@@ -1,0 +1,479 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// # Міграція:
+// npx prisma migrate dev --name unified_services_v4
+// npx prisma generate
+
+// ═══════════════════════════════════════════════
+// ENUMS
+// ═══════════════════════════════════════════════
+
+enum Role {
+  CLIENT
+  MASTER
+  ADMIN
+}
+
+enum VerificationStatus {
+  NONE
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum JobStatus {
+  OPEN          // broadcast идёт, принимает proposals
+  IN_PROGRESS   // proposal принят, order создан
+  COMPLETED
+  CANCELLED
+  EXPIRED
+}
+
+enum ProposalStatus {
+  SENT
+  ACCEPTED
+  REJECTED       // отклонён автоматически при выборе другого
+  WITHDRAWN      // отозван мастером
+}
+
+enum OrderStatus {
+  CREATED        // order создан, чат открыт
+  IN_PROGRESS    // мастер начал работу
+  COMPLETED      // мастер отметил завершённым
+  CANCELLED
+}
+
+enum MessageType {
+  TEXT
+  PHOTO
+  FILE
+  SYSTEM
+}
+
+enum ReviewDirection {
+  CLIENT_TO_MASTER
+  MASTER_TO_CLIENT
+}
+
+// ═══════════════════════════════════════════════
+// USER
+// ═══════════════════════════════════════════════
+
+model User {
+  id            String  @id @default(cuid())
+  email         String  @unique
+  emailVerified Boolean @default(false)
+  name          String?
+  username      String? @unique
+  phone         String?
+  avatar        String?
+  avatarPublicId String?
+  bio           String?
+
+  role Role @default(CLIENT)
+
+  // Для CLIENT и MASTER — основной город
+  city String?
+
+  // Для MASTER — расширенный профиль
+  masterProfile MasterProfile?
+
+  // Денормализованные метрики (рейтинг считается для обеих ролей)
+  avgRating    Float @default(0)
+  reviewsCount Int   @default(0)
+
+  isOnline Boolean  @default(false)
+  lastSeen DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // ─── Связи ───
+  jobs            Job[]        @relation("ClientJobs")
+  proposals       Proposal[]   @relation("MasterProposals")
+  clientOrders    Order[]      @relation("ClientOrders")
+  masterOrders    Order[]      @relation("MasterOrders")
+  sentMessages    Message[]    @relation("SentMessages")
+  authoredReviews Review[]     @relation("AuthorReviews")
+  chats           ChatMember[]
+  sessions        Session[]
+  accounts        Account[]
+  notifications   Notification[]
+  orderEvents     OrderEvent[]
+
+  @@index([username])
+  @@index([role, city])
+}
+
+model MasterProfile {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Категории, в которых работает мастер (slug'и Category)
+  categories String[] @default([])
+
+  // Описание услуг
+  description String? @db.Text
+
+  // Верификация
+  verificationStatus       VerificationStatus @default(NONE)
+  verificationRejectReason String?
+  verifiedAt               DateTime?
+
+  // Доступность
+  isActive Boolean @default(true) // принимает новые заявки
+
+  // Денормализованные счётчики
+  completedOrders Int @default(0)
+  totalOrders     Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([verificationStatus])
+  @@index([isActive])
+}
+
+// ═══════════════════════════════════════════════
+// JOB (заявка клиента) — broadcast
+// ═══════════════════════════════════════════════
+
+model Job {
+  id String @id @default(cuid())
+
+  clientId String
+  client   User   @relation("ClientJobs", fields: [clientId], references: [id], onDelete: Cascade)
+
+  // Матчинг: категория + город
+  category String   // slug Category, для рассылки
+  city     String   // slug City
+
+  title       String
+  description String  @db.Text
+
+  // Бюджет — опционально (Uber-модель: мастера сами назначают цену)
+  budgetMinCents Int?
+  budgetMaxCents Int?
+  currency       String @default("UAH")
+
+  // Фото проблемы
+  attachments          String[] @default([])
+  attachmentsPublicIds String[] @default([])
+
+  status JobStatus @default(OPEN)
+
+  proposalsCount Int @default(0)
+  viewsCount     Int @default(0)
+
+  expiresAt DateTime  // дедлайн на сбор откликов
+  closedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  proposals       Proposal[]
+  selectedOrderId String?    @unique
+  selectedOrder   Order?     @relation("JobToOrder", fields: [selectedOrderId], references: [id])
+
+  @@index([status, createdAt])
+  @@index([category, city, status])  // главный индекс матчинга
+  @@index([clientId])
+  @@index([expiresAt])
+}
+
+// ═══════════════════════════════════════════════
+// PROPOSAL (отклик мастера)
+// ═══════════════════════════════════════════════
+
+model Proposal {
+  id String @id @default(cuid())
+
+  jobId    String
+  job      Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  masterId String
+  master   User   @relation("MasterProposals", fields: [masterId], references: [id], onDelete: Cascade)
+
+  message       String @db.Text
+  priceCents    Int
+  estimatedDays Int     // примерный срок выполнения
+
+  status ProposalStatus @default(SENT)
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  withdrawnAt DateTime?
+
+  @@unique([jobId, masterId])  // один мастер — один отклик
+  @@index([jobId, status])
+  @@index([masterId, status])
+}
+
+// ═══════════════════════════════════════════════
+// ORDER (после accept proposal)
+// ═══════════════════════════════════════════════
+
+model Order {
+  id String @id @default(cuid())
+
+  clientId String
+  client   User   @relation("ClientOrders", fields: [clientId], references: [id])
+  masterId String
+  master   User   @relation("MasterOrders", fields: [masterId], references: [id])
+
+  title       String
+  description String  @db.Text
+  priceCents  Int
+  currency    String  @default("UAH")
+
+  status OrderStatus @default(CREATED)
+
+  startedAt   DateTime?
+  completedAt DateTime?
+  cancelledAt DateTime?
+  cancelledById String?
+  cancelReason  String? @db.Text
+
+  chatId String? @unique
+  chat   Chat?   @relation(fields: [chatId], references: [id], onDelete: SetNull)
+
+  fromJob Job?         @relation("JobToOrder")
+  reviews Review[]
+  events  OrderEvent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clientId, status])
+  @@index([masterId, status])
+  @@index([status, createdAt])
+}
+
+model OrderEvent {
+  id      String @id @default(cuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  type    String  // CREATED, STARTED, COMPLETED, CANCELLED, REVIEWED
+  actorId String?
+  actor   User?   @relation(fields: [actorId], references: [id])
+  payload Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([orderId, createdAt])
+}
+
+// ═══════════════════════════════════════════════
+// CHAT
+// ═══════════════════════════════════════════════
+
+model Chat {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lastMessageText String?
+  lastMessageAt   DateTime?
+  lastSenderId    String?
+
+  members  ChatMember[]
+  messages Message[]
+  order    Order?       // 1-к-1: чат привязан к заказу
+
+  @@index([lastMessageAt])
+}
+
+model ChatMember {
+  id     String @id @default(cuid())
+  chatId String
+  chat   Chat   @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  lastReadAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@unique([chatId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id   String      @id @default(cuid())
+  type MessageType @default(TEXT)
+  text String      @default("")
+
+  attachmentUrl      String?
+  attachmentPublicId String?
+  attachmentMimeType String?
+  attachmentSize     Int?
+  attachmentName     String?
+
+  isRead    Boolean   @default(false)
+  editedAt  DateTime?
+  deletedAt DateTime?
+
+  chatId   String
+  chat     Chat   @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  senderId String
+  sender   User   @relation("SentMessages", fields: [senderId], references: [id])
+
+  replyToId String?
+  replyTo   Message?  @relation("MessageReply", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies   Message[] @relation("MessageReply")
+
+  createdAt DateTime @default(now())
+
+  @@index([chatId, createdAt])
+}
+
+// ═══════════════════════════════════════════════
+// REVIEW
+// ═══════════════════════════════════════════════
+
+model Review {
+  id        String          @id @default(cuid())
+  rating    Int             // 1-5
+  comment   String?
+  direction ReviewDirection
+
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id])
+
+  authorId String
+  author   User   @relation("AuthorReviews", fields: [authorId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([orderId, direction])  // 1 отзыв на сторону
+  @@index([authorId])
+}
+
+// ═══════════════════════════════════════════════
+// СПРАВОЧНИКИ
+// ═══════════════════════════════════════════════
+
+model Category {
+  id          String  @id @default(cuid())
+  slug        String  @unique
+  name        String
+  description String?
+  icon        String?
+  sortOrder   Int     @default(0)
+  isActive    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+}
+
+model City {
+  id        String  @id @default(cuid())
+  slug      String  @unique
+  name      String
+  region    String?
+  isCapital Boolean @default(false)
+  sortOrder Int     @default(0)
+  isActive  Boolean @default(true)
+
+  latitude  Float?
+  longitude Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+  @@index([region])
+}
+
+// ═══════════════════════════════════════════════
+// NOTIFICATIONS
+// ═══════════════════════════════════════════════
+
+model Notification {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // NEW_JOB, NEW_PROPOSAL, PROPOSAL_ACCEPTED,
+  // ORDER_STARTED, ORDER_COMPLETED, NEW_MESSAGE
+  type  String
+  title String
+  body  String?
+
+  jobId      String?
+  proposalId String?
+  orderId    String?
+  chatId     String?
+
+  isRead Boolean   @default(false)
+  readAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
+}
+
+// ═══════════════════════════════════════════════
+// AUTH (better-auth)
+// ═══════════════════════════════════════════════
+
+model Session {
+  id        String   @id
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  token     String   @unique
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Account {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  providerId   String
+  accountId    String
+  accessToken  String?
+  refreshToken String?
+  idToken      String?
+  expiresAt    DateTime?
+  password     String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([providerId, accountId])
+}
+
+model OtpCode {
+  id        String   @id @default(cuid())
+  email     String
+  code      String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([email])
+}
+
+model Verification {
+  id         String    @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime?
+  updatedAt  DateTime?
+
+  @@map("verification")
+  @@index([identifier])
+}

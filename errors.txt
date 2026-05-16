@@ -1,0 +1,335 @@
+﻿Loading svelte-check in workspace: c:\Users\Vinga\Desktop\zunor
+Getting Svelte diagnostics...
+
+c:\Users\Vinga\Desktop\zunor\[32msrc\lib\components\avatar-uploader.svelte[39m:36:5
+[33mWarn[39m: This reference only captures the initial value of `size`. Did you mean to reference it inside a closure instead?
+https://svelte.dev/e/state_referenced_locally (svelte)
+[36m    xl: 'size-32',
+  }[[35msize[36m][39m
+
+c:\Users\Vinga\Desktop\zunor\[32msrc\lib\components\chat\message-bubble.svelte[39m:305:15
+[33mWarn[39m: `<div>` with a mouseenter or mouseleave handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m            <DropdownMenu.Trigger>
+              [35m<div
+                class="size-7 rounded-full flex items-center justify-center cursor-pointer transition-all opacity-0 group-hover:opacity-100"
+                style="color: var(--muted-foreground); background-color: transparent"
+                onmouseenter={(e) =>
+                  ((e.currentTarget as HTMLElement).style.backgroundColor =
+                    'var(--muted)')}
+                onmouseleave={(e) =>
+                  ((e.currentTarget as HTMLElement).style.backgroundColor =
+                    'transparent')}
+                aria-label="╨Ь╨╡╨╜╤О ╨┐╨╛╨▓╤Ц╨┤╨╛╨╝╨╗╨╡╨╜╨╜╤П"
+              >
+                <MoreVertical class="size-3.5" />
+              </div>[36m
+            </DropdownMenu.Trigger>[39m
+
+c:\Users\Vinga\Desktop\zunor\[32msrc\lib\components\chat\chat-window.svelte[39m:67:44
+[33mWarn[39m: This reference only captures the initial value of `initialMessages`. Did you mean to reference it inside a derived instead?
+https://svelte.dev/e/state_referenced_locally (svelte)
+[36m
+  let messages = $state<ChatMessage[]>([...[35minitialMessages[36m].reverse())
+  let nextCursor = $state(initialNextCursor)[39m
+
+c:\Users\Vinga\Desktop\zunor\[32msrc\lib\components\chat\chat-window.svelte[39m:68:27
+[33mWarn[39m: This reference only captures the initial value of `initialNextCursor`. Did you mean to reference it inside a closure instead?
+https://svelte.dev/e/state_referenced_locally (svelte)
+[36m  let messages = $state<ChatMessage[]>([...initialMessages].reverse())
+  let nextCursor = $state([35minitialNextCursor[36m)
+  let loadingMore = $state(false)[39m
+
+c:\Users\Vinga\Desktop\zunor\[32msrc\lib\components\header\mobile-nav.svelte[39m:43:14
+[33mWarn[39m: This reference only captures the initial value of `hasNotifications`. Did you mean to reference it inside a closure instead?
+https://svelte.dev/e/state_referenced_locally (svelte)
+[36m      action: () => onnavigate('/notifications'),
+      badge: [35mhasNotifications[36m ? 5 : 0,
+    },[39m
+
+c:\Users\Vinga\Desktop\zunor\[32msrc\lib\components\header\search-bar.svelte[39m:330:7
+[33mWarn[39m: Elements with the 'listbox' interactive role must have a tabindex value
+https://svelte.dev/e/a11y_interactive_supports_focus (svelte)
+[36m    {#if showLoading || showResultsList || showEmpty}
+      [35m<div
+        id="header-search-results"
+        role="listbox"
+        transition:fly={{ y: -4, duration: 150 }}
+        onmouseleave={() => (highlightedIndex = -1)}
+        class="absolute top-full left-0 right-0 z-50 overflow-y-auto overflow-x-hidden header-search-scroll"
+        style="background-color: #0a0a0a;
+               border: 1px solid rgba(255,255,255,0.14);
+               border-top: none;
+               border-radius: 0 0 1.5rem 1.5rem;
+               box-shadow: 0 24px 48px rgba(0,0,0,0.5);
+               max-height: min(420px, 70vh);"
+      >
+        {#if showLoading}
+          <div class="flex items-center justify-center py-10">
+            <LoaderCircle
+              class="size-5 animate-spin"
+              style="color: rgba(255,255,255,0.4)"
+            />
+          </div>
+        {:else if showResultsList}
+          {#each results as r, i (r.type + ':' + r.slug + ':' + (r.parentSlug ?? ''))}
+            <button
+              id="header-result-{i}"
+              type="button"
+              role="option"
+              aria-selected={i === highlightedIndex}
+              onmouseenter={() => (highlightedIndex = i)}
+              onmousedown={(e) => {
+                e.preventDefault()
+                navigateToResult(r)
+              }}
+              class="result-item w-full flex items-center gap-3 px-5 py-3 transition-colors cursor-pointer text-left"
+              class:active={i === highlightedIndex}
+            >
+              <div
+                class="size-7 rounded-md flex items-center justify-center shrink-0"
+                style="background-color: rgba(255,255,255,0.05)"
+              >
+                {#if r.type === 'category'}
+                  <Layers
+                    class="size-3.5"
+                    style="color: rgba(255,255,255,0.5)"
+                  />
+                {:else}
+                  <Folder
+                    class="size-3.5"
+                    style="color: rgba(255,255,255,0.5)"
+                  />
+                {/if}
+              </div>
+
+              <div class="min-w-0 flex-1">
+                <p
+                  class="text-sm font-medium leading-snug truncate"
+                  style="color: white"
+                >
+                  {r.name}
+                </p>
+                {#if r.parentName}
+                  <p
+                    class="text-xs truncate mt-0.5"
+                    style="color: rgba(255,255,255,0.5)"
+                  >
+                    ╤Г {r.parentName}
+                  </p>
+                {/if}
+              </div>
+            </button>
+          {/each}
+        {:else if showEmpty}
+          <div class="flex flex-col items-center py-10 gap-2">
+            <Search class="size-8" style="color: rgba(255,255,255,0.2)" />
+            <p class="text-sm text-center" style="color: rgba(255,255,255,0.6)">
+              ╨Э╤Ц╤З╨╛╨│╨╛ ╨╜╨╡ ╨╖╨╜╨░╨╣╨┤╨╡╨╜╨╛ ╨┤╨╗╤П
+              <span class="font-medium" style="color: white"
+                >┬л{searchValue}┬╗</span
+              >
+            </p>
+            <p class="text-xs" style="color: rgba(255,255,255,0.4)">
+              ╨б╨┐╤А╨╛╨▒╤Г╨╣╤В╨╡ ╤Ц╨╜╤И╨╕╨╣ ╨╖╨░╨┐╨╕╤В
+            </p>
+          </div>
+        {/if}
+      </div>[36m
+    {/if}[39m
+
+c:\Users\Vinga\Desktop\zunor\[32msrc\lib\components\home\categories-section.svelte[39m:198:5
+[33mWarn[39m: Also define the standard property 'line-clamp' for compatibility (css)
+[36m    display: -webkit-box;
+    [35m-webkit-line-clamp[36m: 2;
+    -webkit-box-orient: vertical;[39m
+
+c:\Users\Vinga\Desktop\zunor\[32msrc\lib\components\jobs\job-form.svelte[39m:104:22
+[33mWarn[39m: This reference only captures the initial value of `initial`. Did you mean to reference it inside a derived instead?
+https://svelte.dev/e/state_referenced_locally (svelte)
+[36m
+  let title = $state([35minitial[36m?.title ?? '')
+  let description = $state(initial?.description ?? '')[39m
+
+c:\Users\Vinga\Desktop\zunor\[32msrc\lib\components\jobs\job-form.svelte[39m:105:28
+[33mWarn[39m: This reference only captures the initial value of `initial`. Did you mean to reference it inside a derived instead?
+https://svelte.dev/e/state_referenced_locally (svelte)
+[36m  let title = $state(initial?.title ?? '')
+  let description = $state([35minitial[36m?.description ?? '')
+  let category = $state(initial?.category ?? '')[39m
+
+c:\Users\Vinga\Desktop\zunor\[32msrc\lib\components\jobs\job-form.svelte[39m:106:25
+[33mWarn[39m: This reference only captures the initial value of `initial`. Did you mean to reference it inside a derived instead?
+https://svelte.dev/e/state_referenced_locally (svelte)
+[36m  let description = $state(initial?.description ?? '')
+  let category = $state([35minitial[36m?.category ?? '')
+  let subcategory = $state(initial?.subcategory ?? '')[39m
+
+c:\Users\Vinga\Desktop\zunor\[32msrc\lib\components\jobs\job-form.svelte[39m:107:28
+[33mWarn[39m: This reference only captures the initial value of `initial`. Did you mean to reference it inside a derived instead?
+https://svelte.dev/e/state_referenced_locally (svelte)
+[36m  let category = $state(initial?.category ?? '')
+  let subcategory = $state([35minitial[36m?.subcategory ?? '')
+  let tagsInput = $state((initial?.tags ?? []).join(', '))[39m
+
+c:\Users\Vinga\Desktop\zunor\[32msrc\lib\components\jobs\job-form.svelte[39m:108:27
+[33mWarn[39m: This reference only captures the initial value of `initial`. Did you mean to reference it inside a derived instead?
+https://svelte.dev/e/state_referenced_locally (svelte)
+[36m  let subcategory = $state(initial?.subcategory ?? '')
+  let tagsInput = $state(([35minitial[36m?.tags ?? []).join(', '))
+  let type = $state(initial?.type ?? 'ANY')[39m
+
+c:\Users\Vinga\Desktop\zunor\[32msrc\lib\components\jobs\job-form.svelte[39m:109:21
+[33mWarn[39m: This reference only captures the initial value of `initial`. Did you mean to reference it inside a derived instead?
+https://svelte.dev/e/state_referenced_locally (svelte)
+[36m  let tagsInput = $state((initial?.tags ?? []).join(', '))
+  let type = $state([35minitial[36m?.type ?? 'ANY')
+  let city = $state(initial?.city ?? '')[39m
+
+c:\Users\Vinga\Desktop\zunor\[32msrc\lib\components\jobs\job-form.svelte[39m:110:21
+[33mWarn[39m: This reference only captures the initial value of `initial`. Did you mean to reference it inside a derived instead?
+https://svelte.dev/e/state_referenced_locally (svelte)
+[36m  let type = $state(initial?.type ?? 'ANY')
+  let city = $state([35minitial[36m?.city ?? '')
+  let deliveryDays = $state([39m
+
+c:\Users\Vinga\Desktop\zunor\[32msrc\lib\components\jobs\job-form.svelte[39m:112:5
+[33mWarn[39m: This reference only captures the initial value of `initial`. Did you mean to reference it inside a derived instead?
+https://svelte.dev/e/state_referenced_locally (svelte)
+[36m  let deliveryDays = $state(
+    [35minitial[36m?.deliveryDays ? String(initial.deliveryDays) : '',
+  )[39m
+
+c:\Users\Vinga\Desktop\zunor\[32msrc\lib\components\jobs\job-form.svelte[39m:112:36
+[33mWarn[39m: This reference only captures the initial value of `initial`. Did you mean to reference it inside a derived instead?
+https://svelte.dev/e/state_referenced_locally (svelte)
+[36m  let deliveryDays = $state(
+    initial?.deliveryDays ? String([35minitial[36m.deliveryDays) : '',
+  )[39m
+
+c:\Users\Vinga\Desktop\zunor\[32msrc\lib\components\jobs\job-form.svelte[39m:114:27
+[33mWarn[39m: This reference only captures the initial value of `initial`. Did you mean to reference it inside a derived instead?
+https://svelte.dev/e/state_referenced_locally (svelte)
+[36m  )
+  let budgetType = $state([35minitial[36m?.budgetType ?? 'FIXED')
+  let budgetMaxUah = $state([39m
+
+c:\Users\Vinga\Desktop\zunor\[32msrc\lib\components\jobs\job-form.svelte[39m:116:5
+[33mWarn[39m: This reference only captures the initial value of `initial`. Did you mean to reference it inside a derived instead?
+https://svelte.dev/e/state_referenced_locally (svelte)
+[36m  let budgetMaxUah = $state(
+    [35minitial[36m?.budgetMaxCents ? String(initial.budgetMaxCents / 100) : '',
+  )[39m
+
+c:\Users\Vinga\Desktop\zunor\[32msrc\lib\components\jobs\job-form.svelte[39m:116:38
+[33mWarn[39m: This reference only captures the initial value of `initial`. Did you mean to reference it inside a derived instead?
+https://svelte.dev/e/state_referenced_locally (svelte)
+[36m  let budgetMaxUah = $state(
+    initial?.budgetMaxCents ? String([35minitial[36m.budgetMaxCents / 100) : '',
+  )[39m
+
+c:\Users\Vinga\Desktop\zunor\[32msrc\lib\components\jobs\job-form.svelte[39m:119:5
+[33mWarn[39m: This reference only captures the initial value of `initial`. Did you mean to reference it inside a derived instead?
+https://svelte.dev/e/state_referenced_locally (svelte)
+[36m  let budgetMinUah = $state(
+    [35minitial[36m?.budgetMinCents ? String(initial.budgetMinCents / 100) : '',
+  )[39m
+
+c:\Users\Vinga\Desktop\zunor\[32msrc\lib\components\jobs\job-form.svelte[39m:119:38
+[33mWarn[39m: This reference only captures the initial value of `initial`. Did you mean to reference it inside a derived instead?
+https://svelte.dev/e/state_referenced_locally (svelte)
+[36m  let budgetMinUah = $state(
+    initial?.budgetMinCents ? String([35minitial[36m.budgetMinCents / 100) : '',
+  )[39m
+
+c:\Users\Vinga\Desktop\zunor\[32msrc\lib\components\jobs\job-form.svelte[39m:1168:5
+[33mWarn[39m: Unknown property: 'tabular-nums' (css)
+[36m    color: var(--muted-foreground);
+    [35mtabular-nums[36m: 1;
+  }[39m
+
+c:\Users\Vinga\Desktop\zunor\[32msrc\lib\components\jobs\proposal-form.svelte[39m:28:25
+[33mWarn[39m: This reference only captures the initial value of `suggestedPriceUah`. Did you mean to reference it inside a derived instead?
+https://svelte.dev/e/state_referenced_locally (svelte)
+[36m  let coverLetter = $state('')
+  let priceUah = $state([35msuggestedPriceUah[36m ? String(suggestedPriceUah) : '')
+  let days = $state(suggestedDays ? String(suggestedDays) : '')[39m
+
+c:\Users\Vinga\Desktop\zunor\[32msrc\lib\components\jobs\proposal-form.svelte[39m:28:52
+[33mWarn[39m: This reference only captures the initial value of `suggestedPriceUah`. Did you mean to reference it inside a derived instead?
+https://svelte.dev/e/state_referenced_locally (svelte)
+[36m  let coverLetter = $state('')
+  let priceUah = $state(suggestedPriceUah ? String([35msuggestedPriceUah[36m) : '')
+  let days = $state(suggestedDays ? String(suggestedDays) : '')[39m
+
+c:\Users\Vinga\Desktop\zunor\[32msrc\lib\components\jobs\proposal-form.svelte[39m:29:21
+[33mWarn[39m: This reference only captures the initial value of `suggestedDays`. Did you mean to reference it inside a derived instead?
+https://svelte.dev/e/state_referenced_locally (svelte)
+[36m  let priceUah = $state(suggestedPriceUah ? String(suggestedPriceUah) : '')
+  let days = $state([35msuggestedDays[36m ? String(suggestedDays) : '')
+  let submitting = $state(false)[39m
+
+c:\Users\Vinga\Desktop\zunor\[32msrc\lib\components\jobs\proposal-form.svelte[39m:29:44
+[33mWarn[39m: This reference only captures the initial value of `suggestedDays`. Did you mean to reference it inside a derived instead?
+https://svelte.dev/e/state_referenced_locally (svelte)
+[36m  let priceUah = $state(suggestedPriceUah ? String(suggestedPriceUah) : '')
+  let days = $state(suggestedDays ? String([35msuggestedDays[36m) : '')
+  let submitting = $state(false)[39m
+
+c:\Users\Vinga\Desktop\zunor\[32msrc\lib\components\jobs\proposal-form.svelte[39m:141:7
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m    <div>
+      [35m<label
+        class="text-xs font-medium block mb-1.5"
+        style="color: var(--muted-foreground)"
+      >
+        ╨Ь╨╛╤В╨╕╨▓╨░╤Ж╤Ц╨╣╨╜╨╕╨╣ ╨╗╨╕╤Б╤В
+      </label>[36m
+      <Textarea[39m
+
+c:\Users\Vinga\Desktop\zunor\[32msrc\lib\components\jobs\proposal-form.svelte[39m:160:9
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m      <div>
+        [35m<label
+          class="text-xs font-medium block mb-1.5"
+          style="color: var(--muted-foreground)"
+        >
+          ╨Т╨░╤И╨░ ╤Ж╤Ц╨╜╨░, тВ┤
+        </label>[36m
+        <Input[39m
+
+c:\Users\Vinga\Desktop\zunor\[32msrc\lib\components\jobs\proposal-form.svelte[39m:175:9
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m      <div>
+        [35m<label
+          class="text-xs font-medium block mb-1.5"
+          style="color: var(--muted-foreground)"
+        >
+          ╨в╨╡╤А╨╝╤Ц╨╜, ╨┤╨╜╤Ц╨▓
+        </label>[36m
+        <Input[39m
+
+c:\Users\Vinga\Desktop\zunor\[32msrc\lib\components\orders\order-card.svelte[39m:108:1
+[31mError[39m: `</a>` attempted to close an element that was not open
+https://svelte.dev/e/element_invalid_closing_tag (svelte)
+[36m  </div>
+[35m[36m</a>[39m
+
+c:\Users\Vinga\Desktop\zunor\[32msrc\lib\components\orders\order-card.svelte[39m:108:1
+[31mError[39m: `</a>` attempted to close an element that was not open
+https://svelte.dev/e/element_invalid_closing_tag (ts)
+[36m  </div>
+[35m[36m</a>[39m
+
+c:\Users\Vinga\Desktop\zunor\[32msrc\routes\(auth)\orders\+page.svelte[39m:7:10
+[31mError[39m: Module '"c:/Users/Vinga/Desktop/zunor/src/lib/components/orders/order-card.svelte"' has no default export. (ts)
+[36m  import { fade } from 'svelte/transition'
+  import [35mOrderCard[36m from '$lib/components/orders/order-card.svelte'
+  import type { PageData } from './$types'[39m
+
+====================================
+[31msvelte-check found 3 errors and 29 warnings in 10 files
+[39m
