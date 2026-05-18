@@ -102,7 +102,7 @@
   }
 
   function goEdit() {
-    goto('/settings')
+    goto('/onboarding')
   }
 
   // ─── Helpers ───

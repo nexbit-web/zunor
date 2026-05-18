@@ -156,28 +156,27 @@ export const POST: RequestHandler = async ({ request }) => {
     throw error(400, 'Опис: 20-5000 символів')
   }
 
-  // Бюджет (опционально)
-  const budgetMinUah = body.budgetMinUah
-  const budgetMaxUah = body.budgetMaxUah
+  // Бюджет (опционально) — поддерживаем 2 формата:
+  //   1) budgetUah — одна сумма ("до X грн")
+  //   2) budgetMinUah + budgetMaxUah — диапазон
   let budgetMinCents: number | null = null
   let budgetMaxCents: number | null = null
 
-  if (budgetMinUah != null) {
-    const n = Number(budgetMinUah)
-    if (!Number.isFinite(n) || n < 0) throw error(400, 'Невірний бюджет')
-    budgetMinCents = Math.round(n * 100)
-  }
-  if (budgetMaxUah != null) {
-    const n = Number(budgetMaxUah)
+  if (body.budgetUah != null && body.budgetUah !== '') {
+    const n = Number(body.budgetUah)
     if (!Number.isFinite(n) || n < 0) throw error(400, 'Невірний бюджет')
     budgetMaxCents = Math.round(n * 100)
-  }
-  if (
-    budgetMinCents != null &&
-    budgetMaxCents != null &&
-    budgetMinCents > budgetMaxCents
-  ) {
-    throw error(400, 'Мінімум більше максимуму')
+  } else {
+    if (body.budgetMinUah != null && body.budgetMinUah !== '') {
+      const n = Number(body.budgetMinUah)
+      if (!Number.isFinite(n) || n < 0) throw error(400, 'Невірний бюджет')
+      budgetMinCents = Math.round(n * 100)
+    }
+    if (body.budgetMaxUah != null && body.budgetMaxUah !== '') {
+      const n = Number(body.budgetMaxUah)
+      if (!Number.isFinite(n) || n < 0) throw error(400, 'Невірний бюджет')
+      budgetMaxCents = Math.round(n * 100)
+    }
   }
 
   // Вложения

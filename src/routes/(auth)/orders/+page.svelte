@@ -2,7 +2,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation'
   import { page } from '$app/state'
-  import { Briefcase, Plus, Filter, User, Hammer, Users } from 'lucide-svelte'
+  import { Briefcase, Plus, User, Hammer, Users } from 'lucide-svelte'
   import { fade } from 'svelte/transition'
   import OrderCard from '$lib/components/orders/order-card.svelte'
   import type { PageData } from './$types'
@@ -14,13 +14,12 @@
   // ═══════════════════════════════════════════════════════════
 
   type StatusTab = 'ACTIVE' | 'COMPLETED' | 'CANCELLED' | 'ALL'
-  type RoleFilter = 'all' | 'client' | 'freelancer'
+  type RoleFilter = 'all' | 'client' | 'master'
 
   // ═══════════════════════════════════════════════════════════
   // State (синхронізується з URL)
   // ═══════════════════════════════════════════════════════════
 
-  // Беремо initial з URL — щоб back/forward у браузері працював
   function getInitialTab(): StatusTab {
     const t = page.url.searchParams.get('status')
     if (t === 'COMPLETED' || t === 'CANCELLED' || t === 'ALL') return t
@@ -39,7 +38,7 @@
         return data.orders
       case 'ACTIVE':
         return data.orders.filter((o) =>
-          ['NEGOTIATING', 'ACCEPTED', 'DELIVERED'].includes(o.status),
+          ['CREATED', 'IN_PROGRESS'].includes(o.status),
         )
       case 'COMPLETED':
         return data.orders.filter((o) => o.status === 'COMPLETED')
@@ -48,16 +47,17 @@
     }
   })
 
-  // Підсумок для заголовку — швидке відчуття «де я і що робиться»
   const activeCount = $derived(data.counts.active)
   const totalCount = $derived(data.orders.length)
+  const isClient = $derived(data.userRole === 'CLIENT')
+  const isMaster = $derived(data.userRole === 'MASTER')
 
   // ═══════════════════════════════════════════════════════════
   // Actions
   // ═══════════════════════════════════════════════════════════
 
   function setRole(role: RoleFilter) {
-    if (role === data.roleFilter) return // не робимо зайвий goto
+    if (role === data.roleFilter) return
 
     const params = new URLSearchParams()
     if (role !== 'all') params.set('role', role)
@@ -74,7 +74,6 @@
     if (tab === activeTab) return
     activeTab = tab
 
-    // Синхронізуємо з URL (без goto, щоб не перезавантажувати loader)
     const params = new URLSearchParams(page.url.searchParams)
     if (tab === 'ACTIVE') {
       params.delete('status')
@@ -93,8 +92,16 @@
   const statusTabs: { value: StatusTab; label: string; count: number }[] =
     $derived([
       { value: 'ACTIVE', label: 'Активні', count: data.counts.active },
-      { value: 'COMPLETED', label: 'Завершені', count: data.counts.completed },
-      { value: 'CANCELLED', label: 'Скасовані', count: data.counts.cancelled },
+      {
+        value: 'COMPLETED',
+        label: 'Завершені',
+        count: data.counts.completed,
+      },
+      {
+        value: 'CANCELLED',
+        label: 'Скасовані',
+        count: data.counts.cancelled,
+      },
       { value: 'ALL', label: 'Усі', count: totalCount },
     ])
 
@@ -105,54 +112,79 @@
   }[] = [
     { value: 'all', label: 'Усі', icon: Users },
     { value: 'client', label: 'Як клієнт', icon: User },
-    { value: 'freelancer', label: 'Як майстер', icon: Hammer },
+    { value: 'master', label: 'Як майстер', icon: Hammer },
   ]
+
+  function getActiveLabel(n: number): string {
+    if (n === 1) return 'активне'
+    if (n >= 2 && n <= 4) return 'активних'
+    return 'активних'
+  }
 </script>
 
 <svelte:head>
   <title>Замовлення · Zunor</title>
   <meta
     name="description"
-    content="Ваші замовлення на Zunor — як клієнт або виконавець"
+    content="Ваші замовлення на Zunor — як клієнт або майстер"
   />
 </svelte:head>
 
 <div class="max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
   <!-- ─── Заголовок ─── -->
   <header class="mb-8">
-    <div class="flex items-baseline gap-3 flex-wrap">
-      <h1
-        class="text-3xl font-bold tracking-tight"
-        style="color: var(--foreground)"
-      >
-        Замовлення
-      </h1>
-      {#if activeCount > 0}
-        <span
-          class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
-          style="background-color: color-mix(in oklch, var(--primary) 10%, transparent);
-                 color: var(--primary)"
+    <div class="flex items-start justify-between gap-4 flex-wrap">
+      <div>
+        <div class="flex items-baseline gap-3 flex-wrap">
+          <h1
+            class="text-3xl font-bold tracking-tight"
+            style="color: var(--foreground)"
+          >
+            Замовлення
+          </h1>
+          {#if activeCount > 0}
+            <span
+              class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
+              style="background-color: color-mix(in oklch, var(--primary) 10%, transparent);
+                     color: var(--primary)"
+            >
+              <span
+                class="size-1.5 rounded-full"
+                style="background-color: var(--primary)"
+              ></span>
+              {activeCount}
+              {getActiveLabel(activeCount)}
+            </span>
+          {/if}
+        </div>
+        <p class="text-sm mt-2" style="color: var(--muted-foreground)">
+          {#if isClient}
+            Ваші замовлення — створіть нове або керуйте поточними
+          {:else if isMaster}
+            Замовлення, які ви виконуєте
+          {:else}
+            Замовлення в яких ви берете участь
+          {/if}
+        </p>
+      </div>
+
+      {#if isClient}
+        <button
+          type="button"
+          onclick={() => goto('/orders/new')}
+          class="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold cursor-pointer transition-all hover:opacity-90 active:scale-95 shrink-0"
+          style="background-color: var(--foreground); color: var(--background)"
         >
-          <span
-            class="size-1.5 rounded-full"
-            style="background-color: var(--primary)"
-          ></span>
-          {activeCount} активн{activeCount === 1
-            ? 'е'
-            : activeCount < 5
-              ? 'их'
-              : 'их'}
-        </span>
+          <Plus class="size-4" strokeWidth={2.25} />
+          Нове замовлення
+        </button>
       {/if}
     </div>
-    <p class="text-sm mt-2" style="color: var(--muted-foreground)">
-      Замовлення в яких ви берете участь — як клієнт або як виконавець
-    </p>
   </header>
 
   <!-- ─── Контроли (Role + Status) ─── -->
   <div class="mb-6 space-y-3">
-    <!-- Role filter — segmented control -->
+    <!-- Role filter -->
     <div class="flex items-center gap-3 flex-wrap">
       <span
         class="text-[11px] font-medium uppercase tracking-wider hidden sm:inline"
@@ -191,7 +223,7 @@
       </div>
     </div>
 
-    <!-- Status tabs — underline-style, як у Linear -->
+    <!-- Status tabs -->
     <div
       class="flex items-center gap-0 border-b overflow-x-auto"
       style="border-color: var(--border)"
@@ -261,22 +293,40 @@
             style="color: var(--muted-foreground)"
           >
             {#if totalCount === 0}
-              Замовлення з'являться тут коли ви замовите послугу або
-              відгукнетесь на заявку
+              {#if isClient}
+                Створіть першу заявку — і майстри почнуть надсилати пропозиції
+              {:else if isMaster}
+                Подавайте пропозиції на заявки — і прийняті замовлення зʼявляться тут
+              {:else}
+                Замовлення зʼявляться тут коли ви візьмете в них участь
+              {/if}
             {:else}
               Спробуйте інший статус або скиньте фільтр ролі
             {/if}
           </p>
 
           {#if totalCount === 0}
-            <a
-              href="/services"
-              class="inline-flex items-center gap-2 mt-5 px-5 py-2.5 rounded-full text-sm font-medium cursor-pointer transition-colors"
-              style="background-color: var(--foreground); color: var(--background)"
-            >
-              <Plus class="size-4" strokeWidth={2.25} />
-              Знайти майстра
-            </a>
+            {#if isClient}
+              <button
+                type="button"
+                onclick={() => goto('/orders/new')}
+                class="inline-flex items-center gap-2 mt-5 px-5 py-2.5 rounded-full text-sm font-medium cursor-pointer transition-opacity hover:opacity-90"
+                style="background-color: var(--foreground); color: var(--background)"
+              >
+                <Plus class="size-4" strokeWidth={2.25} />
+                Створити заявку
+              </button>
+            {:else if isMaster}
+              <button
+                type="button"
+                onclick={() => goto('/jobs')}
+                class="inline-flex items-center gap-2 mt-5 px-5 py-2.5 rounded-full text-sm font-medium cursor-pointer transition-opacity hover:opacity-90"
+                style="background-color: var(--foreground); color: var(--background)"
+              >
+                <Briefcase class="size-4" strokeWidth={2.25} />
+                Знайти роботу
+              </button>
+            {/if}
           {/if}
         </div>
       {:else}
@@ -292,7 +342,6 @@
 </div>
 
 <style>
-  /* ─── Status tabs (Linear-style) ─── */
   .status-tab {
     color: color-mix(in oklch, var(--foreground) 60%, transparent);
   }
@@ -302,7 +351,6 @@
   .status-tab.active {
     color: var(--foreground);
   }
-  /* Підкреслення активного таба — псевдоелемент під border-b батька */
   .status-tab.active::after {
     content: '';
     position: absolute;
@@ -314,7 +362,6 @@
     border-radius: 2px;
   }
 
-  /* Скрол status-tabs на мобайлі без полоси */
   [role='tablist'] {
     scrollbar-width: none;
   }

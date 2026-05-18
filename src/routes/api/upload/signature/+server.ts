@@ -5,15 +5,6 @@ import { signUploadParams } from '$lib/cloudinary'
 import { limit } from '$lib/rate-limit'
 import type { RequestHandler } from './$types'
 
-/**
- * POST /api/upload/signature — подписанные параметры для прямой загрузки на Cloudinary.
- *
- * Body:
- *   { kind: 'avatar' | 'job' | 'chat', resourceType?: 'image' | 'raw' | 'auto' }
- *
- * Возвращает: { signature, timestamp, apiKey, cloudName, folder, resourceType }
- */
-
 const ALLOWED_KINDS = ['avatar', 'job', 'chat'] as const
 type Kind = (typeof ALLOWED_KINDS)[number]
 
@@ -67,5 +58,11 @@ export const POST: RequestHandler = async ({ request }) => {
       ? body.resourceType
       : 'auto'
 
-  return json(signUploadParams({ folder, resourceType }))
+  // Для аватара — фіксований public_id щоб нове фото перезаписувало старе
+  const publicId =
+    kind === 'avatar'
+      ? `zunor/users/${session.user.id}/avatar/profile`
+      : undefined
+
+  return json(signUploadParams({ folder, resourceType, publicId }))
 }

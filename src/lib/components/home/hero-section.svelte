@@ -340,12 +340,13 @@
       </p>
 
       <!-- CTA -->
-      <button
+      <a
+        href="/jobs/new"
         in:fly={{ y: 10, duration: 300, delay: 230, easing: backOut }}
         class="cta-btn"
       >
         Замовити послугу
-      </button>
+      </a>
     {/if}
   </div>
 

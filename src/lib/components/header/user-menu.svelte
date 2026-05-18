@@ -17,6 +17,7 @@
     Settings,
     CircleUserRound,
     Briefcase,
+    ClipboardList,
   } from 'lucide-svelte'
   import { signOut } from '$lib/auth-client'
   import { goto, invalidateAll } from '$app/navigation'
@@ -248,6 +249,14 @@
       Реєстрація
     </button>
   {:else}
+    <a
+      href="/jobs"
+      class="relative flex items-center justify-center h-9 w-9 rounded-full cursor-pointer text-white/75 hover:text-white hover:bg-white/8 transition-colors"
+      aria-label="Замовлення"
+    >
+      <ClipboardList class="size-5" strokeWidth={1.75} />
+    </a>
+
     <button
       type="button"
       onclick={handleChatClick}

@@ -95,6 +95,23 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+
+    // ─── Поля мастера (используются если role=MASTER) ───
+  masterCategories         String[]           @default([])
+  masterDescription        String?            @db.Text
+  verificationStatus       VerificationStatus @default(NONE)
+  verificationRejectReason String?
+  verifiedAt               DateTime?
+  isActiveMaster           Boolean            @default(true)
+
+  // Портфолио (для мастера)
+  portfolioImages          String[]           @default([])
+  portfolioImagesPublicIds String[]           @default([])
+
+  // Счётчики для мастера
+  completedOrders Int @default(0)
+  totalOrders     Int @default(0)
+
   // ─── Связи ───
   jobs            Job[]        @relation("ClientJobs")
   proposals       Proposal[]   @relation("MasterProposals")
@@ -117,11 +134,15 @@ model MasterProfile {
   userId String @unique
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // Категории, в которых работает мастер (slug'и Category)
+  // Категории
   categories String[] @default([])
 
   // Описание услуг
   description String? @db.Text
+
+  // Портфолио
+  portfolioImages          String[] @default([])
+  portfolioImagesPublicIds String[] @default([])
 
   // Верификация
   verificationStatus       VerificationStatus @default(NONE)
@@ -129,9 +150,9 @@ model MasterProfile {
   verifiedAt               DateTime?
 
   // Доступность
-  isActive Boolean @default(true) // принимает новые заявки
+  isActive Boolean @default(true)
 
-  // Денормализованные счётчики
+  // Счётчики
   completedOrders Int @default(0)
   totalOrders     Int @default(0)
 

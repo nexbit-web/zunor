@@ -1,162 +1,106 @@
 <!-- src/lib/components/username-input.svelte -->
 <script lang="ts">
   import { Input } from '$lib/components/ui/input'
-  import { Check, X, Loader2, AtSign } from 'lucide-svelte'
+  import * as Field from '$lib/components/ui/field'
+  import { Spinner } from '$lib/components/ui/spinner'
+  import CheckIcon from '@lucide/svelte/icons/check'
+  import XCircleIcon from '@lucide/svelte/icons/x-circle'
+  import { cn } from '$lib/utils'
 
-  interface Props {
-    value?: string
-    /** Повертає true коли username валідний і доступний */
-    onvalidchange?: (username: string | null) => void
-  }
+  let {
+    value = $bindable(''),
+    isValid = $bindable<boolean | null>(null),
+    currentUsername = '',
+  }: {
+    value: string
+    isValid?: boolean | null
+    currentUsername?: string
+  } = $props()
 
-  let { value = $bindable(''), onvalidchange }: Props = $props()
+  const RE = /^[a-z0-9_]{3,30}$/
 
-  let status = $state<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>(
-    'idle',
-  )
-  let hint = $state('')
-  let suggestions = $state<string[]>([])
-  let debounceTimer: ReturnType<typeof setTimeout> | null = null
+  let checking = $state(false)
+  let available = $state<boolean | null>(null)
+  let timer: ReturnType<typeof setTimeout> | null = null
 
-  function handleInput(e: Event) {
-    const raw = (e.target as HTMLInputElement).value
-    // нормалізація: тільки латиниця/цифри/_
-    const cleaned = raw
-      .toLowerCase()
-      .replace(/[^a-z0-9_]/g, '')
-      .slice(0, 20)
-    value = cleaned
-    check()
-  }
+  const formatOk = $derived(RE.test(value))
 
-  function check() {
-    if (debounceTimer) clearTimeout(debounceTimer)
-    status = 'idle'
-    hint = ''
-    suggestions = []
-    onvalidchange?.(null)
+  $effect(() => {
+    const u = value
+    if (timer) clearTimeout(timer)
+    available = null
+    isValid = null
 
-    if (!value) return
-
-    if (value.length < 3) {
-      status = 'invalid'
-      hint = 'Мінімум 3 символи'
+    if (!u || !RE.test(u)) return
+    if (u === currentUsername) {
+      available = true
+      isValid = true
       return
     }
 
-    status = 'checking'
-    debounceTimer = setTimeout(runCheck, 400)
-  }
-
-  async function runCheck() {
-    try {
-      const res = await fetch(
-        `/api/user/username/check?u=${encodeURIComponent(value)}`,
-      )
-      if (!res.ok) throw new Error('fail')
-      const data = await res.json()
-
-      if (!data.valid) {
-        status = 'invalid'
-        hint = data.hint ?? 'Невірний формат'
-        return
+    checking = true
+    timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/user/username/check?username=${encodeURIComponent(u)}`,
+        )
+        const json = await res.json()
+        available = json.available === true
+        isValid = available
+      } catch {
+        available = null
+        isValid = null
+      } finally {
+        checking = false
       }
-
-      if (data.available) {
-        status = 'available'
-        hint = 'Доступний'
-        onvalidchange?.(value)
-      } else {
-        status = 'taken'
-        hint =
-          data.reason === 'reserved'
-            ? 'Це імʼя зарезервовано'
-            : 'Цей нікнейм уже зайнято'
-        suggestions = data.suggestions ?? []
-      }
-    } catch {
-      status = 'invalid'
-      hint = 'Не вдалось перевірити'
-    }
-  }
-
-  function pickSuggestion(s: string) {
-    value = s
-    check()
-  }
-
-  const borderColor = $derived(
-    status === 'available'
-      ? '#10b981'
-      : status === 'taken' || status === 'invalid'
-        ? 'var(--destructive)'
-        : 'color-mix(in oklch, var(--foreground) 10%, transparent)',
-  )
+    }, 400)
+  })
 </script>
 
-<div>
+<Field.Field>
+  <Field.Label for="username">Username</Field.Label>
   <div class="relative">
     <span
-      class="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
-      style="color: var(--muted-foreground)"
+      class="absolute left-3 top-1/2 -translate-y-1/2 text-sm select-none pointer-events-none"
+      style="color: var(--muted-foreground)">@</span
     >
-      <AtSign class="size-4" />
-    </span>
     <Input
+      id="username"
       type="text"
-      placeholder="nickname"
-      {value}
-      oninput={handleInput}
-      autocomplete="off"
-      spellcheck="false"
-      maxlength={20}
-      class="h-11 pl-9 pr-10 lowercase"
-      style="border-color: {borderColor}"
+      placeholder="oleksandr_master"
+      bind:value
+      maxlength={30}
+      class={cn(
+        'pl-7 pr-9',
+        value && !formatOk && 'border-destructive',
+        available === false && 'border-destructive',
+        available === true && 'border-green-500',
+      )}
+      oninput={() => {
+        value = value.toLowerCase().replace(/[^a-z0-9_]/g, '')
+      }}
     />
     <span class="absolute right-3 top-1/2 -translate-y-1/2">
-      {#if status === 'checking'}
-        <Loader2
-          class="size-4 animate-spin"
-          style="color: var(--muted-foreground)"
-        />
-      {:else if status === 'available'}
-        <Check class="size-4" style="color: #10b981" />
-      {:else if status === 'taken' || status === 'invalid'}
-        <X class="size-4" style="color: var(--destructive)" />
+      {#if checking}
+        <Spinner />
+      {:else if available === true}
+        <CheckIcon class="size-4" style="color: #10b981" />
+      {:else if available === false}
+        <XCircleIcon class="size-4" style="color: var(--destructive)" />
       {/if}
     </span>
   </div>
-
-  {#if hint}
-    <p
-      class="text-xs mt-1.5"
-      style="color: {status === 'available'
-        ? '#10b981'
-        : status === 'taken' || status === 'invalid'
-          ? 'var(--destructive)'
-          : 'var(--muted-foreground)'}"
-    >
-      {hint}
-    </p>
+  {#if value && !formatOk}
+    <Field.Description class="text-destructive">
+      3-30 символів: латиниця, цифри, _
+    </Field.Description>
+  {:else if available === false}
+    <Field.Description class="text-destructive">
+      Цей username вже зайнято
+    </Field.Description>
+  {:else}
+    <Field.Description>
+      Посилання: zunor.com/@{value || 'username'}
+    </Field.Description>
   {/if}
-
-  {#if suggestions.length > 0}
-    <div class="mt-2 flex flex-wrap gap-1.5 items-center">
-      <span class="text-xs" style="color: var(--muted-foreground)">
-        Доступні:
-      </span>
-      {#each suggestions as s}
-        <button
-          type="button"
-          onclick={() => pickSuggestion(s)}
-          class="text-xs px-2.5 py-1 rounded-full border cursor-pointer transition-colors hover:opacity-70"
-          style="border-color: color-mix(in oklch, var(--primary) 25%, transparent);
-                 color: var(--primary);
-                 background-color: color-mix(in oklch, var(--primary) 8%, transparent)"
-        >
-          @{s}
-        </button>
-      {/each}
-    </div>
-  {/if}
-</div>
+</Field.Field>

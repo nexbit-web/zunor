@@ -11,13 +11,10 @@ cloudinary.config({
 
 export { cloudinary }
 
-/**
- * Підписує параметри для signed upload з клієнта.
- * Клієнт використовує отримані поля у multipart-запиті на Cloudinary.
- */
 export function signUploadParams(params: {
   folder: string
   resourceType?: 'image' | 'raw' | 'auto'
+  publicId?: string // фіксований ID для overwrite
 }): {
   signature: string
   timestamp: number
@@ -25,15 +22,20 @@ export function signUploadParams(params: {
   cloudName: string
   folder: string
   resourceType: 'image' | 'raw' | 'auto'
+  publicId?: string
 } {
   const timestamp = Math.round(Date.now() / 1000)
   const folder = params.folder
   const resourceType = params.resourceType ?? 'auto'
 
-  // Cloudinary signature рахується ТІЛЬКИ за тих параметрів, які
-  // йдуть у POST. resourceType — у URL, не в підписі.
+  const toSign: Record<string, string | number> = { timestamp, folder }
+  if (params.publicId) {
+    toSign.public_id = params.publicId
+    toSign.overwrite = 1
+  }
+
   const signature = cloudinary.utils.api_sign_request(
-    { timestamp, folder },
+    toSign,
     env.CLOUDINARY_API_SECRET as string,
   )
 
@@ -44,5 +46,6 @@ export function signUploadParams(params: {
     cloudName: env.CLOUDINARY_CLOUD_NAME as string,
     folder,
     resourceType,
+    ...(params.publicId ? { publicId: params.publicId } : {}),
   }
 }

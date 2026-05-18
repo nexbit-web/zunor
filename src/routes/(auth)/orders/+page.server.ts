@@ -6,10 +6,18 @@ import type { PageServerLoad } from './$types'
 
 export const load: PageServerLoad = async ({ request, url }) => {
   const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw redirect(302, '/user/login?next=/orders')
+  if (!session) throw redirect(302, `/user/login?redirectTo=/orders`)
 
   const userId = session.user.id
-  const role = url.searchParams.get('role') ?? 'all' // 'client' | 'master' | 'all'
+
+  // Отримуємо актуальну роль із БД
+  const dbUser = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true },
+  })
+
+  const userRole = dbUser?.role ?? 'CLIENT'
+  const role = url.searchParams.get('role') ?? 'all'
 
   const where = {
     AND: [
@@ -64,5 +72,6 @@ export const load: PageServerLoad = async ({ request, url }) => {
     counts,
     viewerId: userId,
     roleFilter: role,
+    userRole: userRole as 'CLIENT' | 'MASTER' | 'ADMIN',
   }
 }
