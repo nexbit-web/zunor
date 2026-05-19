@@ -11,8 +11,10 @@
   <title>{data.job.title} · Zunor</title>
 </svelte:head>
 
-{#if data.isOwner}
-  <JobClientView {data} />
-{:else}
-  <JobMasterView {data} />
-{/if}
+<div class="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
+  {#if data.isOwner}
+    <JobClientView {data} />
+  {:else}
+    <JobMasterView {data} />
+  {/if}
+</div>

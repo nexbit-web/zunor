@@ -15,12 +15,15 @@ const authHandle: Handle = async ({ event, resolve }) => {
  * Майстри без оформленого профілю (verificationStatus === NONE)
  * редіректяться на /onboarding. Виняток — сама /onboarding, API, logout, статика.
  */
+// src/hooks.server.ts — заменить функцию onboardingGuard
+
 const onboardingGuard: Handle = async ({ event, resolve }) => {
   const { url } = event
 
-  // Що пропускаємо одразу
+  // Что пропускаем сразу
   const skip =
     url.pathname.startsWith('/onboarding') ||
+    url.pathname.startsWith('/welcome') || // ← новый путь для клиента
     url.pathname.startsWith('/api/') ||
     url.pathname.startsWith('/user/logout') ||
     url.pathname.startsWith('/user/login') ||
@@ -30,31 +33,38 @@ const onboardingGuard: Handle = async ({ event, resolve }) => {
 
   if (skip) return resolve(event)
 
-  // Сесія
   const session = await auth.api
     .getSession({ headers: event.request.headers })
     .catch(() => null)
   if (!session) return resolve(event)
 
-  // Швидка перевірка тільки для MASTER
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: {
       role: true,
+      username: true,
+      city: true,
       masterProfile: { select: { verificationStatus: true } },
     },
   })
 
+  if (!user) return resolve(event)
+
+  // ─── Мастер без оформленного профиля → /onboarding ───
   if (
-    user?.role === 'MASTER' &&
+    user.role === 'MASTER' &&
     (!user.masterProfile || user.masterProfile.verificationStatus === 'NONE')
   ) {
     throw redirect(302, '/onboarding')
   }
 
+  // ─── Клиент без username или города → /welcome ───
+  if (user.role === 'CLIENT' && (!user.username || !user.city)) {
+    throw redirect(302, '/welcome')
+  }
+
   return resolve(event)
 }
-
 const securityHeaders: Handle = async ({ event, resolve }) => {
   const response = await resolve(event)
 

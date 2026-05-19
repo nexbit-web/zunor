@@ -20,16 +20,15 @@
     ClipboardList,
   } from 'lucide-svelte'
   import { signOut } from '$lib/auth-client'
-  import { goto, invalidateAll } from '$app/navigation'
+  import { goto, invalidateAll, invalidate } from '$app/navigation'
   import { page } from '$app/state'
   import { chatStore } from '$lib/stores/chat-store.svelte'
-  import { getPusher } from '$lib/pusher-client'
+  import { getPusher, disconnectPusher } from '$lib/pusher-client'
 
   let { onnavigate }: { onnavigate: (url: string) => void } = $props()
 
   const session = $derived(page.data.session)
   const isLoggedIn = $derived(!!session?.user)
-
   const user = $derived(
     session?.user
       ? {
@@ -54,36 +53,37 @@
     createdAt: string
   }
 
-  let messageCount = $state(0)
-  let notifUnreadCount = $state(0)
+  // messageCount — берём из chatStore реактивно
+  const messageCount = $derived(chatStore.totalUnread)
 
+  // ─── Initial state — берём бейджи из page.data (SSR, мгновенно) ───
+  let notifUnreadCount = $state(page.data.badges?.notifications ?? 0)
   let notifications = $state<Notification[]>([])
   let notifPopoverOpen = $state(false)
   let notifLoading = $state(false)
   let notifInitialized = $state(false)
-  let pusherChannel: any = null
-  let pusherTimeout: ReturnType<typeof setTimeout> | null = null
-  let chatStoreLoaded = $state(false)
 
-  $effect(() => {
-    if (chatStoreLoaded) {
-      messageCount = chatStore.totalUnread
-    }
-  })
+  // Отдельный Pusher канал ТОЛЬКО для нотификаций
+  // chatStore уже держит private-user-{id} для сообщений
+  // Нам нужен тот же канал, но bind только на 'notification'
+  let notifChannel: ReturnType<
+    ReturnType<typeof getPusher>['subscribe']
+  > | null = null
 
+  // ─── Badges ───
   async function loadBadges() {
     if (!session?.user?.id) return
     try {
       const res = await fetch('/api/me/badges')
       if (!res.ok) return
       const data = await res.json()
-      messageCount = data.unreadMessages ?? 0
-      notifUnreadCount = data.unreadNotifications ?? 0
-    } catch {
-      // ignore
-    }
+      // ИСПРАВЛЕНО: API возвращает поле "notifications", а не "unreadNotifications"
+      notifUnreadCount = data.notifications ?? 0
+      // messageCount берём из chatStore, не из badges
+    } catch {}
   }
 
+  // ─── Notifications list ───
   async function loadNotifications() {
     if (!session?.user?.id || notifInitialized) return
     notifLoading = true
@@ -95,24 +95,8 @@
       notifUnreadCount = json.unreadCount
       notifInitialized = true
     } catch {
-      // ignore
     } finally {
       notifLoading = false
-    }
-  }
-
-  async function loadChatStoreIfNeeded() {
-    if (chatStoreLoaded || !session?.user?.id) return
-    try {
-      const res = await fetch('/api/chats')
-      if (res.ok) {
-        const json = await res.json()
-        if (json?.chats) chatStore.setChats(json.chats)
-      }
-      chatStore.subscribeToUserEvents(session.user.id)
-      chatStoreLoaded = true
-    } catch {
-      // ignore
     }
   }
 
@@ -138,10 +122,50 @@
     }).catch(() => {})
   }
 
+  // ─── Pusher — ТОЛЬКО для нотификаций ───
+  // chatStore сам подписывается на private-user-{id} для chat:update / message:new
+  // Pusher позволяет bind разных событий из разных мест на одном канале — это OK
+  // Главное — НЕ subscribe() дважды, а использовать уже открытый канал
+  function setupNotifListener() {
+    const userId = session?.user?.id
+    if (!userId) return
+    try {
+      const pusher = getPusher()
+      // Используем тот же канал что и chatStore — подписка уже есть
+      // Просто добавляем bind на 'notification'
+      notifChannel = pusher.subscribe(`private-user-${userId}`)
+      notifChannel.bind(
+        'notification:new',
+        (data: { notification: Notification }) => {
+          const notif = data.notification
+          notifications = [notif, ...notifications].slice(0, 50)
+          notifUnreadCount++
+        },
+      )
+    } catch (err) {
+      console.error('[notif:pusher]', err)
+    }
+  }
+
+  // Было: fetch + chatStore.setChats
+  // Стало: данные уже в page.data
+  function initChats() {
+    if (!session?.user?.id) return
+    if (chatStore.initialized) return
+
+    const ssrChats = page.data.chats
+    if (ssrChats) {
+      chatStore.setChats(ssrChats)
+    }
+
+    // Pusher всё равно нужен — для realtime событий
+    chatStore.subscribeToUserEvents(session.user.id).catch(() => {})
+  }
+
+  // ─── Navigation ───
   function notifLink(n: Notification): string {
     if (n.orderId) return `/orders/${n.orderId}`
     if (n.type === 'NEW_PROPOSAL' && n.jobId) return `/jobs/${n.jobId}`
-    if (n.proposalId) return '/dashboard/proposals'
     if (n.jobId) return `/jobs/${n.jobId}`
     if (n.chatId) return `/messages/${n.chatId}`
     return '/notifications'
@@ -153,11 +177,6 @@
     goto(notifLink(n))
   }
 
-  function handleChatClick() {
-    loadChatStoreIfNeeded()
-    onnavigate('/messages')
-  }
-
   function notifIconFor(type: string): typeof Briefcase {
     if (type.startsWith('ORDER_')) return Briefcase
     if (type.startsWith('PROPOSAL_') || type === 'NEW_PROPOSAL')
@@ -166,8 +185,7 @@
   }
 
   function formatRelativeShort(iso: string): string {
-    const date = new Date(iso)
-    const diffMs = Date.now() - date.getTime()
+    const diffMs = Date.now() - new Date(iso).getTime()
     const diffMin = Math.floor(diffMs / 60000)
     const diffHr = Math.floor(diffMin / 60)
     const diffDays = Math.floor(diffHr / 24)
@@ -177,33 +195,34 @@
     return `${diffDays} д`
   }
 
-  function setupPusherDelayed() {
-    if (!session?.user?.id) return
-    pusherTimeout = setTimeout(() => {
-      try {
-        const pusher = getPusher()
-        pusherChannel = pusher.subscribe(`private-user-${session.user.id}`)
-        pusherChannel.bind('notification', (data: Notification) => {
-          notifications = [data, ...notifications].slice(0, 50)
-          notifUnreadCount++
-        })
-      } catch {
-        // ignore
-      }
-    }, 2000)
+  function formatBadge(n: number): string {
+    return n > 99 ? '99+' : String(n)
   }
 
+  // ─── Lifecycle ───
   onMount(() => {
     if (!session?.user?.id) return
-    loadBadges()
-    setupPusherDelayed()
+
+    initChats() // синхронно — данные уже есть
+    setupNotifListener()
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        invalidate('app:badges')
+        invalidate('app:chats') // ← обновим и чаты
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
   })
 
   onDestroy(() => {
-    if (pusherTimeout) clearTimeout(pusherTimeout)
-    if (pusherChannel) {
+    if (notifChannel) {
       try {
-        pusherChannel.unbind('notification')
+        notifChannel.unbind('notification:new')
       } catch {}
     }
   })
@@ -215,19 +234,16 @@
   })
 
   async function handleSignOut() {
-    if (chatStoreLoaded) chatStore.unsubscribeAll()
-    if (pusherChannel) {
+    if (notifChannel) {
       try {
-        pusherChannel.unbind('notification')
+        notifChannel.unbind('notification:new')
       } catch {}
     }
+    chatStore.unsubscribeAll()
+    disconnectPusher()
     await signOut()
     await invalidateAll()
     goto('/')
-  }
-
-  function formatBadge(n: number): string {
-    return n > 99 ? '99+' : String(n)
   }
 </script>
 
@@ -240,7 +256,6 @@
     >
       Увійти
     </button>
-
     <button
       type="button"
       onclick={() => onnavigate('/user/register')}
@@ -257,9 +272,10 @@
       <ClipboardList class="size-5" strokeWidth={1.75} />
     </a>
 
+    <!-- Messages -->
     <button
       type="button"
-      onclick={handleChatClick}
+      onclick={() => onnavigate('/messages')}
       class="relative flex items-center justify-center h-9 w-9 rounded-full cursor-pointer text-white/75 hover:text-white hover:bg-white/8 transition-colors"
       aria-label="Повідомлення"
     >
@@ -273,117 +289,180 @@
       {/if}
     </button>
 
+    <!-- Notifications -->
     <Popover.Root bind:open={notifPopoverOpen}>
-      <Popover.Trigger>
-        {#snippet child({ props })}
-          <button
-            {...props}
-            type="button"
-            class="relative flex items-center justify-center h-9 w-9 rounded-full cursor-pointer text-white/75 hover:text-white hover:bg-white/8 transition-colors"
-            aria-label="Сповіщення"
-          >
-            <Bell class="size-5" strokeWidth={1.75} />
-            {#if notifUnreadCount > 0}
-              <span
-                class="absolute top-0.5 right-0.5 min-w-[16px] h-4 text-[10px] font-bold rounded-full flex items-center justify-center px-1 bg-red-500 text-white"
-              >
-                {formatBadge(notifUnreadCount)}
-              </span>
-            {/if}
-          </button>
-        {/snippet}
-      </Popover.Trigger>
+   <Popover.Trigger>
+  {#snippet child({ props })}
+    <button
+      {...props}
+      type="button"
+      class="relative flex items-center justify-center h-9 w-9 rounded-full cursor-pointer text-white/75 hover:text-white hover:bg-white/8 transition-colors"
+      aria-label="Сповіщення"
+    >
+      <Bell class="size-5" strokeWidth={1.75} />
+      {#if notifUnreadCount > 0}
+        <span
+          class="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 text-[10px] font-semibold rounded-full flex items-center justify-center bg-red-500 text-white tabular-nums"
+        >
+          {formatBadge(notifUnreadCount)}
+        </span>
+      {/if}
+    </button>
+  {/snippet}
+</Popover.Trigger>
 
-      <Popover.Content class="w-80 p-0" align="end" sideOffset={8}>
+      <Popover.Content
+        class="w-[360px] p-0 overflow-hidden rounded-xl border shadow-xl"
+        align="end"
+        sideOffset={10}
+        style="border-color: var(--border); background-color: var(--popover, var(--background))"
+      >
+        <!-- Header -->
         <div
-          class="flex items-center justify-between px-4 py-3"
+          class="flex items-center justify-between px-4 h-12"
           style="border-bottom: 1px solid var(--border)"
         >
-          <h3 class="text-sm font-semibold" style="color: var(--foreground)">
-            Сповіщення
-          </h3>
+          <div class="flex items-center gap-2">
+            <h3
+              class="text-[13px] font-semibold tracking-tight"
+              style="color: var(--foreground)"
+            >
+              Сповіщення
+            </h3>
+            {#if notifUnreadCount > 0}
+              <span
+                class="text-[11px] font-medium px-1.5 py-0.5 rounded-md"
+                style="background-color: var(--muted); color: var(--muted-foreground)"
+              >
+                {notifUnreadCount}
+              </span>
+            {/if}
+          </div>
           {#if notifUnreadCount > 0}
             <button
               type="button"
               onclick={markAllNotifRead}
-              class="text-xs cursor-pointer hover:underline"
-              style="color: var(--primary)"
+              class="text-[12px] font-medium cursor-pointer transition-opacity hover:opacity-70"
+              style="color: var(--muted-foreground)"
             >
-              Прочитати всі
+              Прочитати все
             </button>
           {/if}
         </div>
-        <div class="max-h-[400px] overflow-y-auto">
+
+        <!-- List -->
+        <div class="max-h-[420px] overflow-y-auto">
           {#if !notifInitialized && notifLoading}
-            <div class="p-8 text-center">
-              <p class="text-xs" style="color: var(--muted-foreground)">
-                Завантаження…
-              </p>
+            <div class="py-16 flex items-center justify-center">
+              <div
+                class="size-4 rounded-full border-2 animate-spin"
+                style="border-color: var(--border); border-top-color: var(--foreground)"
+              ></div>
             </div>
           {:else if notifications.length === 0}
-            <div class="p-8 text-center">
-              <Bell
-                class="size-8 mx-auto mb-2 opacity-30"
+            <div class="py-16 px-6 text-center">
+              <div
+                class="size-10 mx-auto mb-3 rounded-full flex items-center justify-center"
+                style="background-color: var(--muted)"
+              >
+                <Bell
+                  class="size-4"
+                  strokeWidth={1.75}
+                  style="color: var(--muted-foreground)"
+                />
+              </div>
+              <p
+                class="text-[13px] font-medium"
+                style="color: var(--foreground)"
+              >
+                Поки що тихо
+              </p>
+              <p
+                class="text-[12px] mt-1"
                 style="color: var(--muted-foreground)"
-              />
-              <p class="text-xs" style="color: var(--muted-foreground)">
-                Немає сповіщень
+              >
+                Нові сповіщення зʼявляться тут
               </p>
             </div>
           {:else}
-            {#each notifications as n (n.id)}
-              {@const Icon = notifIconFor(n.type)}
-              <button
-                type="button"
-                onclick={() => handleNotifClick(n)}
-                class="w-full flex items-start gap-3 px-4 py-3 text-left cursor-pointer transition-colors hover:bg-[var(--accent)]"
-                style="border-bottom: 1px solid var(--border); background-color: {n.isRead
-                  ? 'transparent'
-                  : 'color-mix(in srgb, var(--primary) 5%, transparent)'}"
-              >
-                {#if !n.isRead}
-                  <div
-                    class="size-2 rounded-full shrink-0 mt-2"
-                    style="background-color: var(--primary)"
-                  ></div>
-                {:else}
-                  <div class="size-2 shrink-0 mt-2"></div>
-                {/if}
-                <div
-                  class="size-8 rounded-full shrink-0 flex items-center justify-center"
-                  style="background-color: var(--muted)"
+            <div class="py-1">
+              {#each notifications as n (n.id)}
+                {@const Icon = notifIconFor(n.type)}
+                <button
+                  type="button"
+                  onclick={() => handleNotifClick(n)}
+                  class="group w-full flex items-start gap-3 px-4 py-3 text-left cursor-pointer transition-colors hover:bg-[var(--accent)] relative"
                 >
-                  <Icon class="size-4" style="color: var(--muted-foreground)" />
-                </div>
-                <div class="flex-1 min-w-0">
-                  <p
-                    class="text-sm font-medium leading-snug"
-                    style="color: var(--foreground)"
-                  >
-                    {n.title}
-                  </p>
-                  {#if n.body}
-                    <p
-                      class="text-xs mt-0.5 leading-snug line-clamp-2"
-                      style="color: var(--muted-foreground)"
-                    >
-                      {n.body}
-                    </p>
+                  {#if !n.isRead}
+                    <span
+                      class="absolute left-1.5 top-1/2 -translate-y-1/2 size-1.5 rounded-full"
+                      style="background-color: var(--primary)"
+                    ></span>
                   {/if}
-                  <p
-                    class="text-[10px] mt-1"
-                    style="color: var(--muted-foreground)"
+
+                  <div
+                    class="size-8 rounded-full shrink-0 flex items-center justify-center transition-colors"
+                    style="background-color: var(--muted)"
                   >
-                    {formatRelativeShort(n.createdAt)}
-                  </p>
-                </div>
-              </button>
-            {/each}
+                    <Icon
+                      class="size-[15px]"
+                      strokeWidth={1.75}
+                      style="color: var(--foreground)"
+                    />
+                  </div>
+
+                  <div class="flex-1 min-w-0 pt-px">
+                    <div class="flex items-baseline gap-2">
+                      <p
+                        class="text-[13px] leading-snug truncate flex-1 {n.isRead
+                          ? 'font-normal'
+                          : 'font-semibold'}"
+                        style="color: var(--foreground)"
+                      >
+                        {n.title}
+                      </p>
+                      <span
+                        class="text-[11px] shrink-0 tabular-nums"
+                        style="color: var(--muted-foreground)"
+                      >
+                        {formatRelativeShort(n.createdAt)}
+                      </span>
+                    </div>
+                    {#if n.body}
+                      <p
+                        class="text-[12px] mt-0.5 leading-snug line-clamp-1"
+                        style="color: var(--muted-foreground)"
+                      >
+                        {n.body}
+                      </p>
+                    {/if}
+                  </div>
+                </button>
+              {/each}
+            </div>
           {/if}
         </div>
+
+        <!-- Footer -->
+        {#if notifications.length > 0}
+          <div
+            class="h-10 flex items-center justify-center"
+            style="border-top: 1px solid var(--border); background-color: var(--muted)"
+          >
+            <a
+              href="/notifications"
+              onclick={() => (notifPopoverOpen = false)}
+              class="text-[12px] font-medium transition-opacity hover:opacity-70"
+              style="color: var(--foreground)"
+            >
+              Усі сповіщення
+            </a>
+          </div>
+        {/if}
       </Popover.Content>
     </Popover.Root>
 
+    <!-- User dropdown -->
     <DropdownMenu.Root>
       <DropdownMenu.Trigger>
         {#snippet child({ props })}
@@ -437,7 +516,7 @@
           </DropdownMenu.Item>
           <DropdownMenu.Item
             class="gap-2 cursor-pointer"
-            onclick={handleChatClick}
+            onclick={() => onnavigate('/messages')}
           >
             <MessageSquare class="size-3.5 text-muted-foreground" /><span
               >Повідомлення</span
@@ -446,8 +525,9 @@
               <span
                 class="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full"
                 style="background-color: var(--foreground); color: var(--background)"
-                >{messageCount}</span
               >
+                {messageCount}
+              </span>
             {/if}
           </DropdownMenu.Item>
           <DropdownMenu.Item

@@ -86,6 +86,7 @@ export const load: PageServerLoad = async ({
         username: user.username ?? undefined,
         avatar: user.avatar ?? undefined,
         bio: user.bio ?? undefined,
+        phone: user.phone ?? undefined,
         city: user.city ?? undefined,
         createdAt: user.createdAt.toISOString(),
         totalOrders,

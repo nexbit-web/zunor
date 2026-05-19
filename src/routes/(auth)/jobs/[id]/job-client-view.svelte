@@ -2,12 +2,14 @@
 <script lang="ts">
   import { goto } from '$app/navigation'
   import { Button } from '$lib/components/ui/button'
+  import { Badge } from '$lib/components/ui/badge'
   import {
     Avatar,
     AvatarFallback,
     AvatarImage,
   } from '$lib/components/ui/avatar'
-  import { Badge } from '$lib/components/ui/badge'
+  import { Card, CardContent } from '$lib/components/ui/card'
+  import { Separator } from '$lib/components/ui/separator'
   import {
     ArrowLeft,
     MapPin,
@@ -16,13 +18,13 @@
     Eye,
     MessageSquare,
     Star,
-    Banknote,
+    Wallet,
     CheckCircle2,
   } from 'lucide-svelte'
   import type { PageData } from './$types'
+  import { Spinner } from '$lib/components/ui/spinner'
 
   let { data }: { data: PageData } = $props()
-
   let acceptingId = $state<string | null>(null)
 
   function formatMoney(cents: number, currency = 'UAH') {
@@ -32,19 +34,12 @@
       minimumFractionDigits: 0,
     }).format(cents / 100)
   }
-
-  function formatBudget(
-    min: number | null,
-    max: number | null,
-    currency = 'UAH',
-  ) {
-    if (min && max)
-      return `${formatMoney(min, currency)} — ${formatMoney(max, currency)}`
-    if (max) return `до ${formatMoney(max, currency)}`
-    if (min) return `від ${formatMoney(min, currency)}`
-    return 'Бюджет договірний'
+  function formatBudget(min: number | null, max: number | null, c = 'UAH') {
+    if (min && max) return `${formatMoney(min, c)} — ${formatMoney(max, c)}`
+    if (max) return `до ${formatMoney(max, c)}`
+    if (min) return `від ${formatMoney(min, c)}`
+    return 'Договірний'
   }
-
   function formatRelative(iso: string) {
     const diff = Date.now() - new Date(iso).getTime()
     const min = Math.floor(diff / 60_000)
@@ -53,34 +48,35 @@
     if (min < 1) return 'щойно'
     if (min < 60) return `${min} хв тому`
     if (hr < 24) return `${hr} год тому`
-    if (days < 7) return `${days} дн тому`
+    if (days < 7) return `${days} дн`
     return new Date(iso).toLocaleDateString('uk-UA', {
       day: 'numeric',
       month: 'short',
     })
   }
-
   function expiresIn(iso: string) {
     const diff = new Date(iso).getTime() - Date.now()
     if (diff <= 0) return 'Прострочено'
     const days = Math.floor(diff / (24 * 60 * 60_000))
     const hr = Math.floor(diff / (60 * 60_000))
-    if (days >= 1) return `Активна ще ${days} дн`
-    if (hr >= 1) return `Активна ще ${hr} год`
-    return 'Активна < 1 год'
+    if (days >= 1) return `${days} дн`
+    if (hr >= 1) return `${hr} год`
+    return '< 1 год'
   }
-
   function memberSince(iso: string) {
     return new Date(iso).toLocaleDateString('uk-UA', {
       month: 'short',
       year: 'numeric',
     })
   }
-
   function initials(name: string | null) {
     return (name ?? '?')[0]?.toUpperCase() ?? '?'
   }
-
+  function statusVariant(s: string): 'default' | 'secondary' | 'outline' {
+    if (s === 'OPEN') return 'default'
+    if (s === 'IN_PROGRESS') return 'secondary'
+    return 'outline'
+  }
   function statusLabel(s: string) {
     return (
       (
@@ -94,7 +90,6 @@
       )[s] ?? s
     )
   }
-
   function proposalStatusLabel(s: string) {
     return (
       (
@@ -106,6 +101,13 @@
         } as Record<string, string>
       )[s] ?? s
     )
+  }
+  function proposalStatusVariant(
+    s: string,
+  ): 'default' | 'secondary' | 'outline' {
+    if (s === 'ACCEPTED') return 'default'
+    if (s === 'SENT') return 'secondary'
+    return 'outline'
   }
 
   async function acceptProposal(proposalId: string) {
@@ -119,7 +121,7 @@
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
-        alert(json?.message ?? json?.error ?? 'Не вдалось прийняти')
+        alert(json?.message ?? 'Не вдалось прийняти')
         return
       }
       if (json.orderId) goto(`/orders/${json.orderId}`, { invalidateAll: true })
@@ -132,32 +134,33 @@
   }
 </script>
 
-<div class="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
-  <button
-    type="button"
-    onclick={() => goto('/jobs')}
-    class="inline-flex items-center gap-1.5 text-sm mb-5 cursor-pointer hover:opacity-70 transition-opacity"
-    style="color: var(--muted-foreground)"
-  >
-    <ArrowLeft class="size-4" /> До списку
-  </button>
+<!-- Back -->
+<button
+  type="button"
+  onclick={() => goto('/jobs')}
+  class="inline-flex items-center gap-1.5 text-sm mb-5 cursor-pointer hover:opacity-70 transition-opacity"
+  style="color: var(--muted-foreground)"
+>
+  <ArrowLeft class="size-4" /> До моїх заявок
+</button>
 
-  <!-- Header card -->
-  <div
-    class="rounded-2xl p-5 sm:p-6 mb-4"
-    style="background-color: var(--card); border: 1px solid var(--border)"
-  >
+<!-- Header card -->
+<Card class="rounded-2xl mb-3">
+  <CardContent class="p-5 sm:p-6">
     <div class="flex items-center gap-2 flex-wrap mb-3">
-      <Badge variant="outline" class="text-[10px] font-bold uppercase">
+      <Badge
+        variant={statusVariant(data.job.status)}
+        class="text-[10px] uppercase font-bold"
+      >
         {statusLabel(data.job.status)}
       </Badge>
-      <span class="text-xs" style="color: var(--muted-foreground)"
-        >{formatRelative(data.job.createdAt)}</span
-      >
+      <span class="text-xs" style="color: var(--muted-foreground)">
+        {formatRelative(data.job.createdAt)}
+      </span>
       {#if data.job.status === 'OPEN'}
-        <span class="text-xs" style="color: var(--muted-foreground)"
-          >· {expiresIn(data.job.expiresAt)}</span
-        >
+        <span class="text-xs" style="color: var(--muted-foreground)">
+          · Активна ще {expiresIn(data.job.expiresAt)}
+        </span>
       {/if}
     </div>
 
@@ -168,229 +171,186 @@
       {data.job.title}
     </h1>
 
-    <div class="flex items-center gap-3 flex-wrap text-sm mb-5">
-      <span
-        class="inline-flex items-center gap-1.5"
-        style="color: var(--muted-foreground)"
+    <p
+      class="text-sm leading-relaxed whitespace-pre-wrap mb-4"
+      style="color: var(--foreground)"
+    >
+      {data.job.description}
+    </p>
+
+    <div class="flex items-center gap-2 flex-wrap mb-4">
+      <Badge variant="outline" class="font-normal gap-1 text-xs">
+        <Layers class="size-3" />
+        {data.job.category}
+      </Badge>
+      <Badge variant="outline" class="font-normal gap-1 text-xs">
+        <MapPin class="size-3" />
+        {data.job.city}
+      </Badge>
+      <Badge
+        variant="secondary"
+        class="font-semibold tabular-nums text-xs gap-1"
       >
-        <Layers class="size-3.5" />{data.job.category}
-      </span>
-      <span
-        class="inline-flex items-center gap-1.5"
-        style="color: var(--muted-foreground)"
-      >
-        <MapPin class="size-3.5" />{data.job.city}
-      </span>
-      <span
-        class="inline-flex items-center gap-1.5 font-semibold tabular-nums"
-        style="color: var(--foreground)"
-      >
-        <Banknote class="size-3.5" />
+        <Wallet class="size-3" />
         {formatBudget(
           data.job.budgetMinCents,
           data.job.budgetMaxCents,
           data.job.currency,
         )}
-      </span>
+      </Badge>
     </div>
+
+    <Separator class="my-4" />
 
     <div
-      class="text-sm leading-relaxed whitespace-pre-wrap mb-5"
-      style="color: var(--foreground)"
-    >
-      {data.job.description}
-    </div>
-
-    <div
-      class="flex items-center gap-4 pt-4 text-xs"
-      style="border-top: 1px solid var(--border); color: var(--muted-foreground)"
-    >
-      <span class="inline-flex items-center gap-1"
-        ><Eye class="size-3.5" />{data.job.viewsCount} переглядів</span
-      >
-      <span class="inline-flex items-center gap-1"
-        ><MessageSquare class="size-3.5" />{data.job.proposalsCount} пропозицій</span
-      >
-    </div>
-  </div>
-
-  <!-- Client card -->
-  <div
-    class="rounded-2xl p-4 sm:p-5 mb-4"
-    style="background-color: var(--card); border: 1px solid var(--border)"
-  >
-    <p
-      class="text-[11px] font-semibold uppercase tracking-widest mb-3"
+      class="flex items-center gap-4 text-xs"
       style="color: var(--muted-foreground)"
     >
-      Замовник
-    </p>
-    <a
-      href={data.job.client.username ? `/@${data.job.client.username}` : '#'}
-      class="flex items-center gap-3 group"
+      <span class="inline-flex items-center gap-1">
+        <MessageSquare class="size-3.5" />
+        {data.job.proposalsCount} пропозиц{data.job.proposalsCount === 1
+          ? 'ія'
+          : 'ій'}
+      </span>
+      <span class="inline-flex items-center gap-1">
+        <Eye class="size-3.5" />
+        {data.job.viewsCount} переглядів
+      </span>
+    </div>
+  </CardContent>
+</Card>
+
+<!-- Proposals -->
+{#if data.proposals.length > 0}
+  <div class="flex items-center justify-between mb-3 mt-6 px-1">
+    <h2
+      class="text-base font-bold tracking-tight"
+      style="color: var(--foreground); letter-spacing: -0.01em"
     >
-      <Avatar class="size-12">
-        <AvatarImage
-          src={data.job.client.avatar ?? ''}
-          alt={data.job.client.name ?? ''}
-        />
-        <AvatarFallback class="text-base font-semibold"
-          >{initials(data.job.client.name)}</AvatarFallback
-        >
-      </Avatar>
-      <div class="min-w-0 flex-1">
-        <p
-          class="text-sm font-semibold group-hover:underline"
-          style="color: var(--foreground)"
-        >
-          {data.job.client.name ?? 'Користувач'}
-        </p>
-        <div
-          class="flex items-center gap-2 text-xs mt-0.5"
-          style="color: var(--muted-foreground)"
-        >
-          {#if data.job.client.reviewsCount > 0}
-            <span class="inline-flex items-center gap-1">
-              <Star class="size-3" style="color: #f5a623; fill: #f5a623" />
-              {data.job.client.avgRating.toFixed(1)} ({data.job.client
-                .reviewsCount})
-            </span>
-            <span>·</span>
-          {/if}
-          <span>З {memberSince(data.job.client.createdAt)}</span>
-        </div>
-      </div>
-    </a>
+      Відгуки майстрів
+    </h2>
+    <span class="text-xs tabular-nums" style="color: var(--muted-foreground)">
+      {data.proposals.length}
+    </span>
   </div>
 
-  <!-- Proposals -->
-  {#if data.proposals.length > 0}
-    <div
-      class="rounded-2xl p-5"
-      style="background-color: var(--card); border: 1px solid var(--border)"
-    >
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-sm font-semibold" style="color: var(--foreground)">
-          Пропозиції майстрів
-        </h2>
-        <span class="text-xs" style="color: var(--muted-foreground)"
-          >{data.proposals.length}</span
-        >
-      </div>
-      <div class="space-y-3">
-        {#each data.proposals as p (p.id)}
-          <div
-            class="rounded-xl p-4"
-            style="background-color: var(--background); border: 1px solid var(--border)"
-          >
-            <div class="flex items-start justify-between gap-3 mb-3">
-              <a
-                href={p.master.username ? `/@${p.master.username}` : '#'}
-                class="flex items-center gap-2.5 min-w-0 group"
-              >
-                <Avatar class="size-9 shrink-0">
-                  <AvatarImage
-                    src={p.master.avatar ?? ''}
-                    alt={p.master.name ?? ''}
-                  />
-                  <AvatarFallback class="text-sm font-semibold"
-                    >{initials(p.master.name)}</AvatarFallback
-                  >
-                </Avatar>
-                <div class="min-w-0">
-                  <p
-                    class="text-sm font-semibold group-hover:underline truncate"
-                    style="color: var(--foreground)"
-                  >
-                    {p.master.name ?? 'Майстер'}
-                  </p>
+  <div class="space-y-3">
+    {#each data.proposals as p (p.id)}
+      <Card class="rounded-2xl transition-all hover:-translate-y-0.5">
+        <CardContent class="p-5">
+          <div class="flex items-start justify-between gap-3 mb-3">
+            <a
+              href={p.master.username ? `/@${p.master.username}` : '#'}
+              class="flex items-center gap-2.5 min-w-0 group"
+            >
+              <Avatar class="size-10 shrink-0">
+                <AvatarImage
+                  src={p.master.avatar ?? ''}
+                  alt={p.master.name ?? ''}
+                />
+                <AvatarFallback class="text-sm font-semibold">
+                  {initials(p.master.name)}
+                </AvatarFallback>
+              </Avatar>
+              <div class="min-w-0">
+                <p
+                  class="text-sm font-semibold group-hover:underline truncate"
+                  style="color: var(--foreground)"
+                >
+                  {p.master.name ?? 'Майстер'}
+                </p>
+                <div
+                  class="flex items-center gap-1.5 text-xs mt-0.5"
+                  style="color: var(--muted-foreground)"
+                >
                   {#if p.master.reviewsCount > 0}
-                    <p
-                      class="text-[11px] inline-flex items-center gap-1 mt-0.5"
-                      style="color: var(--muted-foreground)"
-                    >
+                    <span class="inline-flex items-center gap-1">
                       <Star
                         class="size-3"
                         style="color: #f5a623; fill: #f5a623"
                       />
                       {p.master.avgRating.toFixed(1)} ({p.master.reviewsCount})
-                    </p>
+                    </span>
+                    <span>·</span>
                   {/if}
+                  <span>{formatRelative(p.createdAt)}</span>
                 </div>
-              </a>
-              <Badge variant="outline" class="text-[10px] uppercase"
-                >{proposalStatusLabel(p.status)}</Badge
-              >
-            </div>
-
-            <p
-              class="text-sm leading-relaxed mb-3 whitespace-pre-wrap"
-              style="color: var(--foreground)"
-            >
-              {p.message}
-            </p>
-
-            <div
-              class="flex items-center justify-between gap-3 pt-3"
-              style="border-top: 1px solid var(--border)"
-            >
-              <div
-                class="flex items-center gap-3 text-xs"
-                style="color: var(--muted-foreground)"
-              >
-                <span class="inline-flex items-center gap-1"
-                  ><Clock class="size-3" />{p.estimatedDays} дн</span
-                >
-                <span
-                  class="font-semibold tabular-nums"
-                  style="color: var(--foreground)"
-                  >{formatMoney(p.priceCents, data.job.currency)}</span
-                >
               </div>
-              {#if p.status === 'SENT' && data.job.status === 'OPEN'}
-                <Button
-                  size="sm"
-                  disabled={acceptingId !== null}
-                  onclick={() => acceptProposal(p.id)}
-                  class="gap-1.5"
-                >
-                  {#if acceptingId === p.id}
-                    Приймаємо…
-                  {:else}
-                    <CheckCircle2 class="size-3.5" /> Прийняти
-                  {/if}
-                </Button>
-              {/if}
-            </div>
+            </a>
+            <Badge
+              variant={proposalStatusVariant(p.status)}
+              class="text-[10px] uppercase shrink-0"
+            >
+              {proposalStatusLabel(p.status)}
+            </Badge>
           </div>
-        {/each}
-      </div>
-    </div>
-  {:else if data.job.status === 'OPEN'}
-    <div
-      class="rounded-2xl p-8 text-center"
-      style="background-color: var(--card); border: 1px solid var(--border)"
-    >
+
+          <p
+            class="text-sm leading-relaxed mb-4 whitespace-pre-wrap"
+            style="color: var(--foreground)"
+          >
+            {p.message}
+          </p>
+
+          <Separator class="mb-3" />
+
+          <div class="flex items-center justify-between gap-3 flex-wrap">
+            <div class="flex items-center gap-2 flex-wrap">
+              <Badge variant="outline" class="font-normal gap-1 text-xs">
+                <Clock class="size-3" />
+                {p.estimatedDays} дн
+              </Badge>
+              <Badge
+                variant="secondary"
+                class="font-semibold tabular-nums text-xs gap-1"
+              >
+                <Wallet class="size-3" />
+                {formatMoney(p.priceCents, data.job.currency)}
+              </Badge>
+            </div>
+            {#if p.status === 'SENT' && data.job.status === 'OPEN'}
+              <Button
+                size="sm"
+                disabled={acceptingId !== null}
+                onclick={() => acceptProposal(p.id)}
+                class="rounded-full gap-1.5"
+              >
+                {#if acceptingId === p.id}
+                  <Spinner />
+                  Приймаємо…
+                {:else}
+                  <CheckCircle2 class="size-3.5" /> Прийняти
+                {/if}
+              </Button>
+            {/if}
+          </div>
+        </CardContent>
+      </Card>
+    {/each}
+  </div>
+{:else if data.job.status === 'OPEN'}
+  <Card class="rounded-2xl">
+    <CardContent class="px-6 py-12 text-center">
       <div
-        class="size-12 rounded-full mx-auto mb-3 flex items-center justify-center"
+        class="size-14 rounded-2xl mx-auto mb-4 flex items-center justify-center"
         style="background-color: var(--muted)"
       >
         <Clock
-          class="size-5"
-          style="color: var(--muted-foreground)"
+          class="size-6"
           strokeWidth={1.75}
+          style="color: var(--muted-foreground)"
         />
       </div>
-      <p class="text-sm font-semibold mb-1" style="color: var(--foreground)">
+      <h2 class="text-base font-semibold mb-1" style="color: var(--foreground)">
         Очікуємо пропозиції
-      </p>
+      </h2>
       <p
-        class="text-xs leading-relaxed max-w-xs mx-auto"
+        class="text-sm max-w-sm mx-auto"
         style="color: var(--muted-foreground)"
       >
-        Майстри вашого міста отримали повідомлення про заявку. Перші пропозиції
-        зазвичай зʼявляються протягом години.
+        Майстри вашого міста отримали сповіщення. Перші відгуки зазвичай
+        зʼявляються протягом години.
       </p>
-    </div>
-  {/if}
-</div>
+    </CardContent>
+  </Card>
+{/if}

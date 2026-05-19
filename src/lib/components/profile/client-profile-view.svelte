@@ -21,6 +21,7 @@
     Repeat,
     Sparkles,
     ArrowRight,
+    Phone,
   } from 'lucide-svelte'
   import { goto } from '$app/navigation'
   import type { ClientProfileData } from '$lib/components/profile/types'
@@ -73,14 +74,26 @@
 
   // ─── State ───
   let avatarLoaded = $state(false)
-  let copied = $state(false)
+  let usernameCopied = $state(false)
+  let phoneCopied = $state(false)
 
   async function copyUsername() {
     if (!user.username) return
     try {
       await navigator.clipboard.writeText('@' + user.username)
-      copied = true
-      setTimeout(() => (copied = false), 1200)
+      usernameCopied = true
+      setTimeout(() => (usernameCopied = false), 1200)
+    } catch {
+      // ignore
+    }
+  }
+
+  async function copyPhone() {
+    if (!user.phone) return
+    try {
+      await navigator.clipboard.writeText(user.phone)
+      phoneCopied = true
+      setTimeout(() => (phoneCopied = false), 1200)
     } catch {
       // ignore
     }
@@ -165,7 +178,7 @@
             class="cursor-pointer transition-colors hover:opacity-70"
             aria-label="Скопіювати нікнейм"
           >
-            {#if copied}
+            {#if usernameCopied}
               <Check class="size-3" style="color: #10b981" aria-hidden="true" />
             {:else}
               <Copy class="size-3" aria-hidden="true" />
@@ -254,6 +267,75 @@
       class="border-t"
       style="border-color: color-mix(in oklch, var(--foreground) 8%, transparent)"
     ></div>
+
+    <!-- ═══════ Контакти (тільки owner) ═══════ -->
+    {#if isOwner}
+      <section aria-labelledby="contacts-heading" class="py-5 space-y-3">
+        <h2
+          id="contacts-heading"
+          class="text-[11px] font-medium tracking-widest uppercase flex items-center gap-1.5"
+          style="color: var(--muted-foreground)"
+        >
+          <Phone class="size-3.5" aria-hidden="true" /> Контакти
+          <span
+            class="font-normal text-[10px] normal-case tracking-normal ml-1"
+            style="color: color-mix(in oklch, var(--muted-foreground) 60%, transparent)"
+          >
+            — видно тільки вам
+          </span>
+        </h2>
+
+        {#if user.phone}
+          <div class="flex items-center justify-between gap-3">
+            <div class="min-w-0">
+              <p
+                class="text-[10px] uppercase tracking-wider mb-0.5"
+                style="color: var(--muted-foreground)"
+              >
+                Телефон
+              </p>
+              <p
+                class="text-sm font-medium tabular-nums truncate"
+                style="color: var(--foreground)"
+              >
+                {user.phone}
+              </p>
+            </div>
+            <button
+              type="button"
+              onclick={copyPhone}
+              class="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-colors cursor-pointer hover:opacity-70 shrink-0"
+              style="background-color: var(--muted); color: var(--muted-foreground)"
+              aria-label="Скопіювати телефон"
+            >
+              {#if phoneCopied}
+                <Check
+                  class="size-3"
+                  style="color: #10b981"
+                  aria-hidden="true"
+                />
+                Скопійовано
+              {:else}
+                <Copy class="size-3" aria-hidden="true" />
+                Копіювати
+              {/if}
+            </button>
+          </div>
+        {:else}
+          <p
+            class="text-sm italic"
+            style="color: var(--muted-foreground); opacity: 0.6"
+          >
+            Ви ще не додали телефон.
+          </p>
+        {/if}
+      </section>
+
+      <div
+        class="border-t"
+        style="border-color: color-mix(in oklch, var(--foreground) 8%, transparent)"
+      ></div>
+    {/if}
 
     <!-- ═══════ Про себе ═══════ -->
     {#if user.bio || isOwner}

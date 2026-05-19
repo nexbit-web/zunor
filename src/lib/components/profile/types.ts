@@ -17,6 +17,7 @@ export interface FreelancerProfileData {
   username?: string
   avatar?: string | null
   bio?: string | null
+  phone?: string | null
   city?: string | null
   createdAt: string | Date
 
@@ -38,6 +39,7 @@ export interface ClientProfileData {
   username?: string
   avatar?: string | null
   bio?: string | null
+  phone?: string | null
   city?: string | null
   createdAt: string | Date
   totalOrders: number

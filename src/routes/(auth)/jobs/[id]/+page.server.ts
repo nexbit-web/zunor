@@ -62,6 +62,23 @@ export const load: PageServerLoad = async ({ params, request }) => {
 
   if (!job) throw error(404, 'Заявку не знайдено')
 
+  // ─── Подтягиваем human-readable имена для category и city ───
+  const [categoryRow, cityRow] = await Promise.all([
+    prisma.category.findUnique({
+      where: { slug: job.category },
+      select: { name: true },
+    }),
+    prisma.city.findUnique({
+      where: { slug: job.city },
+      select: { name: true, region: true },
+    }),
+  ])
+
+  const categoryName = categoryRow?.name ?? job.category
+  const cityName = cityRow?.name ?? job.city
+
+  if (!job) throw error(404, 'Заявку не знайдено')
+
   const isOwner = job.clientId === userId
   const isMaster = user.role === 'MASTER'
 
@@ -180,6 +197,10 @@ export const load: PageServerLoad = async ({ params, request }) => {
   return {
     job: {
       ...job,
+      category: categoryName, 
+      categorySlug: job.category,  
+      city: cityName,  
+      citySlug: job.city,
       createdAt: job.createdAt.toISOString(),
       expiresAt: job.expiresAt.toISOString(),
       client: {
