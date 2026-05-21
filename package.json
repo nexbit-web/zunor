@@ -15,7 +15,6 @@
     "@fontsource-variable/inter": "^5.2.8",
     "@fontsource-variable/noto-sans": "^5.2.10",
     "@internationalized/date": "^3.12.1",
-    "@lucide/svelte": "^1.16.0",
     "@sveltejs/adapter-auto": "^7.0.1",
     "@sveltejs/kit": "^2.57.0",
     "@sveltejs/vite-plugin-svelte": "^7.0.0",
@@ -24,7 +23,6 @@
     "@types/nodemailer": "^8.0.0",
     "@types/nprogress": "^0.2.3",
     "@types/pg": "^8.20.0",
-    "@types/pusher-js": "^4.2.2",
     "bits-ui": "^2.17.3",
     "clsx": "^2.1.1",
     "paneforge": "^1.0.2",
@@ -41,6 +39,7 @@
     "vite": "^8.0.7"
   },
   "dependencies": {
+    "@lucide/svelte": "^1.16.0",
     "@prisma/adapter-pg": "^7.7.0",
     "@prisma/client": "^7.7.0",
     "better-auth": "^1.6.5",
@@ -54,7 +53,6 @@
     "prisma": "^7.7.0",
     "pusher": "^5.3.3",
     "pusher-js": "^8.5.0",
-    "resend": "^6.12.0",
     "svelte-hot-french-toast": "^4.0.0"
   }
 }
