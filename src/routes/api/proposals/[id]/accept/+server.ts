@@ -76,7 +76,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
         clientId: session.user.id,
         masterId: proposal.masterId,
         title: proposal.job.title,
-        description: proposal.job.description,
+        description: proposal.job.description ?? '',
         priceCents: proposal.priceCents,
         currency: 'UAH',
         status: 'CREATED',
