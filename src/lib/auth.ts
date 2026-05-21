@@ -1,33 +1,9 @@
 import { betterAuth } from 'better-auth'
 import { prismaAdapter } from 'better-auth/adapters/prisma'
-import { PrismaClient } from '../generated/prisma/client'
-import { PrismaPg } from '@prisma/adapter-pg'
-import {
-  BETTER_AUTH_URL,
-  BETTER_AUTH_SECRET,
-  DATABASE_URL,
-} from '$env/static/private'
+import { BETTER_AUTH_URL, BETTER_AUTH_SECRET } from '$env/static/private'
 import { dev } from '$app/environment'
+import { prisma } from './prisma'
 import { sendResetPasswordEmail } from './email'
-
-// ─── Prisma client (singleton) ───
-// HMR у dev може створювати нові інстанси при кожному hot-reload —
-// тому в dev зберігаємо інстанс на globalThis, інакше відкриваються
-// сотні з'єднань і Postgres вибиває "too many connections".
-const adapter = new PrismaPg({ connectionString: DATABASE_URL })
-
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined
-}
-
-const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    adapter,
-    log: dev ? ['warn', 'error'] : ['error'],
-  })
-
-if (dev) globalForPrisma.prisma = prisma
 
 // ─── Better-auth ───
 export const auth = betterAuth({
