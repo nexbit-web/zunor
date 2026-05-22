@@ -1,29 +1,27 @@
 <script lang="ts">
   import HeroSection from '$lib/components/home/hero-section.svelte'
-  import CategoriesSection from '$lib/components/home/categories-section.svelte'
   import HowItWorks from '$lib/components/home/how-it-works.svelte'
 </script>
 
 <svelte:head>
-  <title>Zunor.org — сервіс пошуку майстрів та фрилансерів</title>
-
+  <title>Zunor — прибирання як від сусіда</title>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <!-- SEO -->
   <meta
     name="description"
-    content="Zunor — сучасна платформа для пошуку майстрів та фрилансерів в Україні. Замовляйте послуги швидко та безпечно."
+    content="Zunor — сервіс замовлення прибирання квартир, будинків та офісів в Одесі. Замов клінера за 4 кроки."
   />
 
-  <!-- Open Graph -->
-  <meta property="og:title" content="Zunor" />
-  <meta property="og:description" content="Знайди майстра або заробляй на своїх навичках" />
+  <meta property="og:title" content="Zunor — прибирання як від сусіда" />
+  <meta
+    property="og:description"
+    content="Замов клінера в Одесі. Без анкет, без зайвих питань."
+  />
   <meta property="og:type" content="website" />
 
-  <!-- Favicon -->
   <link rel="icon" href="/favicon.ico" />
 </svelte:head>
+
 <HeroSection />
-<CategoriesSection />
 <HowItWorks />

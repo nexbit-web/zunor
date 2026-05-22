@@ -3,8 +3,7 @@ import { json, error } from '@sveltejs/kit'
 import { auth } from '$lib/auth'
 import { prisma } from '$lib/prisma'
 import { limit } from '$lib/rate-limit'
-import { Notify } from '$lib/server/notifications'
-import { safeTrigger, channels } from '$lib/server/pusher'
+import { dispatchJob } from '$lib/server/dispatch'
 import type { RequestHandler } from './$types'
 
 const JOB_EXPIRES_DAYS = 7
@@ -231,56 +230,12 @@ export const POST: RequestHandler = async ({ request }) => {
     },
   })
 
-  // ─── BROADCAST: находим подходящих мастеров и шлём notification + Pusher ───
-  // Не блокируем ответ клиенту — рассылка идёт асинхронно (fail-soft)
-  broadcastToMasters(job).catch((err) => console.error('[job:broadcast]', err))
-
-  return json({ job }, { status: 201 })
-}
-
-/**
- * Находит подходящих мастеров и шлёт им NEW_JOB notification + Pusher event.
- *
- * Критерии матчинга:
- *   - role = MASTER
- *   - masterProfile.isActive
- *   - masterProfile.verificationStatus = VERIFIED
- *   - User.city = job.city
- *   - masterProfile.categories содержит job.category
- *   - masterId !== clientId
- */
-async function broadcastToMasters(job: {
-  id: string
-  title: string
-  category: string
-  city: string
-}) {
-  const masters = await prisma.user.findMany({
-    where: {
-      role: 'MASTER',
-      city: job.city,
-      masterProfile: {
-        isActive: true,
-        verificationStatus: 'VERIFIED',
-        categories: { has: job.category },
-      },
-    },
-    select: { id: true },
-    take: 500,
-  })
-
-  if (masters.length === 0) return
-
-  // Параллельно создаём notifications и шлём Pusher
-  await Promise.all(
-    masters.map(async (master) => {
-      try {
-        await Notify.newJob(master.id, job.id, job.title)
-      } catch (err) {
-        console.error(`[broadcast] notify ${master.id} failed:`, err)
-      }
-    }),
+  // ─── DISPATCH: мозок-диспетчер вирішує кого уведомити (хвиля 1) ───
+  // Не блокуємо відповідь клієнту — розсилка йде асинхронно (fail-soft).
+  // Хвилі 2-3 підхопить cron, якщо у заявки 0 відгуків.
+  dispatchJob(job.id, job.title).catch((err) =>
+    console.error('[job:dispatch]', err),
   )
 
-  console.log(`[job:${job.id}] broadcast to ${masters.length} masters`)
+  return json({ job }, { status: 201 })
 }

@@ -489,3 +489,22 @@ model Verification {
   @@map("verification")
   @@index([identifier])
 }
+
+// ═══════════════════════════════════════════════
+// DISPATCH (пам'ять мозку-диспетчера)
+// ═══════════════════════════════════════════════
+
+model DispatchEvent {
+  id          String    @id @default(cuid())
+  jobId       String
+  masterId    String
+  wave        Int                       // номер хвилі (1, 2, 3...)
+  score       Float                     // який score був на момент відправки
+  notifiedAt  DateTime  @default(now())
+  openedAt    DateTime?                 // майстер відкрив заявку
+  respondedAt DateTime?                 // майстер залишив відгук
+
+  @@unique([jobId, masterId])           // одному майстру — одне уведомлення на заявку
+  @@index([jobId])
+  @@index([masterId])
+}
