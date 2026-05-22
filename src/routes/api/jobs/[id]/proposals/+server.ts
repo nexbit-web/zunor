@@ -4,6 +4,7 @@ import { auth } from '$lib/auth'
 import { prisma } from '$lib/prisma'
 import { limit } from '$lib/rate-limit'
 import { Notify } from '$lib/server/notifications'
+import { markResponded } from '$lib/server/dispatch'
 import type { RequestHandler } from './$types'
 
 /**
@@ -127,7 +128,9 @@ export const POST: RequestHandler = async ({ params, request }) => {
   } catch (err) {
     console.error('[proposal:new] notify failed', err)
   }
-
+  // Пам'ять мозку: майстер відгукнувся на заявку, яку йому розіслали.
+  // Ключова метрика якості dispatch (хто з уведомлених реально відповів).
+  markResponded(job.id, session.user.id).catch(() => {})
   return json({ proposal }, { status: 201 })
 }
 

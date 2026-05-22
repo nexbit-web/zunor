@@ -2,6 +2,7 @@
 import { auth } from '$lib/auth'
 import { prisma } from '$lib/prisma'
 import { error, redirect } from '@sveltejs/kit'
+import { markOpened } from '$lib/server/dispatch'
 import type { PageServerLoad } from './$types'
 
 export const load: PageServerLoad = async ({ params, request }) => {
@@ -90,6 +91,12 @@ export const load: PageServerLoad = async ({ params, request }) => {
         data: { viewsCount: { increment: 1 } },
       })
       .catch(() => {})
+  }
+
+  // Пам'ять мозку: майстер відкрив заявку, яку йому розіслали.
+  // Метрика "відкрив, але не відгукнувся" — для майбутнього ML.
+  if (isMaster && !isOwner) {
+    markOpened(job.id, userId).catch(() => {})
   }
 
   // Пропозиції — клієнт бачить всі, майстер бачить тільки свою
@@ -197,9 +204,9 @@ export const load: PageServerLoad = async ({ params, request }) => {
   return {
     job: {
       ...job,
-      category: categoryName, 
-      categorySlug: job.category,  
-      city: cityName,  
+      category: categoryName,
+      categorySlug: job.category,
+      city: cityName,
       citySlug: job.city,
       createdAt: job.createdAt.toISOString(),
       expiresAt: job.expiresAt.toISOString(),
