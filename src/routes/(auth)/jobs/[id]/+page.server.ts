@@ -190,9 +190,6 @@ export const load: PageServerLoad = async ({ params, request }) => {
     } else if (!user.masterProfile?.isActive) {
       canPropose = false
       cantProposeReason = 'Профіль майстра неактивний'
-    } else if (user.masterProfile.verificationStatus !== 'VERIFIED') {
-      canPropose = false
-      cantProposeReason = 'Профіль не верифіковано'
     } else if (!user.masterProfile.categories.includes(job.category)) {
       canPropose = false
       cantProposeReason = 'Ця категорія не у вашому профілі'

@@ -100,12 +100,9 @@ export const GET: RequestHandler = async ({ request, url }) => {
   }
 
   const mp = user.masterProfile
-  if (
-    !mp?.isActive ||
-    mp.verificationStatus !== 'VERIFIED' ||
-    !user.city ||
-    mp.categories.length === 0
-  ) {
+  // Маніфест: впускаємо новачків. Verified — це бонус у scoring, не фільтр.
+  // Достатньо активного профілю з містом і категорією.
+  if (!mp?.isActive || !user.city || mp.categories.length === 0) {
     return json({ jobs: [], nextCursor: null })
   }
 
