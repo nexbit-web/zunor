@@ -5,6 +5,7 @@ import { svelteKitHandler } from 'better-auth/svelte-kit'
 import { building, dev } from '$app/environment'
 import { sequence } from '@sveltejs/kit/hooks'
 import { redirect, type Handle } from '@sveltejs/kit'
+import { touchPresence } from '$lib/server/presence'
 
 const authHandle: Handle = async ({ event, resolve }) => {
   return svelteKitHandler({ event, resolve, auth, building })
@@ -47,6 +48,9 @@ const onboardingGuard: Handle = async ({ event, resolve }) => {
       masterProfile: { select: { verificationStatus: true } },
     },
   })
+
+  // Оновлюємо presence (throttled, не на кожен запит)
+  touchPresence(session.user.id)
 
   if (!user) return resolve(event)
 

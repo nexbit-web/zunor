@@ -21,16 +21,15 @@ const { SCORE } = DISPATCH_CONFIG
 export function scoreCandidate(c: Candidate, now: Date): number {
   let score = 0
 
-  // ─── Швидкість: онлайн та нещодавня активність ───
-  if (c.isOnline) {
-    score += SCORE.ONLINE
-  } else {
-    const minsSinceSeen = (now.getTime() - c.lastSeen.getTime()) / 60000
-    if (minsSinceSeen < 5) score += SCORE.SEEN_5MIN
-    else if (minsSinceSeen < 60) score += SCORE.SEEN_1HOUR
-    else if (minsSinceSeen < 60 * 24) score += SCORE.SEEN_24HOUR
-  }
-
+  // ─── Швидкість: онлайн визначається свіжістю lastSeen ───
+  // Не довіряємо флагу isOnline (він не скидається в false при виході).
+  // lastSeen — чесний, оновлюється на кожному запиті (throttled).
+  const minsSinceSeen = (now.getTime() - c.lastSeen.getTime()) / 60000
+  if (minsSinceSeen < 5)
+    score += SCORE.ONLINE // реально онлайн зараз
+  else if (minsSinceSeen < 30) score += SCORE.SEEN_5MIN
+  else if (minsSinceSeen < 60) score += SCORE.SEEN_1HOUR
+  else if (minsSinceSeen < 60 * 24) score += SCORE.SEEN_24HOUR
   // ─── Якість: рейтинг ───
   score += c.avgRating * SCORE.RATING_MULTIPLIER
 
