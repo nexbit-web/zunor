@@ -7,10 +7,6 @@ datasource db {
   provider = "postgresql"
 }
 
-// # Міграція:
-// npx prisma migrate dev --name unified_services_v4
-// npx prisma generate
-
 // ═══════════════════════════════════════════════
 // ENUMS
 // ═══════════════════════════════════════════════
@@ -29,8 +25,8 @@ enum VerificationStatus {
 }
 
 enum JobStatus {
-  OPEN          // broadcast идёт, принимает proposals
-  IN_PROGRESS   // proposal принят, order создан
+  OPEN          // broadcast іде, приймає proposals
+  IN_PROGRESS   // proposal прийнятий, order створений
   COMPLETED
   CANCELLED
   EXPIRED
@@ -39,14 +35,14 @@ enum JobStatus {
 enum ProposalStatus {
   SENT
   ACCEPTED
-  REJECTED       // отклонён автоматически при выборе другого
-  WITHDRAWN      // отозван мастером
+  REJECTED       // відхилений автоматично при виборі іншого
+  WITHDRAWN      // відкликаний майстром
 }
 
 enum OrderStatus {
-  CREATED        // order создан, чат открыт
-  IN_PROGRESS    // мастер начал работу
-  COMPLETED      // мастер отметил завершённым
+  CREATED        // order створений, чат відкритий
+  IN_PROGRESS    // майстер почав роботу
+  COMPLETED      // майстер відмітив завершеним
   CANCELLED
 }
 
@@ -79,13 +75,13 @@ model User {
 
   role Role @default(CLIENT)
 
-  // Для CLIENT и MASTER — основной город
+  // Для CLIENT і MASTER — основне місто
   city String?
 
-  // Для MASTER — расширенный профиль
+  // Для MASTER — розширений профіль
   masterProfile MasterProfile?
 
-  // Денормализованные метрики (рейтинг считается для обеих ролей)
+  // Денормалізовані метрики (рейтинг рахується для обох ролей)
   avgRating    Float @default(0)
   reviewsCount Int   @default(0)
 
@@ -95,24 +91,7 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-
-    // ─── Поля мастера (используются если role=MASTER) ───
-  masterCategories         String[]           @default([])
-  masterDescription        String?            @db.Text
-  verificationStatus       VerificationStatus @default(NONE)
-  verificationRejectReason String?
-  verifiedAt               DateTime?
-  isActiveMaster           Boolean            @default(true)
-
-  // Портфолио (для мастера)
-  portfolioImages          String[]           @default([])
-  portfolioImagesPublicIds String[]           @default([])
-
-  // Счётчики для мастера
-  completedOrders Int @default(0)
-  totalOrders     Int @default(0)
-
-  // ─── Связи ───
+  // ─── Звʼязки ───
   jobs            Job[]        @relation("ClientJobs")
   proposals       Proposal[]   @relation("MasterProposals")
   clientOrders    Order[]      @relation("ClientOrders")
@@ -134,25 +113,29 @@ model MasterProfile {
   userId String @unique
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // Категории
+  // Категорії
   categories String[] @default([])
 
-  // Описание услуг
+  // Опис послуг
   description String? @db.Text
 
-  // Портфолио
+  // Структуровані дані залежно від категорії
+  // (типи помешкань, типи послуг тощо — заповнюється UI-слоєм)
+  metadata Json?
+
+  // Портфоліо
   portfolioImages          String[] @default([])
   portfolioImagesPublicIds String[] @default([])
 
-  // Верификация
+  // Верифікація
   verificationStatus       VerificationStatus @default(NONE)
   verificationRejectReason String?
   verifiedAt               DateTime?
 
-  // Доступность
+  // Доступність
   isActive Boolean @default(true)
 
-  // Счётчики
+  // Лічильники
   completedOrders Int @default(0)
   totalOrders     Int @default(0)
 
@@ -164,7 +147,7 @@ model MasterProfile {
 }
 
 // ═══════════════════════════════════════════════
-// JOB (заявка клиента) — broadcast
+// JOB (заявка клієнта) — broadcast
 // ═══════════════════════════════════════════════
 
 model Job {
@@ -173,19 +156,24 @@ model Job {
   clientId String
   client   User   @relation("ClientJobs", fields: [clientId], references: [id], onDelete: Cascade)
 
-  // Матчинг: категория + город
-  category String   // slug Category, для рассылки
+  // Матчинг: категорія + місто
+  category String   // slug Category, для розсилки
   city     String   // slug City
 
+  // Title генерується автоматично з metadata на сервері
   title       String
-  description String  @db.Text
+  // Description — опціональна "замітка" клієнта (не основа заявки)
+  description String? @db.Text
 
-  // Бюджет — опционально (Uber-модель: мастера сами назначают цену)
+  // Структуровані дані заявки (тип помешкання, розмір, час тощо)
+  metadata Json?
+
+  // Бюджет — опціонально (Uber-модель: майстри самі назначають ціну)
   budgetMinCents Int?
   budgetMaxCents Int?
   currency       String @default("UAH")
 
-  // Фото проблемы
+  // Фото проблеми
   attachments          String[] @default([])
   attachmentsPublicIds String[] @default([])
 
@@ -194,7 +182,7 @@ model Job {
   proposalsCount Int @default(0)
   viewsCount     Int @default(0)
 
-  expiresAt DateTime  // дедлайн на сбор откликов
+  expiresAt DateTime  // дедлайн на збір відгуків
   closedAt  DateTime?
 
   createdAt DateTime @default(now())
@@ -205,13 +193,13 @@ model Job {
   selectedOrder   Order?     @relation("JobToOrder", fields: [selectedOrderId], references: [id])
 
   @@index([status, createdAt])
-  @@index([category, city, status])  // главный индекс матчинга
+  @@index([category, city, status])  // головний індекс матчингу
   @@index([clientId])
   @@index([expiresAt])
 }
 
 // ═══════════════════════════════════════════════
-// PROPOSAL (отклик мастера)
+// PROPOSAL (відгук майстра)
 // ═══════════════════════════════════════════════
 
 model Proposal {
@@ -224,7 +212,7 @@ model Proposal {
 
   message       String @db.Text
   priceCents    Int
-  estimatedDays Int     // примерный срок выполнения
+  estimatedDays Int     // приблизний строк виконання
 
   status ProposalStatus @default(SENT)
 
@@ -232,13 +220,13 @@ model Proposal {
   updatedAt   DateTime  @updatedAt
   withdrawnAt DateTime?
 
-  @@unique([jobId, masterId])  // один мастер — один отклик
+  @@unique([jobId, masterId])  // один майстер — один відгук
   @@index([jobId, status])
   @@index([masterId, status])
 }
 
 // ═══════════════════════════════════════════════
-// ORDER (после accept proposal)
+// ORDER (після accept proposal)
 // ═══════════════════════════════════════════════
 
 model Order {
@@ -307,7 +295,7 @@ model Chat {
 
   members  ChatMember[]
   messages Message[]
-  order    Order?       // 1-к-1: чат привязан к заказу
+  order    Order?       // 1-к-1: чат привʼязаний до замовлення
 
   @@index([lastMessageAt])
 }
@@ -373,12 +361,12 @@ model Review {
 
   createdAt DateTime @default(now())
 
-  @@unique([orderId, direction])  // 1 отзыв на сторону
+  @@unique([orderId, direction])  // 1 відгук на сторону
   @@index([authorId])
 }
 
 // ═══════════════════════════════════════════════
-// СПРАВОЧНИКИ
+// ДОВІДНИКИ
 // ═══════════════════════════════════════════════
 
 model Category {
@@ -389,6 +377,9 @@ model Category {
   icon        String?
   sortOrder   Int     @default(0)
   isActive    Boolean @default(true)
+
+  // Опис очікуваної структури Job.metadata для цієї категорії (на майбутнє)
+  metadataSchema Json?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

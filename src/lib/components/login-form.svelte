@@ -14,7 +14,6 @@
   import { signIn } from '$lib/auth-client'
   import { goto, invalidateAll } from '$app/navigation'
   import {
-    LoaderCircle,
     AlertCircle,
     CheckCircle2,
     Eye,
