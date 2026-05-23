@@ -3,6 +3,7 @@ import { auth } from '$lib/auth'
 import { prisma } from '$lib/prisma'
 import { error, redirect } from '@sveltejs/kit'
 import { markOpened } from '$lib/server/dispatch'
+import { getRecommendedIds } from '$lib/server/ranking'
 import type { PageServerLoad } from './$types'
 
 export const load: PageServerLoad = async ({ params, request }) => {
@@ -107,6 +108,7 @@ export const load: PageServerLoad = async ({ params, request }) => {
     estimatedDays: number
     status: string
     createdAt: string
+    recommended?: boolean
     master: {
       id: string
       name: string | null
@@ -136,13 +138,60 @@ export const load: PageServerLoad = async ({ params, request }) => {
             avatar: true,
             avgRating: true,
             reviewsCount: true,
+            lastSeen: true,
+            masterProfile: {
+              select: {
+                verificationStatus: true,
+                completedOrders: true,
+                createdAt: true,
+              },
+            },
+            _count: {
+              select: {
+                masterOrders: {
+                  where: { status: { in: ['CREATED', 'IN_PROGRESS'] } },
+                },
+              },
+            },
           },
         },
       },
     })
+
+    // ─── Ранжування: позначаємо рекомендовані (топ-3 + слот новачку) ───
+    const now = new Date()
+    const recommendedIds = getRecommendedIds(
+      items.map((p) => ({
+        id: p.id,
+        createdAt: p.createdAt,
+        master: {
+          lastSeen: p.master.lastSeen,
+          avgRating: p.master.avgRating,
+          isVerified: p.master.masterProfile?.verificationStatus === 'VERIFIED',
+          activeOrders: p.master._count.masterOrders,
+          masterSince: p.master.masterProfile?.createdAt ?? now,
+          completedOrders: p.master.masterProfile?.completedOrders ?? 0,
+        },
+      })),
+      now,
+    )
+
     proposals = items.map((p) => ({
-      ...p,
+      id: p.id,
+      message: p.message,
+      priceCents: p.priceCents,
+      estimatedDays: p.estimatedDays,
+      status: p.status,
       createdAt: p.createdAt.toISOString(),
+      recommended: recommendedIds.has(p.id),
+      master: {
+        id: p.master.id,
+        name: p.master.name,
+        username: p.master.username,
+        avatar: p.master.avatar,
+        avgRating: p.master.avgRating,
+        reviewsCount: p.master.reviewsCount,
+      },
     }))
   } else if (isMaster) {
     const mine = await prisma.proposal.findFirst({
