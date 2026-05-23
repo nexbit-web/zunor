@@ -7,7 +7,7 @@ import type { PageServerLoad } from './$types'
 export const load: PageServerLoad = async ({ request }) => {
   const session = await auth.api.getSession({ headers: request.headers })
   if (!session) {
-    throw redirect(302, '/user/login?redirectTo=/orders/new')
+    throw redirect(302, '/user/login?redirectTo=/jobs/new')
   }
 
   const user = await prisma.user.findUnique({
@@ -17,38 +17,12 @@ export const load: PageServerLoad = async ({ request }) => {
 
   if (!user) throw redirect(302, '/user/login')
 
-  // Майстри не створюють замовлення
+  // Майстри не створюють заявки
   if (user.role === 'MASTER') {
     throw redirect(302, '/dashboard')
   }
 
-  const [categories, cities] = await Promise.all([
-    prisma.category.findMany({
-      where: { isActive: true },
-      orderBy: { sortOrder: 'asc' },
-      select: {
-        id: true,
-        slug: true,
-        name: true,
-        icon: true,
-      },
-    }),
-    prisma.city.findMany({
-      where: { isActive: true },
-      orderBy: [{ isCapital: 'desc' }, { sortOrder: 'asc' }, { name: 'asc' }],
-      select: {
-        id: true,
-        slug: true,
-        name: true,
-        region: true,
-        isCapital: true,
-      },
-    }),
-  ])
-
   return {
-    categories,
-    cities,
     userCity: user.city ?? null,
   }
 }

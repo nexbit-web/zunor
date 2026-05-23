@@ -2,770 +2,624 @@
 <script lang="ts">
   import { goto } from '$app/navigation'
   import { Button } from '$lib/components/ui/button'
-  import * as Card from '$lib/components/ui/card'
-  import * as Field from '$lib/components/ui/field'
-  import * as Popover from '$lib/components/ui/popover'
-  import * as Command from '$lib/components/ui/command'
   import { Input } from '$lib/components/ui/input'
   import { Textarea } from '$lib/components/ui/textarea'
+  import { Spinner } from '$lib/components/ui/spinner'
   import { Calendar } from '$lib/components/ui/calendar'
-  import { cn } from '$lib/utils'
+  import PortfolioUploader from '$lib/components/portfolio-uploader.svelte'
   import {
-    DateFormatter,
+    PREMISES,
+    SERVICES,
+    ROOM_OPTIONS,
+    ELEVATOR_OPTIONS,
+    BALCONY_OPTIONS,
+    TRASH_OPTIONS,
+    FREQUENCY_OPTIONS,
+    SOFA_ITEMS,
+    QUICK_WHEN,
+    needsRooms,
+    needsWindows,
+    needsItems,
+    needsFrequency,
+    needsTrash,
+  } from '$lib/categories/cleaning/presets'
+  import { generateTitle } from '$lib/categories/cleaning/title-gen'
+  import type { CleaningItem } from '$lib/categories/cleaning/title-gen'
+  import * as Icons from '@lucide/svelte'
+  import ArrowLeft from '@lucide/svelte/icons/arrow-left'
+  import Check from '@lucide/svelte/icons/check'
+  import Plus from '@lucide/svelte/icons/plus'
+  import Minus from '@lucide/svelte/icons/minus'
+  import {
     getLocalTimeZone,
     today,
     type DateValue,
   } from '@internationalized/date'
-  import { tick } from 'svelte'
-  import CheckIcon from '@lucide/svelte/icons/check'
-  import ChevronsUpDownIcon from '@lucide/svelte/icons/chevrons-up-down'
-  import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle'
-  import CalendarIcon from '@lucide/svelte/icons/calendar'
-  import CircleCheckBigIcon from '@lucide/svelte/icons/circle-check-big'
-  import type { PageData } from './$types'
-  import { Spinner } from '$lib/components/ui/spinner'
 
-  let { data }: { data: PageData } = $props()
+  let { data } = $props()
 
-  // ─── Constants ───────────────────────────────────────────
-  const TITLE_MIN = 5
-  const TITLE_MAX = 200
-  const DESC_MIN = 30
-  const DESC_MAX = 922
-  const BUDGET_MAX = 10_000_000
+  // ─── Wizard state ───
+  let step = $state(1)
+  let premise = $state('')
+  let service = $state('')
 
-  const dateFmt = new DateFormatter('uk-UA', { day: 'numeric', month: 'long' })
+  // деталі (адаптивні)
+  let rooms = $state('')
+  let floor = $state('')
+  let hasElevator = $state('')
+  let trash = $state('')
+  let frequency = $state('')
+  let windowsCount = $state('')
+  let balcony = $state('')
+  let items = $state<CleaningItem[]>([])
+
+  // коли
+  let when = $state('')
+  let calendarValue = $state<DateValue | undefined>(undefined)
+
+  // підтвердження
+  let note = $state('')
+  let imageUrls = $state<string[]>([])
+  let imagePublicIds = $state<string[]>([])
+  let uploading = $state(false)
+
+  let submitting = $state(false)
+  let serverError = $state('')
+
   const todayDate = today(getLocalTimeZone())
 
-  // ─── Time presets ─────────────────────────────────────────
-  type TimePreset = 'today' | 'tomorrow' | 'this-week' | 'custom' | ''
-
-  const TIME_PRESETS: {
-    key: Exclude<TimePreset, '' | 'custom'>
-    label: string
-  }[] = [
-    { key: 'today', label: 'Сьогодні' },
-    { key: 'tomorrow', label: 'Завтра' },
-    { key: 'this-week', label: 'Цього тижня' },
-  ]
-
-  // ─── State ───────────────────────────────────────────────
-  let category = $state('')
-  let city = $state(data.userCity ?? '')
-  let title = $state('')
-  let description = $state('')
-
-  let timePreset = $state<TimePreset>('')
-  let dateFromOpen = $state(false)
-  let dateToOpen = $state(false)
-  let customDateFrom = $state<DateValue | undefined>(undefined)
-  let customDateTo = $state<DateValue | undefined>(undefined)
-
-  let budget = $state('')
-
-  let triedSubmit = $state(false)
-  let touchedTitle = $state(false)
-  let touchedDesc = $state(false)
-  let touchedBudget = $state(false)
-
-  let categoryOpen = $state(false)
-  let cityOpen = $state(false)
-  let categoryTriggerRef = $state<HTMLButtonElement>(null!)
-  let cityTriggerRef = $state<HTMLButtonElement>(null!)
-
-  let submitting = false
-  let loading = $state(false)
-  let serverError = $state('')
-  let successMessage = $state('')
-
-  // ─── Derived ─────────────────────────────────────────────
-  const titleTrim = $derived(title.trim())
-  const descTrim = $derived(description.trim())
-
-  const selectedCategoryName = $derived(
-    data.categories.find((c) => c.slug === category)?.name ?? '',
-  )
-  const selectedCityName = $derived(
-    data.cities.find((c) => c.slug === city)?.name ?? '',
-  )
-
-  function parseBudget(raw: string): number | null {
-    const trimmed = String(raw).trim()
-    if (!trimmed) return null
-    const normalized = trimmed.replace(',', '.')
-    const n = parseFloat(normalized)
-    if (isNaN(n) || !isFinite(n) || n < 0 || n > BUDGET_MAX) return null
-    return Math.round(n * 100) / 100
+  // ─── Icon helper ───
+  function iconByName(name: string): any {
+    return (Icons as Record<string, unknown>)[name] ?? Icons.Square
   }
 
-  const budgetNum = $derived(parseBudget(budget))
-  const budgetInvalid = $derived(budget.trim() !== '' && budgetNum === null)
+  // ─── Step 3 валідність (чи можна йти далі) ───
+  const step3Valid = $derived.by(() => {
+    if (needsItems(service)) return items.length > 0
+    if (needsWindows(service))
+      return windowsCount !== '' && Number(windowsCount) > 0
+    if (needsRooms(service)) {
+      const base = rooms !== ''
+      if (needsFrequency(service)) return base && frequency !== ''
+      return base
+    }
+    return true
+  })
 
-  const categoryValid = $derived(!!category)
-  const cityValid = $derived(!!city)
-  const titleValid = $derived(
-    titleTrim.length >= TITLE_MIN && titleTrim.length <= TITLE_MAX,
-  )
-  const descValid = $derived(
-    descTrim.length >= DESC_MIN && descTrim.length <= DESC_MAX,
-  )
-  const budgetValid = $derived(!budgetInvalid)
-
-  const formValid = $derived(
-    categoryValid && cityValid && titleValid && descValid && budgetValid,
-  )
-
-  const showCategoryError = $derived(triedSubmit && !categoryValid)
-  const showCityError = $derived(triedSubmit && !cityValid)
-
-  const showTitleError = $derived((triedSubmit || touchedTitle) && !titleValid)
-  const titleError = $derived(
-    showTitleError
-      ? titleTrim.length === 0
-        ? 'Введіть заголовок'
-        : titleTrim.length < TITLE_MIN
-          ? `Мінімум ${TITLE_MIN} символів`
-          : ''
-      : '',
-  )
-
-  const showDescError = $derived((triedSubmit || touchedDesc) && !descValid)
-  const descError = $derived(
-    showDescError
-      ? descTrim.length === 0
-        ? 'Опишіть завдання детально'
-        : descTrim.length < DESC_MIN
-          ? `Ще ${DESC_MIN - descTrim.length} символів`
-          : ''
-      : '',
+  // ─── Прев'ю заголовка ───
+  const previewMeta = $derived({
+    premise,
+    service,
+    when,
+    rooms: rooms || undefined,
+    floor: floor ? Number(floor) : undefined,
+    hasElevator: hasElevator || undefined,
+    trash: trash || undefined,
+    frequency: frequency || undefined,
+    windowsCount: windowsCount ? Number(windowsCount) : undefined,
+    balcony: balcony || undefined,
+    items: items.length ? items : undefined,
+  })
+  const previewTitle = $derived(
+    premise && service ? generateTitle(previewMeta) : '',
   )
 
-  const budgetError = $derived(
-    (triedSubmit || touchedBudget) && budgetInvalid
-      ? 'Введіть коректну суму (від 0 до 10 000 000)'
-      : '',
-  )
-
-  const dateFromLabel = $derived(
-    customDateFrom
-      ? dateFmt.format(customDateFrom.toDate(getLocalTimeZone()))
-      : '',
-  )
-  const dateToLabel = $derived(
-    customDateTo ? dateFmt.format(customDateTo.toDate(getLocalTimeZone())) : '',
-  )
-
-  // deadline для API: пресет або діапазон ISO-дат
-  const deadlineValue = $derived.by(
-    (): { from: string; to: string | null } | null => {
-      if (!timePreset) return null
-      if (timePreset === 'today') return { from: 'today', to: null }
-      if (timePreset === 'tomorrow') return { from: 'tomorrow', to: null }
-      if (timePreset === 'this-week') return { from: 'this-week', to: null }
-      if (!customDateFrom) return null
-      return {
-        from: customDateFrom.toString(),
-        to: customDateTo ? customDateTo.toString() : null,
-      }
-    },
-  )
-
-  // ─── Actions ─────────────────────────────────────────────
-  function closeCategoryAndFocus() {
-    categoryOpen = false
-    tick().then(() => categoryTriggerRef?.focus())
+  // ─── Хімчистка: керування предметами ───
+  function itemQty(type: string, variant?: string): number {
+    const found = items.find(
+      (i) => i.type === type && (i.variant ?? '') === (variant ?? ''),
+    )
+    return found?.qty ?? 0
   }
-  function closeCityAndFocus() {
-    cityOpen = false
-    tick().then(() => cityTriggerRef?.focus())
+  function addItem(type: string, variant?: string) {
+    const idx = items.findIndex(
+      (i) => i.type === type && (i.variant ?? '') === (variant ?? ''),
+    )
+    if (idx >= 0) {
+      items[idx].qty++
+      items = [...items]
+    } else {
+      items = [...items, { type, qty: 1, ...(variant ? { variant } : {}) }]
+    }
+  }
+  function removeItem(type: string, variant?: string) {
+    const idx = items.findIndex(
+      (i) => i.type === type && (i.variant ?? '') === (variant ?? ''),
+    )
+    if (idx < 0) return
+    if (items[idx].qty > 1) {
+      items[idx].qty--
+      items = [...items]
+    } else {
+      items = items.filter((_, i) => i !== idx)
+    }
   }
 
-  function selectPreset(p: Exclude<TimePreset, '' | 'custom'>) {
-    timePreset = timePreset === p ? '' : p
-    customDateFrom = undefined
-    customDateTo = undefined
+  // ─── Навігація ───
+  function selectPremise(key: string) {
+    premise = key
+    step = 2
+  }
+  function selectService(key: string) {
+    service = key
+    // скидаємо деталі при зміні послуги
+    rooms = ''
+    floor = ''
+    hasElevator = ''
+    trash = ''
+    frequency = ''
+    windowsCount = ''
+    balcony = ''
+    items = []
+    step = 3
+  }
+  function goToWhen() {
+    if (step3Valid) step = 4
+  }
+  function selectQuickWhen(key: string) {
+    when = key
+    calendarValue = undefined
+    step = 5
+  }
+  function onCalendarPick(v: DateValue | undefined) {
+    if (v) {
+      when = v.toString()
+      step = 5
+    }
+  }
+  function back() {
+    if (step > 1) step--
   }
 
-  // ─── Submit ───────────────────────────────────────────────
-  async function handleSubmit(e: SubmitEvent) {
-    e.preventDefault()
+  // ─── Submit ───
+  async function submit() {
     if (submitting) return
     submitting = true
-
-    triedSubmit = true
     serverError = ''
 
-    if (!formValid) {
-      submitting = false
-      if (!categoryValid) tick().then(() => categoryTriggerRef?.focus())
-      else if (!cityValid) tick().then(() => cityTriggerRef?.focus())
-      else if (!titleValid)
-        tick().then(() =>
-          (document.getElementById('title') as HTMLElement)?.focus(),
-        )
-      else if (!descValid)
-        tick().then(() =>
-          (document.getElementById('description') as HTMLElement)?.focus(),
-        )
-      return
+    const metadata: Record<string, unknown> = { premise, service, when }
+    if (needsRooms(service)) {
+      metadata.rooms = rooms
+      if (floor) metadata.floor = Number(floor)
+      if (hasElevator) metadata.hasElevator = hasElevator
     }
+    if (needsTrash(service) && trash) metadata.trash = trash
+    if (needsFrequency(service)) metadata.frequency = frequency
+    if (needsWindows(service)) {
+      metadata.windowsCount = Number(windowsCount)
+      if (floor) metadata.floor = Number(floor)
+      if (balcony) metadata.balcony = balcony
+    }
+    if (needsItems(service)) metadata.items = items
 
-    loading = true
     try {
-      const body: Record<string, unknown> = {
-        category,
-        city,
-        title: titleTrim,
-        description: descTrim,
-        ...(deadlineValue !== null && { deadline: deadlineValue }),
-        ...(budgetNum !== null && { budgetUah: budgetNum }),
-      }
-
       const res = await fetch('/api/jobs', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-Requested-With': 'XMLHttpRequest',
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          metadata,
+          note: note.trim() || undefined,
+          attachments: imageUrls,
+          attachmentsPublicIds: imagePublicIds,
+        }),
       })
-
-      let json: Record<string, unknown> = {}
-      try {
-        json = await res.json()
-      } catch {
-        /* not json */
-      }
-
+      const json = await res.json().catch(() => ({}))
       if (!res.ok) {
-        serverError =
-          typeof json?.message === 'string'
-            ? json.message
-            : typeof json?.error === 'string'
-              ? json.error
-              : `Помилка сервера (${res.status})`
+        serverError = json?.message ?? json?.error ?? 'Помилка сервера'
         return
       }
-
-      successMessage = 'Замовлення створено!'
-      await new Promise((r) => setTimeout(r, 700))
       goto('/jobs', { invalidateAll: true })
-    } catch (err) {
-      console.error('[order:create]', err)
-      serverError = "Помилка з'єднання. Перевірте інтернет і спробуйте ще раз."
+    } catch {
+      serverError = "Помилка з'єднання"
     } finally {
-      loading = false
       submitting = false
     }
   }
 </script>
 
 <svelte:head>
-  <title>Нове замовлення · Zunor</title>
+  <title>Замовити прибирання · Zunor</title>
 </svelte:head>
 
-<div
-  class="min-h-svh flex items-start justify-center px-4 py-10 md:py-16 bg-background"
->
-  <div class="w-full max-w-md">
+<div class="min-h-svh flex flex-col items-center px-4 py-8 bg-background">
+  <div class="w-full max-w-lg">
     <!-- Header -->
-    <div class="mb-6">
-      <h1
-        class="text-2xl font-bold tracking-tight text-foreground"
-        style="letter-spacing:-0.02em"
-      >
-        Нове замовлення
-      </h1>
-      <p class="text-sm mt-1.5 text-muted-foreground">
-        Опишіть, що потрібно — майстри надішлють пропозиції
-      </p>
+    <div class="flex items-center justify-between mb-8 h-9">
+      {#if step > 1}
+        <button
+          type="button"
+          onclick={back}
+          class="inline-flex items-center gap-1.5 text-sm cursor-pointer hover:opacity-70 transition-opacity text-muted-foreground"
+        >
+          <ArrowLeft class="size-4" /> Назад
+        </button>
+      {:else}
+        <span></span>
+      {/if}
+      <span class="text-xs font-medium text-muted-foreground tabular-nums">
+        Крок {step} з 5
+      </span>
     </div>
 
-    <!-- Success banner -->
-    {#if successMessage}
-      <div
-        class="flex items-center gap-3 p-4 rounded-xl mb-4 bg-primary/10 border border-primary/25"
-        role="status"
-      >
-        <CircleCheckBigIcon class="size-5 shrink-0 text-primary" />
-        <p class="text-sm font-medium text-foreground">{successMessage}</p>
+    <!-- ═══ Крок 1: Помешкання ═══ -->
+    {#if step === 1}
+      <h1 class="text-2xl font-bold tracking-tight text-foreground mb-6">
+        Що прибираємо?
+      </h1>
+      <div class="grid grid-cols-2 gap-3">
+        {#each PREMISES as p (p.key)}
+          {@const Icon = iconByName(p.icon)}
+          <button
+            type="button"
+            onclick={() => selectPremise(p.key)}
+            class="flex flex-col items-start gap-3 p-5 rounded-2xl border border-border bg-card hover:border-foreground/40 hover:shadow-md transition-all min-h-[120px] cursor-pointer"
+          >
+            <Icon size={28} strokeWidth={1.5} class="text-foreground" />
+            <span class="text-base font-semibold text-foreground"
+              >{p.label}</span
+            >
+          </button>
+        {/each}
       </div>
     {/if}
 
-    <Card.Root>
-      <Card.Content class="pt-6">
-        <form onsubmit={handleSubmit} novalidate>
-          <Field.Group>
-            <!-- ══ 1. Категорія ══════════════════════ -->
-            <Field.Field>
-              <Field.Label id="category-label">Категорія</Field.Label>
-              <Popover.Root bind:open={categoryOpen}>
-                <Popover.Trigger bind:ref={categoryTriggerRef}>
-                  {#snippet child({ props })}
-                    <Button
-                      {...props}
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={categoryOpen}
-                      aria-labelledby="category-label"
-                      aria-invalid={showCategoryError}
-                      aria-describedby={showCategoryError
-                        ? 'category-error'
-                        : undefined}
-                      class={cn(
-                        'w-full justify-between font-normal',
-                        !category && 'text-muted-foreground',
-                        showCategoryError && 'border-destructive',
-                      )}
-                    >
-                      {selectedCategoryName || 'Оберіть категорію'}
-                      <ChevronsUpDownIcon class="opacity-50" />
-                    </Button>
-                  {/snippet}
-                </Popover.Trigger>
-                <Popover.Content
-                  class="w-(--bits-popover-anchor-width) p-0"
-                  align="start"
-                  sideOffset={6}
-                >
-                  <Command.Root>
-                    <Command.Input placeholder="Пошук категорії..." />
-                    <Command.List>
-                      <Command.Empty>Нічого не знайдено</Command.Empty>
-                      <Command.Group value="categories">
-                        {#each data.categories as c (c.slug)}
-                          <Command.Item
-                            value={c.name}
-                            onSelect={() => {
-                              category = c.slug
-                              closeCategoryAndFocus()
-                            }}
-                          >
-                            <CheckIcon
-                              class={cn(
-                                category !== c.slug && 'text-transparent',
-                              )}
-                            />
-                            {c.name}
-                          </Command.Item>
-                        {/each}
-                      </Command.Group>
-                    </Command.List>
-                  </Command.Root>
-                </Popover.Content>
-              </Popover.Root>
-              {#if showCategoryError}
-                <Field.Description id="category-error" class="text-destructive">
-                  Оберіть категорію
-                </Field.Description>
-              {/if}
-            </Field.Field>
+    <!-- ═══ Крок 2: Послуга ═══ -->
+    {#if step === 2}
+      <h1 class="text-2xl font-bold tracking-tight text-foreground mb-6">
+        Яке прибирання?
+      </h1>
+      <div class="grid grid-cols-2 gap-3">
+        {#each SERVICES as s (s.key)}
+          {@const Icon = iconByName(s.icon)}
+          <button
+            type="button"
+            onclick={() => selectService(s.key)}
+            class="flex flex-col items-start gap-3 p-5 rounded-2xl border border-border bg-card hover:border-foreground/40 hover:shadow-md transition-all min-h-[120px] cursor-pointer"
+          >
+            <Icon size={28} strokeWidth={1.5} class="text-foreground" />
+            <span class="text-base font-semibold text-foreground"
+              >{s.label}</span
+            >
+          </button>
+        {/each}
+      </div>
+    {/if}
 
-            <!-- ══ 2. Місто ══════════════════════════ -->
-            <Field.Field>
-              <Field.Label id="city-label">Місто</Field.Label>
-              <Popover.Root bind:open={cityOpen}>
-                <Popover.Trigger bind:ref={cityTriggerRef}>
-                  {#snippet child({ props })}
-                    <Button
-                      {...props}
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={cityOpen}
-                      aria-labelledby="city-label"
-                      aria-invalid={showCityError}
-                      aria-describedby={showCityError
-                        ? 'city-error'
-                        : undefined}
-                      class={cn(
-                        'w-full justify-between font-normal',
-                        !city && 'text-muted-foreground',
-                        showCityError && 'border-destructive',
-                      )}
-                    >
-                      {selectedCityName || 'Оберіть місто'}
-                      <ChevronsUpDownIcon class="opacity-50" />
-                    </Button>
-                  {/snippet}
-                </Popover.Trigger>
-                <Popover.Content
-                  class="w-(--bits-popover-anchor-width) p-0"
-                  align="start"
-                  sideOffset={6}
-                >
-                  <Command.Root>
-                    <Command.Input placeholder="Пошук міста..." />
-                    <Command.List>
-                      <Command.Empty>Нічого не знайдено</Command.Empty>
-                      <Command.Group value="cities">
-                        {#each data.cities as c (c.slug)}
-                          <Command.Item
-                            value={c.name}
-                            onSelect={() => {
-                              city = c.slug
-                              closeCityAndFocus()
-                            }}
-                          >
-                            <CheckIcon
-                              class={cn(city !== c.slug && 'text-transparent')}
-                            />
-                            {c.name}
-                          </Command.Item>
-                        {/each}
-                      </Command.Group>
-                    </Command.List>
-                  </Command.Root>
-                </Popover.Content>
-              </Popover.Root>
-              {#if showCityError}
-                <Field.Description id="city-error" class="text-destructive">
-                  Оберіть місто
-                </Field.Description>
-              {/if}
-            </Field.Field>
+    <!-- ═══ Крок 3: Деталі (адаптивні) ═══ -->
+    {#if step === 3}
+      <h1 class="text-2xl font-bold tracking-tight text-foreground mb-6">
+        Деталі
+      </h1>
 
-            <!-- ══ 3. Заголовок ══════════════════════ -->
-            <Field.Field>
-              <div class="flex items-baseline justify-between">
-                <Field.Label for="title">Заголовок</Field.Label>
-                {#if titleTrim.length > 0}
-                  <span
-                    class={cn(
-                      'text-[11px] tabular-nums transition-colors',
-                      titleTrim.length > TITLE_MAX * 0.9
-                        ? 'text-destructive'
-                        : 'text-muted-foreground',
-                    )}
-                    aria-live="polite"
-                  >
-                    {titleTrim.length}/{TITLE_MAX}
-                  </span>
-                {/if}
-              </div>
-              <Input
-                id="title"
-                type="text"
-                placeholder="Наприклад: Ремонт крана на кухні"
-                bind:value={title}
-                maxlength={TITLE_MAX}
-                aria-invalid={!!titleError}
-                aria-describedby={titleError ? 'title-error' : 'title-hint'}
-                class={cn(titleError && 'border-destructive')}
-                onblur={() => {
-                  touchedTitle = true
-                }}
-              />
-              {#if titleError}
-                <Field.Description id="title-error" class="text-destructive">
-                  {titleError}
-                </Field.Description>
-              {:else}
-                <Field.Description id="title-hint">
-                  Коротко і конкретно — майстри шукають по ключових словах
-                </Field.Description>
-              {/if}
-            </Field.Field>
-
-            <!-- ══ 4. Опис ════════════════════════════ -->
-            <Field.Field>
-              <div class="flex items-baseline justify-between">
-                <Field.Label for="description">Опис</Field.Label>
-                <span
-                  class={cn(
-                    'text-[11px] tabular-nums transition-colors',
-                    descTrim.length > DESC_MAX * 0.9
-                      ? 'text-destructive'
-                      : 'text-muted-foreground',
-                  )}
-                  aria-live="polite"
-                >
-                  {descTrim.length}/{DESC_MAX}
-                </span>
-              </div>
-              <Textarea
-                id="description"
-                placeholder="Опишіть проблему детально: що сталось, які матеріали є, чи є доступ, важливі деталі..."
-                bind:value={description}
-                maxlength={DESC_MAX}
-                rows={5}
-                aria-invalid={!!descError}
-                aria-describedby={descError ? 'desc-error' : 'desc-hint'}
-                class={cn('resize-none', descError && 'border-destructive')}
-                onblur={() => {
-                  touchedDesc = true
-                }}
-              />
-              {#if descError}
-                <Field.Description id="desc-error" class="text-destructive">
-                  {descError}
-                </Field.Description>
-              {:else}
-                <Field.Description id="desc-hint">
-                  Мінімум {DESC_MIN} символів. Чим детальніше — тим точніші пропозиції.
-                </Field.Description>
-              {/if}
-            </Field.Field>
-
-            <!-- ══ 5. Коли потрібно (опц.) ═══════════ -->
-            <Field.Field>
-              <Field.Label>
-                Коли потрібно
-                <span
-                  class="text-[10px] font-normal uppercase tracking-wide ml-1.5 text-muted-foreground"
-                >
-                  Опц.
-                </span>
-              </Field.Label>
-
-              <!-- Пресети -->
-              <div
-                class="flex flex-wrap gap-1.5"
-                role="group"
-                aria-label="Пресети часу"
+      <!-- Житлові: кімнати -->
+      {#if needsRooms(service)}
+        <div class="mb-5">
+          <span class="block text-sm font-medium text-foreground mb-2"
+            >Кількість кімнат</span
+          >
+          <div class="grid grid-cols-2 gap-2">
+            {#each ROOM_OPTIONS as o (o.key)}
+              <button
+                type="button"
+                onclick={() => (rooms = o.key)}
+                class="p-3 rounded-xl border text-sm font-medium cursor-pointer transition-all
+                  {rooms === o.key
+                  ? 'border-foreground bg-foreground text-background'
+                  : 'border-border bg-card text-foreground hover:border-foreground/40'}"
               >
-                {#each TIME_PRESETS as p (p.key)}
+                {o.label}
+              </button>
+            {/each}
+          </div>
+        </div>
+
+        <!-- Регулярне: частота -->
+        {#if needsFrequency(service)}
+          <div class="mb-5">
+            <span class="block text-sm font-medium text-foreground mb-2"
+              >Як часто</span
+            >
+            <div class="flex flex-col gap-2">
+              {#each FREQUENCY_OPTIONS as o (o.key)}
+                <button
+                  type="button"
+                  onclick={() => (frequency = o.key)}
+                  class="p-3 rounded-xl border text-sm font-medium text-left cursor-pointer transition-all
+                    {frequency === o.key
+                    ? 'border-foreground bg-foreground text-background'
+                    : 'border-border bg-card text-foreground hover:border-foreground/40'}"
+                >
+                  {o.label}
+                </button>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
+        <!-- Після ремонту: сміття -->
+        {#if needsTrash(service)}
+          <div class="mb-5">
+            <span class="block text-sm font-medium text-foreground mb-2"
+              >Сміття</span
+            >
+            <div class="flex flex-col gap-2">
+              {#each TRASH_OPTIONS as o (o.key)}
+                <button
+                  type="button"
+                  onclick={() => (trash = o.key)}
+                  class="p-3 rounded-xl border text-sm font-medium text-left cursor-pointer transition-all
+                    {trash === o.key
+                    ? 'border-foreground bg-foreground text-background'
+                    : 'border-border bg-card text-foreground hover:border-foreground/40'}"
+                >
+                  {o.label}
+                </button>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
+        <!-- Поверх + ліфт -->
+        <div class="mb-5">
+          <label
+            for="floor"
+            class="block text-sm font-medium text-foreground mb-2"
+          >
+            Поверх <span class="text-muted-foreground font-normal"
+              >(необов'язково)</span
+            >
+          </label>
+          <Input
+            id="floor"
+            type="number"
+            inputmode="numeric"
+            min="0"
+            max="200"
+            bind:value={floor}
+            placeholder="Напр. 5"
+            class="mb-2"
+          />
+          <div class="grid grid-cols-2 gap-2">
+            {#each ELEVATOR_OPTIONS as o (o.key)}
+              <button
+                type="button"
+                onclick={() => (hasElevator = o.key)}
+                class="p-3 rounded-xl border text-sm font-medium cursor-pointer transition-all
+                  {hasElevator === o.key
+                  ? 'border-foreground bg-foreground text-background'
+                  : 'border-border bg-card text-foreground hover:border-foreground/40'}"
+              >
+                {o.label}
+              </button>
+            {/each}
+          </div>
+        </div>
+      {/if}
+
+      <!-- Вікна -->
+      {#if needsWindows(service)}
+        <div class="mb-5">
+          <label for="wc" class="block text-sm font-medium text-foreground mb-2"
+            >Кількість вікон</label
+          >
+          <Input
+            id="wc"
+            type="number"
+            inputmode="numeric"
+            min="1"
+            max="200"
+            bind:value={windowsCount}
+            placeholder="Напр. 5"
+          />
+        </div>
+        <div class="mb-5">
+          <label
+            for="wfloor"
+            class="block text-sm font-medium text-foreground mb-2"
+          >
+            Поверх <span class="text-muted-foreground font-normal"
+              >(необов'язково)</span
+            >
+          </label>
+          <Input
+            id="wfloor"
+            type="number"
+            inputmode="numeric"
+            min="0"
+            max="200"
+            bind:value={floor}
+            placeholder="Напр. 5"
+          />
+        </div>
+        <div class="mb-5">
+          <span class="block text-sm font-medium text-foreground mb-2"
+            >Балкон / лоджія</span
+          >
+          <div class="grid grid-cols-3 gap-2">
+            {#each BALCONY_OPTIONS as o (o.key)}
+              <button
+                type="button"
+                onclick={() => (balcony = o.key)}
+                class="p-3 rounded-xl border text-sm font-medium cursor-pointer transition-all
+                  {balcony === o.key
+                  ? 'border-foreground bg-foreground text-background'
+                  : 'border-border bg-card text-foreground hover:border-foreground/40'}"
+              >
+                {o.label}
+              </button>
+            {/each}
+          </div>
+        </div>
+      {/if}
+
+      <!-- Хімчистка: предмети -->
+      {#if needsItems(service)}
+        <div class="flex flex-col gap-4 mb-5">
+          {#each SOFA_ITEMS as item (item.key)}
+            <div class="rounded-2xl border border-border bg-card p-4">
+              <span class="block text-sm font-semibold text-foreground mb-3"
+                >{item.label}</span
+              >
+              {#if item.variants}
+                <div class="flex flex-col gap-2">
+                  {#each item.variants as v (v.key)}
+                    {@const qty = itemQty(item.key, v.key)}
+                    <div class="flex items-center justify-between">
+                      <span class="text-sm text-foreground">{v.label}</span>
+                      <div class="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onclick={() => removeItem(item.key, v.key)}
+                          disabled={qty === 0}
+                          class="size-8 rounded-full border border-border flex items-center justify-center cursor-pointer disabled:opacity-30 hover:bg-secondary"
+                        >
+                          <Minus class="size-4" />
+                        </button>
+                        <span
+                          class="w-6 text-center text-sm font-semibold tabular-nums"
+                          >{qty}</span
+                        >
+                        <button
+                          type="button"
+                          onclick={() => addItem(item.key, v.key)}
+                          class="size-8 rounded-full border border-border flex items-center justify-center cursor-pointer hover:bg-secondary"
+                        >
+                          <Plus class="size-4" />
+                        </button>
+                      </div>
+                    </div>
+                  {/each}
+                </div>
+              {:else}
+                {@const qty = itemQty(item.key)}
+                <div class="flex items-center justify-end gap-2">
                   <button
                     type="button"
-                    onclick={() => selectPreset(p.key)}
-                    aria-pressed={timePreset === p.key}
-                    class="time-chip"
-                    class:time-chip-active={timePreset === p.key}
+                    onclick={() => removeItem(item.key)}
+                    disabled={qty === 0}
+                    class="size-8 rounded-full border border-border flex items-center justify-center cursor-pointer disabled:opacity-30 hover:bg-secondary"
                   >
-                    {p.label}
+                    <Minus class="size-4" />
                   </button>
-                {/each}
-              </div>
-
-              <!-- Діапазон дат: від → до -->
-              <div class="flex items-center gap-2 mt-2">
-                <Popover.Root bind:open={dateFromOpen}>
-                  <Popover.Trigger>
-                    {#snippet child({ props })}
-                      <button
-                        {...props}
-                        type="button"
-                        aria-label={dateFromLabel
-                          ? `Від: ${dateFromLabel}`
-                          : 'Оберіть дату від'}
-                        class={cn(
-                          'date-range-btn flex-1',
-                          customDateFrom && 'date-range-btn-active',
-                        )}
-                        onclick={() => {
-                          timePreset = 'custom'
-                          dateFromOpen = true
-                        }}
-                      >
-                        <CalendarIcon
-                          class="size-3.5 shrink-0 opacity-50"
-                          aria-hidden="true"
-                        />
-                        <span class="truncate">{dateFromLabel || 'Від'}</span>
-                      </button>
-                    {/snippet}
-                  </Popover.Trigger>
-                  <Popover.Content
-                    class="w-auto p-0"
-                    align="start"
-                    sideOffset={6}
+                  <span
+                    class="w-6 text-center text-sm font-semibold tabular-nums"
+                    >{qty}</span
                   >
-                    <Calendar
-                      type="single"
-                      bind:value={customDateFrom}
-                      minValue={todayDate}
-                      onValueChange={(v) => {
-                        if (v) {
-                          timePreset = 'custom'
-                          if (customDateTo && v.compare(customDateTo) > 0)
-                            customDateTo = undefined
-                          dateFromOpen = false
-                        }
-                      }}
-                    />
-                  </Popover.Content>
-                </Popover.Root>
-
-                <span class="text-sm text-muted-foreground shrink-0">—</span>
-
-                <Popover.Root bind:open={dateToOpen}>
-                  <Popover.Trigger>
-                    {#snippet child({ props })}
-                      <button
-                        {...props}
-                        type="button"
-                        aria-label={dateToLabel
-                          ? `До: ${dateToLabel}`
-                          : 'Оберіть дату до'}
-                        class={cn(
-                          'date-range-btn flex-1',
-                          customDateTo && 'date-range-btn-active',
-                        )}
-                        onclick={() => {
-                          timePreset = 'custom'
-                          dateToOpen = true
-                        }}
-                      >
-                        <CalendarIcon
-                          class="size-3.5 shrink-0 opacity-50"
-                          aria-hidden="true"
-                        />
-                        <span class="truncate">{dateToLabel || 'До'}</span>
-                      </button>
-                    {/snippet}
-                  </Popover.Trigger>
-                  <Popover.Content
-                    class="w-auto p-0"
-                    align="start"
-                    sideOffset={6}
+                  <button
+                    type="button"
+                    onclick={() => addItem(item.key)}
+                    class="size-8 rounded-full border border-border flex items-center justify-center cursor-pointer hover:bg-secondary"
                   >
-                    <Calendar
-                      type="single"
-                      bind:value={customDateTo}
-                      minValue={customDateFrom ?? todayDate}
-                      onValueChange={(v) => {
-                        if (v) {
-                          timePreset = 'custom'
-                          dateToOpen = false
-                        }
-                      }}
-                    />
-                  </Popover.Content>
-                </Popover.Root>
-              </div>
-            </Field.Field>
-
-            <!-- ══ 6. Бюджет (опц.) ══════════════════ -->
-            <Field.Field>
-              <Field.Label for="budget">
-                Бюджет, ₴
-                <span
-                  class="text-[10px] font-normal uppercase tracking-wide ml-1.5 text-muted-foreground"
-                >
-                  Опц.
-                </span>
-              </Field.Label>
-              <Input
-                id="budget"
-                type="text"
-                inputmode="numeric"
-                pattern="[0-9]*"
-                placeholder="Наприклад: 1500"
-                bind:value={budget}
-                aria-invalid={!!budgetError}
-                aria-describedby={budgetError ? 'budget-error' : 'budget-hint'}
-                class={cn('tabular-nums', budgetError && 'border-destructive')}
-                onblur={() => {
-                  touchedBudget = true
-                }}
-              />
-              {#if budgetError}
-                <Field.Description id="budget-error" class="text-destructive">
-                  {budgetError}
-                </Field.Description>
-              {:else}
-                <Field.Description id="budget-hint">
-                  Вкажіть очікувану суму або залиште порожнім
-                </Field.Description>
+                    <Plus class="size-4" />
+                  </button>
+                </div>
               {/if}
-            </Field.Field>
+            </div>
+          {/each}
+        </div>
+      {/if}
 
-            <!-- Server error -->
-            {#if serverError}
-              <div
-                class="text-sm p-3 rounded-lg bg-destructive/8 text-destructive border border-destructive/20"
-                role="alert"
-                aria-live="assertive"
-              >
-                {serverError}
-              </div>
-            {/if}
+      <Button
+        onclick={goToWhen}
+        disabled={!step3Valid}
+        class="w-full h-12 text-base font-semibold"
+      >
+        Далі
+      </Button>
+    {/if}
 
-            <!-- Submit -->
-            <Button
-              type="submit"
-              disabled={loading || !!successMessage}
-              class="w-full h-11 mt-2 font-semibold"
-            >
-              {#if successMessage}
-                <CircleCheckBigIcon class="size-4 mr-2" />
-                {successMessage}
-              {:else if loading}
-                <Spinner />
-                Створюємо...
-              {:else}
-                Створити замовлення
-              {/if}
-            </Button>
-          </Field.Group>
-        </form>
-      </Card.Content>
-    </Card.Root>
+    <!-- ═══ Крок 4: Коли ═══ -->
+    {#if step === 4}
+      <h1 class="text-2xl font-bold tracking-tight text-foreground mb-6">
+        Коли потрібно?
+      </h1>
+      <div class="flex gap-2 mb-4">
+        {#each QUICK_WHEN as w (w.key)}
+          <button
+            type="button"
+            onclick={() => selectQuickWhen(w.key)}
+            class="flex-1 p-4 rounded-2xl border border-border bg-card text-base font-semibold text-foreground hover:border-foreground/40 hover:shadow-md transition-all cursor-pointer"
+          >
+            {w.label}
+          </button>
+        {/each}
+      </div>
+      <div
+        class="rounded-2xl border border-border bg-card p-3 flex justify-center"
+      >
+        <Calendar
+          type="single"
+          bind:value={calendarValue}
+          minValue={todayDate}
+          onValueChange={onCalendarPick}
+        />
+      </div>
+    {/if}
+
+    <!-- ═══ Крок 5: Підтвердження ═══ -->
+    {#if step === 5}
+      <h1 class="text-2xl font-bold tracking-tight text-foreground mb-2">
+        Майже готово
+      </h1>
+      <p class="text-sm text-muted-foreground mb-6">{previewTitle}</p>
+
+      <div class="mb-5">
+        <span class="block text-sm font-medium text-foreground mb-2">
+          Фото <span class="text-muted-foreground font-normal"
+            >(допоможе клінеру оцінити обсяг)</span
+          >
+        </span>
+        <PortfolioUploader
+          bind:images={imageUrls}
+          bind:publicIds={imagePublicIds}
+          bind:uploading
+          maxItems={6}
+          onError={(msg) => (serverError = msg)}
+        />
+      </div>
+
+      <div class="mb-5">
+        <label
+          for="note"
+          class="block text-sm font-medium text-foreground mb-2"
+        >
+          Коментар <span class="text-muted-foreground font-normal"
+            >(необов'язково)</span
+          >
+        </label>
+        <Textarea
+          id="note"
+          bind:value={note}
+          placeholder="Особливі побажання, деталі доступу..."
+          rows={4}
+          maxlength={1000}
+          class="resize-none"
+        />
+      </div>
+
+      {#if serverError}
+        <div
+          class="text-sm p-3 rounded-lg bg-destructive/8 text-destructive border border-destructive/20 mb-4"
+          role="alert"
+        >
+          {serverError}
+        </div>
+      {/if}
+
+      <Button
+        onclick={submit}
+        disabled={submitting || uploading}
+        class="w-full h-12 text-base font-semibold gap-2"
+      >
+        {#if submitting}
+          <Spinner /> Створюємо...
+        {:else}
+          <Check class="size-5" /> Замовити прибирання
+        {/if}
+      </Button>
+    {/if}
   </div>
 </div>
-
-<style>
-  .time-chip {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.4375rem 0.875rem;
-    border-radius: 9999px;
-    font-size: 0.8125rem;
-    font-weight: 500;
-    background-color: transparent;
-    color: var(--foreground);
-    border: 1px solid var(--border);
-    cursor: pointer;
-    transition:
-      background-color 120ms ease,
-      border-color 120ms ease,
-      opacity 120ms ease;
-    white-space: nowrap;
-    outline-offset: 2px;
-  }
-  .time-chip:hover {
-    background-color: var(--muted);
-  }
-  .time-chip:focus-visible {
-    outline: 2px solid var(--ring);
-  }
-  .time-chip-active {
-    background-color: var(--foreground);
-    color: var(--background);
-    border-color: var(--foreground);
-  }
-  .time-chip-active:hover {
-    opacity: 0.9;
-  }
-
-  .date-range-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.375rem;
-    padding: 0.4375rem 0.75rem;
-    border-radius: var(--radius);
-    font-size: 0.8125rem;
-    font-weight: 400;
-    background-color: transparent;
-    color: var(--muted-foreground);
-    border: 1px solid var(--border);
-    cursor: pointer;
-    transition:
-      background-color 120ms ease,
-      border-color 120ms ease,
-      color 120ms ease;
-    white-space: nowrap;
-    outline-offset: 2px;
-    min-width: 0;
-  }
-  .date-range-btn:hover {
-    background-color: var(--muted);
-    color: var(--foreground);
-  }
-  .date-range-btn:focus-visible {
-    outline: 2px solid var(--ring);
-  }
-  .date-range-btn-active {
-    color: var(--foreground);
-    border-color: var(--foreground);
-  }
-</style>

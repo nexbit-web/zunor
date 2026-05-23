@@ -1,38 +1,71 @@
 // src/lib/categories/cleaning/title-gen.ts
 //
-// Генерація заголовка заявки з metadata. Використовується:
-//   - на сервері при створенні Job (Job.title)
-//   - у wizard для превью на кроці підтвердження
-//
-// Приклад: "Генеральне прибирання, 2 кімнати"
+// Генерація заголовка заявки з metadata.
+// Поля адаптивні — залежать від типу послуги.
 
 import {
   premiseLabel,
   serviceLabel,
-  sizeLabel,
-  type CATEGORY_SLUG,
+  roomLabel,
+  itemLabel,
+  itemVariantLabel,
+  whenLabel,
 } from './presets'
 
+/** Предмет хімчистки. */
+export interface CleaningItem {
+  type: string
+  variant?: string
+  qty: number
+}
+
+/** Гнучка metadata — поля залежать від послуги. */
 export interface CleaningMetadata {
   premise: string
   service: string
-  size?: string
   when: string
+  // житлові послуги
+  rooms?: string
+  floor?: number
+  hasElevator?: string
+  // після ремонту
+  trash?: string
+  // регулярне
+  frequency?: string
+  // вікна
+  windowsCount?: number
+  balcony?: string
+  // хімчистка
+  items?: CleaningItem[]
 }
 
 /**
  * Будує людський заголовок заявки.
- * service + premise/size — без зайвих слів.
+ * Приклади:
+ *   "Генеральне прибирання, квартира, 2 кімнати"
+ *   "Миття вікон, квартира, 5 вікон"
+ *   "Хімчистка: диван, килим"
  */
 export function generateTitle(meta: CleaningMetadata): string {
   const service = serviceLabel(meta.service)
   const premise = premiseLabel(meta.premise).toLowerCase()
 
-  // Розмір, якщо є
-  const size = meta.size ? sizeLabel(meta.premise, meta.size).toLowerCase() : ''
-
-  if (size) {
-    return `${service} прибирання, ${premise}, ${size}`
+  // Хімчистка — перелік предметів
+  if (meta.service === 'sofa' && meta.items && meta.items.length > 0) {
+    const names = meta.items.map((i) => itemLabel(i.type).toLowerCase())
+    const unique = [...new Set(names)]
+    return `Хімчистка: ${unique.join(', ')}`
   }
-  return `${service} прибирання, ${premise}`
+
+  // Вікна — кількість
+  if (meta.service === 'windows' && meta.windowsCount) {
+    return `${service}, ${premise}, ${meta.windowsCount} вікон`
+  }
+
+  // Житлові — кімнати
+  if (meta.rooms) {
+    return `${service}, ${premise}, ${roomLabel(meta.rooms).toLowerCase()}`
+  }
+
+  return `${service}, ${premise}`
 }
