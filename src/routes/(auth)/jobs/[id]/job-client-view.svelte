@@ -26,6 +26,7 @@
 
   let { data }: { data: PageData } = $props()
   let acceptingId = $state<string | null>(null)
+  let showAll = $state(false)
 
   function formatMoney(cents: number, currency = 'UAH') {
     return new Intl.NumberFormat('uk-UA', {
@@ -222,12 +223,20 @@
 
 <!-- Proposals -->
 {#if data.proposals.length > 0}
+  {@const recommended = data.proposals.filter((p) => p.recommended)}
+  {@const others = data.proposals.filter((p) => !p.recommended)}
+  {@const visible = showAll ? data.proposals : recommended}
+
   <div class="flex items-center justify-between mb-3 mt-6 px-1">
     <h2
       class="text-base font-bold tracking-tight"
       style="color: var(--foreground); letter-spacing: -0.01em"
     >
-      Відгуки майстрів
+      {#if recommended.length > 0 && !showAll}
+        Рекомендуємо для вас
+      {:else}
+        Відгуки майстрів
+      {/if}
     </h2>
     <span class="text-xs tabular-nums" style="color: var(--muted-foreground)">
       {data.proposals.length}
@@ -235,7 +244,7 @@
   </div>
 
   <div class="space-y-3">
-    {#each data.proposals as p (p.id)}
+    {#each visible as p (p.id)}
       <Card class="rounded-2xl transition-all hover:-translate-y-0.5">
         <CardContent class="p-5">
           <div class="flex items-start justify-between gap-3 mb-3">
@@ -277,12 +286,20 @@
                 </div>
               </div>
             </a>
-            <Badge
-              variant={proposalStatusVariant(p.status)}
-              class="text-[10px] uppercase shrink-0"
-            >
-              {proposalStatusLabel(p.status)}
-            </Badge>
+            <div class="flex items-center gap-1.5 shrink-0">
+              {#if p.recommended}
+                <Badge variant="default" class="text-[10px] uppercase gap-1">
+                  <Star class="size-3" style="fill: currentColor" />
+                  Топ
+                </Badge>
+              {/if}
+              <Badge
+                variant={proposalStatusVariant(p.status)}
+                class="text-[10px] uppercase"
+              >
+                {proposalStatusLabel(p.status)}
+              </Badge>
+            </div>
           </div>
 
           <p
@@ -328,6 +345,17 @@
       </Card>
     {/each}
   </div>
+
+  {#if !showAll && others.length > 0}
+    <button
+      type="button"
+      onclick={() => (showAll = true)}
+      class="w-full mt-3 py-3 rounded-2xl text-sm font-medium cursor-pointer transition-colors"
+      style="color: var(--foreground); background-color: var(--secondary)"
+    >
+      Показати всі відгуки ({data.proposals.length})
+    </button>
+  {/if}
 {:else if data.job.status === 'OPEN'}
   <Card class="rounded-2xl">
     <CardContent class="px-6 py-12 text-center">
