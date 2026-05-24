@@ -115,7 +115,7 @@ export const load: PageServerLoad = async ({ request, url }) => {
   }
 
   const mp = user.masterProfile
-  if (!mp?.isActive || mp.verificationStatus !== 'VERIFIED' || !user.city) {
+  if (!mp?.isActive || !user.city) {
     return {
       view: 'feed' as const,
       userRole: user.role,
@@ -125,9 +125,7 @@ export const load: PageServerLoad = async ({ request, url }) => {
       filters: { categories: allCategories, cities: allCities },
       blockReason: !mp?.isActive
         ? 'Профіль майстра неактивний'
-        : mp.verificationStatus !== 'VERIFIED'
-          ? 'Профіль не верифіковано'
-          : 'У профілі не вказано місто',
+        : 'У профілі не вказано місто',
     }
   }
 

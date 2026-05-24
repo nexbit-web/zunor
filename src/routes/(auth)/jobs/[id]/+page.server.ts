@@ -42,6 +42,7 @@ export const load: PageServerLoad = async ({ params, request }) => {
       budgetMaxCents: true,
       currency: true,
       attachments: true,
+      metadata: true,
       proposalsCount: true,
       viewsCount: true,
       expiresAt: true,
@@ -109,6 +110,7 @@ export const load: PageServerLoad = async ({ params, request }) => {
     status: string
     createdAt: string
     recommended?: boolean
+    isNew?: boolean
     master: {
       id: string
       name: string | null
@@ -160,21 +162,23 @@ export const load: PageServerLoad = async ({ params, request }) => {
 
     // ─── Ранжування: позначаємо рекомендовані (топ-3 + слот новачку) ───
     const now = new Date()
-    const recommendedIds = getRecommendedIds(
-      items.map((p) => ({
-        id: p.id,
-        createdAt: p.createdAt,
-        master: {
-          lastSeen: p.master.lastSeen,
-          avgRating: p.master.avgRating,
-          isVerified: p.master.masterProfile?.verificationStatus === 'VERIFIED',
-          activeOrders: p.master._count.masterOrders,
-          masterSince: p.master.masterProfile?.createdAt ?? now,
-          completedOrders: p.master.masterProfile?.completedOrders ?? 0,
-        },
-      })),
-      now,
-    )
+    const { recommended: recommendedIds, newbies: newbieIds } =
+      getRecommendedIds(
+        items.map((p) => ({
+          id: p.id,
+          createdAt: p.createdAt,
+          master: {
+            lastSeen: p.master.lastSeen,
+            avgRating: p.master.avgRating,
+            isVerified:
+              p.master.masterProfile?.verificationStatus === 'VERIFIED',
+            activeOrders: p.master._count.masterOrders,
+            masterSince: p.master.masterProfile?.createdAt ?? now,
+            completedOrders: p.master.masterProfile?.completedOrders ?? 0,
+          },
+        })),
+        now,
+      )
 
     proposals = items.map((p) => ({
       id: p.id,
@@ -184,6 +188,7 @@ export const load: PageServerLoad = async ({ params, request }) => {
       status: p.status,
       createdAt: p.createdAt.toISOString(),
       recommended: recommendedIds.has(p.id),
+      isNew: newbieIds.has(p.id),
       master: {
         id: p.master.id,
         name: p.master.name,

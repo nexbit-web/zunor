@@ -75,8 +75,9 @@ function scoreProposal(p: RankableProposal, now: Date): number {
 export function getRecommendedIds(
   proposals: RankableProposal[],
   now: Date = new Date(),
-): Set<string> {
-  if (proposals.length === 0) return new Set()
+): { recommended: Set<string>; newbies: Set<string> } {
+  if (proposals.length === 0)
+    return { recommended: new Set(), newbies: new Set() }
 
   const scored = proposals
     .map((p) => ({
@@ -93,16 +94,16 @@ export function getRecommendedIds(
   // Гарантований слот новачку
   const hasNewInTop = top.some((p) => p.isNew)
   if (!hasNewInTop) {
-    // Найкращий новачок поза топом
     const bestNewbie = scored.slice(TOP_N).find((p) => p.isNew)
-
     if (bestNewbie && top.length === TOP_N) {
-      // Замінюємо найслабший у топі (останній) на новачка
       const weakest = top[top.length - 1]
       recommended.delete(weakest.id)
       recommended.add(bestNewbie.id)
     }
   }
 
-  return recommended
+  // Множина всіх новачків (для мітки "Новачок")
+  const newbies = new Set(scored.filter((p) => p.isNew).map((p) => p.id))
+
+  return { recommended, newbies }
 }

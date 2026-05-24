@@ -27,8 +27,12 @@
   } from 'lucide-svelte'
   import type { PageData } from './$types'
   import { Spinner } from '$lib/components/ui/spinner'
+  import { describeJob } from '$lib/categories/cleaning/describe'
+  import PhotoGallery from '$lib/components/photo-gallery.svelte'
 
   let { data }: { data: PageData } = $props()
+
+  const details = $derived(describeJob(data.job.metadata))
 
   // ─── Форма отклика ───
   let formOpen = $state(false)
@@ -200,33 +204,79 @@
       {data.job.title}
     </h1>
 
-    <p
-      class="text-sm leading-relaxed whitespace-pre-wrap mb-4"
-      style="color: var(--foreground)"
-    >
-      {data.job.description}
-    </p>
-
-    <div class="flex items-center gap-2 flex-wrap mb-4">
-      <Badge variant="outline" class="font-normal gap-1 text-xs">
-        <Layers class="size-3" />
-        {data.job.category}
-      </Badge>
-      <Badge variant="outline" class="font-normal gap-1 text-xs">
-        <MapPin class="size-3" />
-        {data.job.city}
-      </Badge>
-      <Badge
-        variant="secondary"
-        class="font-semibold tabular-nums text-xs gap-1"
+    {#if data.job.description}
+      <p
+        class="text-sm leading-relaxed whitespace-pre-wrap mb-4"
+        style="color: var(--foreground)"
       >
-        <Wallet class="size-3" />
-        {formatBudget(
-          data.job.budgetMinCents,
-          data.job.budgetMaxCents,
-          data.job.currency,
-        )}
-      </Badge>
+        {data.job.description}
+      </p>
+    {/if}
+
+    <!-- Характеристики заявки -->
+    {#if details.length > 0}
+      <div class="rounded-xl border border-border overflow-hidden mb-4">
+        {#each details as d, i (d.label)}
+          {#if d.items}
+            <div
+              class="px-4 py-3 text-sm"
+              class:border-t={i > 0}
+              style="border-color: var(--border)"
+            >
+              <span class="block mb-2.5" style="color: var(--muted-foreground)"
+                >{d.label}</span
+              >
+              <div class="space-y-2">
+                {#each d.items as it (it.name)}
+                  <div class="flex items-center justify-between gap-3">
+                    <span class="font-medium" style="color: var(--foreground)"
+                      >{it.name}</span
+                    >
+                    <span
+                      class="shrink-0 inline-flex items-center justify-center min-w-7 h-6 px-2 rounded-full text-xs font-semibold tabular-nums"
+                      style="background-color: var(--secondary); color: var(--foreground)"
+                    >
+                      ×{it.qty}
+                    </span>
+                  </div>
+                {/each}
+              </div>
+            </div>
+          {:else}
+            <div
+              class="flex items-center justify-between px-4 py-2.5 text-sm gap-4"
+              class:border-t={i > 0}
+              style="border-color: var(--border)"
+            >
+              <span class="shrink-0" style="color: var(--muted-foreground)"
+                >{d.label}</span
+              >
+              <span
+                class="font-medium text-right"
+                style="color: var(--foreground)"
+              >
+                {d.value}
+              </span>
+            </div>
+          {/if}
+        {/each}
+      </div>
+    {/if}
+
+    <!-- Фото обсягу робіт -->
+    {#if data.job.attachments && data.job.attachments.length > 0}
+      <div class="mb-4">
+        <PhotoGallery images={data.job.attachments} />
+      </div>
+    {/if}
+
+    <!-- Місто -->
+    <div
+      class="flex items-center gap-1.5 text-sm mb-4"
+      style="color: var(--muted-foreground)"
+    >
+      <MapPin class="size-3.5" />
+      {data.job.city}
     </div>
 
     <Separator class="my-4" />
@@ -349,26 +399,89 @@
   {/each}
 {:else if data.canPropose}
   <Card class="rounded-2xl">
-    <CardContent class="p-5">
+    <CardContent class="p-5 sm:p-6">
       {#if !formOpen}
-        <div class="flex items-center justify-between gap-3 flex-wrap">
-          <div class="min-w-0">
-            <p class="text-sm font-semibold" style="color: var(--foreground)">
-              Подати пропозицію
-            </p>
-            <p class="text-xs mt-0.5" style="color: var(--muted-foreground)">
-              Запропонуйте ціну та термін — клієнт отримає сповіщення
-            </p>
+        <div class="text-center py-2">
+          <div
+            class="size-12 rounded-2xl mx-auto mb-3 flex items-center justify-center"
+            style="background-color: var(--secondary)"
+          >
+            <Send class="size-5" style="color: var(--foreground)" />
           </div>
+          <p class="text-base font-bold mb-1" style="color: var(--foreground)">
+            Зацікавила заявка?
+          </p>
+          <p
+            class="text-sm mb-4 max-w-xs mx-auto"
+            style="color: var(--muted-foreground)"
+          >
+            Запропонуйте ціну та термін — клієнт одразу отримає сповіщення
+          </p>
           <Button
             onclick={() => (formOpen = true)}
-            class="rounded-full gap-2 shrink-0"
+            class="rounded-full gap-2 h-11 px-6 font-semibold"
           >
-            <Send class="size-4" /> Запропонувати
+            <Send class="size-4" /> Подати пропозицію
           </Button>
         </div>
       {:else}
-        <div class="space-y-4">
+        <div class="space-y-5">
+          <!-- Ціна — великий акцентний інпут -->
+          <div>
+            <Label
+              for="proposal-price"
+              class="text-sm font-semibold mb-2 block"
+            >
+              Ваша ціна
+            </Label>
+            <div
+              class="flex items-center gap-2 rounded-2xl border px-4 h-16 transition-colors focus-within:border-foreground"
+              style="border-color: var(--border); background-color: var(--secondary)"
+            >
+              <input
+                id="proposal-price"
+                type="number"
+                bind:value={priceUah}
+                min={50}
+                max={500000}
+                placeholder="0"
+                class="flex-1 min-w-0 bg-transparent outline-none text-3xl font-bold tabular-nums"
+                style="color: var(--foreground)"
+              />
+              <span
+                class="text-2xl font-bold shrink-0"
+                style="color: var(--muted-foreground)">₴</span
+              >
+            </div>
+          </div>
+
+          <!-- Термін -->
+          <div>
+            <Label for="proposal-days" class="text-sm font-semibold mb-2 block">
+              Термін виконання
+            </Label>
+            <div
+              class="flex items-center gap-2 rounded-xl border px-4 h-12"
+              style="border-color: var(--border)"
+            >
+              <input
+                id="proposal-days"
+                type="number"
+                bind:value={estimatedDays}
+                min={1}
+                max={180}
+                placeholder="3"
+                class="flex-1 min-w-0 bg-transparent outline-none text-base font-medium tabular-nums"
+                style="color: var(--foreground)"
+              />
+              <span
+                class="text-sm shrink-0"
+                style="color: var(--muted-foreground)">днів</span
+              >
+            </div>
+          </div>
+
+          <!-- Повідомлення -->
           <div>
             <div class="flex items-center justify-between mb-2">
               <Label for="proposal-msg" class="text-sm font-semibold">
@@ -387,59 +500,22 @@
               id="proposal-msg"
               bind:value={message}
               rows={4}
-              placeholder="Розкажіть, як ви виконаєте роботу. Мінімум 20 символів."
+              placeholder="Розкажіть, як виконаєте роботу. Що входить, які матеріали, досвід. Мінімум 20 символів."
               class="resize-none"
             />
           </div>
 
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <Label
-                for="proposal-price"
-                class="text-sm font-semibold mb-2 block"
-              >
-                Ціна, грн
-              </Label>
-              <Input
-                id="proposal-price"
-                type="number"
-                bind:value={priceUah}
-                min={50}
-                max={500000}
-                placeholder="2000"
-                class="tabular-nums"
-              />
-            </div>
-            <div>
-              <Label
-                for="proposal-days"
-                class="text-sm font-semibold mb-2 block"
-              >
-                Термін, днів
-              </Label>
-              <Input
-                id="proposal-days"
-                type="number"
-                bind:value={estimatedDays}
-                min={1}
-                max={180}
-                placeholder="3"
-                class="tabular-nums"
-              />
-            </div>
-          </div>
-
           {#if errorMsg}
             <div
-              class="text-xs flex items-start gap-2 rounded-lg px-3 py-2.5"
+              class="text-sm flex items-start gap-2 rounded-xl px-3 py-2.5"
               style="background-color: color-mix(in srgb, var(--destructive) 10%, transparent); color: var(--destructive)"
             >
-              <XCircle class="size-3.5 shrink-0 mt-0.5" />
+              <XCircle class="size-4 shrink-0 mt-0.5" />
               <span>{errorMsg}</span>
             </div>
           {/if}
 
-          <div class="flex items-center gap-2 pt-1">
+          <div class="flex items-center gap-2">
             <Button
               variant="ghost"
               onclick={() => {
@@ -447,36 +523,24 @@
                 errorMsg = null
               }}
               disabled={submitting}
+              class="rounded-full"
             >
               Скасувати
             </Button>
             <Button
               onclick={submitProposal}
               disabled={!canSubmit}
-              class="flex-1 rounded-full gap-2"
+              class="flex-1 rounded-full gap-2 h-12 text-base font-semibold"
             >
               {#if submitting}
-                <Spinner />
-                Відправляємо…
+                <Spinner /> Відправляємо…
               {:else}
-                <Send class="size-3.5" /> Відправити відгук
+                <Send class="size-4" /> Відправити відгук
               {/if}
             </Button>
           </div>
         </div>
       {/if}
-    </CardContent>
-  </Card>
-{:else if data.cantProposeReason}
-  <Card class="rounded-2xl" style="background-color: var(--muted)">
-    <CardContent class="p-4 text-sm flex items-start gap-2.5">
-      <XCircle
-        class="size-4 shrink-0 mt-0.5"
-        style="color: var(--muted-foreground)"
-      />
-      <span style="color: var(--muted-foreground)"
-        >{data.cantProposeReason}</span
-      >
     </CardContent>
   </Card>
 {/if}
