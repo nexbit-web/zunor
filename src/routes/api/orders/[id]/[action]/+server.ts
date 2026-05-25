@@ -66,106 +66,112 @@ export const POST: RequestHandler = async ({ params, request }) => {
   const body = await request.json().catch(() => ({}) as Record<string, unknown>)
 
   // Транзакция перехода
-  const updated = await prisma.$transaction(async (tx) => {
-    const now = new Date()
-    const data: any = { status: newStatus, updatedAt: now }
+  const updated = await prisma.$transaction(
+    async (tx) => {
+      const now = new Date()
+      const data: any = { status: newStatus, updatedAt: now }
 
-    switch (transition) {
-      case 'START': {
-        data.startedAt = now
-        // Инкремент totalOrders мастера
-        await tx.masterProfile.update({
-          where: { userId: order.masterId },
-          data: { totalOrders: { increment: 1 } },
-        })
-        break
-      }
-      case 'COMPLETE': {
-        data.completedAt = now
-        await tx.masterProfile.update({
-          where: { userId: order.masterId },
-          data: { completedOrders: { increment: 1 } },
-        })
-        break
-      }
-      case 'CANCEL': {
-        data.cancelledAt = now
-        data.cancelledById = session.user.id
-        const reason = String(body.reason ?? '').trim()
-        if (reason.length > 500) throw error(400, 'Причина занадто довга')
-        data.cancelReason = reason || null
-
-        // Майстер відмовився → повертаємо заявку в пошук (manifest: клієнт не винен)
-        if (actor === 'MASTER' && order.fromJob) {
-          const jobId = order.fromJob.id
-
-          // 1. Заявка знову відкрита + лічильник відгуків обнуляємо
-          await tx.job.update({
-            where: { id: jobId },
-            data: {
-              status: 'OPEN',
-              closedAt: null,
-              selectedOrderId: null,
-              proposalsCount: 0,
-            },
+      switch (transition) {
+        case 'START': {
+          data.startedAt = now
+          // Инкремент totalOrders мастера
+          await tx.masterProfile.update({
+            where: { userId: order.masterId },
+            data: { totalOrders: { increment: 1 } },
           })
-
-          // 2. Видаляємо всі відгуки — заявка чиста, майстри відгукуються заново
-          await tx.proposal.deleteMany({ where: { jobId } })
-
-          // 3. Чорна мітка втікачу — мозок пам'ятає, що він відмовився.
-          //    Запис лишається (не видаляємо) → і фільтр кандидатів його не покличе.
-          await tx.dispatchEvent.updateMany({
-            where: { jobId, masterId: order.masterId },
-            data: { declined: true, respondedAt: null, openedAt: null },
-          })
-
-          // 4. Решту записів диспатчу видаляємо → redispatch покличе їх заново
-          await tx.dispatchEvent.deleteMany({
-            where: {
-              jobId,
-              masterId: { not: order.masterId },
-              declined: false,
-            },
-          })
+          break
         }
-        break
+        case 'COMPLETE': {
+          data.completedAt = now
+          await tx.masterProfile.update({
+            where: { userId: order.masterId },
+            data: { completedOrders: { increment: 1 } },
+          })
+          break
+        }
+        case 'CANCEL': {
+          data.cancelledAt = now
+          data.cancelledById = session.user.id
+          const reason = String(body.reason ?? '').trim()
+          if (reason.length > 500) throw error(400, 'Причина занадто довга')
+          data.cancelReason = reason || null
+
+          // Майстер відмовився → повертаємо заявку в пошук (manifest: клієнт не винен)
+          if (actor === 'MASTER' && order.fromJob) {
+            const jobId = order.fromJob.id
+
+            // 1. Заявка знову відкрита + лічильник відгуків обнуляємо
+            await tx.job.update({
+              where: { id: jobId },
+              data: {
+                status: 'OPEN',
+                closedAt: null,
+                selectedOrderId: null,
+                proposalsCount: 0,
+              },
+            })
+
+            // 2. Видаляємо всі відгуки — заявка чиста, майстри відгукуються заново
+            await tx.proposal.deleteMany({ where: { jobId } })
+
+            // 3. Чорна мітка втікачу — мозок пам'ятає, що він відмовився.
+            //    Запис лишається (не видаляємо) → і фільтр кандидатів його не покличе.
+            await tx.dispatchEvent.updateMany({
+              where: { jobId, masterId: order.masterId },
+              data: { declined: true, respondedAt: null, openedAt: null },
+            })
+
+            // 4. Решту записів диспатчу видаляємо → redispatch покличе їх заново
+            await tx.dispatchEvent.deleteMany({
+              where: {
+                jobId,
+                masterId: { not: order.masterId },
+                declined: false,
+              },
+            })
+          }
+          break
+        }
       }
-    }
 
-    const result = await tx.order.update({
-      where: { id: order.id },
-      data,
-      select: {
-        id: true,
-        status: true,
-        priceCents: true,
-        currency: true,
-        title: true,
-        clientId: true,
-        masterId: true,
-        startedAt: true,
-        completedAt: true,
-        cancelledAt: true,
-        cancelReason: true,
-        chatId: true,
-      },
-    })
+      const result = await tx.order.update({
+        where: { id: order.id },
+        data,
+        select: {
+          id: true,
+          status: true,
+          priceCents: true,
+          currency: true,
+          title: true,
+          clientId: true,
+          masterId: true,
+          startedAt: true,
+          completedAt: true,
+          cancelledAt: true,
+          cancelReason: true,
+          chatId: true,
+        },
+      })
 
-    await tx.orderEvent.create({
-      data: {
-        orderId: order.id,
-        type: transitionToEventType(transition),
-        actorId: session.user.id,
-        payload:
-          transition === 'CANCEL' && data.cancelReason
-            ? ({ reason: data.cancelReason } as any)
-            : null,
-      },
-    })
+      await tx.orderEvent.create({
+        data: {
+          orderId: order.id,
+          type: transitionToEventType(transition),
+          actorId: session.user.id,
+          payload:
+            transition === 'CANCEL' && data.cancelReason
+              ? ({ reason: data.cancelReason } as any)
+              : null,
+        },
+      })
 
-    return result
-  })
+      return result
+    },
+    {
+      maxWait: 10000, // макс. чекати на з'єднання з пулу (Neon cold start)
+      timeout: 20000, // макс. тривалість транзакції
+    },
+  )
 
   // System message + notification (fail-soft)
   const eventType = transitionToEventType(transition)
