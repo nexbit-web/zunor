@@ -7,6 +7,7 @@
   import { Spinner } from '$lib/components/ui/spinner'
   import { Calendar } from '$lib/components/ui/calendar'
   import PortfolioUploader from '$lib/components/portfolio-uploader.svelte'
+  import SuccessCheck from '$lib/components/success-check.svelte'
   import {
     PREMISES,
     SERVICES,
@@ -35,13 +36,15 @@
     today,
     type DateValue,
   } from '@internationalized/date'
-  import { fly } from 'svelte/transition'
+  import { fly, scale } from 'svelte/transition'
   import { quintOut } from 'svelte/easing'
+  import confetti from 'canvas-confetti'
+  import { playSuccessSound, unlockAudio } from '$lib/sound/notification'
 
   const stepIn = { y: 12, duration: 280, easing: quintOut }
+  const REDIRECT_DELAY = 2200
 
-  let { data } = $props()
-
+  // ─── State ───
   let step = $state(1)
   let premise = $state('')
   let service = $state('')
@@ -64,6 +67,7 @@
   let uploading = $state(false)
 
   let submitting = $state(false)
+  let success = $state(false)
   let serverError = $state('')
 
   const todayDate = today(getLocalTimeZone())
@@ -72,6 +76,7 @@
     return (Icons as Record<string, unknown>)[name] ?? Icons.Square
   }
 
+  // ─── Валідність кроку 3 ───
   const step3Valid = $derived.by(() => {
     if (needsItems(service)) return items.length > 0
     if (needsWindows(service))
@@ -84,6 +89,7 @@
     return true
   })
 
+  // ─── Прев'ю заголовка ───
   const previewMeta = $derived({
     premise,
     service,
@@ -101,11 +107,13 @@
     premise && service ? generateTitle(previewMeta) : '',
   )
 
+  // ─── Хімчистка: предмети ───
   function itemQty(type: string, variant?: string): number {
-    const found = items.find(
-      (i) => i.type === type && (i.variant ?? '') === (variant ?? ''),
+    return (
+      items.find(
+        (i) => i.type === type && (i.variant ?? '') === (variant ?? ''),
+      )?.qty ?? 0
     )
-    return found?.qty ?? 0
   }
   function addItem(type: string, variant?: string) {
     const idx = items.findIndex(
@@ -131,7 +139,9 @@
     }
   }
 
+  // ─── Навігація ───
   function selectPremise(key: string) {
+    unlockAudio() // розблокувати звук на першу взаємодію (autoplay policy)
     premise = key
     step = 2
   }
@@ -165,8 +175,46 @@
     if (step > 1) step--
   }
 
+  // ─── Момент перемоги ───
+  function celebrate() {
+    const colors = [
+      '#FFD700',
+      '#FFA500',
+      '#22C55E',
+      '#3B82F6',
+      '#EC4899',
+      '#FF5C00',
+    ]
+    confetti({
+      particleCount: 70,
+      spread: 70,
+      origin: { y: 0.6 },
+      colors,
+      disableForReducedMotion: true,
+    })
+    setTimeout(() => {
+      confetti({
+        particleCount: 40,
+        angle: 60,
+        spread: 55,
+        origin: { x: 0 },
+        colors,
+        disableForReducedMotion: true,
+      })
+      confetti({
+        particleCount: 40,
+        angle: 120,
+        spread: 55,
+        origin: { x: 1 },
+        colors,
+        disableForReducedMotion: true,
+      })
+    }, 150)
+  }
+
+  // ─── Submit ───
   async function submit() {
-    if (submitting) return
+    if (submitting || success) return
     submitting = true
     serverError = ''
 
@@ -200,14 +248,24 @@
         }),
       })
       const json = await res.json().catch(() => ({}))
+
       if (!res.ok) {
-        serverError = json?.message ?? json?.error ?? 'Помилка сервера'
+        // Окреме повідомлення для rate-limit (429)
+        serverError =
+          res.status === 429
+            ? 'Забагато запитів. Зачекайте трохи і спробуйте ще раз.'
+            : (json?.message ?? json?.error ?? 'Не вдалось створити заявку')
+        submitting = false // ← фікс: розблоковуємо кнопку при помилці
         return
       }
-      goto('/jobs', { invalidateAll: true })
+
+      // Успіх — момент перемоги, потім перехід
+      success = true
+      celebrate()
+      playSuccessSound()
+      setTimeout(() => goto('/jobs', { invalidateAll: true }), REDIRECT_DELAY)
     } catch {
-      serverError = "Помилка з'єднання"
-    } finally {
+      serverError = "Помилка з'єднання. Перевірте інтернет і спробуйте ще раз."
       submitting = false
     }
   }
@@ -218,444 +276,459 @@
 </svelte:head>
 
 <div class="min-h-svh flex flex-col items-center px-4 py-8 bg-background">
-  <div class="w-full max-w-lg">
-    <!-- Header: прогрес-бар + назад -->
-    <div class="mb-8">
-      <div class="flex items-center justify-between h-9 mb-3">
-        {#if step > 1}
-          <button
-            type="button"
-            onclick={back}
-            class="inline-flex items-center gap-1.5 text-sm cursor-pointer hover:opacity-70 transition-opacity text-muted-foreground"
-          >
-            <ArrowLeft class="size-4" /> Назад
-          </button>
-        {:else}
-          <span></span>
-        {/if}
-        <span class="text-xs font-medium text-muted-foreground tabular-nums">
-          {step} / 5
-        </span>
+  {#if success}
+    <!-- ═══ Екран успіху ═══ -->
+    <div
+      class="flex-1 flex flex-col items-center justify-center text-center"
+      in:scale={{ duration: 400, start: 0.85, easing: quintOut }}
+    >
+      <div class="mb-6">
+        <SuccessCheck size={96} />
       </div>
-      <div class="h-1 w-full rounded-full overflow-hidden bg-secondary">
-        <div
-          class="h-full rounded-full bg-foreground transition-all duration-300 ease-out"
-          style="width: {(step / 5) * 100}%"
-        ></div>
-      </div>
+      <h1 class="text-2xl font-bold tracking-tight text-foreground mb-2">
+        Готово!
+      </h1>
+      <p class="text-base text-muted-foreground max-w-xs">
+        Zuno вже шукає для вас майстра.
+      </p>
     </div>
-
-    <!-- ═══ Крок 1: Помешкання ═══ -->
-    {#if step === 1}
-      <div in:fly={stepIn}>
-        <h1 class="text-2xl font-bold tracking-tight text-foreground mb-6">
-          Що прибираємо?
-        </h1>
-        <div class="grid grid-cols-2 gap-3">
-          {#each PREMISES as p (p.key)}
-            {@const Icon = iconByName(p.icon)}
+  {:else}
+    <div class="w-full max-w-lg">
+      <!-- Header: прогрес-бар + назад -->
+      <div class="mb-8">
+        <div class="flex items-center justify-between h-9 mb-3">
+          {#if step > 1}
             <button
               type="button"
-              onclick={() => selectPremise(p.key)}
-              class="group flex flex-col items-start gap-3 p-5 rounded-2xl border border-border bg-card hover:border-foreground/40 hover:shadow-md active:scale-[0.98] transition-all min-h-[120px] cursor-pointer"
+              onclick={back}
+              class="inline-flex items-center gap-1.5 text-sm cursor-pointer hover:opacity-70 transition-opacity text-muted-foreground"
             >
-              <span
-                class="flex items-center justify-center size-11 rounded-xl bg-secondary group-hover:bg-foreground group-hover:text-background transition-colors"
-              >
-                <Icon size={22} strokeWidth={1.75} />
-              </span>
-              <span class="text-base font-semibold text-foreground"
-                >{p.label}</span
-              >
+              <ArrowLeft class="size-4" /> Назад
             </button>
-          {/each}
+          {:else}
+            <span></span>
+          {/if}
+          <span class="text-xs font-medium text-muted-foreground tabular-nums"
+            >{step} / 5</span
+          >
+        </div>
+        <div class="h-1 w-full rounded-full overflow-hidden bg-secondary">
+          <div
+            class="h-full rounded-full bg-foreground transition-all duration-300 ease-out"
+            style="width: {(step / 5) * 100}%"
+          ></div>
         </div>
       </div>
-    {/if}
 
-    <!-- ═══ Крок 2: Послуга ═══ -->
-    {#if step === 2}
-      <div in:fly={stepIn}>
-        <h1 class="text-2xl font-bold tracking-tight text-foreground mb-6">
-          Яке прибирання?
-        </h1>
-        <div class="grid grid-cols-2 gap-3">
-          {#each SERVICES as s (s.key)}
-            {@const Icon = iconByName(s.icon)}
-            <button
-              type="button"
-              onclick={() => selectService(s.key)}
-              class="group flex flex-col items-start gap-3 p-5 rounded-2xl border border-border bg-card hover:border-foreground/40 hover:shadow-md active:scale-[0.98] transition-all min-h-[120px] cursor-pointer"
-            >
-              <span
-                class="flex items-center justify-center size-11 rounded-xl bg-secondary group-hover:bg-foreground group-hover:text-background transition-colors"
+      <!-- ═══ Крок 1: Помешкання ═══ -->
+      {#if step === 1}
+        <div in:fly={stepIn}>
+          <h1 class="text-2xl font-bold tracking-tight text-foreground mb-6">
+            Що прибираємо?
+          </h1>
+          <div class="grid grid-cols-2 gap-3">
+            {#each PREMISES as p (p.key)}
+              {@const Icon = iconByName(p.icon)}
+              <button
+                type="button"
+                onclick={() => selectPremise(p.key)}
+                class="group flex flex-col items-start gap-3 p-5 rounded-2xl border border-border bg-card hover:border-foreground/40 hover:shadow-md active:scale-[0.98] transition-all min-h-[120px] cursor-pointer"
               >
-                <Icon size={22} strokeWidth={1.75} />
-              </span>
-              <span class="text-base font-semibold text-foreground"
-                >{s.label}</span
-              >
-            </button>
-          {/each}
-        </div>
-      </div>
-    {/if}
-
-    <!-- ═══ Крок 3: Деталі (адаптивні) ═══ -->
-    {#if step === 3}
-      <div in:fly={stepIn}>
-        <h1 class="text-2xl font-bold tracking-tight text-foreground mb-6">
-          Деталі
-        </h1>
-
-        {#if needsRooms(service)}
-          <div class="mb-5">
-            <span class="block text-sm font-medium text-foreground mb-2"
-              >Кількість кімнат</span
-            >
-            <div class="grid grid-cols-2 gap-2">
-              {#each ROOM_OPTIONS as o (o.key)}
-                <button
-                  type="button"
-                  onclick={() => (rooms = o.key)}
-                  class="p-3 rounded-xl border text-sm font-medium cursor-pointer active:scale-[0.98] transition-all
-                    {rooms === o.key
-                    ? 'border-foreground bg-foreground text-background'
-                    : 'border-border bg-card text-foreground hover:border-foreground/40'}"
+                <span
+                  class="flex items-center justify-center size-11 rounded-xl bg-secondary group-hover:bg-foreground group-hover:text-background transition-colors"
                 >
-                  {o.label}
-                </button>
-              {/each}
-            </div>
-          </div>
-
-          {#if needsFrequency(service)}
-            <div class="mb-5">
-              <span class="block text-sm font-medium text-foreground mb-2"
-                >Як часто</span
-              >
-              <div class="flex flex-col gap-2">
-                {#each FREQUENCY_OPTIONS as o (o.key)}
-                  <button
-                    type="button"
-                    onclick={() => (frequency = o.key)}
-                    class="p-3 rounded-xl border text-sm font-medium text-left cursor-pointer active:scale-[0.99] transition-all
-                      {frequency === o.key
-                      ? 'border-foreground bg-foreground text-background'
-                      : 'border-border bg-card text-foreground hover:border-foreground/40'}"
-                  >
-                    {o.label}
-                  </button>
-                {/each}
-              </div>
-            </div>
-          {/if}
-
-          {#if needsTrash(service)}
-            <div class="mb-5">
-              <span class="block text-sm font-medium text-foreground mb-2"
-                >Сміття</span
-              >
-              <div class="flex flex-col gap-2">
-                {#each TRASH_OPTIONS as o (o.key)}
-                  <button
-                    type="button"
-                    onclick={() => (trash = o.key)}
-                    class="p-3 rounded-xl border text-sm font-medium text-left cursor-pointer active:scale-[0.99] transition-all
-                      {trash === o.key
-                      ? 'border-foreground bg-foreground text-background'
-                      : 'border-border bg-card text-foreground hover:border-foreground/40'}"
-                  >
-                    {o.label}
-                  </button>
-                {/each}
-              </div>
-            </div>
-          {/if}
-
-          <div class="mb-5">
-            <label
-              for="floor"
-              class="block text-sm font-medium text-foreground mb-2"
-            >
-              Поверх <span class="text-muted-foreground font-normal"
-                >(необов'язково)</span
-              >
-            </label>
-            <Input
-              id="floor"
-              type="number"
-              inputmode="numeric"
-              min="0"
-              max="200"
-              bind:value={floor}
-              placeholder="Напр. 5"
-              class="mb-2"
-            />
-            <div class="grid grid-cols-2 gap-2">
-              {#each ELEVATOR_OPTIONS as o (o.key)}
-                <button
-                  type="button"
-                  onclick={() => (hasElevator = o.key)}
-                  class="p-3 rounded-xl border text-sm font-medium cursor-pointer active:scale-[0.98] transition-all
-                    {hasElevator === o.key
-                    ? 'border-foreground bg-foreground text-background'
-                    : 'border-border bg-card text-foreground hover:border-foreground/40'}"
+                  <Icon size={22} strokeWidth={1.75} />
+                </span>
+                <span class="text-base font-semibold text-foreground"
+                  >{p.label}</span
                 >
-                  {o.label}
-                </button>
-              {/each}
-            </div>
-          </div>
-        {/if}
-
-        {#if needsWindows(service)}
-          <div class="mb-5">
-            <label
-              for="wc"
-              class="block text-sm font-medium text-foreground mb-2"
-              >Кількість вікон</label
-            >
-            <Input
-              id="wc"
-              type="number"
-              inputmode="numeric"
-              min="1"
-              max="200"
-              bind:value={windowsCount}
-              placeholder="Напр. 5"
-            />
-          </div>
-          <div class="mb-5">
-            <label
-              for="wfloor"
-              class="block text-sm font-medium text-foreground mb-2"
-            >
-              Поверх <span class="text-muted-foreground font-normal"
-                >(необов'язково)</span
-              >
-            </label>
-            <Input
-              id="wfloor"
-              type="number"
-              inputmode="numeric"
-              min="0"
-              max="200"
-              bind:value={floor}
-              placeholder="Напр. 5"
-            />
-          </div>
-          <div class="mb-5">
-            <span class="block text-sm font-medium text-foreground mb-2"
-              >Балкон / лоджія</span
-            >
-            <div class="grid grid-cols-3 gap-2">
-              {#each BALCONY_OPTIONS as o (o.key)}
-                <button
-                  type="button"
-                  onclick={() => (balcony = o.key)}
-                  class="p-3 rounded-xl border text-sm font-medium cursor-pointer active:scale-[0.98] transition-all
-                    {balcony === o.key
-                    ? 'border-foreground bg-foreground text-background'
-                    : 'border-border bg-card text-foreground hover:border-foreground/40'}"
-                >
-                  {o.label}
-                </button>
-              {/each}
-            </div>
-          </div>
-        {/if}
-
-        {#if needsItems(service)}
-          <div class="flex flex-col gap-4 mb-5">
-            {#each SOFA_ITEMS as item (item.key)}
-              <div class="rounded-2xl border border-border bg-card p-4">
-                <span class="block text-sm font-semibold text-foreground mb-3"
-                  >{item.label}</span
-                >
-                {#if item.variants}
-                  <div class="flex flex-col gap-2">
-                    {#each item.variants as v (v.key)}
-                      {@const qty = itemQty(item.key, v.key)}
-                      <div class="flex items-center justify-between">
-                        <span class="text-sm text-foreground">{v.label}</span>
-                        <div class="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onclick={() => removeItem(item.key, v.key)}
-                            disabled={qty === 0}
-                            class="size-8 rounded-full border border-border flex items-center justify-center cursor-pointer active:scale-90 disabled:opacity-30 hover:bg-secondary transition-all"
-                          >
-                            <Minus class="size-4" />
-                          </button>
-                          <span
-                            class="w-6 text-center text-sm font-semibold tabular-nums"
-                            >{qty}</span
-                          >
-                          <button
-                            type="button"
-                            onclick={() => addItem(item.key, v.key)}
-                            class="size-8 rounded-full border border-border flex items-center justify-center cursor-pointer active:scale-90 hover:bg-secondary transition-all"
-                          >
-                            <Plus class="size-4" />
-                          </button>
-                        </div>
-                      </div>
-                    {/each}
-                  </div>
-                {:else}
-                  {@const qty = itemQty(item.key)}
-                  <div class="flex items-center justify-end gap-2">
-                    <button
-                      type="button"
-                      onclick={() => removeItem(item.key)}
-                      disabled={qty === 0}
-                      class="size-8 rounded-full border border-border flex items-center justify-center cursor-pointer active:scale-90 disabled:opacity-30 hover:bg-secondary transition-all"
-                    >
-                      <Minus class="size-4" />
-                    </button>
-                    <span
-                      class="w-6 text-center text-sm font-semibold tabular-nums"
-                      >{qty}</span
-                    >
-                    <button
-                      type="button"
-                      onclick={() => addItem(item.key)}
-                      class="size-8 rounded-full border border-border flex items-center justify-center cursor-pointer active:scale-90 hover:bg-secondary transition-all"
-                    >
-                      <Plus class="size-4" />
-                    </button>
-                  </div>
-                {/if}
-              </div>
+              </button>
             {/each}
           </div>
-        {/if}
-
-        <Button
-          onclick={goToWhen}
-          disabled={!step3Valid}
-          class="w-full h-12 text-base font-semibold"
-        >
-          Далі
-        </Button>
-      </div>
-    {/if}
-
-    <!-- ═══ Крок 4: Коли ═══ -->
-    {#if step === 4}
-      <div in:fly={stepIn}>
-        <h1 class="text-2xl font-bold tracking-tight text-foreground mb-6">
-          Коли потрібно?
-        </h1>
-        <div class="flex gap-2 mb-4">
-          {#each QUICK_WHEN as w (w.key)}
-            <button
-              type="button"
-              onclick={() => selectQuickWhen(w.key)}
-              class="flex-1 p-4 rounded-2xl border border-border bg-card text-base font-semibold text-foreground hover:border-foreground/40 hover:shadow-md active:scale-[0.98] transition-all cursor-pointer"
-            >
-              {w.label}
-            </button>
-          {/each}
         </div>
-        <div
-          class="wizard-calendar rounded-2xl border border-border bg-card p-4 shadow-sm"
-        >
-          <Calendar
-            type="single"
-            locale="uk-UA"
-            weekdayFormat="short"
-            bind:value={calendarValue}
-            minValue={todayDate}
-            onValueChange={onCalendarPick}
-            class="w-full !bg-transparent p-0 [--cell-size:clamp(36px,8vw,38px)]"
-          />
-        </div>
-        <p class="text-xs text-center text-muted-foreground mt-3">
-          Точна дата допоможе клінеру одразу зрозуміти, чи він вільний
-        </p>
-      </div>
-    {/if}
+      {/if}
 
-    <!-- ═══ Крок 5: Підтвердження ═══ -->
-    {#if step === 5}
-      <div in:fly={stepIn}>
-        <h1 class="text-2xl font-bold tracking-tight text-foreground mb-2">
-          Майже готово
-        </h1>
-        <p class="text-sm text-muted-foreground mb-6">{previewTitle}</p>
-
-        <div class="mb-5">
-          <span class="block text-sm font-medium text-foreground mb-2">
-            Фото <span class="text-muted-foreground font-normal"
-              >(допоможе клінеру оцінити обсяг)</span
-            >
-          </span>
-          <PortfolioUploader
-            bind:images={imageUrls}
-            bind:publicIds={imagePublicIds}
-            bind:uploading
-            maxItems={6}
-            onError={(msg) => (serverError = msg)}
-          />
-        </div>
-
-        <div class="mb-5">
-          <label
-            for="note"
-            class="block text-sm font-medium text-foreground mb-2"
-          >
-            Коментар <span class="text-muted-foreground font-normal"
-              >(необов'язково)</span
-            >
-          </label>
-          <Textarea
-            id="note"
-            bind:value={note}
-            placeholder="Особливі побажання, деталі доступу..."
-            rows={4}
-            maxlength={1000}
-            class="resize-none"
-          />
-        </div>
-
-        {#if serverError}
-          <div
-            class="text-sm p-3 rounded-lg bg-destructive/8 text-destructive border border-destructive/20 mb-4"
-            role="alert"
-          >
-            {serverError}
+      <!-- ═══ Крок 2: Послуга ═══ -->
+      {#if step === 2}
+        <div in:fly={stepIn}>
+          <h1 class="text-2xl font-bold tracking-tight text-foreground mb-6">
+            Яке прибирання?
+          </h1>
+          <div class="grid grid-cols-2 gap-3">
+            {#each SERVICES as s (s.key)}
+              {@const Icon = iconByName(s.icon)}
+              <button
+                type="button"
+                onclick={() => selectService(s.key)}
+                class="group flex flex-col items-start gap-3 p-5 rounded-2xl border border-border bg-card hover:border-foreground/40 hover:shadow-md active:scale-[0.98] transition-all min-h-[120px] cursor-pointer"
+              >
+                <span
+                  class="flex items-center justify-center size-11 rounded-xl bg-secondary group-hover:bg-foreground group-hover:text-background transition-colors"
+                >
+                  <Icon size={22} strokeWidth={1.75} />
+                </span>
+                <span class="text-base font-semibold text-foreground"
+                  >{s.label}</span
+                >
+              </button>
+            {/each}
           </div>
-        {/if}
+        </div>
+      {/if}
 
-        <Button
-          onclick={submit}
-          disabled={submitting || uploading}
-          class="w-full h-12 text-base font-semibold gap-2"
-        >
-          {#if submitting}
-            <Spinner /> Створюємо...
-          {:else}
-            <Check class="size-5" /> Замовити прибирання
+      <!-- ═══ Крок 3: Деталі ═══ -->
+      {#if step === 3}
+        <div in:fly={stepIn}>
+          <h1 class="text-2xl font-bold tracking-tight text-foreground mb-6">
+            Деталі
+          </h1>
+
+          {#if needsRooms(service)}
+            <div class="mb-5">
+              <span class="block text-sm font-medium text-foreground mb-2"
+                >Кількість кімнат</span
+              >
+              <div class="grid grid-cols-2 gap-2">
+                {#each ROOM_OPTIONS as o (o.key)}
+                  <button
+                    type="button"
+                    onclick={() => (rooms = o.key)}
+                    class="p-3 rounded-xl border text-sm font-medium cursor-pointer active:scale-[0.98] transition-all {rooms ===
+                    o.key
+                      ? 'border-foreground bg-foreground text-background'
+                      : 'border-border bg-card text-foreground hover:border-foreground/40'}"
+                  >
+                    {o.label}
+                  </button>
+                {/each}
+              </div>
+            </div>
+
+            {#if needsFrequency(service)}
+              <div class="mb-5">
+                <span class="block text-sm font-medium text-foreground mb-2"
+                  >Як часто</span
+                >
+                <div class="flex flex-col gap-2">
+                  {#each FREQUENCY_OPTIONS as o (o.key)}
+                    <button
+                      type="button"
+                      onclick={() => (frequency = o.key)}
+                      class="p-3 rounded-xl border text-sm font-medium text-left cursor-pointer active:scale-[0.99] transition-all {frequency ===
+                      o.key
+                        ? 'border-foreground bg-foreground text-background'
+                        : 'border-border bg-card text-foreground hover:border-foreground/40'}"
+                    >
+                      {o.label}
+                    </button>
+                  {/each}
+                </div>
+              </div>
+            {/if}
+
+            {#if needsTrash(service)}
+              <div class="mb-5">
+                <span class="block text-sm font-medium text-foreground mb-2"
+                  >Сміття</span
+                >
+                <div class="flex flex-col gap-2">
+                  {#each TRASH_OPTIONS as o (o.key)}
+                    <button
+                      type="button"
+                      onclick={() => (trash = o.key)}
+                      class="p-3 rounded-xl border text-sm font-medium text-left cursor-pointer active:scale-[0.99] transition-all {trash ===
+                      o.key
+                        ? 'border-foreground bg-foreground text-background'
+                        : 'border-border bg-card text-foreground hover:border-foreground/40'}"
+                    >
+                      {o.label}
+                    </button>
+                  {/each}
+                </div>
+              </div>
+            {/if}
+
+            <div class="mb-5">
+              <label
+                for="floor"
+                class="block text-sm font-medium text-foreground mb-2"
+              >
+                Поверх <span class="text-muted-foreground font-normal"
+                  >(необов'язково)</span
+                >
+              </label>
+              <Input
+                id="floor"
+                type="number"
+                inputmode="numeric"
+                min="0"
+                max="200"
+                bind:value={floor}
+                placeholder="Напр. 5"
+                class="mb-2"
+              />
+              <div class="grid grid-cols-2 gap-2">
+                {#each ELEVATOR_OPTIONS as o (o.key)}
+                  <button
+                    type="button"
+                    onclick={() => (hasElevator = o.key)}
+                    class="p-3 rounded-xl border text-sm font-medium cursor-pointer active:scale-[0.98] transition-all {hasElevator ===
+                    o.key
+                      ? 'border-foreground bg-foreground text-background'
+                      : 'border-border bg-card text-foreground hover:border-foreground/40'}"
+                  >
+                    {o.label}
+                  </button>
+                {/each}
+              </div>
+            </div>
           {/if}
-        </Button>
-      </div>
-    {/if}
-  </div>
+
+          {#if needsWindows(service)}
+            <div class="mb-5">
+              <label
+                for="wc"
+                class="block text-sm font-medium text-foreground mb-2"
+                >Кількість вікон</label
+              >
+              <Input
+                id="wc"
+                type="number"
+                inputmode="numeric"
+                min="1"
+                max="200"
+                bind:value={windowsCount}
+                placeholder="Напр. 5"
+              />
+            </div>
+            <div class="mb-5">
+              <label
+                for="wfloor"
+                class="block text-sm font-medium text-foreground mb-2"
+              >
+                Поверх <span class="text-muted-foreground font-normal"
+                  >(необов'язково)</span
+                >
+              </label>
+              <Input
+                id="wfloor"
+                type="number"
+                inputmode="numeric"
+                min="0"
+                max="200"
+                bind:value={floor}
+                placeholder="Напр. 5"
+              />
+            </div>
+            <div class="mb-5">
+              <span class="block text-sm font-medium text-foreground mb-2"
+                >Балкон / лоджія</span
+              >
+              <div class="grid grid-cols-3 gap-2">
+                {#each BALCONY_OPTIONS as o (o.key)}
+                  <button
+                    type="button"
+                    onclick={() => (balcony = o.key)}
+                    class="p-3 rounded-xl border text-sm font-medium cursor-pointer active:scale-[0.98] transition-all {balcony ===
+                    o.key
+                      ? 'border-foreground bg-foreground text-background'
+                      : 'border-border bg-card text-foreground hover:border-foreground/40'}"
+                  >
+                    {o.label}
+                  </button>
+                {/each}
+              </div>
+            </div>
+          {/if}
+
+          {#if needsItems(service)}
+            <div class="flex flex-col gap-4 mb-5">
+              {#each SOFA_ITEMS as item (item.key)}
+                <div class="rounded-2xl border border-border bg-card p-4">
+                  <span class="block text-sm font-semibold text-foreground mb-3"
+                    >{item.label}</span
+                  >
+                  {#if item.variants}
+                    <div class="flex flex-col gap-2">
+                      {#each item.variants as v (v.key)}
+                        {@const qty = itemQty(item.key, v.key)}
+                        <div class="flex items-center justify-between">
+                          <span class="text-sm text-foreground">{v.label}</span>
+                          <div class="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onclick={() => removeItem(item.key, v.key)}
+                              disabled={qty === 0}
+                              class="size-8 rounded-full border border-border flex items-center justify-center cursor-pointer active:scale-90 disabled:opacity-30 hover:bg-secondary transition-all"
+                            >
+                              <Minus class="size-4" />
+                            </button>
+                            <span
+                              class="w-6 text-center text-sm font-semibold tabular-nums"
+                              >{qty}</span
+                            >
+                            <button
+                              type="button"
+                              onclick={() => addItem(item.key, v.key)}
+                              class="size-8 rounded-full border border-border flex items-center justify-center cursor-pointer active:scale-90 hover:bg-secondary transition-all"
+                            >
+                              <Plus class="size-4" />
+                            </button>
+                          </div>
+                        </div>
+                      {/each}
+                    </div>
+                  {:else}
+                    {@const qty = itemQty(item.key)}
+                    <div class="flex items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onclick={() => removeItem(item.key)}
+                        disabled={qty === 0}
+                        class="size-8 rounded-full border border-border flex items-center justify-center cursor-pointer active:scale-90 disabled:opacity-30 hover:bg-secondary transition-all"
+                      >
+                        <Minus class="size-4" />
+                      </button>
+                      <span
+                        class="w-6 text-center text-sm font-semibold tabular-nums"
+                        >{qty}</span
+                      >
+                      <button
+                        type="button"
+                        onclick={() => addItem(item.key)}
+                        class="size-8 rounded-full border border-border flex items-center justify-center cursor-pointer active:scale-90 hover:bg-secondary transition-all"
+                      >
+                        <Plus class="size-4" />
+                      </button>
+                    </div>
+                  {/if}
+                </div>
+              {/each}
+            </div>
+          {/if}
+
+          <Button
+            onclick={goToWhen}
+            disabled={!step3Valid}
+            class="w-full h-12 text-base font-semibold"
+          >
+            Далі
+          </Button>
+        </div>
+      {/if}
+
+      <!-- ═══ Крок 4: Коли ═══ -->
+      {#if step === 4}
+        <div in:fly={stepIn}>
+          <h1 class="text-2xl font-bold tracking-tight text-foreground mb-6">
+            Коли потрібно?
+          </h1>
+          <div class="flex gap-2 mb-4">
+            {#each QUICK_WHEN as w (w.key)}
+              <button
+                type="button"
+                onclick={() => selectQuickWhen(w.key)}
+                class="flex-1 p-4 rounded-2xl border border-border bg-card text-base font-semibold text-foreground hover:border-foreground/40 hover:shadow-md active:scale-[0.98] transition-all cursor-pointer"
+              >
+                {w.label}
+              </button>
+            {/each}
+          </div>
+          <div
+            class="wizard-calendar rounded-2xl border border-border bg-card p-4 shadow-sm"
+          >
+            <Calendar
+              type="single"
+              locale="uk-UA"
+              weekdayFormat="short"
+              bind:value={calendarValue}
+              minValue={todayDate}
+              onValueChange={onCalendarPick}
+              class="w-full !bg-transparent p-0 [--cell-size:clamp(36px,8vw,38px)]"
+            />
+          </div>
+          <p class="text-xs text-center text-muted-foreground mt-3">
+            Точна дата допоможе клінеру одразу зрозуміти, чи він вільний
+          </p>
+        </div>
+      {/if}
+
+      <!-- ═══ Крок 5: Підтвердження ═══ -->
+      {#if step === 5}
+        <div in:fly={stepIn}>
+          <h1 class="text-2xl font-bold tracking-tight text-foreground mb-2">
+            Майже готово
+          </h1>
+          <p class="text-sm text-muted-foreground mb-6">{previewTitle}</p>
+
+          <div class="mb-5">
+            <span class="block text-sm font-medium text-foreground mb-2">
+              Фото <span class="text-muted-foreground font-normal"
+                >(допоможе клінеру оцінити обсяг)</span
+              >
+            </span>
+            <PortfolioUploader
+              bind:images={imageUrls}
+              bind:publicIds={imagePublicIds}
+              bind:uploading
+              maxItems={6}
+              onError={(msg) => (serverError = msg)}
+            />
+          </div>
+
+          <div class="mb-5">
+            <label
+              for="note"
+              class="block text-sm font-medium text-foreground mb-2"
+            >
+              Коментар <span class="text-muted-foreground font-normal"
+                >(необов'язково)</span
+              >
+            </label>
+            <Textarea
+              id="note"
+              bind:value={note}
+              placeholder="Особливі побажання, деталі доступу..."
+              rows={4}
+              maxlength={1000}
+              class="resize-none"
+            />
+          </div>
+
+          {#if serverError}
+            <div
+              class="text-sm p-3 rounded-lg bg-destructive/8 text-destructive border border-destructive/20 mb-4"
+              role="alert"
+            >
+              {serverError}
+            </div>
+          {/if}
+
+          <Button
+            onclick={submit}
+            disabled={submitting || uploading}
+            class="w-full h-12 text-base font-semibold gap-2"
+          >
+            {#if submitting}
+              <Spinner /> Створюємо...
+            {:else}
+              <Check class="size-5" /> Замовити прибирання
+            {/if}
+          </Button>
+        </div>
+      {/if}
+    </div>
+  {/if}
 </div>
 
 <style>
-  /* Клітинки тіла — на всю ширину */
   .wizard-calendar :global(td) {
     width: calc(100% / 7);
   }
-  /* Заголовки днів тижня (th) — розтягуємо так само */
   .wizard-calendar :global(th) {
     width: calc(100% / 7) !important;
     text-align: center;
   }
-  /* Курсор на активних датах */
   .wizard-calendar :global(td [role='button']:not([data-disabled])),
   .wizard-calendar :global(td button:not([data-disabled])) {
     cursor: pointer;
