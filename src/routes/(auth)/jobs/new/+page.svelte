@@ -40,6 +40,7 @@
   import { quintOut } from 'svelte/easing'
   import confetti from 'canvas-confetti'
   import { playSuccessSound, unlockAudio } from '$lib/sound/notification'
+  import Zuna from '$lib/components/zuna.svelte'
 
   const stepIn = { y: 12, duration: 280, easing: quintOut }
   const REDIRECT_DELAY = 2200
@@ -289,7 +290,8 @@
         Готово!
       </h1>
       <p class="text-base text-muted-foreground max-w-xs">
-        Zuno вже шукає для вас майстра.
+        <span class="font-semibold text-foreground">Zuna:</span> я вже шукаю тобі
+        майстра.
       </p>
     </div>
   {:else}
