@@ -124,6 +124,13 @@ export const GET: RequestHandler = async ({ request, url }) => {
     ]
   }
 
+  // Заявки, від яких майстер відмовився (чорна мітка) — приховуємо
+  const declined = await prisma.dispatchEvent.findMany({
+    where: { masterId: userId, declined: true },
+    select: { jobId: true },
+  })
+  const declinedJobIds = declined.map((d) => d.jobId)
+
   const jobs = await prisma.job.findMany({
     where: {
       status: 'OPEN',
@@ -131,6 +138,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
       category: { in: allowedCategories },
       clientId: { not: userId },
       expiresAt: { gt: new Date() },
+      ...(declinedJobIds.length > 0 ? { id: { notIn: declinedJobIds } } : {}),
       ...(maxPriceCents !== null && {
         OR: [
           { budgetMinCents: { lte: maxPriceCents } },

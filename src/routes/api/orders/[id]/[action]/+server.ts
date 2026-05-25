@@ -99,26 +99,34 @@ export const POST: RequestHandler = async ({ params, request }) => {
         if (actor === 'MASTER' && order.fromJob) {
           const jobId = order.fromJob.id
 
-          // 1. Заявка знову відкрита
+          // 1. Заявка знову відкрита + лічильник відгуків обнуляємо
           await tx.job.update({
             where: { id: jobId },
             data: {
               status: 'OPEN',
               closedAt: null,
               selectedOrderId: null,
+              proposalsCount: 0,
             },
           })
 
-          // 2. Скидаємо всі відгуки — заявка чиста, майстри відгукуються заново
-          await tx.proposal.updateMany({
-            where: { jobId, status: { in: ['ACCEPTED', 'SENT'] } },
-            data: { status: 'REJECTED' },
+          // 2. Видаляємо всі відгуки — заявка чиста, майстри відгукуються заново
+          await tx.proposal.deleteMany({ where: { jobId } })
+
+          // 3. Чорна мітка втікачу — мозок пам'ятає, що він відмовився.
+          //    Запис лишається (не видаляємо) → і фільтр кандидатів його не покличе.
+          await tx.dispatchEvent.updateMany({
+            where: { jobId, masterId: order.masterId },
+            data: { declined: true, respondedAt: null, openedAt: null },
           })
 
-          // 3. Чорний список: видаляємо DispatchEvent усіх, КРІМ майстра-втікача.
-          //    Його запис лишається → skipDuplicates не покличе його знову.
+          // 4. Решту записів диспатчу видаляємо → redispatch покличе їх заново
           await tx.dispatchEvent.deleteMany({
-            where: { jobId, masterId: { not: order.masterId } },
+            where: {
+              jobId,
+              masterId: { not: order.masterId },
+              declined: false,
+            },
           })
         }
         break

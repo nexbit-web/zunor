@@ -142,6 +142,13 @@ export const load: PageServerLoad = async ({ request, url }) => {
     }
   }
 
+  // Заявки, від яких цей майстер відмовився (чорна мітка) — не показуємо
+  const declined = await prisma.dispatchEvent.findMany({
+    where: { masterId: userId, declined: true },
+    select: { jobId: true },
+  })
+  const declinedJobIds = declined.map((d) => d.jobId)
+
   const jobs = await prisma.job.findMany({
     where: {
       status: 'OPEN',
@@ -149,6 +156,7 @@ export const load: PageServerLoad = async ({ request, url }) => {
       category: { in: mp.categories },
       clientId: { not: userId },
       expiresAt: { gt: new Date() },
+      ...(declinedJobIds.length > 0 ? { id: { notIn: declinedJobIds } } : {}),
     },
     orderBy: { createdAt: 'desc' },
     take: PAGE_SIZE + 1,
