@@ -97,13 +97,28 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
         // Майстер відмовився → повертаємо заявку в пошук (manifest: клієнт не винен)
         if (actor === 'MASTER' && order.fromJob) {
+          const jobId = order.fromJob.id
+
+          // 1. Заявка знову відкрита
           await tx.job.update({
-            where: { id: order.fromJob.id },
+            where: { id: jobId },
             data: {
               status: 'OPEN',
               closedAt: null,
               selectedOrderId: null,
             },
+          })
+
+          // 2. Скидаємо всі відгуки — заявка чиста, майстри відгукуються заново
+          await tx.proposal.updateMany({
+            where: { jobId, status: { in: ['ACCEPTED', 'SENT'] } },
+            data: { status: 'REJECTED' },
+          })
+
+          // 3. Чорний список: видаляємо DispatchEvent усіх, КРІМ майстра-втікача.
+          //    Його запис лишається → skipDuplicates не покличе його знову.
+          await tx.dispatchEvent.deleteMany({
+            where: { jobId, masterId: { not: order.masterId } },
           })
         }
         break
@@ -180,13 +195,17 @@ export const POST: RequestHandler = async ({ params, request }) => {
         await Notify.orderCompleted(updated.clientId, updated.id)
         break
       case 'CANCEL': {
-        const recipientId =
-          actor === 'CLIENT' ? updated.masterId : updated.clientId
-        await Notify.orderCancelled(
-          recipientId,
-          updated.id,
-          updated.cancelReason ?? undefined,
-        )
+        if (actor === 'MASTER' && order.fromJob) {
+          // Майстер відмовився → клієнту тепле повідомлення від Zuno
+          await Notify.jobReopened(updated.clientId, order.fromJob.id)
+        } else {
+          // Клієнт скасував → майстру звичайне сповіщення
+          await Notify.orderCancelled(
+            updated.masterId,
+            updated.id,
+            updated.cancelReason ?? undefined,
+          )
+        }
         break
       }
     }
