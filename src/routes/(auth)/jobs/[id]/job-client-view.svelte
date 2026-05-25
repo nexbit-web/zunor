@@ -26,6 +26,7 @@
   import { describeJob } from '$lib/categories/cleaning/describe'
   import PhotoGallery from '$lib/components/photo-gallery.svelte'
   import * as AlertDialog from '$lib/components/ui/alert-dialog'
+  import Zuna from '$lib/components/zuna.svelte'
 
   let { data }: { data: PageData } = $props()
   let acceptingId = $state<string | null>(null)
@@ -460,27 +461,11 @@
   {/if}
 {:else if data.job.status === 'OPEN'}
   <Card class="rounded-2xl">
-    <CardContent class="px-6 py-12 text-center">
-      <div
-        class="size-14 rounded-2xl mx-auto mb-4 flex items-center justify-center"
-        style="background-color: var(--muted)"
-      >
-        <Clock
-          class="size-6"
-          strokeWidth={1.75}
-          style="color: var(--muted-foreground)"
-        />
-      </div>
-      <h2 class="text-base font-semibold mb-1" style="color: var(--foreground)">
-        Очікуємо пропозиції
-      </h2>
-      <p
-        class="text-sm max-w-sm mx-auto"
-        style="color: var(--muted-foreground)"
-      >
-        Майстри вашого міста отримали сповіщення. Перші відгуки зазвичай
-        зʼявляються протягом години.
-      </p>
+    <CardContent class="p-5">
+      <Zuna variant="card" showName size={48}>
+        Шукаю для тебе майстрів. Можеш спокійно займатися справами — я
+        надішлю сповіщення, щойно хтось відгукнеться.
+      </Zuna>
     </CardContent>
   </Card>
 {/if}
