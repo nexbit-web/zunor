@@ -155,6 +155,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
       id: true,
       title: true,
       description: true,
+      metadata: true,
       category: true,
       city: true,
       status: true,

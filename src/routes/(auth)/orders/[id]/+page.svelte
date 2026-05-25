@@ -25,8 +25,11 @@
   } from '$lib/orders/labels'
   import { onDestroy } from 'svelte'
   import type { PageData } from './$types'
+  import { describeJob } from '$lib/categories/cleaning/describe'
 
   let { data }: { data: PageData } = $props()
+
+  const details = $derived(describeJob((data.order as any).metadata))
 
   // ═══════════════════════════════════════════════════════════
   // Derived
@@ -180,21 +183,83 @@
   <div class="grid lg:grid-cols-[1fr_340px] gap-6 lg:gap-8">
     <!-- ━━━ ОСНОВНИЙ КОНТЕНТ ━━━ -->
     <div class="min-w-0 space-y-6">
-      <!-- Description -->
-      <section>
-        <h2
-          class="text-[11px] font-semibold uppercase tracking-[0.08em] mb-2"
-          style="color: var(--muted-foreground)"
-        >
-          Опис замовлення
-        </h2>
-        <p
-          class="text-[14.5px] leading-relaxed whitespace-pre-wrap"
-          style="color: var(--foreground)"
-        >
-          {order.description}
-        </p>
-      </section>
+      <!-- Деталі прибирання -->
+      {#if details.length > 0}
+        <section>
+          <h2
+            class="text-[11px] font-semibold uppercase tracking-[0.08em] mb-3"
+            style="color: var(--muted-foreground)"
+          >
+            Деталі замовлення
+          </h2>
+          <div
+            class="rounded-xl border overflow-hidden"
+            style="border-color: var(--border)"
+          >
+            {#each details as d, i (d.label)}
+              {#if d.items}
+                <div
+                  class="px-4 py-3 text-sm"
+                  style="border-color: var(--border); {i > 0
+                    ? 'border-top: 1px solid var(--border)'
+                    : ''}"
+                >
+                  <span
+                    class="block mb-2.5"
+                    style="color: var(--muted-foreground)">{d.label}</span
+                  >
+                  <div class="space-y-2">
+                    {#each d.items as it (it.name)}
+                      <div class="flex items-center justify-between gap-3">
+                        <span
+                          class="font-medium"
+                          style="color: var(--foreground)">{it.name}</span
+                        >
+                        <span
+                          class="shrink-0 inline-flex items-center justify-center min-w-7 h-6 px-2 rounded-full text-xs font-semibold tabular-nums"
+                          style="background-color: var(--secondary); color: var(--foreground)"
+                          >×{it.qty}</span
+                        >
+                      </div>
+                    {/each}
+                  </div>
+                </div>
+              {:else}
+                <div
+                  class="flex items-center justify-between px-4 py-2.5 text-sm gap-4"
+                  style={i > 0 ? 'border-top: 1px solid var(--border)' : ''}
+                >
+                  <span class="shrink-0" style="color: var(--muted-foreground)"
+                    >{d.label}</span
+                  >
+                  <span
+                    class="font-medium text-right"
+                    style="color: var(--foreground)">{d.value}</span
+                  >
+                </div>
+              {/if}
+            {/each}
+          </div>
+        </section>
+      {/if}
+
+      <!-- Коментар клієнта -->
+      {#if order.description}
+        <section>
+          <h2
+            class="text-[11px] font-semibold uppercase tracking-[0.08em] mb-2"
+            style="color: var(--muted-foreground)"
+          >
+            Коментар
+          </h2>
+          <p
+            class="text-[14.5px] leading-relaxed whitespace-pre-wrap"
+            style="color: var(--foreground)"
+          >
+            {order.description}
+          </p>
+        </section>
+      {/if}
 
       <!-- Cancellation reason -->
       {#if order.cancelReason && order.status === 'CANCELLED'}

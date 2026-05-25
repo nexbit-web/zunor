@@ -1,49 +1,43 @@
 <!-- src/lib/components/jobs/master-feed.svelte -->
 <script lang="ts">
-  import { goto } from '$app/navigation'
-  import { Button } from '$lib/components/ui/button'
-  import { Badge } from '$lib/components/ui/badge'
-  import { Input } from '$lib/components/ui/input'
   import { Spinner } from '$lib/components/ui/spinner'
   import {
     Avatar,
     AvatarFallback,
     AvatarImage,
   } from '$lib/components/ui/avatar'
-  import * as Popover from '$lib/components/ui/popover'
-  import * as Command from '$lib/components/ui/command'
-  import { cn } from '$lib/utils'
   import { onMount } from 'svelte'
+  import { fly } from 'svelte/transition'
+  import { quintOut } from 'svelte/easing'
   import {
     Briefcase,
-    MapPin,
-    Layers,
     Star,
     ChevronRight,
-    SlidersHorizontal,
-    ChevronsUpDown,
-    X,
     AlertCircle,
+    Clock,
+    MapPin,
   } from 'lucide-svelte'
+
+  import * as Icons from '@lucide/svelte'
+
+  function iconByName(name: string | undefined): any {
+    if (!name) return null
+    return (Icons as Record<string, unknown>)[name] ?? null
+  }
+
+  import { goto } from '$app/navigation'
+  import { SERVICES } from '$lib/categories/cleaning/presets'
+  import { describeJob } from '$lib/categories/cleaning/describe'
 
   let {
     initialJobs,
     initialNextCursor,
     blockReason,
-    filters,
   }: {
     initialJobs: any[]
     initialNextCursor: string | null
     blockReason: string | null
-    filters: {
-      categories: { slug: string; name: string }[]
-      cities: {
-        slug: string
-        name: string
-        region?: string | null
-        isCapital?: boolean
-      }[]
-    }
+    filters?: any
   } = $props()
 
   let jobs = $state([...initialJobs])
@@ -51,46 +45,12 @@
   let loadingMore = $state(false)
   let sentinelEl = $state<HTMLDivElement | null>(null)
 
-  // Filters
-  let filterCategories = $state<string[]>([])
-  let filterCities = $state<string[]>([])
-  let filterMinPrice = $state('')
-  let filterMaxPrice = $state('')
-  let priceOpen = $state(false)
-  let categoryPickerOpen = $state(false)
-  let cityPickerOpen = $state(false)
-
-  const activeFiltersCount = $derived(
-    (filterCategories.length > 0 ? 1 : 0) +
-      (filterCities.length > 0 ? 1 : 0) +
-      (filterMinPrice ? 1 : 0) +
-      (filterMaxPrice ? 1 : 0),
-  )
-
-  function toggleCategory(slug: string) {
-    filterCategories = filterCategories.includes(slug)
-      ? filterCategories.filter((s) => s !== slug)
-      : [...filterCategories, slug]
-  }
-  function toggleCity(slug: string) {
-    filterCities = filterCities.includes(slug)
-      ? filterCities.filter((s) => s !== slug)
-      : [...filterCities, slug]
-  }
-  function clearFilters() {
-    filterCategories = []
-    filterCities = []
-    filterMinPrice = ''
-    filterMaxPrice = ''
-  }
+  // Фільтр по типу послуги
+  let activeService = $state<string>('')
 
   function buildQuery(cursor: string | null) {
     const p = new URLSearchParams({ view: 'feed' })
     if (cursor) p.set('cursor', cursor)
-    if (filterCategories.length) p.set('categories', filterCategories.join(','))
-    if (filterCities.length) p.set('cities', filterCities.join(','))
-    if (filterMinPrice) p.set('minPrice', filterMinPrice)
-    if (filterMaxPrice) p.set('maxPrice', filterMaxPrice)
     return p.toString()
   }
 
@@ -131,36 +91,23 @@
       (entries) => {
         if (entries[0].isIntersecting && nextCursor && !loadingMore) loadMore()
       },
-      { rootMargin: '300px' },
+      { rootMargin: '400px' },
     )
     obs.observe(sentinelEl)
     return () => obs.disconnect()
   })
 
-  let debounceTimer: ReturnType<typeof setTimeout> | null = null
-  $effect(() => {
-    void filterCategories
-    void filterCities
-    void filterMinPrice
-    void filterMaxPrice
-    if (debounceTimer) clearTimeout(debounceTimer)
-    debounceTimer = setTimeout(reload, 250)
-  })
+  // Клієнтська фільтрація по типу послуги (metadata.service)
+  const visibleJobs = $derived(
+    activeService
+      ? jobs.filter((j) => {
+          const meta = j.metadata as Record<string, unknown> | null
+          return meta?.service === activeService
+        })
+      : jobs,
+  )
 
   // Helpers
-  function formatMoney(cents: number) {
-    return new Intl.NumberFormat('uk-UA', {
-      style: 'currency',
-      currency: 'UAH',
-      minimumFractionDigits: 0,
-    }).format(cents / 100)
-  }
-  function formatBudget(min: number | null, max: number | null) {
-    if (min && max) return `${formatMoney(min)} — ${formatMoney(max)}`
-    if (max) return `до ${formatMoney(max)}`
-    if (min) return `від ${formatMoney(min)}`
-    return 'Договірний'
-  }
   function formatRelative(iso: string) {
     const diff = Date.now() - new Date(iso).getTime()
     const min = Math.floor(diff / 60_000)
@@ -175,20 +122,11 @@
       month: 'short',
     })
   }
-  function expiresIn(iso: string) {
-    const diff = new Date(iso).getTime() - Date.now()
-    if (diff <= 0) return 'Прострочено'
-    const days = Math.floor(diff / (24 * 60 * 60_000))
-    const hr = Math.floor(diff / (60 * 60_000))
-    if (days >= 1) return `${days} дн`
-    if (hr >= 1) return `${hr} год`
-    return '< 1 год'
-  }
-  function categoryLabel(slug: string) {
-    return filters.categories.find((c) => c.slug === slug)?.name ?? slug
-  }
-  function cityLabel(slug: string) {
-    return filters.cities.find((c) => c.slug === slug)?.name ?? slug
+  function jobDetails(job: any) {
+    // Беремо ключові деталі (без "Послуга" — вона вже в заголовку, і без предметів)
+    return describeJob(job.metadata).filter(
+      (d) => d.label !== 'Послуга' && !d.items,
+    )
   }
   function initials(name: string | null | undefined) {
     return (name ?? '?')[0]?.toUpperCase() ?? '?'
@@ -201,19 +139,17 @@
     class="text-2xl sm:text-3xl font-bold tracking-tight"
     style="color: var(--foreground); letter-spacing: -0.02em"
   >
-    Знайти роботу
+    Заявки поруч
   </h1>
   <p class="text-sm mt-1.5" style="color: var(--muted-foreground)">
-    Заявки клієнтів, які підходять вашому профілю
+    Нові замовлення на прибирання у вашому місті
   </p>
 </header>
 
-<!-- Block reason -->
 {#if blockReason}
   <div
     class="mb-6 p-4 rounded-2xl flex items-start gap-3"
-    style="background-color: color-mix(in oklch, #f59e0b 8%, transparent);
-              border: 1px solid color-mix(in oklch, #f59e0b 25%, transparent)"
+    style="background-color: color-mix(in oklch, #f59e0b 8%, transparent); border: 1px solid color-mix(in oklch, #f59e0b 25%, transparent)"
   >
     <AlertCircle class="size-5 shrink-0 mt-0.5" style="color: #b45309" />
     <div>
@@ -232,199 +168,37 @@
     </div>
   </div>
 {:else}
-  <!-- Filters -->
-  <div class="mb-6 space-y-3">
-    <div class="flex items-center gap-2 flex-wrap">
-      <!-- Price toggle -->
-      <Button
-        variant="outline"
-        size="sm"
-        class={cn('gap-2 rounded-full', priceOpen && 'border-foreground')}
-        onclick={() => (priceOpen = !priceOpen)}
+  <!-- Фільтр по типу послуги -->
+  <div
+    class="filter-row mb-6 flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap sm:overflow-visible"
+  >
+    <button
+      type="button"
+      onclick={() => (activeService = '')}
+      class="shrink-0 px-4 h-9 rounded-full text-sm font-medium cursor-pointer transition-all whitespace-nowrap
+        {activeService === ''
+        ? 'bg-foreground text-background'
+        : 'bg-secondary text-foreground hover:opacity-80'}"
+    >
+      Усі
+    </button>
+    {#each SERVICES as s (s.key)}
+      <button
+        type="button"
+        onclick={() => (activeService = s.key)}
+        class="shrink-0 px-4 h-9 rounded-full text-sm font-medium cursor-pointer transition-all whitespace-nowrap
+          {activeService === s.key
+          ? 'bg-foreground text-background'
+          : 'bg-secondary text-foreground hover:opacity-80'}"
       >
-        <SlidersHorizontal class="size-3.5" />
-        Ціна
-        {#if filterMinPrice || filterMaxPrice}
-          <Badge variant="secondary" class="px-1.5 py-0 ml-1">1</Badge>
-        {/if}
-      </Button>
-
-      <!-- Categories -->
-      <Popover.Root bind:open={categoryPickerOpen}>
-        <Popover.Trigger>
-          {#snippet child({ props })}
-            <Button
-              {...props}
-              variant="outline"
-              size="sm"
-              class={cn(
-                'gap-1.5 rounded-full font-normal',
-                filterCategories.length > 0 && 'border-foreground',
-              )}
-            >
-              <Layers class="size-3.5 opacity-60" />
-              {filterCategories.length > 0
-                ? `Категорії: ${filterCategories.length}`
-                : 'Категорія'}
-              <ChevronsUpDown class="size-3 opacity-40" />
-            </Button>
-          {/snippet}
-        </Popover.Trigger>
-        <Popover.Content class="w-72 p-0" align="start" sideOffset={6}>
-          <Command.Root>
-            <Command.Input placeholder="Пошук..." />
-            <Command.List>
-              <Command.Empty>Нічого не знайдено</Command.Empty>
-              <Command.Group>
-                {#each filters.categories as c (c.slug)}
-                  {@const sel = filterCategories.includes(c.slug)}
-                  <Command.Item
-                    value={c.name}
-                    onSelect={() => toggleCategory(c.slug)}
-                  >
-                    <div
-                      class={cn(
-                        'size-4 rounded border flex items-center justify-center shrink-0',
-                        sel
-                          ? 'bg-foreground border-foreground'
-                          : 'border-border',
-                      )}
-                    >
-                      {#if sel}
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="3"
-                          class="size-3"
-                          style="color: var(--background)"
-                        >
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
-                      {/if}
-                    </div>
-                    {c.name}
-                  </Command.Item>
-                {/each}
-              </Command.Group>
-            </Command.List>
-          </Command.Root>
-        </Popover.Content>
-      </Popover.Root>
-
-      <!-- Cities -->
-      <Popover.Root bind:open={cityPickerOpen}>
-        <Popover.Trigger>
-          {#snippet child({ props })}
-            <Button
-              {...props}
-              variant="outline"
-              size="sm"
-              class={cn(
-                'gap-1.5 rounded-full font-normal',
-                filterCities.length > 0 && 'border-foreground',
-              )}
-            >
-              <MapPin class="size-3.5 opacity-60" />
-              {filterCities.length > 0
-                ? `Міста: ${filterCities.length}`
-                : 'Місто'}
-              <ChevronsUpDown class="size-3 opacity-40" />
-            </Button>
-          {/snippet}
-        </Popover.Trigger>
-        <Popover.Content class="w-72 p-0" align="start" sideOffset={6}>
-          <Command.Root>
-            <Command.Input placeholder="Пошук..." />
-            <Command.List>
-              <Command.Empty>Нічого не знайдено</Command.Empty>
-              <Command.Group>
-                {#each filters.cities as c (c.slug)}
-                  {@const sel = filterCities.includes(c.slug)}
-                  <Command.Item
-                    value={c.name}
-                    onSelect={() => toggleCity(c.slug)}
-                  >
-                    <div
-                      class={cn(
-                        'size-4 rounded border flex items-center justify-center shrink-0',
-                        sel
-                          ? 'bg-foreground border-foreground'
-                          : 'border-border',
-                      )}
-                    >
-                      {#if sel}
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="3"
-                          class="size-3"
-                          style="color: var(--background)"
-                        >
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
-                      {/if}
-                    </div>
-                    {c.name}
-                    {#if c.region}
-                      <span class="ml-auto text-xs text-muted-foreground"
-                        >{c.region}</span
-                      >
-                    {/if}
-                  </Command.Item>
-                {/each}
-              </Command.Group>
-            </Command.List>
-          </Command.Root>
-        </Popover.Content>
-      </Popover.Root>
-
-      {#if activeFiltersCount > 0}
-        <Button
-          variant="ghost"
-          size="sm"
-          class="rounded-full gap-1 text-muted-foreground"
-          onclick={clearFilters}
-        >
-          <X class="size-3.5" />
-          Скинути
-        </Button>
-      {/if}
-    </div>
-
-    {#if priceOpen}
-      <div
-        class="rounded-xl p-4 flex items-center gap-2"
-        style="background-color: var(--card); border: 1px solid var(--border)"
-      >
-        <span class="text-sm shrink-0" style="color: var(--muted-foreground)"
-          >Ціна, ₴:</span
-        >
-        <Input
-          type="number"
-          placeholder="Від"
-          bind:value={filterMinPrice}
-          min={0}
-          class="h-9 tabular-nums"
-        />
-        <span style="color: var(--muted-foreground)">—</span>
-        <Input
-          type="number"
-          placeholder="До"
-          bind:value={filterMaxPrice}
-          min={0}
-          class="h-9 tabular-nums"
-        />
-      </div>
-    {/if}
+        {s.label}
+      </button>
+    {/each}
   </div>
 {/if}
 
 <!-- List -->
-{#if jobs.length === 0 && !loadingMore}
+{#if visibleJobs.length === 0 && !loadingMore}
   <div
     class="rounded-2xl px-6 py-16 text-center"
     style="background-color: var(--card); border: 1px solid var(--border)"
@@ -440,99 +214,110 @@
       />
     </div>
     <h2 class="text-base font-semibold mb-1" style="color: var(--foreground)">
-      Немає доступних заявок
+      {activeService ? 'Немає заявок цього типу' : 'Поки немає заявок'}
     </h2>
     <p class="text-sm" style="color: var(--muted-foreground)">
-      Перевірте пізніше або змініть фільтри
+      {activeService
+        ? 'Спробуйте інший фільтр'
+        : 'Зайдіть пізніше — нові заявки з’являються щодня'}
     </p>
   </div>
 {:else}
   <div class="space-y-3">
-    {#each jobs as job (job.id)}
+    {#each visibleJobs as job, i (job.id)}
       <a
         href={`/jobs/${job.id}`}
-        class="block rounded-2xl p-5 transition-all hover:-translate-y-0.5 group"
+        in:fly={{
+          y: 12,
+          duration: 260,
+          delay: Math.min(i, 6) * 40,
+          easing: quintOut,
+        }}
+        class="block rounded-2xl p-5 transition-all hover:-translate-y-0.5 hover:shadow-md group"
         style="background-color: var(--card); border: 1px solid var(--border)"
       >
+        <!-- Час -->
         <div class="flex items-center justify-between gap-2 mb-2.5">
-          <div class="flex items-center gap-2 flex-wrap">
-            <span class="text-xs" style="color: var(--muted-foreground)"
-              >{formatRelative(job.createdAt)}</span
-            >
-            <span class="text-xs" style="color: var(--muted-foreground)"
-              >· Активна ще {expiresIn(job.expiresAt)}</span
-            >
-          </div>
+          <span
+            class="text-xs inline-flex items-center gap-1"
+            style="color: var(--muted-foreground)"
+          >
+            <Clock class="size-3" />
+            {formatRelative(job.createdAt)}
+          </span>
           <ChevronRight
             class="size-5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
             style="color: var(--muted-foreground)"
           />
         </div>
 
+        <!-- Заголовок (тип прибирання) -->
         <h3
-          class="text-base sm:text-lg font-semibold leading-snug mb-2"
+          class="text-base sm:text-lg font-semibold leading-snug mb-3"
           style="color: var(--foreground)"
         >
           {job.title}
         </h3>
-        <p
-          class="text-sm leading-relaxed line-clamp-2 mb-3"
-          style="color: var(--muted-foreground)"
-        >
-          {job.description}
-        </p>
 
-        <div class="flex items-center gap-2 flex-wrap mb-3">
-          <Badge variant="outline" class="font-normal gap-1 text-xs">
-            <Layers class="size-3" />
-            {categoryLabel(job.category)}
-          </Badge>
-          <Badge variant="outline" class="font-normal gap-1 text-xs">
-            <MapPin class="size-3" />
-            {cityLabel(job.city)}
-          </Badge>
-          <Badge variant="secondary" class="font-semibold tabular-nums text-xs">
-            {formatBudget(job.budgetMinCents, job.budgetMaxCents)}
-          </Badge>
-        </div>
+        <!-- Ключові деталі (чипи) -->
+        {#if jobDetails(job).length > 0}
+          <div class="flex items-center gap-1.5 flex-wrap mb-3">
+            {#each jobDetails(job) as d (d.label)}
+              {@const Icon = iconByName(d.icon)}
+              {#if d.label === 'Коли'}
+                <!-- Дата — акцентний чип (важливо майстру) -->
+                <span
+                  class="inline-flex items-center gap-1.5 px-2.5 h-7 rounded-full text-xs font-semibold"
+                  style="background-color: color-mix(in srgb, var(--brand) 12%, transparent); color: var(--brand)"
+                >
+                  {#if Icon}<Icon class="size-3.5" />{/if}
+                  {d.value}
+                </span>
+              {:else}
+                <span
+                  class="inline-flex items-center gap-1.5 px-2.5 h-7 rounded-full text-xs font-medium"
+                  style="background-color: var(--secondary); color: var(--foreground)"
+                >
+                  {#if Icon}<Icon class="size-3.5 opacity-60" />{/if}
+                  {d.value}
+                </span>
+              {/if}
+            {/each}
+          </div>
+        {/if}
 
-        <!-- Client info -->
+        <!-- Клієнт -->
         {#if job.client}
-          {@const client = job.client as {
-            id: string
-            name: string | null
-            username: string | null
-            avatar: string | null
-            avgRating: number
-            reviewsCount: number
-          }}
           <div
             class="flex items-center gap-2 pt-3"
             style="border-top: 1px solid var(--border)"
           >
             <Avatar class="size-8 shrink-0">
-              <AvatarImage src={client.avatar ?? ''} alt={client.name ?? ''} />
+              <AvatarImage
+                src={job.client.avatar ?? ''}
+                alt={job.client.name ?? ''}
+              />
               <AvatarFallback class="text-xs font-semibold"
-                >{initials(client.name)}</AvatarFallback
+                >{initials(job.client.name)}</AvatarFallback
               >
             </Avatar>
-            <div class="min-w-0">
+            <div class="min-w-0 flex-1">
               <p
                 class="text-sm font-medium truncate"
                 style="color: var(--foreground)"
               >
-                {client.name ?? 'Замовник'}
+                {job.client.name ?? 'Замовник'}
               </p>
-              {#if client.reviewsCount > 0}
-                <p
-                  class="text-[11px] inline-flex items-center gap-1"
-                  style="color: var(--muted-foreground)"
-                >
-                  <Star class="size-3" style="color: #f5a623; fill: #f5a623" />
-                  {client.avgRating.toFixed(1)} ({client.reviewsCount})
-                </p>
-              {/if}
             </div>
+            {#if job.client.reviewsCount > 0}
+              <span
+                class="text-[11px] inline-flex items-center gap-1 shrink-0"
+                style="color: var(--muted-foreground)"
+              >
+                <Star class="size-3" style="color: #f5a623; fill: #f5a623" />
+                {job.client.avgRating.toFixed(1)} ({job.client.reviewsCount})
+              </span>
+            {/if}
           </div>
         {/if}
       </a>
@@ -543,11 +328,20 @@
   {#if loadingMore}
     <div class="flex justify-center py-8"><Spinner /></div>
   {/if}
-  {#if !nextCursor && jobs.length > 0 && !loadingMore}
+  {#if !nextCursor && visibleJobs.length > 0 && !loadingMore}
     <div class="text-center py-8">
       <p class="text-xs" style="color: var(--muted-foreground)">
-        Кінець списку
+        Це всі заявки
       </p>
     </div>
   {/if}
 {/if}
+
+<style>
+  .filter-row {
+    scrollbar-width: none; /* Firefox */
+  }
+  .filter-row::-webkit-scrollbar {
+    display: none; /* Chrome/Safari */
+  }
+</style>

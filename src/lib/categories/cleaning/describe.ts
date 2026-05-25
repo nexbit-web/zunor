@@ -24,6 +24,8 @@ export interface JobDetailItem {
 export interface JobDetail {
   label: string
   value: string
+  /** Назва Lucide-іконки для цього поля. */
+  icon?: string
   /** Для хімчистки — структурований список предметів. */
   items?: JobDetailItem[]
 }
@@ -43,17 +45,26 @@ export function describeJob(metadata: unknown): JobDetail[] {
     details.push({
       label: 'Помешкання',
       value: premiseLabel(String(m.premise)),
+      icon: 'Home',
     })
   }
 
   // Послуга
   if (m.service) {
-    details.push({ label: 'Послуга', value: serviceLabel(String(m.service)) })
+    details.push({
+      label: 'Послуга',
+      value: serviceLabel(String(m.service)),
+      icon: 'Sparkles',
+    })
   }
 
   // Кімнати
   if (m.rooms) {
-    details.push({ label: 'Кімнат', value: roomLabel(String(m.rooms)) })
+    details.push({
+      label: 'Кімнат',
+      value: roomLabel(String(m.rooms)),
+      icon: 'DoorOpen',
+    })
   }
 
   // Частота (регулярне)
@@ -61,28 +72,49 @@ export function describeJob(metadata: unknown): JobDetail[] {
     details.push({
       label: 'Періодичність',
       value: frequencyLabel(String(m.frequency)),
+      icon: 'Repeat',
     })
   }
 
   // Сміття (після ремонту)
   if (m.trash) {
-    details.push({ label: 'Сміття', value: trashLabel(String(m.trash)) })
+    details.push({
+      label: 'Сміття',
+      value: trashLabel(String(m.trash)),
+      icon: 'Trash2',
+    })
   }
 
   // Вікна
   if (m.windowsCount) {
-    details.push({ label: 'Кількість вікон', value: String(m.windowsCount) })
+    details.push({
+      label: 'Кількість вікон',
+      value: `${m.windowsCount} вікон`,
+      icon: 'AppWindow',
+    })
   }
   if (m.balcony) {
-    details.push({ label: 'Балкон', value: balconyLabel(String(m.balcony)) })
+    details.push({
+      label: 'Балкон',
+      value: balconyLabel(String(m.balcony)),
+      icon: 'Columns2',
+    })
   }
 
   // Поверх + ліфт
   if (m.floor != null) {
-    details.push({ label: 'Поверх', value: String(m.floor) })
+    details.push({
+      label: 'Поверх',
+      value: `${m.floor} поверх`,
+      icon: 'Building',
+    })
   }
   if (m.hasElevator) {
-    details.push({ label: 'Ліфт', value: elevatorLabel(String(m.hasElevator)) })
+    details.push({
+      label: 'Ліфт',
+      value: elevatorLabel(String(m.hasElevator)),
+      icon: 'ArrowUpDown',
+    })
   }
   // Хімчистка: предмети — структурований список (назва + кількість)
   if (Array.isArray(m.items) && m.items.length > 0) {
@@ -102,7 +134,11 @@ export function describeJob(metadata: unknown): JobDetail[] {
 
   // Коли
   if (m.when) {
-    details.push({ label: 'Коли', value: whenLabel(String(m.when)) })
+    details.push({
+      label: 'Коли',
+      value: whenLabel(String(m.when)),
+      icon: 'Calendar',
+    })
   }
 
   return details

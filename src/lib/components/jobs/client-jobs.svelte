@@ -7,13 +7,23 @@
   import {
     Plus,
     Briefcase,
-    MapPin,
-    Layers,
     Eye,
     MessageSquare,
     ChevronRight,
   } from 'lucide-svelte'
+  import * as Icons from '@lucide/svelte'
   import { onMount } from 'svelte'
+  import { describeJob } from '$lib/categories/cleaning/describe'
+
+  function iconByName(name: string | undefined): any {
+    if (!name) return null
+    return (Icons as Record<string, unknown>)[name] ?? null
+  }
+  function jobDetails(job: any) {
+    return describeJob(job.metadata).filter(
+      (d) => d.label !== 'Послуга' && !d.items,
+    )
+  }
 
   let {
     initialJobs,
@@ -273,26 +283,39 @@
         >
           {job.title}
         </h3>
-        <p
-          class="text-sm leading-relaxed line-clamp-2 mb-3"
-          style="color: var(--muted-foreground)"
-        >
-          {job.description}
-        </p>
+        {#if job.description}
+          <p
+            class="text-sm leading-relaxed line-clamp-2 mb-3"
+            style="color: var(--muted-foreground)"
+          >
+            {job.description}
+          </p>
+        {/if}
 
-        <div class="flex items-center gap-2 flex-wrap mb-3">
-          <Badge variant="outline" class="font-normal gap-1 text-xs">
-            <Layers class="size-3" />
-            {categoryLabel(job.category)}
-          </Badge>
-          <Badge variant="outline" class="font-normal gap-1 text-xs">
-            <MapPin class="size-3" />
-            {cityLabel(job.city)}
-          </Badge>
-          <Badge variant="secondary" class="font-semibold tabular-nums text-xs">
-            {formatBudget(job.budgetMinCents, job.budgetMaxCents)}
-          </Badge>
-        </div>
+        {#if jobDetails(job).length > 0}
+          <div class="flex items-center gap-1.5 flex-wrap mb-3">
+            {#each jobDetails(job) as d (d.label)}
+              {@const Icon = iconByName(d.icon)}
+              {#if d.label === 'Коли'}
+                <span
+                  class="inline-flex items-center gap-1.5 px-2.5 h-7 rounded-full text-xs font-semibold"
+                  style="background-color: color-mix(in srgb, var(--brand) 12%, transparent); color: var(--brand)"
+                >
+                  {#if Icon}<Icon class="size-3.5" />{/if}
+                  {d.value}
+                </span>
+              {:else}
+                <span
+                  class="inline-flex items-center gap-1.5 px-2.5 h-7 rounded-full text-xs font-medium"
+                  style="background-color: var(--secondary); color: var(--foreground)"
+                >
+                  {#if Icon}<Icon class="size-3.5 opacity-60" />{/if}
+                  {d.value}
+                </span>
+              {/if}
+            {/each}
+          </div>
+        {/if}
 
         <div
           class="flex items-center gap-3 pt-3 text-xs"
