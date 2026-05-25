@@ -10,6 +10,7 @@ import {
 } from '$lib/server/order-state-machine'
 import { postOrderSystemMessage } from '$lib/server/system-message'
 import { Notify } from '$lib/server/notifications'
+import { dispatchJob } from '$lib/server/dispatch'
 import type { RequestHandler } from './$types'
 
 /**
@@ -50,6 +51,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
       clientId: true,
       masterId: true,
       chatId: true,
+      fromJob: { select: { id: true, title: true } },
     },
   })
   if (!order) throw error(404, 'Замовлення не знайдено')
@@ -92,6 +94,18 @@ export const POST: RequestHandler = async ({ params, request }) => {
         const reason = String(body.reason ?? '').trim()
         if (reason.length > 500) throw error(400, 'Причина занадто довга')
         data.cancelReason = reason || null
+
+        // Майстер відмовився → повертаємо заявку в пошук (manifest: клієнт не винен)
+        if (actor === 'MASTER' && order.fromJob) {
+          await tx.job.update({
+            where: { id: order.fromJob.id },
+            data: {
+              status: 'OPEN',
+              closedAt: null,
+              selectedOrderId: null,
+            },
+          })
+        }
         break
       }
     }
@@ -148,6 +162,13 @@ export const POST: RequestHandler = async ({ params, request }) => {
     } catch (err) {
       console.error('[order-action] system message error', err)
     }
+  }
+
+  // Майстер відмовився → перезапускаємо диспатч (мозок шукає заміну)
+  if (transition === 'CANCEL' && actor === 'MASTER' && order.fromJob) {
+    dispatchJob(order.fromJob.id, order.fromJob.title).catch((err) =>
+      console.error('[order-action] redispatch failed', err),
+    )
   }
 
   try {
