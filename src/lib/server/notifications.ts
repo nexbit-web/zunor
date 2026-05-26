@@ -43,7 +43,7 @@ export const Notify = {
     notify({
       userId: masterId,
       type: 'NEW_JOB',
-      title: 'Нова заявка у вашій категорії',
+      title: 'Є нова заявка для тебе',
       body: jobTitle,
       jobId,
     }),
@@ -51,7 +51,7 @@ export const Notify = {
     notify({
       userId: clientId,
       type: 'NEW_PROPOSAL',
-      title: 'Новий відгук на вашу заявку',
+      title: 'Майстер відгукнувся на твою заявку!',
       jobId,
       proposalId,
     }),
@@ -59,8 +59,8 @@ export const Notify = {
     notify({
       userId: masterId,
       type: 'PROPOSAL_ACCEPTED',
-      title: 'Клієнт обрав вас!',
-      body: 'Можете розпочинати роботу',
+      title: 'Вітаю, тебе обрали!',
+      body: 'Можеш починати роботу',
       jobId,
       orderId,
     }),
@@ -68,15 +68,15 @@ export const Notify = {
     notify({
       userId: clientId,
       type: 'ORDER_STARTED',
-      title: 'Майстер розпочав роботу',
+      title: 'Майстер узявся за роботу',
       orderId,
     }),
   orderCompleted: (clientId: string, orderId: string) =>
     notify({
       userId: clientId,
       type: 'ORDER_COMPLETED',
-      title: 'Замовлення завершено',
-      body: 'Залиште відгук про роботу майстра',
+      title: 'Роботу завершено!',
+      body: 'Залиш відгук про майстра',
       orderId,
     }),
   orderCancelled: (recipientId: string, orderId: string, reason?: string) =>
@@ -92,8 +92,8 @@ export const Notify = {
     notify({
       userId: clientId,
       type: 'JOB_REOPENED',
-      title: 'Zuno шукає нового майстра',
-      body: 'Майстер відмовився від замовлення. Ми вже сповістили інших майстрів — скоро з’являться нові відгуки.',
+      title: 'Майстер відмовився, але я вже шукаю нового.',
+      body: 'Скоро зʼявляться нові відгуки — я повідомлю.',
       jobId,
     }),
 }
