@@ -65,11 +65,10 @@ export const load: PageServerLoad = async ({
 
   if (!user) throw redirect(302, '/user/login')
 
-  console.log('[dashboard] role=', user.role, 'userId=', user.id)
-
   if (user.role === 'CLIENT') {
-    const reviews = await loadReviews('clientId', user.id, 'MASTER_TO_CLIENT')
-    const [totalOrders, completedOrders] = await Promise.all([
+    // Паралельно: відгуки + лічильники замовлень (один раунд до БД)
+    const [reviews, totalOrders, completedOrders] = await Promise.all([
+      loadReviews('clientId', user.id, 'MASTER_TO_CLIENT'),
       prisma.order.count({ where: { clientId: user.id } }),
       prisma.order.count({
         where: { clientId: user.id, status: 'COMPLETED' },

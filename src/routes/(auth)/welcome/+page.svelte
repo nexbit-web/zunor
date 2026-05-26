@@ -11,34 +11,62 @@
     SelectItem,
     SelectTrigger,
   } from '$lib/components/ui/select'
-  import { Card, CardContent } from '$lib/components/ui/card'
   import AvatarUploader from '$lib/components/avatar-uploader.svelte'
-  import UsernameInput from '$lib/components/username-input.svelte'
-  import { Sparkles, ArrowRight, XCircle } from 'lucide-svelte'
+  import toast from 'svelte-hot-french-toast'
   import type { PageData } from './$types'
   import { Spinner } from '$lib/components/ui/spinner'
 
   let { data }: { data: PageData } = $props()
 
-  // ─── State — все строки, без null (важно для $bindable) ───
+  const NAME_MAX = 80
+  const BIO_MAX = 922
+
   let name = $state(data.user.name ?? '')
-  let username = $state(data.user.username ?? '')
-  let usernameValid = $state<boolean | null>(data.user.username ? true : null)
   let city = $state(data.user.city ?? '')
-  let phone = $state(data.user.phone ?? '')
   let bio = $state(data.user.bio ?? '')
 
-  // Аватар — отдельные state для $bindable пропсов
   let avatarUrl = $state(data.user.avatar ?? '')
   let avatarPublicId = $state('')
   let avatarUploading = $state(false)
 
   let submitting = $state(false)
-  let errorMsg = $state<string | null>(null)
+
+  // ─── Телефон України: +380 (статичний префікс) + 9 цифр оператора ───
+  // Зберігаємо лише 9 значущих цифр. Нормалізація будь-якого вводу:
+  // 380XXXXXXXXX / 80XXXXXXXXX / 0XXXXXXXXX / XXXXXXXXX → 9 цифр.
+  function normalizePhone(input: string): string {
+    let d = input.replace(/\D/g, '')
+    if (d.startsWith('380')) d = d.slice(3)
+    else if (d.startsWith('80')) d = d.slice(2)
+    else if (d.startsWith('0')) d = d.slice(1)
+    return d.slice(0, 9)
+  }
+
+  // Форматування локальної частини: "67 123 45 67" (без префікса +380)
+  function formatLocal(d: string): string {
+    let out = d.slice(0, 2)
+    if (d.length > 2) out += ' ' + d.slice(2, 5)
+    if (d.length > 5) out += ' ' + d.slice(5, 7)
+    if (d.length > 7) out += ' ' + d.slice(7, 9)
+    return out
+  }
+
+  let phoneDigits = $state(normalizePhone(data.user.phone ?? ''))
+  const phoneDisplayLocal = $derived(formatLocal(phoneDigits))
+
+  function onPhoneInput(e: Event) {
+    const el = e.target as HTMLInputElement
+    phoneDigits = normalizePhone(el.value)
+    // Синхронізуємо відображення (інакше зайві символи лишаються в полі)
+    el.value = formatLocal(phoneDigits)
+  }
+
+  // Валідні перші цифри коду укр. мобільного оператора: 3,5,6,7,9
+  const phoneValid = $derived(
+    phoneDigits.length === 9 && /^[35679]/.test(phoneDigits),
+  )
 
   const nameTrimmed = $derived(name.trim())
-  const cityTrimmed = $derived(city.trim())
-
   const avatarFallback = $derived(
     nameTrimmed ? nameTrimmed[0].toUpperCase() : 'U',
   )
@@ -47,9 +75,9 @@
     !submitting &&
       !avatarUploading &&
       nameTrimmed.length >= 1 &&
-      nameTrimmed.length <= 80 &&
-      usernameValid === true &&
-      !!cityTrimmed,
+      nameTrimmed.length <= NAME_MAX &&
+      !!city &&
+      phoneValid,
   )
 
   const cityLabel = $derived(
@@ -59,7 +87,6 @@
   async function submit() {
     if (!canSubmit) return
     submitting = true
-    errorMsg = null
 
     try {
       const res = await fetch('/api/user/update', {
@@ -67,21 +94,24 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: nameTrimmed,
-          username,
-          city: cityTrimmed,
-          phone: phone.trim() || undefined,
+          city,
+          phone: '+380' + phoneDigits,
           bio: bio.trim(),
+          avatar: avatarUrl || null,
+          avatarPublicId: avatarPublicId || null,
         }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
-        errorMsg = json?.error ?? 'Не вдалось зберегти'
+        toast.error(json?.error ?? 'Не вдалось зберегти')
         return
       }
+      toast.success('Вітаю! Тепер можна замовляти')
       await invalidateAll()
+      await new Promise((r) => setTimeout(r, 800))
       goto('/dashboard')
     } catch {
-      errorMsg = 'Помилка зʼєднання'
+      toast.error('Помилка зʼєднання')
     } finally {
       submitting = false
     }
@@ -89,148 +119,150 @@
 </script>
 
 <svelte:head>
-  <title>Завершіть профіль · Zunor</title>
+  <title>Знайомство · Zunor</title>
 </svelte:head>
 
-<div class="max-w-xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
-  <!-- Hero -->
-  <div class="text-center mb-8">
-    <div
-      class="size-12 rounded-2xl mx-auto mb-4 flex items-center justify-center"
-      style="background-color: color-mix(in oklch, var(--primary) 12%, transparent)"
-    >
-      <Sparkles class="size-6" style="color: var(--primary)" />
-    </div>
+<div
+  class="min-h-svh px-5 py-10 sm:py-16"
+  style="background-color: var(--background)"
+>
+  <div class="max-w-md mx-auto">
     <h1
-      class="text-2xl sm:text-3xl font-bold tracking-tight mb-2"
-      style="color: var(--foreground); letter-spacing: -0.02em"
+      class="text-3xl sm:text-4xl font-bold tracking-tight mb-3"
+      style="color: var(--foreground); letter-spacing: -0.03em"
     >
-      Майже готово!
+      Знайомство
     </h1>
-    <p class="text-sm" style="color: var(--muted-foreground)">
-      Заповніть профіль — щоб майстри знали, з ким мають справу
+    <p class="text-base mb-10" style="color: var(--muted-foreground)">
+      Кілька слів про тебе — і можна замовляти. Це швидко.
     </p>
-  </div>
 
-  <Card class="rounded-2xl">
-    <CardContent class="p-5 sm:p-6 space-y-5">
-      <!-- Avatar -->
-      <div class="flex justify-center">
-        <AvatarUploader
-          bind:value={avatarUrl}
-          bind:publicId={avatarPublicId}
-          bind:uploading={avatarUploading}
-          fallback={avatarFallback}
-          onError={(msg) => (errorMsg = msg)}
-        />
-      </div>
+    <div class="flex justify-center mb-10">
+      <AvatarUploader
+        bind:value={avatarUrl}
+        bind:publicId={avatarPublicId}
+        bind:uploading={avatarUploading}
+        fallback={avatarFallback}
+        onError={(msg) => toast.error(msg)}
+      />
+    </div>
 
-      <!-- Name -->
+    <div class="space-y-7">
+      <!-- Імʼя -->
       <div>
-        <Label for="name" class="text-sm font-semibold mb-2 block">
-          Імʼя <span style="color: var(--destructive)">*</span>
+        <Label
+          for="name"
+          class="text-sm font-semibold mb-2.5 block"
+          style="color: var(--foreground)"
+        >
+          Як тебе звати?
         </Label>
         <Input
           id="name"
           type="text"
           bind:value={name}
           placeholder="Іван Петренко"
-          maxlength={80}
+          maxlength={NAME_MAX}
+          autocomplete="name"
+          class="h-12 text-base"
         />
       </div>
 
-      <!-- Username (компонент уже включает Label и подсказку) -->
-      <UsernameInput
-        bind:value={username}
-        bind:isValid={usernameValid}
-        currentUsername={data.user.username ?? ''}
-      />
-
-      <!-- City -->
+      <!-- Місто -->
       <div>
-        <Label for="city" class="text-sm font-semibold mb-2 block">
-          Місто <span style="color: var(--destructive)">*</span>
+        <Label
+          for="city"
+          class="text-sm font-semibold mb-2.5 block"
+          style="color: var(--foreground)"
+        >
+          Твоє місто
         </Label>
         <Select type="single" bind:value={city}>
-          <SelectTrigger id="city">
+          <SelectTrigger
+            id="city"
+            class="h-12 text-base data-[placeholder]:text-muted-foreground"
+          >
             {cityLabel}
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent class="rounded-xl">
             {#each data.cities as c (c.slug)}
-              <SelectItem value={c.slug}>{c.name}</SelectItem>
+              <SelectItem value={c.slug} class="text-base py-2.5"
+                >{c.name}</SelectItem
+              >
             {/each}
           </SelectContent>
         </Select>
-        <p class="text-xs mt-1.5" style="color: var(--muted-foreground)">
-          Майстри побачать ваші заявки тільки якщо вони працюють у вашому місті
+      </div>
+
+      <!-- Телефон -->
+      <div>
+        <Label
+          for="phone"
+          class="text-sm font-semibold mb-2.5 block"
+          style="color: var(--foreground)"
+        >
+          Номер телефону
+        </Label>
+        <div
+          class="flex items-center h-12 rounded-md border bg-transparent text-base focus-within:ring-2 focus-within:ring-ring/50 transition-shadow"
+          style="border-color: var(--input)"
+        >
+          <span
+            class="pl-3 pr-2 shrink-0 select-none tabular-nums"
+            style="color: var(--muted-foreground)"
+          >
+            +380
+          </span>
+          <input
+            id="phone"
+            type="tel"
+            inputmode="numeric"
+            autocomplete="tel-national"
+            value={phoneDisplayLocal}
+            oninput={onPhoneInput}
+            placeholder="00 000 00 00"
+            class="flex-1 h-full bg-transparent outline-none pr-3 tabular-nums"
+            style="color: var(--foreground)"
+          />
+        </div>
+        <p class="text-xs mt-2" style="color: var(--muted-foreground)">
+          Приватний. Майстер побачить його лише після того, як ти його обереш.
         </p>
       </div>
 
-      <!-- Phone -->
+      <!-- Про себе -->
       <div>
-        <Label for="phone" class="text-sm font-semibold mb-2 block">
-          Телефон
-          <span class="font-normal" style="color: var(--muted-foreground)">
-            — необовʼязково
-          </span>
-        </Label>
-        <Input
-          id="phone"
-          type="tel"
-          bind:value={phone}
-          placeholder="+380 50 123 45 67"
-          maxlength={20}
-        />
-      </div>
-
-      <!-- Bio -->
-      <div>
-        <Label for="bio" class="text-sm font-semibold mb-2 block">
+        <Label
+          for="bio"
+          class="text-sm font-semibold mb-2.5 block"
+          style="color: var(--foreground)"
+        >
           Про себе
-          <span class="font-normal" style="color: var(--muted-foreground)">
-            — необовʼязково
-          </span>
+          <span class="font-normal" style="color: var(--muted-foreground)"
+            >— необовʼязково</span
+          >
         </Label>
         <Textarea
           id="bio"
           bind:value={bio}
           rows={3}
-          maxlength={922}
-          placeholder="Розкажіть коротко про себе"
-          class="resize-none"
+          maxlength={BIO_MAX}
+          placeholder="Кілька слів про себе — майстру буде приємно знати, з ким працює"
+          class="resize-none text-base"
         />
-        <p
-          class="text-xs mt-1.5 text-right tabular-nums"
-          style="color: var(--muted-foreground)"
-        >
-          {bio.length} / 922
-        </p>
       </div>
+    </div>
 
-      <!-- Error -->
-      {#if errorMsg}
-        <div
-          class="text-xs flex items-start gap-2 rounded-lg px-3 py-2.5"
-          style="background-color: color-mix(in srgb, var(--destructive) 10%, transparent); color: var(--destructive)"
-        >
-          <XCircle class="size-3.5 shrink-0 mt-0.5" />
-          <span>{errorMsg}</span>
-        </div>
+    <Button
+      onclick={submit}
+      disabled={!canSubmit}
+      class="w-full h-12 rounded-xl mt-10 text-base font-semibold"
+    >
+      {#if submitting}
+        <Spinner /> Зберігаємо…
+      {:else}
+        Готово
       {/if}
-
-      <!-- Submit -->
-      <Button
-        onclick={submit}
-        disabled={!canSubmit}
-        class="w-full h-11 rounded-full gap-2"
-      >
-        {#if submitting}
-          <Spinner />
-          Зберігаємо…
-        {:else}
-          Завершити <ArrowRight class="size-4" />
-        {/if}
-      </Button>
-    </CardContent>
-  </Card>
+    </Button>
+  </div>
 </div>

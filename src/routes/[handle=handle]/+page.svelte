@@ -1,7 +1,6 @@
 <!-- src/routes/[handle=handle]/+page.svelte -->
 <script lang="ts">
   import FreelancerProfileView from '$lib/components/profile/freelancer-profile-view.svelte'
-  import ClientProfileView from '$lib/components/profile/client-profile-view.svelte'
   import { page } from '$app/state'
   import type { PageData } from './$types'
 
@@ -89,16 +88,8 @@
   {/if}
 </svelte:head>
 
-{#if data.profileType === 'master'}
-  <FreelancerProfileView
-    user={data.user}
-    isOwner={false}
-    isAuthenticated={data.isAuthenticated}
-  />
-{:else}
-  <ClientProfileView
-    user={data.user}
-    isOwner={false}
-    isAuthenticated={data.isAuthenticated}
-  />
-{/if}
+<FreelancerProfileView
+  user={data.user}
+  isOwner={false}
+  isAuthenticated={data.isAuthenticated}
+/>

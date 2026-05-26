@@ -4,7 +4,6 @@ import { error, redirect } from '@sveltejs/kit'
 import type { PageServerLoad } from './$types'
 import type {
   FreelancerProfileData,
-  ClientProfileData,
   ProfileReview,
 } from '$lib/components/profile/types'
 
@@ -39,7 +38,9 @@ async function loadReviews(
 }
 
 export const load: PageServerLoad = async ({ params, request, setHeaders }) => {
-  const raw = params.handle.startsWith('@') ? params.handle.slice(1) : params.handle
+  const raw = params.handle.startsWith('@')
+    ? params.handle.slice(1)
+    : params.handle
   const username = raw.trim().toLowerCase()
 
   if (!USERNAME_RE.test(username)) {
@@ -61,55 +62,10 @@ export const load: PageServerLoad = async ({ params, request, setHeaders }) => {
     throw redirect(302, '/dashboard')
   }
 
+  // Клієнт не має публічної сторінки /@handle — лише майстри є вітринами.
+  // Перегляд клієнта майстром відбувається через /client/[id].
   if (user.role === 'CLIENT') {
-    if (!session) throw error(404, 'Користувача не знайдено')
-
-    const sharedChat = await prisma.chat.findFirst({
-      where: {
-        AND: [
-          { members: { some: { userId: session.user.id } } },
-          { members: { some: { userId: user.id } } },
-        ],
-      },
-      select: { id: true },
-    })
-
-    if (!sharedChat) throw error(404, 'Користувача не знайдено')
-
-    const reviews = await loadReviews('clientId', user.id, 'MASTER_TO_CLIENT')
-    const [totalOrders, completedOrders] = await Promise.all([
-      prisma.order.count({ where: { clientId: user.id } }),
-      prisma.order.count({
-        where: { clientId: user.id, status: 'COMPLETED' },
-      }),
-    ])
-
-    setHeaders({
-      'cache-control': 'private, no-store',
-      'x-robots-tag': 'noindex, nofollow',
-    })
-
-    const clientUser: ClientProfileData = {
-      id: user.id,
-      name: user.name ?? '',
-      username: user.username ?? undefined,
-      avatar: user.avatar ?? undefined,
-      bio: user.bio ?? undefined,
-      city: user.city ?? undefined,
-      createdAt: user.createdAt.toISOString(),
-      totalOrders,
-      completedOrders,
-      avgRating: user.avgRating,
-      reviewsCount: user.reviewsCount,
-      reviews,
-    }
-
-    return {
-      profileType: 'client' as const,
-      isOwner: false as const,
-      isAuthenticated: true as const,
-      user: clientUser,
-    }
+    throw error(404, 'Користувача не знайдено')
   }
 
   const mp = user.masterProfile

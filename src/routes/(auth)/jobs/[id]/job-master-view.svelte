@@ -309,7 +309,7 @@
       Замовник
     </p>
     <a
-      href={data.job.client.username ? `/@${data.job.client.username}` : '#'}
+      href="/client/{data.job.client.id}"
       class="flex items-center gap-3 group"
     >
       <Avatar class="size-11">

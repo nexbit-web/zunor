@@ -45,6 +45,7 @@ const onboardingGuard: Handle = async ({ event, resolve }) => {
       role: true,
       username: true,
       city: true,
+      phone: true,
       masterProfile: { select: { verificationStatus: true } },
     },
   })
@@ -62,8 +63,8 @@ const onboardingGuard: Handle = async ({ event, resolve }) => {
     throw redirect(302, '/onboarding')
   }
 
-  // ─── Клиент без username или города → /welcome ───
-  if (user.role === 'CLIENT' && (!user.username || !user.city)) {
+  // ─── Клиент без обовʼязкових полів (місто, телефон) → /welcome ───
+  if (user.role === 'CLIENT' && (!user.city || !user.phone)) {
     throw redirect(302, '/welcome')
   }
 
