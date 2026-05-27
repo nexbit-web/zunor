@@ -23,6 +23,7 @@ export const load: PageServerLoad = async ({ params, request }) => {
           username: true,
           avatar: true,
           city: true,
+          phone: true,
           avgRating: true,
           reviewsCount: true,
         },
@@ -34,6 +35,7 @@ export const load: PageServerLoad = async ({ params, request }) => {
           username: true,
           avatar: true,
           city: true,
+          phone: true,
           avgRating: true,
           reviewsCount: true,
           masterProfile: {

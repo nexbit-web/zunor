@@ -6,15 +6,7 @@
     AvatarFallback,
     AvatarImage,
   } from '$lib/components/ui/avatar'
-  import {
-    BadgeCheck,
-    Star,
-    MessageSquare,
-    Clock,
-    Copy,
-    Check,
-    LoaderCircle,
-  } from 'lucide-svelte'
+  import { Clock, Copy, Check, Phone, LoaderCircle, MessageSquare, Star } from 'lucide-svelte'
   import { Button } from '$lib/components/ui/button'
   import OrderActions from '$lib/components/orders/order-actions.svelte'
   import ReviewForm from '$lib/components/orders/review-form.svelte'
@@ -39,6 +31,15 @@
   const isClient = $derived(data.viewerId === order.clientId)
   const isMaster = $derived(data.viewerId === order.masterId)
   const peer = $derived(isClient ? order.master : order.client)
+
+  // Клієнт → майстер має публічну сторінку /@username; майстер → клієнт за /client/[id]
+  const peerHref = $derived(
+    isClient
+      ? order.master.username
+        ? `/@${order.master.username}`
+        : '#'
+      : `/client/${order.client.id}`,
+  )
 
   const statusLabel = $derived(ORDER_STATUS_LABEL[order.status])
   const statusColor = $derived(ORDER_STATUS_COLOR[order.status])
@@ -483,10 +484,7 @@
           {isClient ? 'Майстер' : 'Замовник'}
         </p>
 
-        <a
-          href={peer.username ? `/@${peer.username}` : '#'}
-          class="flex items-center gap-3 mb-3 group"
-        >
+        <a href={peerHref} class="flex items-center gap-3 mb-3 group">
           <Avatar class="size-12 shrink-0">
             <AvatarImage src={peer.avatar ?? ''} alt={peer.name ?? ''} />
             <AvatarFallback
@@ -519,6 +517,23 @@
             {/if}
           </div>
         </a>
+
+        <!-- Телефон співрозмовника (видно лише після створення замовлення) -->
+        {#if peer.phone}
+          <a
+            href="tel:{peer.phone}"
+            class="flex items-center gap-2.5 w-full h-11 px-3 rounded-lg mb-2 transition-colors hover:bg-[var(--muted)]"
+            style="border: 1px solid var(--border)"
+          >
+            <Phone class="size-4 shrink-0" style="color: var(--primary)" />
+            <span
+              class="text-sm font-medium tabular-nums"
+              style="color: var(--foreground)"
+            >
+              {peer.phone}
+            </span>
+          </a>
+        {/if}
 
         <Button
           variant="outline"

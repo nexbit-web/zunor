@@ -141,7 +141,7 @@
       <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mb-3">
         <span
           class="flex items-center gap-1 text-xs"
-          style="color: var(--muted-foreground)"Клієнт
+          style="color: var(--muted-foreground)"
         >
           <Calendar class="size-3" aria-hidden="true" />
           З <time datetime={memberSinceISO}>{memberSinceLabel}</time>
