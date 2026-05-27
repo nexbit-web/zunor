@@ -66,14 +66,21 @@ export const load: PageServerLoad = async ({
   if (!user) throw redirect(302, '/user/login')
 
   if (user.role === 'CLIENT') {
-    // Паралельно: відгуки + лічильники замовлень (один раунд до БД)
-    const [reviews, totalOrders, completedOrders] = await Promise.all([
+    // Паралельно: відгуки + лічильники + назва міста
+    const [reviews, totalOrders, completedOrders, cityRow] = await Promise.all([
       loadReviews('clientId', user.id, 'MASTER_TO_CLIENT'),
       prisma.order.count({ where: { clientId: user.id } }),
       prisma.order.count({
         where: { clientId: user.id, status: 'COMPLETED' },
       }),
+      user.city
+        ? prisma.city.findUnique({
+            where: { slug: user.city },
+            select: { name: true },
+          })
+        : Promise.resolve(null),
     ])
+    const cityName = cityRow?.name ?? user.city ?? undefined
 
     return {
       profileType: 'client',
@@ -86,7 +93,7 @@ export const load: PageServerLoad = async ({
         avatar: user.avatar ?? undefined,
         bio: user.bio ?? undefined,
         phone: user.phone ?? undefined,
-        city: user.city ?? undefined,
+        city: cityName,
         createdAt: user.createdAt.toISOString(),
         totalOrders,
         completedOrders,

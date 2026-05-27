@@ -68,6 +68,15 @@ export const load: PageServerLoad = async ({ params, request, setHeaders }) => {
     throw error(404, 'Користувача не знайдено')
   }
 
+  // Назва міста українською (slug → name)
+  const cityRow = client.city
+    ? await prisma.city.findUnique({
+        where: { slug: client.city },
+        select: { name: true },
+      })
+    : null
+  const cityName = cityRow?.name ?? client.city ?? undefined
+
   setHeaders({
     'cache-control': 'private, no-store',
     'x-robots-tag': 'noindex, nofollow',
@@ -78,8 +87,8 @@ export const load: PageServerLoad = async ({ params, request, setHeaders }) => {
     name: client.name ?? '',
     avatar: client.avatar ?? undefined,
     bio: client.bio ?? undefined,
-    phone: null, // приватний — не віддаємо до вибору майстра
-    city: client.city ?? undefined,
+    phone: null,
+    city: cityName,
     createdAt: client.createdAt.toISOString(),
     totalOrders,
     completedOrders,
