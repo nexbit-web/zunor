@@ -24,9 +24,9 @@ export interface FreelancerProfileData {
   verificationStatus: VerificationStatus
   verificationRejectReason?: string | null
 
-  categories: string[] // назви українською для відображення
-  categorySlugs: string[] // slug'и для логіки (банер, фільтри)
-
+  categories: string[]  
+  categorySlugs: string[]  
+  portfolioImages: string[]  
   avgRating: number
   reviewsCount: number
   completedOrders: number

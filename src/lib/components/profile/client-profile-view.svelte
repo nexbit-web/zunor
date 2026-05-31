@@ -37,7 +37,8 @@
   // ─── Derived (memoized) ───
   const memberSinceLabel = $derived(
     new Date(user.createdAt).toLocaleDateString('uk-UA', {
-      month: 'short',
+      day: '2-digit',
+      month: '2-digit',
       year: 'numeric',
     }),
   )
@@ -136,7 +137,6 @@
       >
         {user.name || 'Без імені'}
       </h1>
-    
 
       <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mb-3">
         <span
@@ -144,7 +144,7 @@
           style="color: var(--muted-foreground)"
         >
           <Calendar class="size-3" aria-hidden="true" />
-          З <time datetime={memberSinceISO}>{memberSinceLabel}</time>
+          <time datetime={memberSinceISO}>{memberSinceLabel}</time>
         </span>
         {#if user.city}
           <span
@@ -218,7 +218,6 @@
       style="border-color: color-mix(in oklch, var(--foreground) 8%, transparent)"
     ></div>
 
-   
     <!-- ═══════ Про себе ═══════ -->
     {#if user.bio || isOwner}
       <section aria-labelledby="about-heading" class="py-5 space-y-3">

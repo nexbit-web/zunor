@@ -21,10 +21,12 @@
     User,
     Pencil,
     Sparkles,
+    Image,
   } from 'lucide-svelte'
 
   import type { FreelancerProfileData as ProfileData } from '$lib/components/profile/types'
   import { getBannerForCategories } from '$lib/categories/registry'
+  import PhotoGallery from '$lib/components/photo-gallery.svelte'
 
   interface Props {
     user: ProfileData
@@ -37,11 +39,11 @@
   // ─── Derived (memoized) ───
   const memberSince = $derived(
     new Date(user.createdAt).toLocaleDateString('uk-UA', {
-      month: 'short',
+      day: '2-digit',
+      month: '2-digit',
       year: 'numeric',
     }),
   )
-
   const memberSinceISO = $derived(new Date(user.createdAt).toISOString())
 
   const profileUrl = $derived(
@@ -394,6 +396,25 @@
       class="border-t"
       style="border-color: color-mix(in oklch, var(--foreground) 6%, transparent)"
     ></div>
+
+    <!-- ═══════ Приклади робіт ═══════ -->
+    {#if user.portfolioImages && user.portfolioImages.length > 0}
+      <section class="py-5 space-y-4" aria-labelledby="portfolio-heading">
+        <h2
+          id="portfolio-heading"
+          class="text-[11px] font-medium tracking-widest uppercase flex items-center gap-1.5"
+          style="color: var(--muted-foreground)"
+        >
+          <Image class="size-3.5" aria-hidden="true" /> Приклади робіт
+        </h2>
+        <PhotoGallery images={user.portfolioImages} />
+      </section>
+
+      <div
+        class="border-t"
+        style="border-color: color-mix(in oklch, var(--foreground) 6%, transparent)"
+      ></div>
+    {/if}
 
     <!-- ═══════ Статистика ═══════ -->
     <section class="py-5" aria-labelledby="stats-heading">

@@ -116,8 +116,9 @@ export const load: PageServerLoad = async ({ params, request, setHeaders }) => {
     verificationRejectReason: null,
     categories: categoryNames,
     categorySlugs: mp?.categories ?? [],
-    avgRating: user.avgRating,
-    reviewsCount: user.reviewsCount,
+    portfolioImages: mp?.portfolioImages ?? [],
+    avgRating: user.avgRatingAsMaster,
+    reviewsCount: user.reviewsCountAsMaster,
     completedOrders: mp?.completedOrders ?? 0,
     reviews,
   }

@@ -179,10 +179,9 @@ export const load: PageServerLoad = async ({ request, url }) => {
         select: {
           id: true,
           name: true,
-          username: true,
           avatar: true,
-          avgRating: true,
-          reviewsCount: true,
+          avgRatingAsClient: true,
+          reviewsCountAsClient: true,
         },
       },
     },
@@ -204,6 +203,11 @@ export const load: PageServerLoad = async ({ request, url }) => {
       ...j,
       createdAt: j.createdAt.toISOString(),
       expiresAt: j.expiresAt.toISOString(),
+      client: {
+        ...j.client,
+        avgRating: j.client.avgRatingAsClient,
+        reviewsCount: j.client.reviewsCountAsClient,
+      },
     })),
     nextCursor,
     counts: {

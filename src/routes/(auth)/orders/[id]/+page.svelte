@@ -6,7 +6,15 @@
     AvatarFallback,
     AvatarImage,
   } from '$lib/components/ui/avatar'
-  import { Clock, Copy, Check, Phone, LoaderCircle, MessageSquare, Star } from 'lucide-svelte'
+  import {
+    Clock,
+    Copy,
+    Check,
+    Phone,
+    LoaderCircle,
+    MessageSquare,
+    Star,
+  } from 'lucide-svelte'
   import { Button } from '$lib/components/ui/button'
   import OrderActions from '$lib/components/orders/order-actions.svelte'
   import ReviewForm from '$lib/components/orders/review-form.svelte'
@@ -31,6 +39,19 @@
   const isClient = $derived(data.viewerId === order.clientId)
   const isMaster = $derived(data.viewerId === order.masterId)
   const peer = $derived(isClient ? order.master : order.client)
+
+  // peer — це або master, або client, у них різні поля рейтингу
+  const peerRating = $derived(
+    isClient
+      ? {
+          avg: order.master.avgRatingAsMaster,
+          count: order.master.reviewsCountAsMaster,
+        }
+      : {
+          avg: order.client.avgRatingAsClient,
+          count: order.client.reviewsCountAsClient,
+        },
+  )
 
   // Клієнт → майстер має публічну сторінку /@username; майстер → клієнт за /client/[id]
   const peerHref = $derived(
@@ -503,16 +524,16 @@
                 {peer.name}
               </p>
             </div>
-            {#if peer.reviewsCount && peer.reviewsCount > 0}
+            {#if peerRating.count > 0}
               <p
                 class="text-[11px] inline-flex items-center gap-1 mt-0.5"
                 style="color: var(--muted-foreground)"
               >
                 <Star class="size-3" style="fill: #f59e0b; color: #f59e0b" />
                 <span class="tabular-nums">
-                  {peer.avgRating?.toFixed(1) ?? '—'}
+                  {peerRating.avg.toFixed(1)}
                 </span>
-                <span>({peer.reviewsCount})</span>
+                <span>({peerRating.count})</span>
               </p>
             {/if}
           </div>

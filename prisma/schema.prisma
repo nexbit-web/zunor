@@ -81,9 +81,13 @@ model User {
   // Для MASTER — розширений профіль
   masterProfile MasterProfile?
 
-  // Денормалізовані метрики (рейтинг рахується для обох ролей)
-  avgRating    Float @default(0)
-  reviewsCount Int   @default(0)
+ // Денормалізовані метрики рейтингів — окремо для кожної ролі.
+  // Як майстер: оцінки від клієнтів за виконані замовлення.
+  avgRatingAsMaster    Float @default(0)
+  reviewsCountAsMaster Int   @default(0)
+  // Як клієнт: оцінки від майстрів за співпрацю.
+  avgRatingAsClient    Float @default(0)
+  reviewsCountAsClient Int   @default(0)
 
   isOnline Boolean  @default(false)
   lastSeen DateTime @default(now())

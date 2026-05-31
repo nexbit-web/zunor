@@ -97,7 +97,7 @@ async function loadCandidates(
       id: true,
       isOnline: true,
       lastSeen: true,
-      avgRating: true,
+      avgRatingAsMaster: true,
       masterProfile: {
         select: {
           verificationStatus: true,
@@ -122,7 +122,7 @@ async function loadCandidates(
       id: m.id,
       isOnline: m.isOnline,
       lastSeen: m.lastSeen,
-      avgRating: m.avgRating,
+      avgRating: m.avgRatingAsMaster,
       isVerified: m.masterProfile!.verificationStatus === 'VERIFIED',
       activeOrders: m._count.masterOrders,
       masterSince: m.masterProfile!.createdAt,

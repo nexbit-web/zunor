@@ -53,8 +53,8 @@ export const load: PageServerLoad = async ({ params, request, setHeaders }) => {
         bio: true,
         city: true,
         createdAt: true,
-        avgRating: true,
-        reviewsCount: true,
+        avgRatingAsClient: true,
+        reviewsCountAsClient: true,
       },
     }),
     loadClientReviews(params.id),
@@ -92,8 +92,8 @@ export const load: PageServerLoad = async ({ params, request, setHeaders }) => {
     createdAt: client.createdAt.toISOString(),
     totalOrders,
     completedOrders,
-    avgRating: client.avgRating,
-    reviewsCount: client.reviewsCount,
+    avgRating: client.avgRatingAsClient,
+    reviewsCount: client.reviewsCountAsClient,
     reviews,
   }
 

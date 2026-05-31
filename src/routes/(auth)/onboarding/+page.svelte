@@ -27,25 +27,55 @@
   let { data }: { data: PageData } = $props()
 
   const TOTAL_STEPS = 3
+  const NAME_MAX = 80
   const DESC_MIN = 50
   const DESC_MAX = 2000
   const MAX_CATS = 1
 
   let step = $state(1)
 
+  // ─── Avatar ───
   let avatarUrl = $state(data.user.avatar ?? '')
   let avatarPublicId = $state(data.user.avatarPublicId ?? '')
   let avatarUploading = $state(false)
 
+  // ─── User fields ───
   let name = $state(data.user.name ?? '')
   let username = $state(data.user.username ?? '')
   let usernameValid = $state<boolean | null>(data.user.username ? true : null)
-  let phone = $state(data.user.phone ?? '')
 
+  // ─── Телефон України: +380 + 9 цифр (як у welcome) ───
+  function normalizePhone(input: string): string {
+    let d = input.replace(/\D/g, '')
+    if (d.startsWith('380')) d = d.slice(3)
+    else if (d.startsWith('80')) d = d.slice(2)
+    else if (d.startsWith('0')) d = d.slice(1)
+    return d.slice(0, 9)
+  }
+  function formatLocal(d: string): string {
+    let out = d.slice(0, 2)
+    if (d.length > 2) out += ' ' + d.slice(2, 5)
+    if (d.length > 5) out += ' ' + d.slice(5, 7)
+    if (d.length > 7) out += ' ' + d.slice(7, 9)
+    return out
+  }
+  let phoneDigits = $state(normalizePhone(data.user.phone ?? ''))
+  const phoneDisplayLocal = $derived(formatLocal(phoneDigits))
+  function onPhoneInput(e: Event) {
+    const el = e.target as HTMLInputElement
+    phoneDigits = normalizePhone(el.value)
+    el.value = formatLocal(phoneDigits)
+  }
+  const phoneValid = $derived(
+    phoneDigits.length === 9 && /^[35679]/.test(phoneDigits),
+  )
+
+  // ─── City ───
   let city = $state(data.user.city ?? '')
   let cityOpen = $state(false)
   let cityTriggerRef = $state<HTMLButtonElement>(null!)
 
+  // ─── Master profile ───
   let categories = $state<string[]>(data.user.masterProfile?.categories ?? [])
   let description = $state(data.user.masterProfile?.description ?? '')
 
@@ -74,7 +104,7 @@
   const descTrim = $derived(description.trim())
 
   const step1Valid = $derived(
-    name.trim().length >= 2 && usernameValid === true && !!city,
+    name.trim().length >= 2 && usernameValid === true && phoneValid && !!city,
   )
   const step2Valid = $derived(
     categories.length >= 1 && categories.length <= MAX_CATS,
@@ -89,11 +119,12 @@
   function next() {
     if (!canNext) {
       if (step === 1) {
-        if (name.trim().length < 2) toast.error('Введіть імʼя (мін. 2 символи)')
-        else if (usernameValid !== true) toast.error('Перевірте username')
-        else if (!city) toast.error('Оберіть місто')
+        if (name.trim().length < 2) toast.error('Введи імʼя (мін. 2 символи)')
+        else if (usernameValid !== true) toast.error('Перевір username')
+        else if (!phoneValid) toast.error('Введи коректний телефон')
+        else if (!city) toast.error('Обери місто')
       } else if (step === 2) {
-        toast.error('Оберіть хоча б одну категорію')
+        toast.error('Обери хоча б одну категорію')
       } else {
         toast.error(`Опис: мінімум ${DESC_MIN} символів`)
       }
@@ -147,7 +178,7 @@
         body: JSON.stringify({
           name: name.trim(),
           username,
-          phone: phone.trim() || null,
+          phone: '+380' + phoneDigits,
           city,
           avatar: avatarUrl || null,
           avatarPublicId: avatarPublicId || null,
@@ -161,6 +192,7 @@
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
         toast.error(json?.message ?? json?.error ?? 'Сталася помилка')
+        submitting = false
         return
       }
 
@@ -172,7 +204,6 @@
       goto('/dashboard', { invalidateAll: true })
     } catch {
       toast.error('Помилка зʼєднання')
-    } finally {
       submitting = false
     }
   }
@@ -258,7 +289,7 @@
               class="text-3xl sm:text-4xl font-bold tracking-tight mb-2"
               style="color: var(--foreground); letter-spacing: -0.02em"
             >
-              {isEdit ? 'Редагуйте профіль' : 'Розкажіть про себе'}
+              {isEdit ? 'Редагуй профіль' : 'Розкажи про себе'}
             </h1>
             <p style="color: var(--muted-foreground)">
               Контакти та місто роботи
@@ -277,7 +308,7 @@
                   onError={(msg) => toast.error(msg)}
                 />
                 <p class="text-sm" style="color: var(--muted-foreground)">
-                  Клікніть на фото щоб завантажити.<br />JPG, PNG до 5 МБ.
+                  Клікни на фото щоб завантажити.<br />JPG, PNG до 5 МБ.
                 </p>
               </div>
             </Field.Field>
@@ -289,7 +320,7 @@
                 type="text"
                 placeholder="Олександр Петренко"
                 bind:value={name}
-                maxlength={80}
+                maxlength={NAME_MAX}
                 class="h-11"
               />
             </Field.Field>
@@ -300,24 +331,37 @@
               currentUsername={data.user.username ?? ''}
             />
 
+            <!-- Телефон (обовʼязковий, +380) -->
             <Field.Field>
-              <Field.Label for="phone">
-                Телефон
+              <Field.Label for="phone">Телефон</Field.Label>
+              <div
+                class="flex items-center h-11 rounded-md border bg-transparent text-base focus-within:ring-2 focus-within:ring-ring/50 transition-shadow"
+                style="border-color: var(--input)"
+              >
                 <span
-                  class="text-[10px] font-normal uppercase tracking-wide ml-1.5"
-                  style="color: var(--muted-foreground)">Опц.</span
+                  class="pl-3 pr-2 shrink-0 select-none tabular-nums"
+                  style="color: var(--muted-foreground)"
                 >
-              </Field.Label>
-              <Input
-                id="phone"
-                type="tel"
-                placeholder="+380 67 123 45 67"
-                bind:value={phone}
-                maxlength={30}
-                class="h-11"
-              />
+                  +380
+                </span>
+                <input
+                  id="phone"
+                  type="tel"
+                  inputmode="numeric"
+                  autocomplete="tel-national"
+                  value={phoneDisplayLocal}
+                  oninput={onPhoneInput}
+                  placeholder="67 123 45 67"
+                  class="flex-1 h-full bg-transparent outline-none pr-3 tabular-nums text-sm"
+                  style="color: var(--foreground)"
+                />
+              </div>
+              <Field.Description>
+                Клієнт побачить його лише після того, як обере тебе.
+              </Field.Description>
             </Field.Field>
 
+            <!-- Місто -->
             <Field.Field>
               <Field.Label>Місто роботи</Field.Label>
               <Popover.Root bind:open={cityOpen}>
@@ -333,7 +377,7 @@
                         !city && 'text-muted-foreground',
                       )}
                     >
-                      {cityName || 'Оберіть місто'}
+                      {cityName || 'Обери місто'}
                       <ChevronsUpDownIcon class="opacity-50" />
                     </Button>
                   {/snippet}
@@ -370,9 +414,9 @@
                   </Command.Root>
                 </Popover.Content>
               </Popover.Root>
-              <Field.Description
-                >Клієнти з вашого міста бачитимуть вас у пошуку</Field.Description
-              >
+              <Field.Description>
+                Клієнти з твого міста бачитимуть твої відгуки на заявки.
+              </Field.Description>
             </Field.Field>
           </Field.Group>
 
@@ -389,10 +433,10 @@
               class="text-3xl sm:text-4xl font-bold tracking-tight mb-2"
               style="color: var(--foreground); letter-spacing: -0.02em"
             >
-              Ваші категорії
+              Твої категорії
             </h1>
             <p style="color: var(--muted-foreground)">
-              Що ви вмієте? Оберіть до {MAX_CATS} напрямків
+              Що ти вмієш? Обери до {MAX_CATS} напрямків
             </p>
           </header>
 
@@ -428,13 +472,13 @@
                       : 'var(--foreground)'}"
                   >
                     {#if sel}<CheckIcon class="size-3.5" />{/if}
-                    {c.icon ? `${c.icon} ` : ''}{c.name}
+                    {c.name}
                   </button>
                 {/each}
               </div>
 
               <Field.Description class="mt-3">
-                Оберіть напрямки в яких ви маєте досвід і берете замовлення
+                Обирай напрямки, в яких маєш досвід і береш замовлення.
               </Field.Description>
             </Field.Field>
           </Field.Group>
@@ -452,10 +496,10 @@
               class="text-3xl sm:text-4xl font-bold tracking-tight mb-2"
               style="color: var(--foreground); letter-spacing: -0.02em"
             >
-              Ваша візитка
+              Твоя візитка
             </h1>
             <p style="color: var(--muted-foreground)">
-              Опис та приклади робіт — це перше, що бачить клієнт
+              Опис та приклади робіт — це перше, що бачить клієнт.
             </p>
           </header>
 
@@ -476,7 +520,7 @@
               </div>
               <Textarea
                 id="description"
-                placeholder="Розкажіть про себе, ваш досвід, підхід до роботи, що вирізняє вас серед інших майстрів..."
+                placeholder="Розкажи про себе, свій досвід, підхід до роботи, що вирізняє тебе серед інших майстрів..."
                 bind:value={description}
                 maxlength={DESC_MAX}
                 rows={7}
@@ -521,9 +565,9 @@
                 maxItems={6}
                 onError={(msg) => toast.error(msg)}
               />
-              <Field.Description
-                >До 6 фото, JPG/PNG до 10 МБ кожне</Field.Description
-              >
+              <Field.Description>
+                До 6 фото, JPG/PNG до 10 МБ кожне.
+              </Field.Description>
             </Field.Field>
 
             {#if !isEdit}
@@ -536,7 +580,7 @@
                   Після відправки — перевірка модератором
                 </p>
                 <p style="color: var(--muted-foreground)">
-                  Зазвичай займає до 24 годин. Ви отримаєте повідомлення.
+                  Зазвичай займає до 24 годин. Ти отримаєш повідомлення.
                 </p>
               </div>
             {:else if data.user.masterProfile?.verificationStatus === 'VERIFIED'}

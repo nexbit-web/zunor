@@ -6,6 +6,7 @@ import { cloudinary } from '$lib/cloudinary'
 import type { RequestHandler } from './$types'
 
 const USERNAME_RE = /^[a-z0-9_]{3,30}$/
+const PHONE_RE = /^\+380\d{9}$/
 const NAME_MIN = 2
 const NAME_MAX = 80
 const DESC_MIN = 50
@@ -14,16 +15,8 @@ const PORTFOLIO_MAX = 6
 
 /**
  * POST /api/user/onboarding
- *
- * Заповнення майстром свого профілю.
- * Створює/оновлює MasterProfile, переводить verificationStatus у PENDING.
- *
- * Body:
- *   {
- *     name, username, phone?, city, avatar?, avatarPublicId?,
- *     categories[], description,
- *     portfolioImages[], portfolioImagesPublicIds[]
- *   }
+ * Заповнення майстром свого профілю. Маніфест — відкритий маркетплейс,
+ * без модерації: профіль активується одразу.
  */
 export const POST: RequestHandler = async ({ request }) => {
   const session = await auth.api.getSession({ headers: request.headers })
@@ -37,22 +30,17 @@ export const POST: RequestHandler = async ({ request }) => {
       role: true,
       avatarPublicId: true,
       masterProfile: {
-        select: {
-          verificationStatus: true,
-          portfolioImagesPublicIds: true,
-        },
+        select: { portfolioImagesPublicIds: true },
       },
     },
   })
   if (!me) throw error(401, 'Unauthorized')
-  if (me.role !== 'MASTER') {
-    throw error(403, 'Тільки майстри можуть оформлювати профіль')
-  }
-
+  // Клієнт може заповнити профіль майстра — роль зміниться на MASTER
+  // при успішному збереженні (нижче в транзакції).
   const body = await request.json().catch(() => null)
   if (!body) throw error(400, 'Invalid JSON')
 
-  // ─── Validation ───
+  // ─── Валідація ───
   const name = String(body.name ?? '').trim()
   if (name.length < NAME_MIN || name.length > NAME_MAX) {
     throw error(400, `Імʼя: ${NAME_MIN}-${NAME_MAX} символів`)
@@ -65,9 +53,11 @@ export const POST: RequestHandler = async ({ request }) => {
     throw error(400, 'Username: 3-30 символів (a-z, 0-9, _)')
   }
 
-  const phoneRaw = body.phone ? String(body.phone).trim() : ''
-  const phone = phoneRaw || null
-  if (phone && phone.length > 30) throw error(400, 'Невірний телефон')
+  // Телефон обовʼязковий: +380 + 9 цифр
+  const phone = String(body.phone ?? '').trim()
+  if (!PHONE_RE.test(phone)) {
+    throw error(400, 'Невірний телефон (формат: +380XXXXXXXXX)')
+  }
 
   const city = String(body.city ?? '').trim()
   if (!city) throw error(400, 'Оберіть місто')
@@ -104,7 +94,7 @@ export const POST: RequestHandler = async ({ request }) => {
         .slice(0, PORTFOLIO_MAX)
     : []
 
-  // ─── Проверки существования ───
+  // ─── Перевірка існування ───
   const [usernameTaken, cityExists, categoriesValid] = await Promise.all([
     prisma.user.findFirst({
       where: { username, NOT: { id: userId } },
@@ -121,7 +111,7 @@ export const POST: RequestHandler = async ({ request }) => {
     throw error(400, 'Деякі категорії не існують')
   }
 
-  // ─── Cleanup старого аватара в Cloudinary, якщо замінений ───
+  // ─── Cleanup старого аватара ───
   if (
     me.avatarPublicId &&
     avatarPublicId &&
@@ -132,7 +122,7 @@ export const POST: RequestHandler = async ({ request }) => {
       .catch((err) => console.error('[onboarding] cleanup avatar', err))
   }
 
-  // Cleanup старих фото портфолио, якщо їх немає в новому списку
+  // Cleanup видалених фото портфоліо
   const oldPortfolio = me.masterProfile?.portfolioImagesPublicIds ?? []
   const removedIds = oldPortfolio.filter(
     (id) => !portfolioImagesPublicIds.includes(id),
@@ -144,16 +134,20 @@ export const POST: RequestHandler = async ({ request }) => {
   }
 
   // ─── Update в транзакції ───
+  // Модерація потрібна для репутації та анти-спаму.
+  // Профіль після подачі — PENDING (модератор перевіряє).
   await prisma.$transaction([
     prisma.user.update({
       where: { id: userId },
       data: {
+        role: 'MASTER', // перемикаємо роль атомарно з створенням masterProfile
         name,
         username,
         phone,
         city,
-        ...(avatar && { avatar }),
-        ...(avatarPublicId && { avatarPublicId }),
+        avatar, // дозволяємо null (явне скидання)
+        avatarPublicId,
+        bio: description, // синхронізуємо з masterProfile.description для відображення
       },
     }),
     prisma.masterProfile.upsert({

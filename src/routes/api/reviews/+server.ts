@@ -47,6 +47,7 @@ export const POST: RequestHandler = async ({ request }) => {
   if (existing) throw error(409, 'Ви вже залишили відгук')
 
   // Транзакція: створюємо відгук + перераховуємо рейтинг отримувача
+  // у правильному полі за напрямком (master/client)
   await prisma.$transaction(
     async (tx) => {
       await tx.review.create({
@@ -69,12 +70,22 @@ export const POST: RequestHandler = async ({ request }) => {
         _count: { _all: true },
       })
 
+      // Пишемо в правильне поле:
+      //  - CLIENT_TO_MASTER → рейтинг отримувача-майстра
+      //  - MASTER_TO_CLIENT → рейтинг отримувача-клієнта
+      const data = isClient
+        ? {
+            avgRatingAsMaster: agg._avg.rating ?? 0,
+            reviewsCountAsMaster: agg._count._all,
+          }
+        : {
+            avgRatingAsClient: agg._avg.rating ?? 0,
+            reviewsCountAsClient: agg._count._all,
+          }
+
       await tx.user.update({
         where: { id: targetId },
-        data: {
-          avgRating: agg._avg.rating ?? 0,
-          reviewsCount: agg._count._all,
-        },
+        data,
       })
     },
     { maxWait: 10000, timeout: 20000 },

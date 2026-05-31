@@ -55,8 +55,8 @@ export const load: PageServerLoad = async ({ params, request }) => {
           username: true,
           avatar: true,
           city: true,
-          avgRating: true,
-          reviewsCount: true,
+          avgRatingAsClient: true,
+          reviewsCountAsClient: true,
           createdAt: true,
         },
       },
@@ -80,8 +80,6 @@ export const load: PageServerLoad = async ({ params, request }) => {
   const categoryName = categoryRow?.name ?? job.category
   const cityName = cityRow?.name ?? job.city
 
-  if (!job) throw error(404, 'Заявку не знайдено')
-
   const isOwner = job.clientId === userId
   const isMaster = user.role === 'MASTER'
 
@@ -96,7 +94,6 @@ export const load: PageServerLoad = async ({ params, request }) => {
   }
 
   // Пам'ять мозку: майстер відкрив заявку, яку йому розіслали.
-  // Метрика "відкрив, але не відгукнувся" — для майбутнього ML.
   if (isMaster && !isOwner) {
     markOpened(job.id, userId).catch(() => {})
   }
@@ -138,8 +135,8 @@ export const load: PageServerLoad = async ({ params, request }) => {
             name: true,
             username: true,
             avatar: true,
-            avgRating: true,
-            reviewsCount: true,
+            avgRatingAsMaster: true,
+            reviewsCountAsMaster: true,
             lastSeen: true,
             masterProfile: {
               select: {
@@ -160,7 +157,7 @@ export const load: PageServerLoad = async ({ params, request }) => {
       },
     })
 
-    // ─── Ранжування: позначаємо рекомендовані (топ-3 + слот новачку) ───
+    // ─── Ранжування: топ-3 + слот новачку ───
     const now = new Date()
     const { recommended: recommendedIds, newbies: newbieIds } =
       getRecommendedIds(
@@ -169,7 +166,7 @@ export const load: PageServerLoad = async ({ params, request }) => {
           createdAt: p.createdAt,
           master: {
             lastSeen: p.master.lastSeen,
-            avgRating: p.master.avgRating,
+            avgRating: p.master.avgRatingAsMaster,
             isVerified:
               p.master.masterProfile?.verificationStatus === 'VERIFIED',
             activeOrders: p.master._count.masterOrders,
@@ -194,8 +191,8 @@ export const load: PageServerLoad = async ({ params, request }) => {
         name: p.master.name,
         username: p.master.username,
         avatar: p.master.avatar,
-        avgRating: p.master.avgRating,
-        reviewsCount: p.master.reviewsCount,
+        avgRating: p.master.avgRatingAsMaster,
+        reviewsCount: p.master.reviewsCountAsMaster,
       },
     }))
   } else if (isMaster) {
@@ -214,8 +211,8 @@ export const load: PageServerLoad = async ({ params, request }) => {
             name: true,
             username: true,
             avatar: true,
-            avgRating: true,
-            reviewsCount: true,
+            avgRatingAsMaster: true,
+            reviewsCountAsMaster: true,
           },
         },
       },
@@ -223,8 +220,20 @@ export const load: PageServerLoad = async ({ params, request }) => {
     if (mine) {
       proposals = [
         {
-          ...mine,
+          id: mine.id,
+          message: mine.message,
+          priceCents: mine.priceCents,
+          estimatedDays: mine.estimatedDays,
+          status: mine.status,
           createdAt: mine.createdAt.toISOString(),
+          master: {
+            id: mine.master.id,
+            name: mine.master.name,
+            username: mine.master.username,
+            avatar: mine.master.avatar,
+            avgRating: mine.master.avgRatingAsMaster,
+            reviewsCount: mine.master.reviewsCountAsMaster,
+          },
         },
       ]
     }
@@ -263,6 +272,8 @@ export const load: PageServerLoad = async ({ params, request }) => {
       expiresAt: job.expiresAt.toISOString(),
       client: {
         ...job.client,
+        avgRating: job.client.avgRatingAsClient,
+        reviewsCount: job.client.reviewsCountAsClient,
         createdAt: job.client.createdAt.toISOString(),
       },
     },

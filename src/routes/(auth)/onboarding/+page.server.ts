@@ -34,7 +34,8 @@ export const load: PageServerLoad = async ({ request }) => {
   })
 
   if (!user) throw redirect(302, '/user/login')
-  if (user.role !== 'MASTER') throw redirect(302, '/dashboard')
+  // Клієнт може зайти, щоб "приміряти" роль майстра.
+  // Роль зміниться на MASTER лише після успішного збереження профілю.
 
   const [categories, cities] = await Promise.all([
     prisma.category.findMany({
