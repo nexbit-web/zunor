@@ -69,7 +69,28 @@ export const load: PageServerLoad = async ({ params, request, setHeaders }) => {
   }
 
   const mp = user.masterProfile
-  const reviews = await loadReviews('masterId', user.id, 'CLIENT_TO_MASTER')
+
+  // Паралельно: відгуки + назва міста + назви категорій
+  const [reviews, cityRow, categoryRows] = await Promise.all([
+    loadReviews('masterId', user.id, 'CLIENT_TO_MASTER'),
+    user.city
+      ? prisma.city.findUnique({
+          where: { slug: user.city },
+          select: { name: true },
+        })
+      : Promise.resolve(null),
+    mp?.categories && mp.categories.length > 0
+      ? prisma.category.findMany({
+          where: { slug: { in: mp.categories } },
+          select: { slug: true, name: true },
+        })
+      : Promise.resolve([]),
+  ])
+  const cityName = cityRow?.name ?? user.city ?? undefined
+  // Зберігаємо порядок як у профілі
+  const categoryNames = (mp?.categories ?? []).map(
+    (slug) => categoryRows.find((c) => c.slug === slug)?.name ?? slug,
+  )
 
   if (mp?.verificationStatus === 'VERIFIED') {
     setHeaders({
@@ -89,11 +110,12 @@ export const load: PageServerLoad = async ({ params, request, setHeaders }) => {
     username: user.username ?? undefined,
     avatar: user.avatar ?? undefined,
     bio: user.bio ?? undefined,
-    city: user.city ?? undefined,
+    city: cityName,
     createdAt: user.createdAt.toISOString(),
     verificationStatus: mp?.verificationStatus ?? 'NONE',
     verificationRejectReason: null,
-    categories: mp?.categories ?? [],
+    categories: categoryNames,
+    categorySlugs: mp?.categories ?? [],
     avgRating: user.avgRating,
     reviewsCount: user.reviewsCount,
     completedOrders: mp?.completedOrders ?? 0,
