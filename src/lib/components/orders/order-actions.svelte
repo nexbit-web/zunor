@@ -12,6 +12,7 @@
   import { Button } from '$lib/components/ui/button'
   import { Textarea } from '$lib/components/ui/textarea'
   import * as Dialog from '$lib/components/ui/dialog'
+  import * as AlertDialog from '$lib/components/ui/alert-dialog'
 
   interface Props {
     orderId: string
@@ -26,9 +27,11 @@
   let loading = $state<string | null>(null)
   let error = $state('')
 
-  // Cancel dialog state
+  // Dialog state
   let cancelOpen = $state(false)
   let cancelReason = $state('')
+  let startOpen = $state(false)
+  let completeOpen = $state(false)
 
   async function callAction(
     action: 'start' | 'complete' | 'cancel',
@@ -55,12 +58,12 @@
   }
 
   async function start() {
-    if (!confirm('Розпочати роботу над замовленням?')) return
+    startOpen = false
     await callAction('start')
   }
 
   async function complete() {
-    if (!confirm('Завершити замовлення? Клієнт зможе залишити відгук.')) return
+    completeOpen = false
     await callAction('complete')
   }
 
@@ -91,7 +94,7 @@
 {#if !isTerminal}
   <div class="flex flex-wrap items-center gap-2">
     {#if canStart}
-      <Button onclick={start} disabled={loading !== null}>
+      <Button onclick={() => (startOpen = true)} disabled={loading !== null}>
         {#if loading === 'start'}
           <Loader2 class="size-4 animate-spin" />
         {:else}
@@ -102,7 +105,7 @@
     {/if}
 
     {#if canComplete}
-      <Button onclick={complete} disabled={loading !== null}>
+      <Button onclick={() => (completeOpen = true)} disabled={loading !== null}>
         {#if loading === 'complete'}
           <Loader2 class="size-4 animate-spin" />
         {:else}
@@ -141,6 +144,46 @@
     {error}
   </div>
 {/if}
+
+<!-- Start dialog -->
+<AlertDialog.Root bind:open={startOpen}>
+  <AlertDialog.Content>
+    <AlertDialog.Header>
+      <AlertDialog.Title>Розпочати роботу?</AlertDialog.Title>
+      <AlertDialog.Description>
+        Клієнт побачить, що ти взявся за замовлення.
+      </AlertDialog.Description>
+    </AlertDialog.Header>
+    <AlertDialog.Footer>
+      <AlertDialog.Cancel disabled={loading === 'start'}
+        >Не зараз</AlertDialog.Cancel
+      >
+      <AlertDialog.Action onclick={start} disabled={loading === 'start'}>
+        Так, починаю
+      </AlertDialog.Action>
+    </AlertDialog.Footer>
+  </AlertDialog.Content>
+</AlertDialog.Root>
+
+<!-- Complete dialog -->
+<AlertDialog.Root bind:open={completeOpen}>
+  <AlertDialog.Content>
+    <AlertDialog.Header>
+      <AlertDialog.Title>Завершити замовлення?</AlertDialog.Title>
+      <AlertDialog.Description>
+        Після завершення ви зможете залишити відгуки один про одного.
+      </AlertDialog.Description>
+    </AlertDialog.Header>
+    <AlertDialog.Footer>
+      <AlertDialog.Cancel disabled={loading === 'complete'}
+        >Не зараз</AlertDialog.Cancel
+      >
+      <AlertDialog.Action onclick={complete} disabled={loading === 'complete'}>
+        Так, завершити
+      </AlertDialog.Action>
+    </AlertDialog.Footer>
+  </AlertDialog.Content>
+</AlertDialog.Root>
 
 <!-- Cancel dialog -->
 <Dialog.Root bind:open={cancelOpen}>
