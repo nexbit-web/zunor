@@ -271,7 +271,7 @@
           style="color: var(--muted-foreground)"
         >
           <Calendar class="size-3" aria-hidden="true" />
-          З <time datetime={memberSinceISO}>{memberSince}</time>
+          <time datetime={memberSinceISO}>{memberSince}</time>
         </span>
         {#if user.city}
           <span class="text-xs opacity-30" aria-hidden="true">·</span>
