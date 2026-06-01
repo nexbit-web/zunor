@@ -23,8 +23,9 @@ export const load: PageServerLoad = async ({ params, request }) => {
           username: true,
           avatar: true,
           city: true,
-          avgRating: true,
-          reviewsCount: true,
+          phone: true,
+          avgRatingAsClient: true,
+          reviewsCountAsClient: true,
         },
       },
       master: {
@@ -34,8 +35,9 @@ export const load: PageServerLoad = async ({ params, request }) => {
           username: true,
           avatar: true,
           city: true,
-          avgRating: true,
-          reviewsCount: true,
+          phone: true,
+          avgRatingAsMaster: true,
+          reviewsCountAsMaster: true,
           masterProfile: {
             select: {
               verificationStatus: true,

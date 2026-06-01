@@ -24,8 +24,9 @@ export interface FreelancerProfileData {
   verificationStatus: VerificationStatus
   verificationRejectReason?: string | null
 
-  categories: string[]
-
+  categories: string[]  
+  categorySlugs: string[]  
+  portfolioImages: string[]  
   avgRating: number
   reviewsCount: number
   completedOrders: number

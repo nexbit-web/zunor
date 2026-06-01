@@ -10,6 +10,7 @@ import {
 } from '$lib/server/order-state-machine'
 import { postOrderSystemMessage } from '$lib/server/system-message'
 import { Notify } from '$lib/server/notifications'
+import { dispatchJob } from '$lib/server/dispatch'
 import type { RequestHandler } from './$types'
 
 /**
@@ -50,6 +51,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
       clientId: true,
       masterId: true,
       chatId: true,
+      fromJob: { select: { id: true, title: true } },
     },
   })
   if (!order) throw error(404, 'Замовлення не знайдено')
@@ -64,71 +66,112 @@ export const POST: RequestHandler = async ({ params, request }) => {
   const body = await request.json().catch(() => ({}) as Record<string, unknown>)
 
   // Транзакция перехода
-  const updated = await prisma.$transaction(async (tx) => {
-    const now = new Date()
-    const data: any = { status: newStatus, updatedAt: now }
+  const updated = await prisma.$transaction(
+    async (tx) => {
+      const now = new Date()
+      const data: any = { status: newStatus, updatedAt: now }
 
-    switch (transition) {
-      case 'START': {
-        data.startedAt = now
-        // Инкремент totalOrders мастера
-        await tx.masterProfile.update({
-          where: { userId: order.masterId },
-          data: { totalOrders: { increment: 1 } },
-        })
-        break
+      switch (transition) {
+        case 'START': {
+          data.startedAt = now
+          // Инкремент totalOrders мастера
+          await tx.masterProfile.update({
+            where: { userId: order.masterId },
+            data: { totalOrders: { increment: 1 } },
+          })
+          break
+        }
+        case 'COMPLETE': {
+          data.completedAt = now
+          await tx.masterProfile.update({
+            where: { userId: order.masterId },
+            data: { completedOrders: { increment: 1 } },
+          })
+          break
+        }
+        case 'CANCEL': {
+          data.cancelledAt = now
+          data.cancelledById = session.user.id
+          const reason = String(body.reason ?? '').trim()
+          if (reason.length > 500) throw error(400, 'Причина занадто довга')
+          data.cancelReason = reason || null
+
+          // Майстер відмовився → повертаємо заявку в пошук (manifest: клієнт не винен)
+          if (actor === 'MASTER' && order.fromJob) {
+            const jobId = order.fromJob.id
+
+            // 1. Заявка знову відкрита + лічильник відгуків обнуляємо
+            await tx.job.update({
+              where: { id: jobId },
+              data: {
+                status: 'OPEN',
+                closedAt: null,
+                selectedOrderId: null,
+                proposalsCount: 0,
+              },
+            })
+
+            // 2. Видаляємо всі відгуки — заявка чиста, майстри відгукуються заново
+            await tx.proposal.deleteMany({ where: { jobId } })
+
+            // 3. Чорна мітка втікачу — мозок пам'ятає, що він відмовився.
+            //    Запис лишається (не видаляємо) → і фільтр кандидатів його не покличе.
+            await tx.dispatchEvent.updateMany({
+              where: { jobId, masterId: order.masterId },
+              data: { declined: true, respondedAt: null, openedAt: null },
+            })
+
+            // 4. Решту записів диспатчу видаляємо → redispatch покличе їх заново
+            await tx.dispatchEvent.deleteMany({
+              where: {
+                jobId,
+                masterId: { not: order.masterId },
+                declined: false,
+              },
+            })
+          }
+          break
+        }
       }
-      case 'COMPLETE': {
-        data.completedAt = now
-        await tx.masterProfile.update({
-          where: { userId: order.masterId },
-          data: { completedOrders: { increment: 1 } },
-        })
-        break
-      }
-      case 'CANCEL': {
-        data.cancelledAt = now
-        data.cancelledById = session.user.id
-        const reason = String(body.reason ?? '').trim()
-        if (reason.length > 500) throw error(400, 'Причина занадто довга')
-        data.cancelReason = reason || null
-        break
-      }
-    }
 
-    const result = await tx.order.update({
-      where: { id: order.id },
-      data,
-      select: {
-        id: true,
-        status: true,
-        priceCents: true,
-        currency: true,
-        title: true,
-        clientId: true,
-        masterId: true,
-        startedAt: true,
-        completedAt: true,
-        cancelledAt: true,
-        cancelReason: true,
-        chatId: true,
-      },
-    })
+      const result = await tx.order.update({
+        where: { id: order.id },
+        data,
+        select: {
+          id: true,
+          status: true,
+          priceCents: true,
+          currency: true,
+          title: true,
+          clientId: true,
+          masterId: true,
+          startedAt: true,
+          completedAt: true,
+          cancelledAt: true,
+          cancelReason: true,
+          chatId: true,
+        },
+      })
 
-    await tx.orderEvent.create({
-      data: {
-        orderId: order.id,
-        type: transitionToEventType(transition),
-        actorId: session.user.id,
-        payload:
-          transition === 'CANCEL' && data.cancelReason
-            ? ({ reason: data.cancelReason } as any)
-            : null,
-      },
-    })
+      await tx.orderEvent.create({
+        data: {
+          orderId: order.id,
+          type: transitionToEventType(transition),
+          actorId: session.user.id,
+          payload:
+            transition === 'CANCEL' && data.cancelReason
+              ? ({ reason: data.cancelReason } as any)
+              : null,
+        },
+      })
 
-    return result
-  })
+      return result
+    },
+    {
+      maxWait: 10000, // макс. чекати на з'єднання з пулу (Neon cold start)
+      timeout: 20000, // макс. тривалість транзакції
+    },
+  )
 
   // System message + notification (fail-soft)
   const eventType = transitionToEventType(transition)
@@ -150,6 +193,13 @@ export const POST: RequestHandler = async ({ params, request }) => {
     }
   }
 
+  // Майстер відмовився → перезапускаємо диспатч (мозок шукає заміну)
+  if (transition === 'CANCEL' && actor === 'MASTER' && order.fromJob) {
+    dispatchJob(order.fromJob.id, order.fromJob.title).catch((err) =>
+      console.error('[order-action] redispatch failed', err),
+    )
+  }
+
   try {
     switch (transition) {
       case 'START':
@@ -159,13 +209,17 @@ export const POST: RequestHandler = async ({ params, request }) => {
         await Notify.orderCompleted(updated.clientId, updated.id)
         break
       case 'CANCEL': {
-        const recipientId =
-          actor === 'CLIENT' ? updated.masterId : updated.clientId
-        await Notify.orderCancelled(
-          recipientId,
-          updated.id,
-          updated.cancelReason ?? undefined,
-        )
+        if (actor === 'MASTER' && order.fromJob) {
+          // Майстер відмовився → клієнту тепле повідомлення від Zuno
+          await Notify.jobReopened(updated.clientId, order.fromJob.id)
+        } else {
+          // Клієнт скасував → майстру звичайне сповіщення
+          await Notify.orderCancelled(
+            updated.masterId,
+            updated.id,
+            updated.cancelReason ?? undefined,
+          )
+        }
         break
       }
     }

@@ -14,18 +14,19 @@
     Copy,
     Check,
     MapPin,
-    Clock,
     Star,
     Calendar,
     Zap,
     MessageSquare,
     User,
     Pencil,
-    ShieldAlert,
     Sparkles,
+    Image,
   } from 'lucide-svelte'
 
   import type { FreelancerProfileData as ProfileData } from '$lib/components/profile/types'
+  import { getBannerForCategories } from '$lib/categories/registry'
+  import PhotoGallery from '$lib/components/photo-gallery.svelte'
 
   interface Props {
     user: ProfileData
@@ -38,11 +39,11 @@
   // ─── Derived (memoized) ───
   const memberSince = $derived(
     new Date(user.createdAt).toLocaleDateString('uk-UA', {
-      month: 'short',
+      day: '2-digit',
+      month: '2-digit',
       year: 'numeric',
     }),
   )
-
   const memberSinceISO = $derived(new Date(user.createdAt).toISOString())
 
   const profileUrl = $derived(
@@ -126,6 +127,13 @@
 
   // Топ-виконавець: 50+ виконаних замовлень
   const isTopPerformer = $derived(user.completedOrders >= 50)
+
+  // Банер за категорією майстра (за slug — стабільний ключ реєстру)
+  const bannerUrl = $derived(
+    user.categorySlugs && user.categorySlugs.length > 0
+      ? getBannerForCategories(user.categorySlugs)
+      : null,
+  )
 </script>
 
 <svelte:head>
@@ -138,7 +146,7 @@
   itemscope
   itemtype="https://schema.org/Person"
 >
-  <!-- ═══════ БАНЕР (gradient placeholder) ═══════ -->
+  <!-- ═══════ БАНЕР категорії ═══════ -->
   <header class="px-4 pt-4 sm:px-6 sm:pt-6">
     <div
       class="relative w-full h-32 xs:h-40 sm:h-52 rounded-2xl overflow-hidden"
@@ -147,9 +155,20 @@
               color-mix(in oklch, var(--primary) 10%, transparent),
               color-mix(in oklch, var(--foreground) 5%, transparent));"
     >
+      {#if bannerUrl}
+        <img
+          src={bannerUrl}
+          alt=""
+          aria-hidden="true"
+          loading="eager"
+          decoding="async"
+          class="absolute inset-0 w-full h-full object-cover"
+        />
+      {/if}
+      <!-- Затемнення знизу для читабельності аватара -->
       <div
         class="absolute inset-0 pointer-events-none"
-        style="background: linear-gradient(180deg, transparent 50%, rgba(0,0,0,0.25))"
+        style="background: linear-gradient(180deg, transparent 50%, rgba(0,0,0,0.35))"
       ></div>
     </div>
   </header>
@@ -223,41 +242,6 @@
             />
           {/if}
         </div>
-
-        {#if user.verificationStatus === 'VERIFIED'}
-          <span
-            class="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full shrink-0"
-            style="background-color: color-mix(in oklch, var(--primary) 10%, transparent);
-                   color: var(--primary);
-                   border: 1px solid color-mix(in oklch, var(--primary) 30%, transparent)"
-            role="status"
-          >
-            <BadgeCheck class="size-3" aria-hidden="true" />
-            VERIFIED
-          </span>
-        {:else if user.verificationStatus === 'PENDING'}
-          <span
-            class="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full shrink-0"
-            style="background-color: color-mix(in oklch, #f59e0b 15%, transparent);
-                   color: #b45309;
-                   border: 1px solid color-mix(in oklch, #f59e0b 30%, transparent)"
-            role="status"
-          >
-            <Clock class="size-3" aria-hidden="true" />
-            НА МОДЕРАЦІЇ
-          </span>
-        {:else if user.verificationStatus === 'REJECTED'}
-          <span
-            class="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full shrink-0"
-            style="background-color: color-mix(in oklch, var(--destructive) 12%, transparent);
-                   color: var(--destructive);
-                   border: 1px solid color-mix(in oklch, var(--destructive) 25%, transparent)"
-            role="status"
-          >
-            <ShieldAlert class="size-3" aria-hidden="true" />
-            ВІДХИЛЕНО
-          </span>
-        {/if}
       </div>
 
       {#if user.username}
@@ -287,7 +271,7 @@
           style="color: var(--muted-foreground)"
         >
           <Calendar class="size-3" aria-hidden="true" />
-          З <time datetime={memberSinceISO}>{memberSince}</time>
+          <time datetime={memberSinceISO}>{memberSince}</time>
         </span>
         {#if user.city}
           <span class="text-xs opacity-30" aria-hidden="true">·</span>
@@ -331,16 +315,7 @@
           <Sparkles class="size-3" aria-hidden="true" />
           Майстер
         </Badge>
-        {#if user.verificationStatus === 'VERIFIED'}
-          <Badge
-            variant="outline"
-            class="rounded-full text-xs font-normal px-3 py-1 cursor-default gap-1.5"
-            style="border-color: color-mix(in oklch, var(--primary) 30%, transparent); color: var(--primary)"
-          >
-            <BadgeCheck class="size-3" aria-hidden="true" />
-            Перевірений
-          </Badge>
-        {/if}
+
         {#if isTopPerformer}
           <Badge
             variant="outline"
@@ -363,30 +338,6 @@
         </nav>
       {/if}
     </section>
-
-    <!-- Причина відхилення — тільки owner -->
-    {#if isOwner && user.verificationStatus === 'REJECTED' && user.verificationRejectReason}
-      <aside
-        class="p-4 rounded-xl mb-5"
-        style="background-color: color-mix(in oklch, var(--destructive) 8%, transparent);
-               border: 1px solid color-mix(in oklch, var(--destructive) 20%, transparent)"
-        role="alert"
-      >
-        <p
-          class="text-sm font-medium flex items-center gap-1.5 mb-1"
-          style="color: var(--destructive)"
-        >
-          <ShieldAlert class="size-4" aria-hidden="true" />
-          Профіль відхилено модератором
-        </p>
-        <p
-          class="text-sm leading-relaxed"
-          style="color: var(--muted-foreground); overflow-wrap: anywhere"
-        >
-          {user.verificationRejectReason}
-        </p>
-      </aside>
-    {/if}
 
     <div
       class="border-t"
@@ -416,7 +367,7 @@
           class="text-sm italic"
           style="color: var(--muted-foreground); opacity: 0.6"
         >
-          {isOwner ? 'Ви ще не додали опис.' : 'Користувач ще не додав опис.'}
+          {isOwner ? 'Ти ще не додав опис.' : 'Майстер ще не додав опис.'}
         </p>
       {/if}
 
@@ -445,6 +396,25 @@
       class="border-t"
       style="border-color: color-mix(in oklch, var(--foreground) 6%, transparent)"
     ></div>
+
+    <!-- ═══════ Приклади робіт ═══════ -->
+    {#if user.portfolioImages && user.portfolioImages.length > 0}
+      <section class="py-5 space-y-4" aria-labelledby="portfolio-heading">
+        <h2
+          id="portfolio-heading"
+          class="text-[11px] font-medium tracking-widest uppercase flex items-center gap-1.5"
+          style="color: var(--muted-foreground)"
+        >
+          <Image class="size-3.5" aria-hidden="true" /> Приклади робіт
+        </h2>
+        <PhotoGallery images={user.portfolioImages} />
+      </section>
+
+      <div
+        class="border-t"
+        style="border-color: color-mix(in oklch, var(--foreground) 6%, transparent)"
+      ></div>
+    {/if}
 
     <!-- ═══════ Статистика ═══════ -->
     <section class="py-5" aria-labelledby="stats-heading">
@@ -622,7 +592,7 @@
             style="color: var(--muted-foreground); opacity: 0.7"
           >
             {isOwner
-              ? 'Ще немає відгуків. Перше замовлення виконано — і клієнти почнуть лишати відгуки.'
+              ? 'Поки що немає відгуків. Виконай перше замовлення — і клієнти почнуть лишати відгуки.'
               : 'Ще немає відгуків'}
           </p>
         </div>

@@ -65,16 +65,22 @@ export const load: PageServerLoad = async ({
 
   if (!user) throw redirect(302, '/user/login')
 
-  console.log('[dashboard] role=', user.role, 'userId=', user.id)
-
   if (user.role === 'CLIENT') {
-    const reviews = await loadReviews('clientId', user.id, 'MASTER_TO_CLIENT')
-    const [totalOrders, completedOrders] = await Promise.all([
+    // Паралельно: відгуки + лічильники + назва міста
+    const [reviews, totalOrders, completedOrders, cityRow] = await Promise.all([
+      loadReviews('clientId', user.id, 'MASTER_TO_CLIENT'),
       prisma.order.count({ where: { clientId: user.id } }),
       prisma.order.count({
         where: { clientId: user.id, status: 'COMPLETED' },
       }),
+      user.city
+        ? prisma.city.findUnique({
+            where: { slug: user.city },
+            select: { name: true },
+          })
+        : Promise.resolve(null),
     ])
+    const cityName = cityRow?.name ?? user.city ?? undefined
 
     return {
       profileType: 'client',
@@ -87,19 +93,39 @@ export const load: PageServerLoad = async ({
         avatar: user.avatar ?? undefined,
         bio: user.bio ?? undefined,
         phone: user.phone ?? undefined,
-        city: user.city ?? undefined,
+        city: cityName,
         createdAt: user.createdAt.toISOString(),
         totalOrders,
         completedOrders,
-        avgRating: user.avgRating,
-        reviewsCount: user.reviewsCount,
+        avgRating: user.avgRatingAsClient,
+        reviewsCount: user.reviewsCountAsClient,
         reviews,
       },
     }
   }
 
   const mp = user.masterProfile
-  const reviews = await loadReviews('masterId', user.id, 'CLIENT_TO_MASTER')
+
+  // Паралельно: відгуки + назва міста + назви категорій
+  const [reviews, cityRow, categoryRows] = await Promise.all([
+    loadReviews('masterId', user.id, 'CLIENT_TO_MASTER'),
+    user.city
+      ? prisma.city.findUnique({
+          where: { slug: user.city },
+          select: { name: true },
+        })
+      : Promise.resolve(null),
+    mp?.categories && mp.categories.length > 0
+      ? prisma.category.findMany({
+          where: { slug: { in: mp.categories } },
+          select: { slug: true, name: true },
+        })
+      : Promise.resolve([]),
+  ])
+  const cityName = cityRow?.name ?? user.city ?? undefined
+  const categoryNames = (mp?.categories ?? []).map(
+    (slug) => categoryRows.find((c) => c.slug === slug)?.name ?? slug,
+  )
 
   return {
     profileType: 'master',
@@ -111,13 +137,15 @@ export const load: PageServerLoad = async ({
       username: user.username ?? undefined,
       avatar: user.avatar ?? undefined,
       bio: user.bio ?? undefined,
-      city: user.city ?? undefined,
+      city: cityName,
       createdAt: user.createdAt.toISOString(),
       verificationStatus: mp?.verificationStatus ?? 'NONE',
       verificationRejectReason: mp?.verificationRejectReason ?? null,
-      categories: mp?.categories ?? [],
-      avgRating: user.avgRating,
-      reviewsCount: user.reviewsCount,
+      categories: categoryNames,
+      categorySlugs: mp?.categories ?? [],
+      portfolioImages: mp?.portfolioImages ?? [],
+      avgRating: user.avgRatingAsMaster,
+      reviewsCount: user.reviewsCountAsMaster,
       completedOrders: mp?.completedOrders ?? 0,
       reviews,
     },

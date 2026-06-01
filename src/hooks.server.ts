@@ -5,6 +5,7 @@ import { svelteKitHandler } from 'better-auth/svelte-kit'
 import { building, dev } from '$app/environment'
 import { sequence } from '@sveltejs/kit/hooks'
 import { redirect, type Handle } from '@sveltejs/kit'
+import { touchPresence } from '$lib/server/presence'
 
 const authHandle: Handle = async ({ event, resolve }) => {
   return svelteKitHandler({ event, resolve, auth, building })
@@ -44,9 +45,13 @@ const onboardingGuard: Handle = async ({ event, resolve }) => {
       role: true,
       username: true,
       city: true,
+      phone: true,
       masterProfile: { select: { verificationStatus: true } },
     },
   })
+
+  // Оновлюємо presence (throttled, не на кожен запит)
+  touchPresence(session.user.id)
 
   if (!user) return resolve(event)
 
@@ -58,8 +63,8 @@ const onboardingGuard: Handle = async ({ event, resolve }) => {
     throw redirect(302, '/onboarding')
   }
 
-  // ─── Клиент без username или города → /welcome ───
-  if (user.role === 'CLIENT' && (!user.username || !user.city)) {
+  // ─── Клиент без обовʼязкових полів (місто, телефон) → /welcome ───
+  if (user.role === 'CLIENT' && (!user.city || !user.phone)) {
     throw redirect(302, '/welcome')
   }
 

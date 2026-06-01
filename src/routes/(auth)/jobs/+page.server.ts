@@ -57,6 +57,7 @@ export const load: PageServerLoad = async ({ request, url }) => {
           id: true,
           title: true,
           description: true,
+          metadata: true,
           category: true,
           city: true,
           status: true,
@@ -115,7 +116,7 @@ export const load: PageServerLoad = async ({ request, url }) => {
   }
 
   const mp = user.masterProfile
-  if (!mp?.isActive || mp.verificationStatus !== 'VERIFIED' || !user.city) {
+  if (!mp?.isActive || !user.city) {
     return {
       view: 'feed' as const,
       userRole: user.role,
@@ -125,9 +126,7 @@ export const load: PageServerLoad = async ({ request, url }) => {
       filters: { categories: allCategories, cities: allCities },
       blockReason: !mp?.isActive
         ? 'Профіль майстра неактивний'
-        : mp.verificationStatus !== 'VERIFIED'
-          ? 'Профіль не верифіковано'
-          : 'У профілі не вказано місто',
+        : 'У профілі не вказано місто',
     }
   }
 
@@ -143,6 +142,13 @@ export const load: PageServerLoad = async ({ request, url }) => {
     }
   }
 
+  // Заявки, від яких цей майстер відмовився (чорна мітка) — не показуємо
+  const declined = await prisma.dispatchEvent.findMany({
+    where: { masterId: userId, declined: true },
+    select: { jobId: true },
+  })
+  const declinedJobIds = declined.map((d) => d.jobId)
+
   const jobs = await prisma.job.findMany({
     where: {
       status: 'OPEN',
@@ -150,6 +156,7 @@ export const load: PageServerLoad = async ({ request, url }) => {
       category: { in: mp.categories },
       clientId: { not: userId },
       expiresAt: { gt: new Date() },
+      ...(declinedJobIds.length > 0 ? { id: { notIn: declinedJobIds } } : {}),
     },
     orderBy: { createdAt: 'desc' },
     take: PAGE_SIZE + 1,
@@ -157,6 +164,7 @@ export const load: PageServerLoad = async ({ request, url }) => {
       id: true,
       title: true,
       description: true,
+      metadata: true,
       category: true,
       city: true,
       status: true,
@@ -171,10 +179,9 @@ export const load: PageServerLoad = async ({ request, url }) => {
         select: {
           id: true,
           name: true,
-          username: true,
           avatar: true,
-          avgRating: true,
-          reviewsCount: true,
+          avgRatingAsClient: true,
+          reviewsCountAsClient: true,
         },
       },
     },
@@ -196,6 +203,11 @@ export const load: PageServerLoad = async ({ request, url }) => {
       ...j,
       createdAt: j.createdAt.toISOString(),
       expiresAt: j.expiresAt.toISOString(),
+      client: {
+        ...j.client,
+        avgRating: j.client.avgRatingAsClient,
+        reviewsCount: j.client.reviewsCountAsClient,
+      },
     })),
     nextCursor,
     counts: {

@@ -68,6 +68,83 @@ export function playMessageSound() {
 }
 
 /**
+ * Звук успіху в стилі Apple Pay.
+ *
+ * Характер: два чистих тони (E6 → A6). Перший короткий, підготовчий;
+ * другий вищий, триваліший, з м'яким згасанням — фінальний «дзинь».
+ * Динаміка: миттєва атака, плавний спад. Загалом ~0.4с.
+ * Сприйняття: успіх, підтвердження, легкість, технологічність.
+ */
+/**
+ * Звук успіху — м'який приємний «дзинь» у стилі Apple Pay.
+ * Два чистих тони (C6 → E6), теплі, з делікатним блиском. ~0.4с.
+ */
+export function playSuccessSound() {
+  if (muted) return
+  const ctx = getCtx()
+  if (!ctx) return
+  if (ctx.state === 'suspended') {
+    ctx.resume().catch(() => {})
+  }
+
+  const now = ctx.currentTime
+  // Дві ноти мажорної терції — приємне, гармонійне поєднання
+  playTone(ctx, 1046.5, now, 0.18, 0.1) // C6
+  playTone(ctx, 1318.5, now + 0.11, 0.34, 0.11) // E6 — вищий, з довшим хвостом
+}
+
+/**
+ * М'який дзвінкий тон. Основний sine + тиха октава для делікатного блиску.
+ * Низькочастотний фільтр прибирає різкість.
+ */
+function playTone(
+  ctx: AudioContext,
+  frequency: number,
+  startTime: number,
+  duration: number,
+  peakGain: number,
+) {
+  // Фільтр — зрізає різкі верхи, робить звук теплим
+  const filter = ctx.createBiquadFilter()
+  filter.type = 'lowpass'
+  filter.frequency.value = 3500
+  filter.connect(ctx.destination)
+
+  // Основний тон
+  const osc1 = ctx.createOscillator()
+  const gain1 = ctx.createGain()
+  osc1.type = 'sine'
+  osc1.frequency.value = frequency
+
+  // Октава вище — делікатний блиск (тихо)
+  const osc2 = ctx.createOscillator()
+  const gain2 = ctx.createGain()
+  osc2.type = 'sine'
+  osc2.frequency.value = frequency * 2
+
+  const attack = 0.012
+
+  gain1.gain.setValueAtTime(0, startTime)
+  gain1.gain.linearRampToValueAtTime(peakGain, startTime + attack)
+  gain1.gain.exponentialRampToValueAtTime(0.0001, startTime + duration)
+
+  gain2.gain.setValueAtTime(0, startTime)
+  gain2.gain.linearRampToValueAtTime(peakGain * 0.18, startTime + attack)
+  gain2.gain.exponentialRampToValueAtTime(0.0001, startTime + duration * 0.6)
+
+  osc1.connect(gain1)
+  gain1.connect(filter)
+  osc2.connect(gain2)
+  gain2.connect(filter)
+
+  const stopTime = startTime + duration + 0.05
+  osc1.start(startTime)
+  osc1.stop(stopTime)
+  osc2.start(startTime)
+  osc2.stop(stopTime)
+}
+
+/**
  * Окремий звук для «надіслане» — приглушений короткий «фьюх».
  */
 export function playSentSound() {

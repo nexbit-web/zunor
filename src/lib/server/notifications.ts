@@ -2,7 +2,10 @@ import { prisma } from '$lib/prisma'
 import { safeTrigger } from './pusher'
 import type { Prisma } from '../../generated/prisma/client'
 
-export type PrismaTx = Omit<Prisma.TransactionClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>
+export type PrismaTx = Omit<
+  Prisma.TransactionClient,
+  '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'
+>
 
 export async function notify(
   params: {
@@ -30,20 +33,67 @@ export async function notify(
     },
   })
 
-  await safeTrigger(`private-user-${params.userId}`, 'notification:new', { notification })
+  await safeTrigger(`private-user-${params.userId}`, 'notification:new', {
+    notification,
+  })
 }
 
 export const Notify = {
   newJob: (masterId: string, jobId: string, jobTitle: string) =>
-    notify({ userId: masterId, type: 'NEW_JOB', title: 'Нова заявка у вашій категорії', body: jobTitle, jobId }),
+    notify({
+      userId: masterId,
+      type: 'NEW_JOB',
+      title: 'Є нова заявка для тебе',
+      body: jobTitle,
+      jobId,
+    }),
   newProposal: (clientId: string, jobId: string, proposalId: string) =>
-    notify({ userId: clientId, type: 'NEW_PROPOSAL', title: 'Новий відгук на вашу заявку', jobId, proposalId }),
+    notify({
+      userId: clientId,
+      type: 'NEW_PROPOSAL',
+      title: 'Майстер відгукнувся на твою заявку!',
+      jobId,
+      proposalId,
+    }),
   proposalAccepted: (masterId: string, jobId: string, orderId: string) =>
-    notify({ userId: masterId, type: 'PROPOSAL_ACCEPTED', title: 'Клієнт обрав вас!', body: 'Можете розпочинати роботу', jobId, orderId }),
+    notify({
+      userId: masterId,
+      type: 'PROPOSAL_ACCEPTED',
+      title: 'Вітаю, тебе обрали!',
+      body: 'Можеш починати роботу',
+      jobId,
+      orderId,
+    }),
   orderStarted: (clientId: string, orderId: string) =>
-    notify({ userId: clientId, type: 'ORDER_STARTED', title: 'Майстер розпочав роботу', orderId }),
+    notify({
+      userId: clientId,
+      type: 'ORDER_STARTED',
+      title: 'Майстер узявся за роботу',
+      orderId,
+    }),
   orderCompleted: (clientId: string, orderId: string) =>
-    notify({ userId: clientId, type: 'ORDER_COMPLETED', title: 'Замовлення завершено', body: 'Залиште відгук про роботу майстра', orderId }),
+    notify({
+      userId: clientId,
+      type: 'ORDER_COMPLETED',
+      title: 'Роботу завершено!',
+      body: 'Залиш відгук про майстра',
+      orderId,
+    }),
   orderCancelled: (recipientId: string, orderId: string, reason?: string) =>
-    notify({ userId: recipientId, type: 'ORDER_CANCELLED', title: 'Замовлення скасовано', body: reason, orderId }),
+    notify({
+      userId: recipientId,
+      type: 'ORDER_CANCELLED',
+      title: 'Замовлення скасовано',
+      body: reason,
+      orderId,
+    }),
+
+  jobReopened: (clientId: string, jobId: string) =>
+    notify({
+      userId: clientId,
+      type: 'JOB_REOPENED',
+      title: 'Майстер відмовився, але я вже шукаю нового.',
+      body: 'Скоро зʼявляться нові відгуки — я повідомлю.',
+      jobId,
+    }),
 }

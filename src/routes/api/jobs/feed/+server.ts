@@ -100,12 +100,9 @@ export const GET: RequestHandler = async ({ request, url }) => {
   }
 
   const mp = user.masterProfile
-  if (
-    !mp?.isActive ||
-    mp.verificationStatus !== 'VERIFIED' ||
-    !user.city ||
-    mp.categories.length === 0
-  ) {
+  // Маніфест: впускаємо новачків. Verified — це бонус у scoring, не фільтр.
+  // Достатньо активного профілю з містом і категорією.
+  if (!mp?.isActive || !user.city || mp.categories.length === 0) {
     return json({ jobs: [], nextCursor: null })
   }
 
@@ -127,6 +124,13 @@ export const GET: RequestHandler = async ({ request, url }) => {
     ]
   }
 
+  // Заявки, від яких майстер відмовився (чорна мітка) — приховуємо
+  const declined = await prisma.dispatchEvent.findMany({
+    where: { masterId: userId, declined: true },
+    select: { jobId: true },
+  })
+  const declinedJobIds = declined.map((d) => d.jobId)
+
   const jobs = await prisma.job.findMany({
     where: {
       status: 'OPEN',
@@ -134,6 +138,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
       category: { in: allowedCategories },
       clientId: { not: userId },
       expiresAt: { gt: new Date() },
+      ...(declinedJobIds.length > 0 ? { id: { notIn: declinedJobIds } } : {}),
       ...(maxPriceCents !== null && {
         OR: [
           { budgetMinCents: { lte: maxPriceCents } },
@@ -158,6 +163,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
       id: true,
       title: true,
       description: true,
+      metadata: true,
       category: true,
       city: true,
       status: true,

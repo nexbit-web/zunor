@@ -2,6 +2,8 @@
 import { auth } from '$lib/auth'
 import { prisma } from '$lib/prisma'
 import { error, redirect } from '@sveltejs/kit'
+import { markOpened } from '$lib/server/dispatch'
+import { getRecommendedIds } from '$lib/server/ranking'
 import type { PageServerLoad } from './$types'
 
 export const load: PageServerLoad = async ({ params, request }) => {
@@ -40,6 +42,7 @@ export const load: PageServerLoad = async ({ params, request }) => {
       budgetMaxCents: true,
       currency: true,
       attachments: true,
+      metadata: true,
       proposalsCount: true,
       viewsCount: true,
       expiresAt: true,
@@ -52,8 +55,8 @@ export const load: PageServerLoad = async ({ params, request }) => {
           username: true,
           avatar: true,
           city: true,
-          avgRating: true,
-          reviewsCount: true,
+          avgRatingAsClient: true,
+          reviewsCountAsClient: true,
           createdAt: true,
         },
       },
@@ -77,8 +80,6 @@ export const load: PageServerLoad = async ({ params, request }) => {
   const categoryName = categoryRow?.name ?? job.category
   const cityName = cityRow?.name ?? job.city
 
-  if (!job) throw error(404, 'Заявку не знайдено')
-
   const isOwner = job.clientId === userId
   const isMaster = user.role === 'MASTER'
 
@@ -92,6 +93,11 @@ export const load: PageServerLoad = async ({ params, request }) => {
       .catch(() => {})
   }
 
+  // Пам'ять мозку: майстер відкрив заявку, яку йому розіслали.
+  if (isMaster && !isOwner) {
+    markOpened(job.id, userId).catch(() => {})
+  }
+
   // Пропозиції — клієнт бачить всі, майстер бачить тільки свою
   let proposals: Array<{
     id: string
@@ -100,6 +106,8 @@ export const load: PageServerLoad = async ({ params, request }) => {
     estimatedDays: number
     status: string
     createdAt: string
+    recommended?: boolean
+    isNew?: boolean
     master: {
       id: string
       name: string | null
@@ -127,15 +135,65 @@ export const load: PageServerLoad = async ({ params, request }) => {
             name: true,
             username: true,
             avatar: true,
-            avgRating: true,
-            reviewsCount: true,
+            avgRatingAsMaster: true,
+            reviewsCountAsMaster: true,
+            lastSeen: true,
+            masterProfile: {
+              select: {
+                verificationStatus: true,
+                completedOrders: true,
+                createdAt: true,
+              },
+            },
+            _count: {
+              select: {
+                masterOrders: {
+                  where: { status: { in: ['CREATED', 'IN_PROGRESS'] } },
+                },
+              },
+            },
           },
         },
       },
     })
+
+    // ─── Ранжування: топ-3 + слот новачку ───
+    const now = new Date()
+    const { recommended: recommendedIds, newbies: newbieIds } =
+      getRecommendedIds(
+        items.map((p) => ({
+          id: p.id,
+          createdAt: p.createdAt,
+          master: {
+            lastSeen: p.master.lastSeen,
+            avgRating: p.master.avgRatingAsMaster,
+            isVerified:
+              p.master.masterProfile?.verificationStatus === 'VERIFIED',
+            activeOrders: p.master._count.masterOrders,
+            masterSince: p.master.masterProfile?.createdAt ?? now,
+            completedOrders: p.master.masterProfile?.completedOrders ?? 0,
+          },
+        })),
+        now,
+      )
+
     proposals = items.map((p) => ({
-      ...p,
+      id: p.id,
+      message: p.message,
+      priceCents: p.priceCents,
+      estimatedDays: p.estimatedDays,
+      status: p.status,
       createdAt: p.createdAt.toISOString(),
+      recommended: recommendedIds.has(p.id),
+      isNew: newbieIds.has(p.id),
+      master: {
+        id: p.master.id,
+        name: p.master.name,
+        username: p.master.username,
+        avatar: p.master.avatar,
+        avgRating: p.master.avgRatingAsMaster,
+        reviewsCount: p.master.reviewsCountAsMaster,
+      },
     }))
   } else if (isMaster) {
     const mine = await prisma.proposal.findFirst({
@@ -153,8 +211,8 @@ export const load: PageServerLoad = async ({ params, request }) => {
             name: true,
             username: true,
             avatar: true,
-            avgRating: true,
-            reviewsCount: true,
+            avgRatingAsMaster: true,
+            reviewsCountAsMaster: true,
           },
         },
       },
@@ -162,8 +220,20 @@ export const load: PageServerLoad = async ({ params, request }) => {
     if (mine) {
       proposals = [
         {
-          ...mine,
+          id: mine.id,
+          message: mine.message,
+          priceCents: mine.priceCents,
+          estimatedDays: mine.estimatedDays,
+          status: mine.status,
           createdAt: mine.createdAt.toISOString(),
+          master: {
+            id: mine.master.id,
+            name: mine.master.name,
+            username: mine.master.username,
+            avatar: mine.master.avatar,
+            avgRating: mine.master.avgRatingAsMaster,
+            reviewsCount: mine.master.reviewsCountAsMaster,
+          },
         },
       ]
     }
@@ -183,9 +253,6 @@ export const load: PageServerLoad = async ({ params, request }) => {
     } else if (!user.masterProfile?.isActive) {
       canPropose = false
       cantProposeReason = 'Профіль майстра неактивний'
-    } else if (user.masterProfile.verificationStatus !== 'VERIFIED') {
-      canPropose = false
-      cantProposeReason = 'Профіль не верифіковано'
     } else if (!user.masterProfile.categories.includes(job.category)) {
       canPropose = false
       cantProposeReason = 'Ця категорія не у вашому профілі'
@@ -197,14 +264,16 @@ export const load: PageServerLoad = async ({ params, request }) => {
   return {
     job: {
       ...job,
-      category: categoryName, 
-      categorySlug: job.category,  
-      city: cityName,  
+      category: categoryName,
+      categorySlug: job.category,
+      city: cityName,
       citySlug: job.city,
       createdAt: job.createdAt.toISOString(),
       expiresAt: job.expiresAt.toISOString(),
       client: {
         ...job.client,
+        avgRating: job.client.avgRatingAsClient,
+        reviewsCount: job.client.reviewsCountAsClient,
         createdAt: job.client.createdAt.toISOString(),
       },
     },

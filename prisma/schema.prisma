@@ -81,9 +81,13 @@ model User {
   // Для MASTER — розширений профіль
   masterProfile MasterProfile?
 
-  // Денормалізовані метрики (рейтинг рахується для обох ролей)
-  avgRating    Float @default(0)
-  reviewsCount Int   @default(0)
+ // Денормалізовані метрики рейтингів — окремо для кожної ролі.
+  // Як майстер: оцінки від клієнтів за виконані замовлення.
+  avgRatingAsMaster    Float @default(0)
+  reviewsCountAsMaster Int   @default(0)
+  // Як клієнт: оцінки від майстрів за співпрацю.
+  avgRatingAsClient    Float @default(0)
+  reviewsCountAsClient Int   @default(0)
 
   isOnline Boolean  @default(false)
   lastSeen DateTime @default(now())
@@ -239,6 +243,7 @@ model Order {
 
   title       String
   description String  @db.Text
+  metadata    Json?
   priceCents  Int
   currency    String  @default("UAH")
 
@@ -488,4 +493,24 @@ model Verification {
 
   @@map("verification")
   @@index([identifier])
+}
+
+// ═══════════════════════════════════════════════
+// DISPATCH (пам'ять мозку-диспетчера)
+// ═══════════════════════════════════════════════
+
+model DispatchEvent {
+  id          String    @id @default(cuid())
+  jobId       String
+  masterId    String
+  wave        Int                       // номер хвилі (1, 2, 3...)
+  score       Float                     // який score був на момент відправки
+  notifiedAt  DateTime  @default(now())
+  openedAt    DateTime?                 // майстер відкрив заявку
+  respondedAt DateTime?                 // майстер залишив відгук
+  declined    Boolean   @default(false) // майстер відмовився після вибору (чорна мітка)
+
+  @@unique([jobId, masterId])           // одному майстру — одне уведомлення на заявку
+  @@index([jobId])
+  @@index([masterId])
 }

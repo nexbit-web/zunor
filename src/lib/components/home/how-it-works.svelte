@@ -1,85 +1,47 @@
 <script lang="ts">
-  import { Search, Shield, Zap, ArrowRight } from 'lucide-svelte'
-
   const steps = [
     {
-      icon: Search,
-      step: '01',
-      title: 'Створіть замовлення',
-      desc: 'Детально опишіть, що і коли потрібно зробити',
+      number: '1',
+      title: 'Опиши задачу',
+      text: 'За 4 кроки, без зайвих питань. Жодних анкет.',
     },
     {
-      icon: Shield,
-      step: '02',
-      title: 'Фахівець отримає завдання',
-      desc: 'І зв‘яжеться з вами для обговорення деталей',
+      number: '2',
+      title: 'Отримай відгуки',
+      text: 'Клінери поруч відповідають за хвилини. Ціна — у відгуку.',
     },
     {
-      icon: Zap,
-      step: '03',
-      title: 'Закрийте замовлення',
-      desc: 'Залиште відгук та оцінку за виконану роботу',
+      number: '3',
+      title: 'Обери свого',
+      text: 'Дивишся на профілі, читаєш відгуки, домовляєшся в чаті.',
     },
   ]
 </script>
 
-<section class="py-24 border-t" style="background-color: var(--background); border-color: var(--border)">
-  <div class="max-w-6xl mx-auto px-6">
-    
-    <!-- Заголовок в стиле Uber: огромный, жирный, с акцентной линией -->
-    <div class="mb-20">
-      <h2 class="text-4xl md:text-6xl font-bold tracking-tighter mb-8" style="color: var(--foreground)">
-        Як це працює
-      </h2>
-      <!-- Та самая Uber-линия -->
-      <div class="h-1.5 w-24" style="background-color: var(--primary)"></div>
-    </div>
+<section class="px-4 sm:px-6 lg:px-8 py-16 sm:py-20 bg-secondary/30">
+  <div class="max-w-5xl mx-auto">
+    <h2
+      class="text-3xl sm:text-4xl font-bold tracking-tight text-foreground text-center mb-12"
+    >
+      Як це працює
+    </h2>
 
-    <!-- Сетка без карточек — только чистый контент и воздух -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-16 md:gap-12">
-      {#each steps as step}
-        <div class="group flex flex-col items-start">
-          
-          <!-- Номер шага: маленький, но жирный -->
-          <span class="text-sm font-black mb-6 opacity-40 tracking-widest" style="color: var(--foreground)">
-            {step.step} —
-          </span>
-
-          <!-- Иконка: большая, тонкая (stroke 1.0) -->
-          <div class="mb-10 transition-transform duration-500 group-hover:scale-110 group-hover:translate-x-2">
-            <step.icon size={60} strokeWidth={1} style="color: var(--foreground)" />
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-8 sm:gap-12">
+      {#each steps as step (step.number)}
+        <div class="flex flex-col items-start">
+          <div
+            class="flex items-center justify-center w-12 h-12 rounded-full bg-foreground text-background text-lg font-bold mb-4"
+          >
+            {step.number}
           </div>
-
-          <!-- Текст -->
-          <div class="space-y-4">
-            <h3 class="text-2xl font-bold tracking-tight" style="color: var(--foreground)">
-              {step.title}
-            </h3>
-            <p class="text-[17px] leading-relaxed opacity-60 max-w-[280px]" style="color: var(--foreground)">
-              {step.desc}
-            </p>
-          </div>
-
-          <!-- Интерактивный элемент (по желанию) -->
-          <div class="mt-8 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-2 group-hover:translate-y-0">
-            <span class="text-xs font-bold uppercase tracking-wider">Почати</span>
-            <ArrowRight size={14} />
-          </div>
+          <h3 class="text-xl font-semibold tracking-tight text-foreground mb-2">
+            {step.title}
+          </h3>
+          <p class="text-base text-muted-foreground leading-relaxed">
+            {step.text}
+          </p>
         </div>
       {/each}
     </div>
   </div>
 </section>
-
-<style>
-  /* Uber стиль строится на шрифтах без засечек и больших отступах */
-  section {
-    font-family: 'Inter', -apple-system, sans-serif;
-  }
-
-  /* Тонкая настройка для темного режима */
-  :global(.dark) section {
-    border-top-width: 1px;
-    border-color: rgba(255, 255, 255, 0.05);
-  }
-</style>

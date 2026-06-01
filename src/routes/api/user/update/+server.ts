@@ -17,6 +17,8 @@ interface UpdatePayload {
   phone?: string
   city?: string
   bio?: string
+  avatar?: string | null
+  avatarPublicId?: string | null
 
   // ─── MasterProfile поля ───
   categories?: string[] // slug'и категорій, у яких працює майстер
@@ -164,6 +166,9 @@ export const POST: RequestHandler = async ({ request }) => {
   if (body.city) userData.city = body.city
   if (body.bio !== undefined) userData.bio = body.bio
   if (body.username !== undefined) userData.username = body.username
+  if (body.avatar !== undefined) userData.avatar = body.avatar
+  if (body.avatarPublicId !== undefined)
+    userData.avatarPublicId = body.avatarPublicId
 
   if (Object.keys(userData).length > 0) {
     try {
