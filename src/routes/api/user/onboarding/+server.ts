@@ -3,9 +3,9 @@ import { json, error } from '@sveltejs/kit'
 import { auth } from '$lib/auth'
 import { prisma } from '$lib/prisma'
 import { cloudinary } from '$lib/cloudinary'
+import { validateUsername } from '$lib/username'
 import type { RequestHandler } from './$types'
 
-const USERNAME_RE = /^[a-z0-9_]{3,30}$/
 const PHONE_RE = /^\+380\d{9}$/
 const NAME_MIN = 2
 const NAME_MAX = 80
@@ -15,8 +15,9 @@ const PORTFOLIO_MAX = 6
 
 /**
  * POST /api/user/onboarding
- * Заповнення майстром свого профілю. Маніфест — відкритий маркетплейс,
- * без модерації: профіль активується одразу.
+ * Майстер заповнює свій профіль. Профіль активний одразу (isActive=true);
+ * verificationStatus=PENDING — це статус бейджа «перевірено» (модерація),
+ * він НЕ блокує роботу, лише чекає на перевірку модератором.
  */
 export const POST: RequestHandler = async ({ request }) => {
   const session = await auth.api.getSession({ headers: request.headers })
@@ -35,8 +36,9 @@ export const POST: RequestHandler = async ({ request }) => {
     },
   })
   if (!me) throw error(401, 'Unauthorized')
-  // Клієнт може заповнити профіль майстра — роль зміниться на MASTER
-  // при успішному збереженні (нижче в транзакції).
+  // Клієнт теж може заповнити профіль майстра — роль стане MASTER
+  // атомарно при збереженні (нижче в транзакції).
+
   const body = await request.json().catch(() => null)
   if (!body) throw error(400, 'Invalid JSON')
 
@@ -46,12 +48,17 @@ export const POST: RequestHandler = async ({ request }) => {
     throw error(400, `Імʼя: ${NAME_MIN}-${NAME_MAX} символів`)
   }
 
-  const username = String(body.username ?? '')
-    .trim()
-    .toLowerCase()
-  if (!USERNAME_RE.test(username)) {
-    throw error(400, 'Username: 3-30 символів (a-z, 0-9, _)')
+  // Username — за єдиним правилом із $lib/username (збігається з маршрутом /@username).
+  const usernameResult = validateUsername(String(body.username ?? ''))
+  if (!usernameResult.ok) {
+    throw error(
+      400,
+      usernameResult.reason === 'reserved'
+        ? 'Цей username зарезервовано'
+        : 'Username: 3-20 символів, починається з літери (a-z, 0-9, _)',
+    )
   }
+  const username = usernameResult.value
 
   // Телефон обовʼязковий: +380 + 9 цифр
   const phone = String(body.phone ?? '').trim()
@@ -111,7 +118,7 @@ export const POST: RequestHandler = async ({ request }) => {
     throw error(400, 'Деякі категорії не існують')
   }
 
-  // ─── Cleanup старого аватара ───
+  // ─── Прибирання старого аватара в Cloudinary (fire-and-forget) ───
   if (
     me.avatarPublicId &&
     avatarPublicId &&
@@ -122,7 +129,7 @@ export const POST: RequestHandler = async ({ request }) => {
       .catch((err) => console.error('[onboarding] cleanup avatar', err))
   }
 
-  // Cleanup видалених фото портфоліо
+  // Прибирання видалених фото портфоліо
   const oldPortfolio = me.masterProfile?.portfolioImagesPublicIds ?? []
   const removedIds = oldPortfolio.filter(
     (id) => !portfolioImagesPublicIds.includes(id),
@@ -133,21 +140,20 @@ export const POST: RequestHandler = async ({ request }) => {
       .catch((err) => console.error('[onboarding] cleanup portfolio', err))
   }
 
-  // ─── Update в транзакції ───
-  // Модерація потрібна для репутації та анти-спаму.
-  // Профіль після подачі — PENDING (модератор перевіряє).
+  // ─── Запис у транзакції: роль + профіль атомарно ───
+  // verificationStatus=PENDING — статус бейджа «перевірено», не блокує роботу.
   await prisma.$transaction([
     prisma.user.update({
       where: { id: userId },
       data: {
-        role: 'MASTER', // перемикаємо роль атомарно з створенням masterProfile
+        role: 'MASTER', // роль перемикаємо атомарно зі створенням masterProfile
         name,
         username,
         phone,
         city,
-        avatar, // дозволяємо null (явне скидання)
+        avatar, // null = явне скидання аватара
         avatarPublicId,
-        bio: description, // синхронізуємо з masterProfile.description для відображення
+        bio: description, // дублюємо в bio для відображення профілю
       },
     }),
     prisma.masterProfile.upsert({

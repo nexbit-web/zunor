@@ -1,5 +1,6 @@
 <!-- src/routes/(auth)/welcome/+page.svelte -->
 <script lang="ts">
+  import { untrack } from 'svelte'
   import { goto, invalidateAll } from '$app/navigation'
   import { Button } from '$lib/components/ui/button'
   import { Input } from '$lib/components/ui/input'
@@ -21,19 +22,8 @@
   const NAME_MAX = 80
   const BIO_MAX = 922
 
-  let name = $state(data.user.name ?? '')
-  let city = $state(data.user.city ?? '')
-  let bio = $state(data.user.bio ?? '')
-
-  let avatarUrl = $state(data.user.avatar ?? '')
-  let avatarPublicId = $state('')
-  let avatarUploading = $state(false)
-
-  let submitting = $state(false)
-
-  // ─── Телефон України: +380 (статичний префікс) + 9 цифр оператора ───
-  // Зберігаємо лише 9 значущих цифр. Нормалізація будь-якого вводу:
-  // 380XXXXXXXXX / 80XXXXXXXXX / 0XXXXXXXXX / XXXXXXXXX → 9 цифр.
+  // Телефон: тримаємо лише 9 значущих цифр оператора; +380 додаємо при сабміті.
+  // Нормалізуємо будь-який ввід (380…, 80…, 0…, …) до цих 9 цифр.
   function normalizePhone(input: string): string {
     let d = input.replace(/\D/g, '')
     if (d.startsWith('380')) d = d.slice(3)
@@ -42,7 +32,6 @@
     return d.slice(0, 9)
   }
 
-  // Форматування локальної частини: "67 123 45 67" (без префікса +380)
   function formatLocal(d: string): string {
     let out = d.slice(0, 2)
     if (d.length > 2) out += ' ' + d.slice(2, 5)
@@ -51,17 +40,28 @@
     return out
   }
 
-  let phoneDigits = $state(normalizePhone(data.user.phone ?? ''))
+  // Початкові значення форми — знімаємо один раз; далі поля редагуються локально.
+  const initial = untrack(() => data.user)
+
+  let name = $state(initial.name ?? '')
+  let city = $state(initial.city ?? '')
+  let bio = $state(initial.bio ?? '')
+  let avatarUrl = $state(initial.avatar ?? '')
+  let avatarPublicId = $state('')
+  let avatarUploading = $state(false)
+  let phoneDigits = $state(normalizePhone(initial.phone ?? ''))
+  let submitting = $state(false)
+
   const phoneDisplayLocal = $derived(formatLocal(phoneDigits))
 
   function onPhoneInput(e: Event) {
     const el = e.target as HTMLInputElement
     phoneDigits = normalizePhone(el.value)
-    // Синхронізуємо відображення (інакше зайві символи лишаються в полі)
+    // Інакше відкинуті символи лишаються у полі вводу.
     el.value = formatLocal(phoneDigits)
   }
 
-  // Валідні перші цифри коду укр. мобільного оператора: 3,5,6,7,9
+  // Перша цифра укр. мобільного коду: 3, 5, 6, 7, 9.
   const phoneValid = $derived(
     phoneDigits.length === 9 && /^[35679]/.test(phoneDigits),
   )
@@ -98,7 +98,13 @@
           phone: '+380' + phoneDigits,
           bio: bio.trim(),
           avatar: avatarUrl || null,
-          avatarPublicId: avatarPublicId || null,
+          // publicId оновлюємо лише коли є що оновлювати: новий аватар → новий id;
+          // прибрали аватар → null; просте редагування → не чіпаємо.
+          ...(avatarUrl
+            ? avatarPublicId
+              ? { avatarPublicId }
+              : {}
+            : { avatarPublicId: null }),
         }),
       })
       const json = await res.json().catch(() => ({}))
@@ -180,7 +186,7 @@
         <Select type="single" bind:value={city}>
           <SelectTrigger
             id="city"
-            class="h-12 text-base data-[placeholder]:text-muted-foreground"
+            class="h-12 text-base data-placeholder:text-muted-foreground"
           >
             {cityLabel}
           </SelectTrigger>

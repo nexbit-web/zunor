@@ -25,13 +25,12 @@ export const load: PageServerLoad = async ({ request }) => {
 
   if (!user) throw redirect(302, '/user/login')
 
-  // Уже всё заполнено — нечего тут делать
-  if (user.role === 'CLIENT' && user.username && user.city) {
-    throw redirect(302, '/dashboard')
-  }
-
-  // Мастер не должен попадать сюда — его ждёт /onboarding
+  // Мастер сюда не заходит — его профиль редактируется на /onboarding.
   if (user.role === 'MASTER') throw redirect(302, '/onboarding')
+
+  // Клиента НЕ редиректим, даже если профиль уже заполнен:
+  // /welcome — это и первичное знакомство, и страница редактирования
+  // (кнопка «Редагувати профіль» ведёт сюда). Форма приходит предзаполненной.
 
   const cities = await prisma.city.findMany({
     where: { isActive: true },

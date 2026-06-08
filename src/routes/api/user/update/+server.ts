@@ -10,7 +10,7 @@ import { auth } from '$lib/auth'
 import type { RequestHandler } from './$types'
 
 interface UpdatePayload {
-  // ─── User поля ───
+  // ─── Поля User ───
   role?: 'CLIENT' | 'MASTER'
   username?: string
   name?: string
@@ -20,10 +20,10 @@ interface UpdatePayload {
   avatar?: string | null
   avatarPublicId?: string | null
 
-  // ─── MasterProfile поля ───
-  categories?: string[] // slug'и категорій, у яких працює майстер
-  description?: string // опис послуг
-  isActive?: boolean // приймає нові заявки
+  // ─── Поля MasterProfile ───
+  categories?: string[]
+  description?: string
+  isActive?: boolean
 
   // ─── Дія: відправити профіль на модерацію ───
   submitForReview?: boolean
@@ -61,9 +61,14 @@ const LIMITS = {
   BIO_MAX: 922,
   NAME_MAX: 80,
   CITY_MAX: 60,
-  CATEGORIES_MAX: 10, // майстер може працювати у кількох категоріях
+  CATEGORIES_MAX: 10,
   DESCRIPTION_MAX: 2000,
 } as const
+
+// Перевірка типу: гарантує, що значення — рядок, перш ніж звертатись до
+// .length / .trim(). Без неї не-рядок (число, обʼєкт) обходив би валідацію
+// й падав уже в Prisma з 500 замість зрозумілого 400.
+const isString = (v: unknown): v is string => typeof v === 'string'
 
 export const POST: RequestHandler = async ({ request }) => {
   const session = await auth.api.getSession({ headers: request.headers })
@@ -84,37 +89,66 @@ export const POST: RequestHandler = async ({ request }) => {
     return json({ error: 'Invalid role' }, { status: 400 })
   }
 
-  if (body.bio !== undefined && body.bio.length > LIMITS.BIO_MAX) {
-    return json({ error: 'Bio too long' }, { status: 400 })
+  if (body.bio !== undefined) {
+    if (!isString(body.bio))
+      return json({ error: 'Invalid bio' }, { status: 400 })
+    if (body.bio.length > LIMITS.BIO_MAX) {
+      return json({ error: 'Bio too long' }, { status: 400 })
+    }
   }
 
-  if (
-    body.name !== undefined &&
-    (body.name.length < 1 || body.name.length > LIMITS.NAME_MAX)
-  ) {
-    return json({ error: 'Invalid name length' }, { status: 400 })
+  if (body.name !== undefined) {
+    if (!isString(body.name))
+      return json({ error: 'Invalid name' }, { status: 400 })
+    if (body.name.length < 1 || body.name.length > LIMITS.NAME_MAX) {
+      return json({ error: 'Invalid name length' }, { status: 400 })
+    }
   }
 
-  if (body.city !== undefined && body.city.length > LIMITS.CITY_MAX) {
-    return json({ error: 'Invalid city' }, { status: 400 })
+  if (body.city !== undefined) {
+    if (!isString(body.city) || body.city.length > LIMITS.CITY_MAX) {
+      return json({ error: 'Invalid city' }, { status: 400 })
+    }
   }
 
-  if (body.phone !== undefined && body.phone && !PHONE_RE.test(body.phone)) {
-    return json({ error: 'Invalid phone' }, { status: 400 })
+  if (body.phone !== undefined) {
+    if (!isString(body.phone))
+      return json({ error: 'Invalid phone' }, { status: 400 })
+    if (body.phone && !PHONE_RE.test(body.phone)) {
+      return json({ error: 'Invalid phone' }, { status: 400 })
+    }
   }
 
-  if (
-    body.description !== undefined &&
-    body.description.length > LIMITS.DESCRIPTION_MAX
-  ) {
-    return json({ error: 'Description too long' }, { status: 400 })
+  if (body.description !== undefined) {
+    if (!isString(body.description)) {
+      return json({ error: 'Invalid description' }, { status: 400 })
+    }
+    if (body.description.length > LIMITS.DESCRIPTION_MAX) {
+      return json({ error: 'Description too long' }, { status: 400 })
+    }
   }
 
   if (body.isActive !== undefined && typeof body.isActive !== 'boolean') {
     return json({ error: 'Invalid isActive' }, { status: 400 })
   }
 
-  // ─── Categories — массив slug'ів ───
+  // Аватар: рядок або null (скидання). Не-рядок → 400, а не падіння в Prisma.
+  if (
+    body.avatar !== undefined &&
+    body.avatar !== null &&
+    !isString(body.avatar)
+  ) {
+    return json({ error: 'Invalid avatar' }, { status: 400 })
+  }
+  if (
+    body.avatarPublicId !== undefined &&
+    body.avatarPublicId !== null &&
+    !isString(body.avatarPublicId)
+  ) {
+    return json({ error: 'Invalid avatar id' }, { status: 400 })
+  }
+
+  // ─── Категорії — масив slug'ів ───
   if (body.categories !== undefined) {
     if (
       !Array.isArray(body.categories) ||
@@ -122,15 +156,19 @@ export const POST: RequestHandler = async ({ request }) => {
     ) {
       return json({ error: 'Invalid categories' }, { status: 400 })
     }
-    if (
-      !body.categories.every((c) => typeof c === 'string' && SLUG_RE.test(c))
-    ) {
+    if (!body.categories.every((c) => isString(c) && SLUG_RE.test(c))) {
       return json({ error: 'Invalid category slug' }, { status: 400 })
     }
   }
 
   // ─── Username ───
   if (body.username !== undefined) {
+    if (!isString(body.username)) {
+      return json(
+        { error: 'Invalid username format', field: 'username' },
+        { status: 400 },
+      )
+    }
     const u = body.username.trim().toLowerCase()
     if (!USERNAME_RE.test(u)) {
       return json(
@@ -147,7 +185,7 @@ export const POST: RequestHandler = async ({ request }) => {
     body.username = u
   }
 
-  // ─── Перевіряємо що всі вказані категорії існують ───
+  // ─── Перевіряємо, що всі вказані категорії існують ───
   if (body.categories !== undefined && body.categories.length > 0) {
     const found = await prisma.category.count({
       where: { slug: { in: body.categories }, isActive: true },
@@ -157,7 +195,7 @@ export const POST: RequestHandler = async ({ request }) => {
     }
   }
 
-  // ═══════════════════ User update ═══════════════════
+  // ═══════════════════ Оновлення User ═══════════════════
 
   const userData: Prisma.UserUpdateInput = {}
   if (body.role) userData.role = body.role as Role
@@ -177,6 +215,7 @@ export const POST: RequestHandler = async ({ request }) => {
         data: userData,
       })
     } catch (err) {
+      // Унікальний username уже зайнятий — віддаємо зрозумілий 409, а не 500
       if (
         err instanceof Prisma.PrismaClientKnownRequestError &&
         err.code === 'P2002'
@@ -190,7 +229,7 @@ export const POST: RequestHandler = async ({ request }) => {
     }
   }
 
-  // ═══════════════════ MasterProfile upsert ═══════════════════
+  // ═══════════════════ Upsert MasterProfile ═══════════════════
 
   const hasMasterData =
     body.categories !== undefined ||

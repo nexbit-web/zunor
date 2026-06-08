@@ -11,7 +11,6 @@
   import {
     MapPin,
     Calendar,
-    ShoppingBag,
     Star,
     MessageSquare,
     User,
@@ -19,9 +18,6 @@
     Repeat,
     Sparkles,
     ArrowRight,
-    Copy,
-    Check,
-    Phone,
   } from 'lucide-svelte'
   import { goto } from '$app/navigation'
   import type { ClientProfileData } from '$lib/components/profile/types'
@@ -32,31 +28,33 @@
     isAuthenticated: boolean
   }
 
-  let { user, isOwner }: Props = $props()
+  let { user, isOwner, isAuthenticated }: Props = $props()
 
-  // ─── Derived (memoized) ───
-  const memberSinceLabel = $derived(
-    new Date(user.createdAt).toLocaleDateString('uk-UA', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    }),
-  )
+  /** Дата у локалі uk-UA. Невалідне значення не роняє рендер. */
+  function formatDate(
+    value: string | Date,
+    opts: Intl.DateTimeFormatOptions,
+  ): { display: string; iso: string } {
+    const d = new Date(value)
+    if (Number.isNaN(d.getTime())) return { display: '—', iso: '' }
+    return {
+      display: d.toLocaleDateString('uk-UA', opts),
+      iso: d.toISOString(),
+    }
+  }
 
-  const memberSinceISO = $derived(new Date(user.createdAt).toISOString())
+  /** Рейтинг → рядок. Захист від NaN. */
+  function fmtRating(value: number): string {
+    return (Number.isFinite(value) ? value : 0).toFixed(1)
+  }
 
-  // Готовий рейтинг з БД (враховує всі відгуки, не лише завантажені)
-  const avgRatingLabel = $derived(user.avgRating.toFixed(1))
+  /** Ціле число зірок 0–5. Array(n) кидає помилку на дробі/відʼємному. */
+  function starCount(rating: number): number {
+    if (!Number.isFinite(rating)) return 0
+    return Math.max(0, Math.min(5, Math.round(rating)))
+  }
 
-  const initials = $derived(
-    (user.name ?? '?')
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((w) => w[0]?.toUpperCase() ?? '')
-      .join('') || '?',
-  )
-
+  /** Українське відмінювання слова «відгук». */
   function reviewsLabel(n: number): string {
     const mod10 = n % 10
     const mod100 = n % 100
@@ -66,7 +64,28 @@
     return 'відгуків'
   }
 
+  // ─── Derived ───
+  const created = $derived(
+    formatDate(user.createdAt, {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    }),
+  )
+
+  // Готовий рейтинг з БД (враховує всі відгуки, не лише завантажені)
+  const avgRatingLabel = $derived(fmtRating(user.avgRating))
+
   const reviewsLabelStr = $derived(reviewsLabel(user.reviews.length))
+
+  const initials = $derived(
+    (user.name ?? '?')
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w) => w[0]?.toUpperCase() ?? '')
+      .join('') || '?',
+  )
 
   // ─── State ───
   let avatarLoaded = $state(false)
@@ -144,7 +163,7 @@
           style="color: var(--muted-foreground)"
         >
           <Calendar class="size-3" aria-hidden="true" />
-          <time datetime={memberSinceISO}>{memberSinceLabel}</time>
+          <time datetime={created.iso}>{created.display}</time>
         </span>
         {#if user.city}
           <span
@@ -280,6 +299,12 @@
       {#if user.reviews.length > 0}
         <ul class="list-none p-0 m-0">
           {#each user.reviews as review, i (review.id ?? i)}
+            {@const stars = starCount(review.rating)}
+            {@const reviewDate = formatDate(review.createdAt, {
+              day: 'numeric',
+              month: 'long',
+              year: 'numeric',
+            })}
             <li
               class="py-5 first:pt-0"
               style="border-top: {i === 0
@@ -304,9 +329,9 @@
                 </div>
                 <div
                   class="flex gap-0.5 shrink-0"
-                  aria-label={`Рейтинг: ${review.rating} з 5`}
+                  aria-label={`Рейтинг: ${stars} з 5`}
                 >
-                  {#each Array(review.rating) as _, j (j)}
+                  {#each Array(stars) as _, j (j)}
                     <Star
                       class="size-3"
                       style="color: #f5a623; fill: #f5a623"
@@ -325,13 +350,7 @@
                 class="text-[11px] mt-2 pl-10"
                 style="color: color-mix(in oklch, var(--muted-foreground) 60%, transparent)"
               >
-                <time datetime={new Date(review.createdAt).toISOString()}>
-                  {new Date(review.createdAt).toLocaleDateString('uk-UA', {
-                    day: 'numeric',
-                    month: 'long',
-                    year: 'numeric',
-                  })}
-                </time>
+                <time datetime={reviewDate.iso}>{reviewDate.display}</time>
               </p>
             </li>
           {/each}

@@ -1,13 +1,28 @@
 // src/lib/server/dispatch/engine.ts
 //
-// Мозок-диспетчер. Читає стан заявки + кандидатів, вирішує кого
+// Мозок-диспетчер (Zuna). Читає стан заявки + кандидатів, вирішує кого
 // уведомити в поточній хвилі. Сам НЕ відправляє — повертає рішення.
 // Відправку робить index.ts (щоб тут не було залежності від Pusher).
+//
+// Усі читання приймають клієнт `db`: глобальний prisma або tx у межах
+// advisory-лока (index.ts), щоб рішення й claim були в одній серіалізованій транзакції.
 
 import { prisma } from '$lib/prisma'
-import { scoreAll } from './scoring'
+import { scoreAll, responseRate } from './scoring'
 import { DISPATCH_CONFIG } from './types'
 import type { Candidate, JobContext, DispatchDecision } from './types'
+
+/** Клієнт Prisma або транзакційний клієнт — будь-який підходить для читань. */
+export type Db = Omit<
+  typeof prisma,
+  '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'
+>
+
+/** Активні статуси замовлення (майстер зайнятий). */
+const ACTIVE_ORDER_STATUSES = ['CREATED', 'IN_PROGRESS'] as const
+
+/** Скільки кандидатів максимум тягнемо в пам'ять для scoring. */
+const CANDIDATE_POOL_LIMIT = 500
 
 /**
  * Визначає номер поточної хвилі за віком заявки.
@@ -30,17 +45,18 @@ function cumulativeBatchSize(wave: number): number {
   )
 }
 
-/**
- * Збирає контекст заявки: статус, к-сть відгуків, хто вже уведомлений.
- */
-async function loadJobContext(jobId: string): Promise<{
+/** Збирає контекст заявки: статус, к-сть відгуків, хто вже уведомлений. */
+async function loadJobContext(
+  db: Db,
+  jobId: string,
+): Promise<{
   context: JobContext
   category: string
   city: string
   clientId: string
   status: string
 } | null> {
-  const job = await prisma.job.findUnique({
+  const job = await db.job.findUnique({
     where: { id: jobId },
     select: {
       id: true,
@@ -54,7 +70,7 @@ async function loadJobContext(jobId: string): Promise<{
   })
   if (!job) return null
 
-  const dispatched = await prisma.dispatchEvent.findMany({
+  const dispatched = await db.dispatchEvent.findMany({
     where: { jobId },
     select: { masterId: true },
   })
@@ -76,14 +92,19 @@ async function loadJobContext(jobId: string): Promise<{
 /**
  * Завантажує кандидатів-майстрів для заявки.
  * Усі активні майстри категорії+міста, КРІМ клієнта і вже уведомлених.
+ *
+ * Оптимізація: тягнемо тонкий зріз майстрів (без коррельованих підзапитів),
+ * а активні замовлення, відзивчивість і недавню нагрузку рахуємо ОДНИМ
+ * groupBy на весь пул кожне — замість N підзапитів.
  */
 async function loadCandidates(
+  db: Db,
   category: string,
   city: string,
   clientId: string,
   alreadyNotified: Set<string>,
 ): Promise<Candidate[]> {
-  const masters = await prisma.user.findMany({
+  const masters = await db.user.findMany({
     where: {
       role: 'MASTER',
       city,
@@ -105,37 +126,85 @@ async function loadCandidates(
           createdAt: true,
         },
       },
-      _count: {
-        select: {
-          masterOrders: {
-            where: { status: { in: ['CREATED', 'IN_PROGRESS'] } },
-          },
-        },
-      },
     },
-    take: 500,
+    // Свіжіші (ймовірно онлайн) — першими, щоб під лімітом пулу не втратити їх.
+    orderBy: { lastSeen: 'desc' },
+    take: CANDIDATE_POOL_LIMIT,
   })
 
-  return masters
-    .filter((m) => !alreadyNotified.has(m.id) && m.masterProfile)
-    .map((m) => ({
-      id: m.id,
-      isOnline: m.isOnline,
-      lastSeen: m.lastSeen,
-      avgRating: m.avgRatingAsMaster,
-      isVerified: m.masterProfile!.verificationStatus === 'VERIFIED',
-      activeOrders: m._count.masterOrders,
-      masterSince: m.masterProfile!.createdAt,
-      completedOrders: m.masterProfile!.completedOrders,
-    }))
+  const pool = masters.filter(
+    (m) => !alreadyNotified.has(m.id) && m.masterProfile,
+  )
+  if (pool.length === 0) return []
+
+  const ids = pool.map((m) => m.id)
+  const recentCutoff = new Date(
+    Date.now() - DISPATCH_CONFIG.RECENT_LOAD_WINDOW_MIN * 60_000,
+  )
+
+  // Усі агрегати — паралельно, по індексованих полях ([masterId,...]).
+  const [activeAgg, notifiedAgg, respondedAgg, recentAgg] = await Promise.all([
+    db.order.groupBy({
+      by: ['masterId'],
+      where: {
+        masterId: { in: ids },
+        status: { in: [...ACTIVE_ORDER_STATUSES] },
+      },
+      _count: { _all: true },
+    }),
+    db.dispatchEvent.groupBy({
+      by: ['masterId'],
+      where: { masterId: { in: ids } },
+      _count: { _all: true },
+    }),
+    db.dispatchEvent.groupBy({
+      by: ['masterId'],
+      where: { masterId: { in: ids }, respondedAt: { not: null } },
+      _count: { _all: true },
+    }),
+    db.dispatchEvent.groupBy({
+      by: ['masterId'],
+      where: { masterId: { in: ids }, notifiedAt: { gt: recentCutoff } },
+      _count: { _all: true },
+    }),
+  ])
+
+  const activeMap = new Map(activeAgg.map((r) => [r.masterId, r._count._all]))
+  const notifiedMap = new Map(
+    notifiedAgg.map((r) => [r.masterId, r._count._all]),
+  )
+  const respondedMap = new Map(
+    respondedAgg.map((r) => [r.masterId, r._count._all]),
+  )
+  const recentMap = new Map(recentAgg.map((r) => [r.masterId, r._count._all]))
+
+  return pool.map((m) => ({
+    id: m.id,
+    isOnline: m.isOnline,
+    lastSeen: m.lastSeen,
+    avgRating: m.avgRatingAsMaster,
+    isVerified: m.masterProfile!.verificationStatus === 'VERIFIED',
+    activeOrders: activeMap.get(m.id) ?? 0,
+    masterSince: m.masterProfile!.createdAt,
+    completedOrders: m.masterProfile!.completedOrders,
+    responseRate: responseRate(
+      notifiedMap.get(m.id) ?? 0,
+      respondedMap.get(m.id) ?? 0,
+    ),
+    recentNotifications: recentMap.get(m.id) ?? 0,
+  }))
 }
 
 /**
  * ГОЛОВНА ФУНКЦІЯ МОЗКУ.
- * Вирішує, кого уведомити для заявки в поточний момент.
+ * Вирішує, кого уведомити для заявки в поточний момент. Лише читає, не пише.
+ * `db` за замовчуванням глобальний; index.ts передає tx у межах advisory-лока.
  */
-export async function decide(jobId: string): Promise<DispatchDecision> {
-  const loaded = await loadJobContext(jobId)
+export async function decide(
+  jobId: string,
+  db: Db = prisma,
+): Promise<DispatchDecision> {
+  const loaded = await loadJobContext(db, jobId)
 
   // Заявка зникла
   if (!loaded) {
@@ -169,8 +238,8 @@ export async function decide(jobId: string): Promise<DispatchDecision> {
     }
   }
 
-  // Кандидати (без вже уведомлених)
   const candidates = await loadCandidates(
+    db,
     category,
     city,
     clientId,

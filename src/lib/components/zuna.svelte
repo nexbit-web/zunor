@@ -1,20 +1,18 @@
 <!-- src/lib/components/zuna.svelte -->
 <!--
-  Zuna — голос помічниці продукту.
-  Тепло, на «ти», від першої особи.
-  typewriter: ефект друкування (Zuna ніби пише в реальному часі).
+  Zuna — голос помічниці продукту: тепло, на «ти», від першої особи.
+  Повідомлення передається пропом `text` або через children (слот).
+  typewriter — ефект друкування (лише для `text`); поважає reduced-motion.
 -->
 <script lang="ts">
-  import { onMount } from 'svelte'
-
   interface Props {
     text?: string
     size?: number
     variant?: 'inline' | 'card'
     showName?: boolean
-    /** Ефект друкування по буквах. Працює тільки з text (не children). */
+    /** Ефект друкування по буквах. Працює лише з `text`, не з children. */
     typewriter?: boolean
-    /** Зелений індикатор "онлайн" на аватарі. */
+    /** Зелений індикатор «онлайн» на аватарі. */
     online?: boolean
     children?: import('svelte').Snippet
   }
@@ -29,41 +27,56 @@
     children,
   }: Props = $props()
 
-  let displayed = $state(typewriter ? '' : text)
-  let typing = $state(false) // показуємо "..." індикатор перед друком
+  // Друкований текст потрібен лише в режимі typewriter; інакше рендеримо `text`
+  // напряму. Тому стартуємо з порожнього рядка — без посилань на пропси тут.
+  let displayed = $state('')
+  let typing = $state(false) // показуємо «…» перед початком друку
 
-  onMount(() => {
+  // Розмір індикатора «онлайн» — пропорційний аватару, але не менше 10px.
+  const dotSize = $derived(Math.max(10, Math.round(size * 0.26)))
+  const isTypingDone = $derived(displayed.length >= text.length)
+
+  // Друкарка: залежить від `text`/`typewriter`, перезапускається при їх зміні
+  // та прибирає таймери. Якщо користувач просить менше анімацій — показуємо одразу.
+  $effect(() => {
     if (!typewriter || !text) return
 
+    const reduceMotion =
+      typeof matchMedia !== 'undefined' &&
+      matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (reduceMotion) {
+      typing = false
+      displayed = text
+      return
+    }
+
+    let charTimer: ReturnType<typeof setTimeout>
     typing = true
-    // Коротка пауза "Zuna друкує..." перед початком
+    displayed = ''
+
+    // Коротка пауза «Zuna друкує…», далі друк по буквах із живою швидкістю.
     const startDelay = setTimeout(() => {
       typing = false
       let i = 0
       const tick = () => {
-        if (i <= text.length) {
-          displayed = text.slice(0, i)
+        displayed = text.slice(0, i)
+        if (i < text.length) {
           i++
-          // Невелика випадковість швидкості — як жива людина
-          timer = setTimeout(tick, 18 + Math.random() * 30)
+          charTimer = setTimeout(tick, 18 + Math.random() * 30)
         }
       }
       tick()
     }, 700)
 
-    let timer: ReturnType<typeof setTimeout>
     return () => {
       clearTimeout(startDelay)
-      clearTimeout(timer)
+      clearTimeout(charTimer)
     }
   })
-
-  const isTypingDone = $derived(!typewriter || displayed.length >= text.length)
 </script>
 
 <div
   class="flex items-start gap-3 {variant === 'card' ? 'p-4 rounded-2xl' : ''}"
- 
 >
   <div class="relative shrink-0" style="width: {size}px; height: {size}px">
     <img
@@ -71,32 +84,27 @@
       alt="Zuna"
       width={size}
       height={size}
-      loading="lazy"
+      decoding="async"
       class="rounded-full object-cover w-full h-full"
     />
     {#if online}
       <span
         class="absolute bottom-0 right-0 rounded-full ring-2"
-        style="width: {Math.max(10, size * 0.26)}px; height: {Math.max(
-          10,
-          size * 0.26,
-        )}px; background-color: #22c55e; --tw-ring-color: var(--secondary)"
+        style="width: {dotSize}px; height: {dotSize}px; background-color: #22c55e; --tw-ring-color: var(--secondary)"
         aria-label="онлайн"
       ></span>
     {/if}
   </div>
+
   <div class="min-w-0 flex-1 pt-0.5">
     {#if showName}
-      <p
-        class="text-sm font-semibold mb-0.5 flex items-center gap-1.5"
-        style="color: var(--foreground)"
-      >
-        Zuna - AI
+      <p class="text-sm font-semibold mb-0.5" style="color: var(--foreground)">
+        Zuna · AI
       </p>
     {/if}
 
     {#if typing}
-      <!-- Індикатор "друкує" -->
+      <!-- Індикатор «друкує» -->
       <div class="flex items-center gap-1 h-5" aria-label="Zuna друкує">
         <span class="zuna-dot"></span>
         <span class="zuna-dot"></span>
@@ -106,8 +114,13 @@
       <div class="text-sm leading-relaxed" style="color: var(--foreground)">
         {#if children}
           {@render children()}
+        {:else if typewriter}
+          {displayed}{#if !isTypingDone}<span
+              class="zuna-caret"
+              aria-hidden="true">|</span
+            >{/if}
         {:else}
-          {displayed}{#if !isTypingDone}<span class="zuna-caret">|</span>{/if}
+          {text}
         {/if}
       </div>
     {/if}

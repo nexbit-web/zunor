@@ -5,10 +5,15 @@
   import type { PageData } from './$types'
 
   let { data }: { data: PageData } = $props()
+
+  // Один маршрут — два режими: 'mine' (заявки клієнта) і 'feed' (стрічка майстра).
+  const pageTitle = $derived(
+    data.view === 'mine' ? 'Мої заявки' : 'Знайти роботу',
+  )
 </script>
 
 <svelte:head>
-  <title>{data.view === 'mine' ? 'Мої заявки' : 'Знайти роботу'} · Zunor</title>
+  <title>{pageTitle} · Zunor</title>
 </svelte:head>
 
 <div class="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-10">

@@ -34,25 +34,71 @@
     isAuthenticated: boolean
   }
 
-  let { user, isOwner }: Props = $props()
+  let { user, isOwner, isAuthenticated }: Props = $props()
 
-  // ─── Derived (memoized) ───
-  const memberSince = $derived(
-    new Date(user.createdAt).toLocaleDateString('uk-UA', {
+  function safeJsonLd(data: Record<string, unknown>): string {
+    const map: Record<string, string> = {
+      '<': '\\u003c',
+      '>': '\\u003e',
+      '&': '\\u0026',
+      '\u2028': '\\u2028',
+      '\u2029': '\\u2029',
+    }
+    return JSON.stringify(data).replace(
+      /[<>&\u2028\u2029]/g,
+      (c) => map[c] ?? c,
+    )
+  }
+
+  /** Дата у локалі uk-UA. Невалідне значення не роняє рендер. */
+  function formatDate(
+    value: string | Date,
+    opts: Intl.DateTimeFormatOptions,
+  ): { display: string; iso: string } {
+    const d = new Date(value)
+    if (Number.isNaN(d.getTime())) return { display: '—', iso: '' }
+    return {
+      display: d.toLocaleDateString('uk-UA', opts),
+      iso: d.toISOString(),
+    }
+  }
+
+  /** Рейтинг → рядок. Захист від NaN. */
+  function fmtRating(value: number): string {
+    return (Number.isFinite(value) ? value : 0).toFixed(1)
+  }
+
+  /** Ціле число зірок 0–5. Array(n) кидає помилку на дробі/відʼємному. */
+  function starCount(rating: number): number {
+    if (!Number.isFinite(rating)) return 0
+    return Math.max(0, Math.min(5, Math.round(rating)))
+  }
+
+  /** Українське відмінювання слова «відгук». */
+  function reviewsLabel(n: number): string {
+    const mod10 = n % 10
+    const mod100 = n % 100
+    if (mod10 === 1 && mod100 !== 11) return 'відгук'
+    if ([2, 3, 4].includes(mod10) && ![12, 13, 14].includes(mod100))
+      return 'відгуки'
+    return 'відгуків'
+  }
+
+  const created = $derived(
+    formatDate(user.createdAt, {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
     }),
   )
-  const memberSinceISO = $derived(new Date(user.createdAt).toISOString())
 
   const profileUrl = $derived(
     user.username ? `/@${user.username}` : `/dashboard`,
   )
 
-  // SEO: JSON-LD Person schema
+  // SEO: Person schema. Безпечно — проходить через safeJsonLd().
   const personJsonLd = $derived(
-    JSON.stringify({
+    safeJsonLd({
       '@context': 'https://schema.org',
       '@type': 'Person',
       name: user.name,
@@ -69,10 +115,7 @@
           addressCountry: 'UA',
         },
       }),
-      ...(user.categories &&
-        user.categories.length > 0 && {
-          knowsAbout: user.categories,
-        }),
+      ...(user.categories.length > 0 && { knowsAbout: user.categories }),
       ...(user.reviewsCount > 0 && {
         aggregateRating: {
           '@type': 'AggregateRating',
@@ -85,28 +128,28 @@
     }),
   )
 
-  // ─── Стан завантаження картинок ───
-  let bannerLoaded = $state(false)
+  // Стан завантаження аватара (для скелетона)
   let avatarLoaded = $state(false)
 
-  // ─── Копіювати ───
+  // Копіювання нікнейма з тимчасовим станом «скопійовано»
   let copied = $state(false)
-  async function copyUsername() {
+  let copyTimer: ReturnType<typeof setTimeout> | undefined
+
+  async function copyUsername(): Promise<void> {
     if (!user.username) return
     try {
       await navigator.clipboard.writeText('@' + user.username)
       copied = true
-      setTimeout(() => (copied = false), 1200)
+      clearTimeout(copyTimer)
+      copyTimer = setTimeout(() => (copied = false), 1200)
     } catch {
-      // silent fail
+      // Clipboard недоступний (HTTP / дозволи) — мовчки ігноруємо.
     }
   }
 
-  function goEdit() {
-    goto('/onboarding')
-  }
+  // Чистимо таймер при розмонтуванні
+  $effect(() => () => clearTimeout(copyTimer))
 
-  // ─── Helpers ───
   const initials = $derived(
     (user.name ?? '?')
       .split(/\s+/)
@@ -116,24 +159,19 @@
       .join('') || '?',
   )
 
-  function reviewsLabel(n: number): string {
-    const mod10 = n % 10
-    const mod100 = n % 100
-    if (mod10 === 1 && mod100 !== 11) return 'відгук'
-    if ([2, 3, 4].includes(mod10) && ![12, 13, 14].includes(mod100))
-      return 'відгуки'
-    return 'відгуків'
-  }
-
   // Топ-виконавець: 50+ виконаних замовлень
   const isTopPerformer = $derived(user.completedOrders >= 50)
 
-  // Банер за категорією майстра (за slug — стабільний ключ реєстру)
+  // Банер за першою категорією майстра
   const bannerUrl = $derived(
-    user.categorySlugs && user.categorySlugs.length > 0
+    user.categorySlugs.length > 0
       ? getBannerForCategories(user.categorySlugs)
       : null,
   )
+
+  function goEdit() {
+    goto('/onboarding')
+  }
 </script>
 
 <svelte:head>
@@ -146,7 +184,7 @@
   itemscope
   itemtype="https://schema.org/Person"
 >
-  <!-- ═══════ БАНЕР категорії ═══════ -->
+  <!-- ═══════ Банер категорії ═══════ -->
   <header class="px-4 pt-4 sm:px-6 sm:pt-6">
     <div
       class="relative w-full h-32 xs:h-40 sm:h-52 rounded-2xl overflow-hidden"
@@ -165,7 +203,6 @@
           class="absolute inset-0 w-full h-full object-cover"
         />
       {/if}
-      <!-- Затемнення знизу для читабельності аватара -->
       <div
         class="absolute inset-0 pointer-events-none"
         style="background: linear-gradient(180deg, transparent 50%, rgba(0,0,0,0.35))"
@@ -174,7 +211,7 @@
   </header>
 
   <div class="max-w-2xl mx-auto px-4 sm:px-8">
-    <!-- ═══════ АВАТАР + CTA ═══════ -->
+    <!-- ═══════ Аватар + CTA ═══════ -->
     <div class="flex items-start justify-between gap-3">
       <div class="-mt-12 sm:-mt-14 relative">
         {#if user.avatar && !avatarLoaded}
@@ -254,7 +291,7 @@
             type="button"
             onclick={copyUsername}
             class="cursor-pointer transition-colors hover:text-foreground"
-            aria-label="Скопіювати нікнейм"
+            aria-label={copied ? 'Нікнейм скопійовано' : 'Скопіювати нікнейм'}
           >
             {#if copied}
               <Check class="size-3" style="color: #10b981" aria-hidden="true" />
@@ -271,7 +308,7 @@
           style="color: var(--muted-foreground)"
         >
           <Calendar class="size-3" aria-hidden="true" />
-          <time datetime={memberSinceISO}>{memberSince}</time>
+          <time datetime={created.iso}>{created.display}</time>
         </span>
         {#if user.city}
           <span class="text-xs opacity-30" aria-hidden="true">·</span>
@@ -301,12 +338,11 @@
           </span>
           ·
           <span style="color: #f5a623; font-weight: 500">
-            ★ {user.avgRating.toFixed(1)}
+            ★ {fmtRating(user.avgRating)}
           </span>
         {/if}
       </p>
 
-      <!-- Бейджи -->
       <div class="flex flex-wrap gap-2">
         <Badge
           variant="outline"
@@ -328,7 +364,6 @@
         {/if}
       </div>
 
-      <!-- Mobile edit -->
       {#if isOwner}
         <nav class="flex sm:hidden mt-4">
           <Button onclick={goEdit} class="w-full h-11 rounded-full gap-2">
@@ -371,7 +406,7 @@
         </p>
       {/if}
 
-      {#if user.categories && user.categories.length > 0}
+      {#if user.categories.length > 0}
         <div class="flex items-start justify-between gap-4">
           <span class="text-sm shrink-0" style="color: var(--muted-foreground)">
             Категорії
@@ -398,7 +433,7 @@
     ></div>
 
     <!-- ═══════ Приклади робіт ═══════ -->
-    {#if user.portfolioImages && user.portfolioImages.length > 0}
+    {#if user.portfolioImages.length > 0}
       <section class="py-5 space-y-4" aria-labelledby="portfolio-heading">
         <h2
           id="portfolio-heading"
@@ -442,7 +477,7 @@
             class="text-lg sm:text-xl font-semibold tabular-nums m-0"
             style="color: var(--foreground)"
           >
-            {user.avgRating.toFixed(1)}
+            {fmtRating(user.avgRating)}
             <span
               class="text-xs sm:text-sm font-normal"
               style="color: var(--muted-foreground)"
@@ -504,15 +539,21 @@
               style="color: #f5a623; fill: #f5a623"
               aria-hidden="true"
             />
-            {user.avgRating.toFixed(1)} · {user.reviewsCount}
+            {fmtRating(user.avgRating)} · {user.reviewsCount}
             {reviewsLabel(user.reviewsCount)}
           </span>
         {/if}
       </div>
 
-      {#if user.reviews && user.reviews.length > 0}
+      {#if user.reviews.length > 0}
         <ul class="list-none p-0 m-0">
           {#each user.reviews as review, i (review.id ?? i)}
+            {@const stars = starCount(review.rating)}
+            {@const reviewDate = formatDate(review.createdAt, {
+              day: 'numeric',
+              month: 'long',
+              year: 'numeric',
+            })}
             <li
               class="py-5 first:pt-0"
               style="border-top: {i === 0
@@ -544,14 +585,11 @@
                   itemprop="reviewRating"
                   itemscope
                   itemtype="https://schema.org/Rating"
-                  aria-label={`Рейтинг: ${review.rating} з 5`}
+                  aria-label={`Рейтинг: ${stars} з 5`}
                 >
-                  <meta
-                    itemprop="ratingValue"
-                    content={String(review.rating)}
-                  />
+                  <meta itemprop="ratingValue" content={String(stars)} />
                   <meta itemprop="bestRating" content="5" />
-                  {#each Array(review.rating) as _, j (j)}
+                  {#each Array(stars) as _, j (j)}
                     <Star
                       class="size-3"
                       style="color: #f5a623; fill: #f5a623"
@@ -571,13 +609,7 @@
                 class="text-[11px] mt-2 pl-9"
                 style="color: color-mix(in oklch, var(--muted-foreground) 60%, transparent)"
               >
-                <time datetime={new Date(review.createdAt).toISOString()}>
-                  {new Date(review.createdAt).toLocaleDateString('uk-UA', {
-                    day: 'numeric',
-                    month: 'long',
-                    year: 'numeric',
-                  })}
-                </time>
+                <time datetime={reviewDate.iso}>{reviewDate.display}</time>
               </p>
             </li>
           {/each}

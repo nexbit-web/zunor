@@ -1,7 +1,6 @@
 <!-- src/routes/+layout.svelte -->
 <script lang="ts">
   import './layout.css'
-  import favicon from '$lib/assets/favicon.svg'
   import { ModeWatcher } from 'mode-watcher'
   import Header from '$lib/components/header/index.svelte'
   import { page } from '$app/stores'
@@ -43,9 +42,7 @@
 />
 
 <ModeWatcher />
-<svelte:head>
-  <link rel="icon" href={favicon} />
-</svelte:head>
+ 
 
 {#if !hideHeader}
   <Header />
