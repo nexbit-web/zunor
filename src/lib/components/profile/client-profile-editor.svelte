@@ -12,7 +12,7 @@
   import UsernameInput from '$lib/components/username-input.svelte'
   import { cn } from '$lib/utils'
   import { tick } from 'svelte'
-  import toast from 'svelte-hot-french-toast'
+  import { toast } from '$lib/stores/toast-store.svelte'
   import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left'
   import CheckIcon from '@lucide/svelte/icons/check'
   import ChevronsUpDownIcon from '@lucide/svelte/icons/chevrons-up-down'

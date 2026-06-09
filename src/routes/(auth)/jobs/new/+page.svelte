@@ -26,11 +26,24 @@
   } from '$lib/categories/cleaning/presets'
   import { generateTitle } from '$lib/categories/cleaning/title-gen'
   import type { CleaningItem } from '$lib/categories/cleaning/title-gen'
-  import * as Icons from '@lucide/svelte'
+  // Іконки імпортуємо поштучно (не `import * as`), інакше в бандл потрапляє
+  // вся бібліотека lucide. ICONS — лише ті, що згадані в пресетах.
   import ArrowLeft from '@lucide/svelte/icons/arrow-left'
   import Check from '@lucide/svelte/icons/check'
   import Plus from '@lucide/svelte/icons/plus'
   import Minus from '@lucide/svelte/icons/minus'
+  import Square from '@lucide/svelte/icons/square'
+  import Building2 from '@lucide/svelte/icons/building-2'
+  import Home from '@lucide/svelte/icons/home'
+  import Briefcase from '@lucide/svelte/icons/briefcase'
+  import Store from '@lucide/svelte/icons/store'
+  import Boxes from '@lucide/svelte/icons/boxes'
+  import Sparkle from '@lucide/svelte/icons/sparkle'
+  import Sparkles from '@lucide/svelte/icons/sparkles'
+  import Hammer from '@lucide/svelte/icons/hammer'
+  import GlassWater from '@lucide/svelte/icons/glass-water'
+  import Sofa from '@lucide/svelte/icons/sofa'
+  import Repeat from '@lucide/svelte/icons/repeat'
   import {
     getLocalTimeZone,
     today,
@@ -40,10 +53,26 @@
   import { quintOut } from 'svelte/easing'
   import confetti from 'canvas-confetti'
   import { playSuccessSound, unlockAudio } from '$lib/sound/notification'
-  import Zuna from '$lib/components/zuna.svelte'
 
   const stepIn = { y: 12, duration: 280, easing: quintOut }
   const REDIRECT_DELAY = 2200
+
+  const ICONS: Record<string, typeof Square> = {
+    Building2,
+    Home,
+    Briefcase,
+    Store,
+    Boxes,
+    Sparkle,
+    Sparkles,
+    Hammer,
+    GlassWater,
+    Sofa,
+    Repeat,
+  }
+  function iconByName(name: string): typeof Square {
+    return ICONS[name] ?? Square
+  }
 
   // ─── State ───
   let step = $state(1)
@@ -73,11 +102,7 @@
 
   const todayDate = today(getLocalTimeZone())
 
-  function iconByName(name: string): any {
-    return (Icons as Record<string, unknown>)[name] ?? Icons.Square
-  }
-
-  // ─── Валідність кроку 3 ───
+  // Крок 3 адаптивний: набір обовʼязкових полів залежить від послуги.
   const step3Valid = $derived.by(() => {
     if (needsItems(service)) return items.length > 0
     if (needsWindows(service))
@@ -90,7 +115,6 @@
     return true
   })
 
-  // ─── Прев'ю заголовка ───
   const previewMeta = $derived({
     premise,
     service,
@@ -108,7 +132,7 @@
     premise && service ? generateTitle(previewMeta) : '',
   )
 
-  // ─── Хімчистка: предмети ───
+  // ─── Хімчистка: лічильник предметів ───
   function itemQty(type: string, variant?: string): number {
     return (
       items.find(
@@ -142,12 +166,13 @@
 
   // ─── Навігація ───
   function selectPremise(key: string) {
-    unlockAudio() // розблокувати звук на першу взаємодію (autoplay policy)
+    unlockAudio() // розблоковуємо звук на першу взаємодію (autoplay policy браузера)
     premise = key
     step = 2
   }
   function selectService(key: string) {
     service = key
+    // Зміна послуги скидає всі деталі попередньої — поля кроку 3 інші.
     rooms = ''
     floor = ''
     hasElevator = ''
@@ -176,7 +201,6 @@
     if (step > 1) step--
   }
 
-  // ─── Момент перемоги ───
   function celebrate() {
     const colors = [
       '#FFD700',
@@ -213,12 +237,12 @@
     }, 150)
   }
 
-  // ─── Submit ───
   async function submit() {
     if (submitting || success) return
     submitting = true
     serverError = ''
 
+    // Збираємо лише релевантні для послуги поля (сервер валідує повторно).
     const metadata: Record<string, unknown> = { premise, service, when }
     if (needsRooms(service)) {
       metadata.rooms = rooms
@@ -251,16 +275,14 @@
       const json = await res.json().catch(() => ({}))
 
       if (!res.ok) {
-        // Окреме повідомлення для rate-limit (429)
         serverError =
           res.status === 429
             ? 'Забагато запитів. Зачекайте трохи і спробуйте ще раз.'
             : (json?.message ?? json?.error ?? 'Не вдалось створити заявку')
-        submitting = false // ← фікс: розблоковуємо кнопку при помилці
+        submitting = false // розблоковуємо кнопку, щоб користувач міг повторити
         return
       }
 
-      // Успіх — момент перемоги, потім перехід
       success = true
       celebrate()
       playSuccessSound()
@@ -334,7 +356,7 @@
               <button
                 type="button"
                 onclick={() => selectPremise(p.key)}
-                class="group flex flex-col items-start gap-3 p-5 rounded-2xl border border-border bg-card hover:border-foreground/40 hover:shadow-md active:scale-[0.98] transition-all min-h-[120px] cursor-pointer"
+                class="group flex flex-col items-start gap-3 p-5 rounded-2xl border border-border bg-card hover:border-foreground/40 hover:shadow-md active:scale-[0.98] transition-all min-h-30 cursor-pointer"
               >
                 <span
                   class="flex items-center justify-center size-11 rounded-xl bg-secondary group-hover:bg-foreground group-hover:text-background transition-colors"
@@ -362,7 +384,7 @@
               <button
                 type="button"
                 onclick={() => selectService(s.key)}
-                class="group flex flex-col items-start gap-3 p-5 rounded-2xl border border-border bg-card hover:border-foreground/40 hover:shadow-md active:scale-[0.98] transition-all min-h-[120px] cursor-pointer"
+                class="group flex flex-col items-start gap-3 p-5 rounded-2xl border border-border bg-card hover:border-foreground/40 hover:shadow-md active:scale-[0.98] transition-all min-h-30 cursor-pointer"
               >
                 <span
                   class="flex items-center justify-center size-11 rounded-xl bg-secondary group-hover:bg-foreground group-hover:text-background transition-colors"
@@ -395,6 +417,7 @@
                   <button
                     type="button"
                     onclick={() => (rooms = o.key)}
+                    aria-pressed={rooms === o.key}
                     class="p-3 rounded-xl border text-sm font-medium cursor-pointer active:scale-[0.98] transition-all {rooms ===
                     o.key
                       ? 'border-foreground bg-foreground text-background'
@@ -416,6 +439,7 @@
                     <button
                       type="button"
                       onclick={() => (frequency = o.key)}
+                      aria-pressed={frequency === o.key}
                       class="p-3 rounded-xl border text-sm font-medium text-left cursor-pointer active:scale-[0.99] transition-all {frequency ===
                       o.key
                         ? 'border-foreground bg-foreground text-background'
@@ -438,6 +462,7 @@
                     <button
                       type="button"
                       onclick={() => (trash = o.key)}
+                      aria-pressed={trash === o.key}
                       class="p-3 rounded-xl border text-sm font-medium text-left cursor-pointer active:scale-[0.99] transition-all {trash ===
                       o.key
                         ? 'border-foreground bg-foreground text-background'
@@ -474,6 +499,7 @@
                   <button
                     type="button"
                     onclick={() => (hasElevator = o.key)}
+                    aria-pressed={hasElevator === o.key}
                     class="p-3 rounded-xl border text-sm font-medium cursor-pointer active:scale-[0.98] transition-all {hasElevator ===
                     o.key
                       ? 'border-foreground bg-foreground text-background'
@@ -531,6 +557,7 @@
                   <button
                     type="button"
                     onclick={() => (balcony = o.key)}
+                    aria-pressed={balcony === o.key}
                     class="p-3 rounded-xl border text-sm font-medium cursor-pointer active:scale-[0.98] transition-all {balcony ===
                     o.key
                       ? 'border-foreground bg-foreground text-background'
@@ -561,6 +588,7 @@
                               type="button"
                               onclick={() => removeItem(item.key, v.key)}
                               disabled={qty === 0}
+                              aria-label="Прибрати {v.label}"
                               class="size-8 rounded-full border border-border flex items-center justify-center cursor-pointer active:scale-90 disabled:opacity-30 hover:bg-secondary transition-all"
                             >
                               <Minus class="size-4" />
@@ -572,6 +600,7 @@
                             <button
                               type="button"
                               onclick={() => addItem(item.key, v.key)}
+                              aria-label="Додати {v.label}"
                               class="size-8 rounded-full border border-border flex items-center justify-center cursor-pointer active:scale-90 hover:bg-secondary transition-all"
                             >
                               <Plus class="size-4" />
@@ -587,6 +616,7 @@
                         type="button"
                         onclick={() => removeItem(item.key)}
                         disabled={qty === 0}
+                        aria-label="Прибрати {item.label}"
                         class="size-8 rounded-full border border-border flex items-center justify-center cursor-pointer active:scale-90 disabled:opacity-30 hover:bg-secondary transition-all"
                       >
                         <Minus class="size-4" />
@@ -598,6 +628,7 @@
                       <button
                         type="button"
                         onclick={() => addItem(item.key)}
+                        aria-label="Додати {item.label}"
                         class="size-8 rounded-full border border-border flex items-center justify-center cursor-pointer active:scale-90 hover:bg-secondary transition-all"
                       >
                         <Plus class="size-4" />
@@ -646,7 +677,7 @@
               bind:value={calendarValue}
               minValue={todayDate}
               onValueChange={onCalendarPick}
-              class="w-full !bg-transparent p-0 [--cell-size:clamp(36px,8vw,38px)]"
+              class="w-full bg-transparent! p-0 [--cell-size:clamp(36px,8vw,38px)]"
             />
           </div>
           <p class="text-xs text-center text-muted-foreground mt-3">

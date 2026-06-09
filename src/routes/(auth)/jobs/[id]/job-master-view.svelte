@@ -10,31 +10,39 @@
   } from '$lib/components/ui/avatar'
   import { Card, CardContent } from '$lib/components/ui/card'
   import { Textarea } from '$lib/components/ui/textarea'
-  import { Input } from '$lib/components/ui/input'
   import { Label } from '$lib/components/ui/label'
   import { Separator } from '$lib/components/ui/separator'
   import {
     ArrowLeft,
     MapPin,
-    Layers,
     Clock,
     Eye,
     MessageSquare,
     Star,
     XCircle,
     Send,
-    Wallet,
   } from 'lucide-svelte'
   import type { PageData } from './$types'
   import { Spinner } from '$lib/components/ui/spinner'
   import { describeJob } from '$lib/categories/cleaning/describe'
   import PhotoGallery from '$lib/components/photo-gallery.svelte'
+  import {
+    formatMoney,
+    formatRelative,
+    expiresIn,
+    memberSince,
+    initials,
+    statusVariant,
+    statusLabel,
+    proposalStatusLabel,
+    proposalStatusVariant,
+  } from '$lib/components/jobs/display'
 
   let { data }: { data: PageData } = $props()
 
   const details = $derived(describeJob(data.job.metadata))
 
-  // ─── Форма отклика ───
+  // ─── Форма відгуку ───
   let formOpen = $state(false)
   let message = $state('')
   let priceUah = $state<number | ''>('')
@@ -42,6 +50,7 @@
   let submitting = $state(false)
   let errorMsg = $state<string | null>(null)
 
+  // Дзеркало серверних меж (клієнтська перевірка — лише для UX).
   const messageLen = $derived(message.trim().length)
   const canSubmit = $derived(
     !submitting &&
@@ -80,90 +89,6 @@
     } finally {
       submitting = false
     }
-  }
-
-  // ─── Хелперы ───
-  function formatMoney(cents: number, currency = 'UAH') {
-    return new Intl.NumberFormat('uk-UA', {
-      style: 'currency',
-      currency,
-      minimumFractionDigits: 0,
-    }).format(cents / 100)
-  }
-  function formatBudget(min: number | null, max: number | null, c = 'UAH') {
-    if (min && max) return `${formatMoney(min, c)} — ${formatMoney(max, c)}`
-    if (max) return `до ${formatMoney(max, c)}`
-    if (min) return `від ${formatMoney(min, c)}`
-    return 'Договірний'
-  }
-  function formatRelative(iso: string) {
-    const diff = Date.now() - new Date(iso).getTime()
-    const min = Math.floor(diff / 60_000)
-    const hr = Math.floor(min / 60)
-    const days = Math.floor(hr / 24)
-    if (min < 1) return 'щойно'
-    if (min < 60) return `${min} хв тому`
-    if (hr < 24) return `${hr} год тому`
-    if (days < 7) return `${days} дн`
-    return new Date(iso).toLocaleDateString('uk-UA', {
-      day: 'numeric',
-      month: 'short',
-    })
-  }
-  function expiresIn(iso: string) {
-    const diff = new Date(iso).getTime() - Date.now()
-    if (diff <= 0) return 'Прострочено'
-    const days = Math.floor(diff / (24 * 60 * 60_000))
-    const hr = Math.floor(diff / (60 * 60_000))
-    if (days >= 1) return `${days} дн`
-    if (hr >= 1) return `${hr} год`
-    return '< 1 год'
-  }
-  function memberSince(iso: string) {
-    return new Date(iso).toLocaleDateString('uk-UA', {
-      month: 'short',
-      year: 'numeric',
-    })
-  }
-  function initials(name: string | null) {
-    return (name ?? '?')[0]?.toUpperCase() ?? '?'
-  }
-  function statusVariant(s: string): 'default' | 'secondary' | 'outline' {
-    if (s === 'OPEN') return 'default'
-    if (s === 'IN_PROGRESS') return 'secondary'
-    return 'outline'
-  }
-  function statusLabel(s: string) {
-    return (
-      (
-        {
-          OPEN: 'Відкрита',
-          IN_PROGRESS: 'У роботі',
-          COMPLETED: 'Завершена',
-          CANCELLED: 'Скасована',
-          EXPIRED: 'Прострочена',
-        } as Record<string, string>
-      )[s] ?? s
-    )
-  }
-  function proposalStatusLabel(s: string) {
-    return (
-      (
-        {
-          SENT: 'Очікує',
-          ACCEPTED: 'Прийнято',
-          REJECTED: 'Відхилено',
-          WITHDRAWN: 'Відкликано',
-        } as Record<string, string>
-      )[s] ?? s
-    )
-  }
-  function proposalStatusVariant(
-    s: string,
-  ): 'default' | 'secondary' | 'outline' {
-    if (s === 'ACCEPTED') return 'default'
-    if (s === 'SENT') return 'secondary'
-    return 'outline'
   }
 </script>
 
@@ -349,7 +274,7 @@
 
 <!-- Action area -->
 {#if data.proposals.length > 0}
-  <!-- Уже есть отклик -->
+  <!-- Майстер уже подав пропозицію -->
   {#each data.proposals as p (p.id)}
     <Card class="rounded-2xl mb-3">
       <CardContent class="p-5">

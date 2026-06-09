@@ -138,7 +138,7 @@
         <Bell class="size-5" />
         {#if unreadCount > 0}
           <span
-            class="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] rounded-full text-[10px] font-bold flex items-center justify-center px-1"
+            class="absolute -top-0.5 -right-0.5 min-w-4.5 h-4.5 rounded-full text-[10px] font-bold flex items-center justify-center px-1"
             style="background-color: var(--destructive); color: white"
           >
             {unreadCount > 99 ? '99+' : unreadCount}
@@ -168,7 +168,7 @@
       {/if}
     </div>
 
-    <div class="max-h-[400px] overflow-y-auto">
+    <div class="max-h-100 overflow-y-auto">
       {#if !initialized}
         <div class="p-8 text-center">
           <p class="text-xs" style="color: var(--muted-foreground)">

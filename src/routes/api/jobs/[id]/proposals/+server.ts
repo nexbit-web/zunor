@@ -8,30 +8,27 @@ import { markResponded } from '$lib/server/dispatch'
 import type { RequestHandler } from './$types'
 
 /**
- * POST /api/jobs/[id]/proposals — мастер отправляет отклик.
+ * POST /api/jobs/[id]/proposals — майстер надсилає відгук.
  *
- * Body:
- *   { message: string, priceUah: number, estimatedDays: number }
- *
- * Бесплатно (lead fee удалён).
+ * Body: { message: string, priceUah: number, estimatedDays: number }
+ * Безкоштовно (lead fee прибрано).
  */
 export const POST: RequestHandler = async ({ params, request }) => {
   const session = await auth.api.getSession({ headers: request.headers })
   if (!session) throw error(401, 'Unauthorized')
 
-  // Rate limit
   const rl = limit(`proposal:${session.user.id}`, {
     points: 30,
     duration: 60 * 60_000,
   })
   if (!rl.success) throw error(429, 'Забагато відгуків')
 
-  // Проверка роли
   const me = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: {
       role: true,
-      masterProfile: { select: { isActive: true, verificationStatus: true } },
+      city: true,
+      masterProfile: { select: { isActive: true, categories: true } },
     },
   })
   if (!me || me.role !== 'MASTER') {
@@ -65,7 +62,6 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
   const priceCents = Math.round(priceUah * 100)
 
-  // Проверяем job
   const job = await prisma.job.findUnique({
     where: { id: params.id },
     select: {
@@ -74,6 +70,8 @@ export const POST: RequestHandler = async ({ params, request }) => {
       status: true,
       expiresAt: true,
       title: true,
+      category: true,
+      city: true,
     },
   })
 
@@ -84,16 +82,25 @@ export const POST: RequestHandler = async ({ params, request }) => {
     throw error(400, 'Заявка більше не приймає відгуки')
   if (job.expiresAt < new Date()) throw error(400, 'Термін подачі минув')
 
-  // Уже отправлял?
+  // Право на відгук перевіряємо на сервері (та сама умова, що в стрічці й гейті
+  // перегляду) — не покладаємось на те, що UI ховає кнопку.
+  if (me.city !== job.city) {
+    throw error(403, 'Заявка не у вашому місті')
+  }
+  if (!me.masterProfile.categories.includes(job.category)) {
+    throw error(403, 'Ця категорія не у вашому профілі')
+  }
+
+  // Повторний відгук неможливий (унікальний ключ jobId+masterId).
   const existing = await prisma.proposal.findUnique({
     where: { jobId_masterId: { jobId: job.id, masterId: session.user.id } },
-    select: { id: true, status: true },
+    select: { id: true },
   })
   if (existing) {
     throw error(400, 'Ви вже відправили відгук на цю заявку')
   }
 
-  // Создаём proposal + инкремент
+  // Створення відгуку + інкремент лічильника — атомарно.
   const proposal = await prisma.$transaction(async (tx) => {
     const created = await tx.proposal.create({
       data: {
@@ -122,22 +129,23 @@ export const POST: RequestHandler = async ({ params, request }) => {
     return created
   })
 
-  // Notification клиенту (fail-soft)
+  // Сповіщення клієнту — fail-soft: збій нотифікації не валить створення відгуку.
   try {
     await Notify.newProposal(job.clientId, job.id, proposal.id)
   } catch (err) {
     console.error('[proposal:new] notify failed', err)
   }
-  // Пам'ять мозку: майстер відгукнувся на заявку, яку йому розіслали.
-  // Ключова метрика якості dispatch (хто з уведомлених реально відповів).
+
+  // Память диспетчера: майстер відповів на розіслану заявку — ключова метрика
+  // якості розсилки (хто з уведомлених реально відгукнувся).
   markResponded(job.id, session.user.id).catch(() => {})
+
   return json({ proposal }, { status: 201 })
 }
 
 /**
- * GET /api/jobs/[id]/proposals — все отклики на job.
- *
- * Доступ: только владелец job.
+ * GET /api/jobs/[id]/proposals — усі відгуки на заявку.
+ * Доступ: лише власник заявки.
  */
 export const GET: RequestHandler = async ({ params, request }) => {
   const session = await auth.api.getSession({ headers: request.headers })

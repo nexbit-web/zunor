@@ -1,30 +1,33 @@
 // src/lib/server/dispatch/log.ts
 //
 // Пам'ять мозку. Записує кожне рішення про уведомлення.
-// Ці дані — фундамент для майбутнього ML (Етап 4).
+// Ці дані — фундамент для відзивчивості та майбутнього ML.
 
 import { prisma } from '$lib/prisma'
 import type { ScoredCandidate } from './types'
+import type { Db } from './engine'
 
 /**
- * Записує факт уведомлення майстрів у межах однієї хвилі.
- * Використовує createMany — один запит на всю хвилю.
+ * Столбить факт уведомлення майстрів у межах однієї хвилі (один запит).
+ * Приймає `db` — index.ts передає tx, щоб claim був усередині advisory-лока
+ * і виконувався ДО реальної відправки пушів (захист від дублів при збої).
  */
 export async function logDispatch(
   jobId: string,
   wave: number,
   candidates: ScoredCandidate[],
+  db: Db = prisma,
 ): Promise<void> {
   if (candidates.length === 0) return
 
-  await prisma.dispatchEvent.createMany({
+  await db.dispatchEvent.createMany({
     data: candidates.map((c) => ({
       jobId,
       masterId: c.id,
       wave,
       score: c.score,
     })),
-    skipDuplicates: true, // захист від гонок (unique [jobId, masterId])
+    skipDuplicates: true, // підстраховка поверх unique [jobId, masterId]
   })
 }
 

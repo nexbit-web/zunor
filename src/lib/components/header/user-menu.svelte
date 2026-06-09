@@ -18,12 +18,14 @@
     CircleUserRound,
     Briefcase,
     ClipboardList,
+    ChartColumn,
   } from 'lucide-svelte'
   import { signOut } from '$lib/auth-client'
   import { goto, invalidateAll, invalidate } from '$app/navigation'
   import { page } from '$app/state'
   import { chatStore } from '$lib/stores/chat-store.svelte'
   import { getPusher, disconnectPusher } from '$lib/pusher-client'
+  import { toast, type ToastType } from '$lib/stores/toast-store.svelte'
 
   let { onnavigate }: { onnavigate: (url: string) => void } = $props()
 
@@ -88,7 +90,7 @@
     if (!session?.user?.id || notifInitialized) return
     notifLoading = true
     try {
-      const res = await fetch('/api/notifications?limit=20')
+      const res = await fetch('/api/notifications?limit=6')
       if (!res.ok) return
       const json = await res.json()
       notifications = json.items
@@ -131,15 +133,28 @@
     if (!userId) return
     try {
       const pusher = getPusher()
-      // Используем тот же канал что и chatStore — подписка уже есть
-      // Просто добавляем bind на 'notification'
       notifChannel = pusher.subscribe(`private-user-${userId}`)
       notifChannel.bind(
         'notification:new',
         (data: { notification: Notification }) => {
           const notif = data.notification
-          notifications = [notif, ...notifications].slice(0, 50)
+          notifications = [notif, ...notifications].slice(0, 6)
           notifUnreadCount++
+
+          // Тост на всё, КРОМЕ сообщений чата — их считает chatStore,
+          // дублировать тостом не нужно.
+          if (notif.type === 'NEW_MESSAGE') return
+
+          toast[notifToastType(notif.type)](notif.title, {
+            duration: 30000,
+            action: {
+              label: 'Переглянути',
+              onClick: (id) => {
+                toast.dismiss(id)
+                handleNotifClick(notif) // пометит прочитанным + перейдёт по ссылке
+              },
+            },
+          })
         },
       )
     } catch (err) {
@@ -182,6 +197,13 @@
     if (type.startsWith('PROPOSAL_') || type === 'NEW_PROPOSAL')
       return MessageSquare
     return Bell
+  }
+
+  function notifToastType(type: string): ToastType {
+    if (type === 'PROPOSAL_ACCEPTED' || type === 'ORDER_COMPLETED')
+      return 'success'
+    if (type === 'ORDER_CANCELLED') return 'error'
+    return 'notification' // ← было 'info'
   }
 
   function formatRelativeShort(iso: string): string {
@@ -282,7 +304,7 @@
       <MessageCircle class="size-5" strokeWidth={1.75} />
       {#if messageCount > 0}
         <span
-          class="absolute top-0.5 right-0.5 min-w-[16px] h-4 text-[10px] font-bold rounded-full flex items-center justify-center px-1 bg-white text-black"
+          class="absolute top-0.5 right-0.5 min-w-4 h-4 text-[10px] font-bold rounded-full flex items-center justify-center px-1 bg-white text-black"
         >
           {formatBadge(messageCount)}
         </span>
@@ -291,28 +313,28 @@
 
     <!-- Notifications -->
     <Popover.Root bind:open={notifPopoverOpen}>
-   <Popover.Trigger>
-  {#snippet child({ props })}
-    <button
-      {...props}
-      type="button"
-      class="relative flex items-center justify-center h-9 w-9 rounded-full cursor-pointer text-white/75 hover:text-white hover:bg-white/8 transition-colors"
-      aria-label="Сповіщення"
-    >
-      <Bell class="size-5" strokeWidth={1.75} />
-      {#if notifUnreadCount > 0}
-        <span
-          class="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 text-[10px] font-semibold rounded-full flex items-center justify-center bg-red-500 text-white tabular-nums"
-        >
-          {formatBadge(notifUnreadCount)}
-        </span>
-      {/if}
-    </button>
-  {/snippet}
-</Popover.Trigger>
+      <Popover.Trigger>
+        {#snippet child({ props })}
+          <button
+            {...props}
+            type="button"
+            class="relative flex items-center justify-center h-9 w-9 rounded-full cursor-pointer text-white/75 hover:text-white hover:bg-white/8 transition-colors"
+            aria-label="Сповіщення"
+          >
+            <Bell class="size-5" strokeWidth={1.75} />
+            {#if notifUnreadCount > 0}
+              <span
+                class="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 text-[10px] font-semibold rounded-full flex items-center justify-center bg-red-500 text-white tabular-nums"
+              >
+                {formatBadge(notifUnreadCount)}
+              </span>
+            {/if}
+          </button>
+        {/snippet}
+      </Popover.Trigger>
 
       <Popover.Content
-        class="w-[360px] p-0 overflow-hidden rounded-xl border shadow-xl"
+        class="w-90 p-0 overflow-hidden rounded-xl border shadow-xl"
         align="end"
         sideOffset={10}
         style="border-color: var(--border); background-color: var(--popover, var(--background))"
@@ -351,7 +373,7 @@
         </div>
 
         <!-- List -->
-        <div class="max-h-[420px] overflow-y-auto">
+        <div class="max-h-105 overflow-y-auto">
           {#if !notifInitialized && notifLoading}
             <div class="py-16 flex items-center justify-center">
               <div
@@ -405,7 +427,7 @@
                     style="background-color: var(--muted)"
                   >
                     <Icon
-                      class="size-[15px]"
+                      class="size-3.75"
                       strokeWidth={1.75}
                       style="color: var(--foreground)"
                     />
@@ -455,7 +477,7 @@
               class="text-[12px] font-medium transition-opacity hover:opacity-70"
               style="color: var(--foreground)"
             >
-              Усі сповіщення
+              Показати всі{notifUnreadCount > 6 ? ` (${notifUnreadCount})` : ''}
             </a>
           </div>
         {/if}
@@ -514,6 +536,7 @@
               >Мій профіль</span
             >
           </DropdownMenu.Item>
+
           <DropdownMenu.Item
             class="gap-2 cursor-pointer"
             onclick={() => onnavigate('/messages')}
@@ -536,6 +559,14 @@
           >
             <Briefcase class="size-3.5 text-muted-foreground" /><span
               >Замовлення</span
+            >
+          </DropdownMenu.Item>
+          <DropdownMenu.Item
+            class="gap-2 cursor-pointer"
+            onclick={() => goto('/dashboard/proposals')}
+          >
+            <ChartColumn class="size-3.5 text-muted-foreground" /><span
+              >Аналітика</span
             >
           </DropdownMenu.Item>
           <DropdownMenu.Item

@@ -6,6 +6,7 @@
   import CheckIcon from '@lucide/svelte/icons/check'
   import XCircleIcon from '@lucide/svelte/icons/x-circle'
   import { cn } from '$lib/utils'
+  import { validateUsername } from '$lib/username'
 
   let {
     value = $bindable(''),
@@ -17,22 +18,24 @@
     currentUsername?: string
   } = $props()
 
-  const RE = /^[a-z0-9_]{3,30}$/
-
   let checking = $state(false)
   let available = $state<boolean | null>(null)
   let timer: ReturnType<typeof setTimeout> | null = null
 
-  const formatOk = $derived(RE.test(value))
+  // Формат + зарезервовані — за єдиним правилом із $lib/username.
+  const check = $derived(validateUsername(value))
+  const formatOk = $derived(check.ok)
+  const reserved = $derived(!check.ok && check.reason === 'reserved')
 
   $effect(() => {
-    const u = value
+    void value // переобчислюємо при кожній зміні поля
     if (timer) clearTimeout(timer)
     available = null
     isValid = null
 
-    if (!u || !RE.test(u)) return
-    if (u === currentUsername) {
+    if (!check.ok) return
+    // Власний поточний username вважаємо вільним (редагування без зміни).
+    if (check.value === currentUsername) {
       available = true
       isValid = true
       return
@@ -42,7 +45,7 @@
     timer = setTimeout(async () => {
       try {
         const res = await fetch(
-          `/api/user/username/check?username=${encodeURIComponent(u)}`,
+          `/api/user/username/check?username=${encodeURIComponent(check.value)}`,
         )
         const json = await res.json()
         available = json.available === true
@@ -69,7 +72,7 @@
       type="text"
       placeholder="oleksandr_master"
       bind:value
-      maxlength={30}
+      maxlength={20}
       class={cn(
         'pl-7 pr-9',
         value && !formatOk && 'border-destructive',
@@ -92,7 +95,9 @@
   </div>
   {#if value && !formatOk}
     <Field.Description class="text-destructive">
-      3-30 символів: латиниця, цифри, _
+      {reserved
+        ? 'Цей username зарезервовано'
+        : '3-20 символів, починається з літери (a-z, 0-9, _)'}
     </Field.Description>
   {:else if available === false}
     <Field.Description class="text-destructive">
@@ -100,7 +105,7 @@
     </Field.Description>
   {:else}
     <Field.Description>
-      Посилання: zunor.com/@{value || 'username'}
+      Посилання: zunor.org/@{value || 'username'}
     </Field.Description>
   {/if}
 </Field.Field>

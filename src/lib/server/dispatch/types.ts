@@ -1,6 +1,6 @@
 // src/lib/server/dispatch/types.ts
 //
-// Типи "мозку-диспетчера". Чисті дані, без залежностей.
+// Типи «мозку-диспетчера» (Zuna). Чисті дані, без залежностей.
 
 /** Кандидат на уведомлення — майстер з усім, що потрібно для scoring. */
 export interface Candidate {
@@ -13,6 +13,16 @@ export interface Candidate {
   /** Коли майстер створив профіль — для boost новачка. */
   masterSince: Date
   completedOrders: number
+  /**
+   * Відзивчивість: частка розісланих заявок, на які майстер реально відгукнувся
+   * (0..1, зі згладжуванням). Підіймає тих, хто справді бере роботу.
+   */
+  responseRate: number
+  /**
+   * Скільки заявок майстру розіслали за останнє вікно (RECENT_LOAD_WINDOW_MIN).
+   * Чим більше — тим нижче score: розкидаємо навантаження, а не бомбимо «зірок».
+   */
+  recentNotifications: number
 }
 
 /** Контекст заявки на момент прийняття рішення. */
@@ -55,6 +65,9 @@ export const DISPATCH_CONFIG = {
   /** Boost новачка: до скількох виконаних замовлень. */
   NEW_MASTER_ORDERS: 5,
 
+  /** Вікно «недавньої» розсилки для балансування навантаження (хв). */
+  RECENT_LOAD_WINDOW_MIN: 15,
+
   /** Розміри хвиль (скільки майстрів уведомити). */
   WAVES: [
     { afterMinutes: 0, batchSize: 20 }, // хвиля 1 — одразу
@@ -71,6 +84,8 @@ export const DISPATCH_CONFIG = {
     RATING_MULTIPLIER: 50, // avgRating (0-5) × 50
     VERIFIED: 150,
     NEW_MASTER_BOOST: 400, // boost новачкам, щоб мали шанс
-    OVERLOADED_PENALTY: -800,
+    OVERLOADED_PENALTY: -800, // прийнятих замовлень >= MAX_ACTIVE_ORDERS
+    RESPONSIVENESS_MULTIPLIER: 600, // responseRate (0-1) × 600
+    RECENT_LOAD_PENALTY: 150, // × кількість недавніх розсилок (без стелі)
   },
 } as const

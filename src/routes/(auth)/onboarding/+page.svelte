@@ -2,6 +2,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation'
   import { fly } from 'svelte/transition'
+  import { untrack } from 'svelte'
   import { Button } from '$lib/components/ui/button'
   import { Spinner } from '$lib/components/ui/spinner'
   import AvatarUploader from '$lib/components/avatar-uploader.svelte'
@@ -14,7 +15,7 @@
   import { Textarea } from '$lib/components/ui/textarea'
   import { cn } from '$lib/utils'
   import { tick } from 'svelte'
-  import toast from 'svelte-hot-french-toast'
+  import { toast } from '$lib/stores/toast-store.svelte'
   import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left'
   import ArrowRightIcon from '@lucide/svelte/icons/arrow-right'
   import CheckIcon from '@lucide/svelte/icons/check'
@@ -32,19 +33,22 @@
   const DESC_MAX = 2000
   const MAX_CATS = 1
 
+  // Початкові значення форми — знімаємо один раз; далі поля редагуються локально.
+  const initial = untrack(() => data.user)
+  const mp = initial.masterProfile
+
   let step = $state(1)
 
-  // ─── Avatar ───
-  let avatarUrl = $state(data.user.avatar ?? '')
-  let avatarPublicId = $state(data.user.avatarPublicId ?? '')
+  let avatarUrl = $state(initial.avatar ?? '')
+  let avatarPublicId = $state(initial.avatarPublicId ?? '')
   let avatarUploading = $state(false)
 
-  // ─── User fields ───
-  let name = $state(data.user.name ?? '')
-  let username = $state(data.user.username ?? '')
-  let usernameValid = $state<boolean | null>(data.user.username ? true : null)
+  let name = $state(initial.name ?? '')
+  let username = $state(initial.username ?? '')
+  let usernameValid = $state<boolean | null>(initial.username ? true : null)
 
-  // ─── Телефон України: +380 + 9 цифр (як у welcome) ───
+  // Телефон: 9 значущих цифр оператора; +380 додаємо при сабміті.
+  // Нормалізуємо будь-який ввід (380…, 80…, 0…, …) до цих 9 цифр.
   function normalizePhone(input: string): string {
     let d = input.replace(/\D/g, '')
     if (d.startsWith('380')) d = d.slice(3)
@@ -59,31 +63,28 @@
     if (d.length > 7) out += ' ' + d.slice(7, 9)
     return out
   }
-  let phoneDigits = $state(normalizePhone(data.user.phone ?? ''))
+  let phoneDigits = $state(normalizePhone(initial.phone ?? ''))
   const phoneDisplayLocal = $derived(formatLocal(phoneDigits))
   function onPhoneInput(e: Event) {
     const el = e.target as HTMLInputElement
     phoneDigits = normalizePhone(el.value)
+    // Інакше відкинуті символи лишаються у полі.
     el.value = formatLocal(phoneDigits)
   }
+  // Перша цифра укр. мобільного коду: 3, 5, 6, 7, 9.
   const phoneValid = $derived(
     phoneDigits.length === 9 && /^[35679]/.test(phoneDigits),
   )
 
-  // ─── City ───
-  let city = $state(data.user.city ?? '')
+  let city = $state(initial.city ?? '')
   let cityOpen = $state(false)
   let cityTriggerRef = $state<HTMLButtonElement>(null!)
 
-  // ─── Master profile ───
-  let categories = $state<string[]>(data.user.masterProfile?.categories ?? [])
-  let description = $state(data.user.masterProfile?.description ?? '')
-
-  let portfolioImages = $state<string[]>(
-    data.user.masterProfile?.portfolioImages ?? [],
-  )
+  let categories = $state<string[]>(mp?.categories ?? [])
+  let description = $state(mp?.description ?? '')
+  let portfolioImages = $state<string[]>(mp?.portfolioImages ?? [])
   let portfolioImagesPublicIds = $state<string[]>(
-    data.user.masterProfile?.portfolioImagesPublicIds ?? [],
+    mp?.portfolioImagesPublicIds ?? [],
   )
   let portfolioUploading = $state(false)
 
@@ -240,9 +241,9 @@
 
     <!-- Progress bar -->
     <div class="flex gap-1.5 mb-12">
-      {#each Array(TOTAL_STEPS) as _, i}
+      {#each Array(TOTAL_STEPS) as _, i (i)}
         <div
-          class="h-[3px] flex-1 rounded-full transition-all duration-500"
+          class="h-3px flex-1 rounded-full transition-all duration-500"
           style="background-color: {i < step
             ? 'var(--foreground)'
             : 'color-mix(in oklch, var(--foreground) 10%, transparent)'}"

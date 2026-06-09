@@ -13,7 +13,6 @@
   import {
     ArrowLeft,
     MapPin,
-    Layers,
     Clock,
     Eye,
     MessageSquare,
@@ -27,6 +26,17 @@
   import PhotoGallery from '$lib/components/photo-gallery.svelte'
   import * as AlertDialog from '$lib/components/ui/alert-dialog'
   import Zuna from '$lib/components/zuna.svelte'
+  import { toast } from '$lib/stores/toast-store.svelte'
+  import {
+    formatMoney,
+    formatRelative,
+    expiresIn,
+    initials,
+    statusVariant,
+    statusLabel,
+    proposalStatusLabel,
+    proposalStatusVariant,
+  } from '$lib/components/jobs/display'
 
   let { data }: { data: PageData } = $props()
   let acceptingId = $state<string | null>(null)
@@ -37,6 +47,8 @@
   let acceptDialogOpen = $state(false)
   let pendingAcceptId = $state<string | null>(null)
 
+  const details = $derived(describeJob(data.job.metadata))
+
   async function cancelJob() {
     if (cancelling) return
     cancelling = true
@@ -44,101 +56,16 @@
       const res = await fetch(`/api/jobs/${data.job.id}`, { method: 'DELETE' })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
-        alert(json?.message ?? 'Не вдалось скасувати')
+        toast.error(json?.message ?? 'Не вдалось скасувати')
         return
       }
       goto('/jobs', { invalidateAll: true })
     } catch {
-      alert('Помилка зʼєднання')
+      toast.error('Помилка зʼєднання')
     } finally {
       cancelling = false
       cancelDialogOpen = false
     }
-  }
-
-  const details = $derived(describeJob(data.job.metadata))
-
-  function formatMoney(cents: number, currency = 'UAH') {
-    return new Intl.NumberFormat('uk-UA', {
-      style: 'currency',
-      currency,
-      minimumFractionDigits: 0,
-    }).format(cents / 100)
-  }
-  function formatBudget(min: number | null, max: number | null, c = 'UAH') {
-    if (min && max) return `${formatMoney(min, c)} — ${formatMoney(max, c)}`
-    if (max) return `до ${formatMoney(max, c)}`
-    if (min) return `від ${formatMoney(min, c)}`
-    return 'Договірний'
-  }
-  function formatRelative(iso: string) {
-    const diff = Date.now() - new Date(iso).getTime()
-    const min = Math.floor(diff / 60_000)
-    const hr = Math.floor(min / 60)
-    const days = Math.floor(hr / 24)
-    if (min < 1) return 'щойно'
-    if (min < 60) return `${min} хв тому`
-    if (hr < 24) return `${hr} год тому`
-    if (days < 7) return `${days} дн`
-    return new Date(iso).toLocaleDateString('uk-UA', {
-      day: 'numeric',
-      month: 'short',
-    })
-  }
-  function expiresIn(iso: string) {
-    const diff = new Date(iso).getTime() - Date.now()
-    if (diff <= 0) return 'Прострочено'
-    const days = Math.floor(diff / (24 * 60 * 60_000))
-    const hr = Math.floor(diff / (60 * 60_000))
-    if (days >= 1) return `${days} дн`
-    if (hr >= 1) return `${hr} год`
-    return '< 1 год'
-  }
-  function memberSince(iso: string) {
-    return new Date(iso).toLocaleDateString('uk-UA', {
-      month: 'short',
-      year: 'numeric',
-    })
-  }
-  function initials(name: string | null) {
-    return (name ?? '?')[0]?.toUpperCase() ?? '?'
-  }
-  function statusVariant(s: string): 'default' | 'secondary' | 'outline' {
-    if (s === 'OPEN') return 'default'
-    if (s === 'IN_PROGRESS') return 'secondary'
-    return 'outline'
-  }
-  function statusLabel(s: string) {
-    return (
-      (
-        {
-          OPEN: 'Відкрита',
-          IN_PROGRESS: 'У роботі',
-          COMPLETED: 'Завершена',
-          CANCELLED: 'Скасована',
-          EXPIRED: 'Прострочена',
-        } as Record<string, string>
-      )[s] ?? s
-    )
-  }
-  function proposalStatusLabel(s: string) {
-    return (
-      (
-        {
-          SENT: 'Очікує',
-          ACCEPTED: 'Прийнято',
-          REJECTED: 'Відхилено',
-          WITHDRAWN: 'Відкликано',
-        } as Record<string, string>
-      )[s] ?? s
-    )
-  }
-  function proposalStatusVariant(
-    s: string,
-  ): 'default' | 'secondary' | 'outline' {
-    if (s === 'ACCEPTED') return 'default'
-    if (s === 'SENT') return 'secondary'
-    return 'outline'
   }
 
   async function acceptProposal(proposalId: string) {
@@ -150,13 +77,13 @@
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
-        alert(json?.message ?? 'Не вдалось прийняти')
+        toast.error(json?.message ?? 'Не вдалось прийняти')
         return
       }
       if (json.orderId) goto(`/orders/${json.orderId}`, { invalidateAll: true })
       else location.reload()
     } catch {
-      alert('Помилка зʼєднання')
+      toast.error('Помилка зʼєднання')
     } finally {
       acceptingId = null
     }
@@ -462,10 +389,14 @@
 {:else if data.job.status === 'OPEN'}
   <Card class="rounded-2xl">
     <CardContent class="p-5">
-      <Zuna variant="card" showName size={48}>
-        Шукаю для тебе майстрів. Можеш спокійно займатися справами — я
-        надішлю сповіщення, щойно хтось відгукнеться.
-      </Zuna>
+      <Zuna
+        variant="card"
+        size={48}
+        showName
+        online
+        typewriter
+        text="Шукаю для тебе майстрів. Можеш спокійно займатися справами — я надішлю сповіщення, щойно хтось відгукнеться."
+      />
     </CardContent>
   </Card>
 {/if}

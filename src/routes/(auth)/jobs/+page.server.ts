@@ -28,11 +28,16 @@ export const load: PageServerLoad = async ({ request, url }) => {
   })
   if (!user) throw redirect(302, '/user/login')
 
-  const requestedView = url.searchParams.get('view') as ViewMode | null
+  // ?view — параметр з URL, тож приймаємо лише відомі значення; інакше дефолт за роллю.
+  const requestedView = url.searchParams.get('view')
   const view: ViewMode =
-    requestedView ?? (user.role === 'MASTER' ? 'feed' : 'mine')
+    requestedView === 'mine' || requestedView === 'feed'
+      ? requestedView
+      : user.role === 'MASTER'
+        ? 'feed'
+        : 'mine'
 
-  // Довідники для фільтрів (потрібні лише на feed)
+  // Довідники для фільтрів стрічки
   const [allCategories, allCities] = await Promise.all([
     prisma.category.findMany({
       where: { isActive: true },
@@ -46,7 +51,9 @@ export const load: PageServerLoad = async ({ request, url }) => {
     }),
   ])
 
-  // ─── MINE ───
+  // ─── MINE: власні заявки клієнта ───
+  // Тут віддаємо лише першу сторінку (+1 елемент, щоб дізнатись про наявність
+  // наступної). Догрузку «ще» клієнт робить через /api/jobs/feed за nextCursor.
   if (view === 'mine') {
     const [first, total] = await Promise.all([
       prisma.job.findMany({
@@ -110,11 +117,12 @@ export const load: PageServerLoad = async ({ request, url }) => {
     }
   }
 
-  // ─── FEED ───
+  // ─── FEED: відкриті заявки для майстра ───
   if (user.role !== 'MASTER') {
     throw redirect(302, '/jobs?view=mine')
   }
 
+  // Якщо майстер ще не налаштований — порожня стрічка з причиною, а не помилка.
   const mp = user.masterProfile
   if (!mp?.isActive || !user.city) {
     return {
@@ -142,7 +150,7 @@ export const load: PageServerLoad = async ({ request, url }) => {
     }
   }
 
-  // Заявки, від яких цей майстер відмовився (чорна мітка) — не показуємо
+  // Заявки, від яких майстер відмовився, ховаємо зі стрічки.
   const declined = await prisma.dispatchEvent.findMany({
     where: { masterId: userId, declined: true },
     select: { jobId: true },
@@ -154,7 +162,7 @@ export const load: PageServerLoad = async ({ request, url }) => {
       status: 'OPEN',
       city: user.city,
       category: { in: mp.categories },
-      clientId: { not: userId },
+      clientId: { not: userId }, // власні заявки майстру не показуємо
       expiresAt: { gt: new Date() },
       ...(declinedJobIds.length > 0 ? { id: { notIn: declinedJobIds } } : {}),
     },
@@ -191,7 +199,7 @@ export const load: PageServerLoad = async ({ request, url }) => {
   const items = hasMore ? jobs.slice(0, PAGE_SIZE) : jobs
   const nextCursor = hasMore ? items[items.length - 1].id : null
 
-  // Доступні для майстра категорії (тільки з його профілю)
+  // У фільтрах показуємо лише ті категорії, у яких працює сам майстер.
   const masterCategories = allCategories.filter((c) =>
     mp.categories.includes(c.slug),
   )
@@ -203,6 +211,8 @@ export const load: PageServerLoad = async ({ request, url }) => {
       ...j,
       createdAt: j.createdAt.toISOString(),
       expiresAt: j.expiresAt.toISOString(),
+      // Рейтинг клієнта віддаємо під єдиним імʼям (avgRating/reviewsCount),
+      // щоб картка заявки не залежала від ролі автора.
       client: {
         ...j.client,
         avgRating: j.client.avgRatingAsClient,

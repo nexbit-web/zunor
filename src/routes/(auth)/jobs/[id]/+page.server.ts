@@ -12,11 +12,11 @@ export const load: PageServerLoad = async ({ params, request }) => {
 
   const userId = session.user.id
 
-  // Користувач (потрібна роль, щоб правильно показати UI)
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
       role: true,
+      city: true,
       masterProfile: {
         select: {
           isActive: true,
@@ -28,7 +28,6 @@ export const load: PageServerLoad = async ({ params, request }) => {
   })
   if (!user) throw redirect(302, '/user/login')
 
-  // Заявка
   const job = await prisma.job.findUnique({
     where: { id: params.id },
     select: {
@@ -65,7 +64,36 @@ export const load: PageServerLoad = async ({ params, request }) => {
 
   if (!job) throw error(404, 'Заявку не знайдено')
 
-  // ─── Подтягиваем human-readable имена для category и city ───
+  const isOwner = job.clientId === userId
+  const isMaster = user.role === 'MASTER'
+
+  // ─── Контроль доступу ───
+  // Заявку (зокрема фото приміщень клієнта) бачить лише власник або
+  // релевантний майстер: відкрита заявка його міста й категорії (як у стрічці)
+  // АБО заявка, на яку він уже подавав пропозицію. Інакше 404 — не розкриваємо
+  // навіть існування чужої заявки.
+  let canView = isOwner
+  if (!canView && isMaster) {
+    const mp = user.masterProfile
+    const eligibleFromFeed =
+      !!mp?.isActive &&
+      job.status === 'OPEN' &&
+      user.city === job.city &&
+      mp.categories.includes(job.category)
+
+    if (eligibleFromFeed) {
+      canView = true
+    } else {
+      const ownProposal = await prisma.proposal.findFirst({
+        where: { jobId: job.id, masterId: userId },
+        select: { id: true },
+      })
+      canView = !!ownProposal
+    }
+  }
+  if (!canView) throw error(404, 'Заявку не знайдено')
+
+  // Людиночитні назви для категорії та міста (slug → name)
   const [categoryRow, cityRow] = await Promise.all([
     prisma.category.findUnique({
       where: { slug: job.category },
@@ -80,10 +108,7 @@ export const load: PageServerLoad = async ({ params, request }) => {
   const categoryName = categoryRow?.name ?? job.category
   const cityName = cityRow?.name ?? job.city
 
-  const isOwner = job.clientId === userId
-  const isMaster = user.role === 'MASTER'
-
-  // Збільшуємо лічильник переглядів (тільки для не-власника, не блокуючи)
+  // Лічильник переглядів — лише для не-власника, не блокуючи відповідь.
   if (!isOwner) {
     prisma.job
       .update({
@@ -93,12 +118,12 @@ export const load: PageServerLoad = async ({ params, request }) => {
       .catch(() => {})
   }
 
-  // Пам'ять мозку: майстер відкрив заявку, яку йому розіслали.
+  // Память диспетчера: майстер відкрив розіслану йому заявку.
   if (isMaster && !isOwner) {
     markOpened(job.id, userId).catch(() => {})
   }
 
-  // Пропозиції — клієнт бачить всі, майстер бачить тільки свою
+  // Пропозиції: власник бачить усі, майстер — лише свою.
   let proposals: Array<{
     id: string
     message: string
@@ -157,7 +182,7 @@ export const load: PageServerLoad = async ({ params, request }) => {
       },
     })
 
-    // ─── Ранжування: топ-3 + слот новачку ───
+    // Ранжування: топ-3 + слот новачку.
     const now = new Date()
     const { recommended: recommendedIds, newbies: newbieIds } =
       getRecommendedIds(
@@ -239,22 +264,18 @@ export const load: PageServerLoad = async ({ params, request }) => {
     }
   }
 
-  // Може майстер подати пропозицію?
+  // Чи може майстер подати пропозицію?
   let canPropose = false
   let cantProposeReason: string | null = null
 
   if (isMaster && !isOwner) {
     if (job.status !== 'OPEN') {
-      canPropose = false
       cantProposeReason = 'Заявка вже не приймає пропозицій'
     } else if (proposals.length > 0) {
-      canPropose = false
       cantProposeReason = 'Ви вже подали пропозицію'
     } else if (!user.masterProfile?.isActive) {
-      canPropose = false
       cantProposeReason = 'Профіль майстра неактивний'
     } else if (!user.masterProfile.categories.includes(job.category)) {
-      canPropose = false
       cantProposeReason = 'Ця категорія не у вашому профілі'
     } else {
       canPropose = true
