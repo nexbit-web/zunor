@@ -4,7 +4,7 @@
   import { ModeWatcher } from 'mode-watcher'
   import Header from '$lib/components/header/index.svelte'
   import { page } from '$app/stores'
-  import { Toaster } from 'svelte-hot-french-toast'
+  import { Toaster } from '$lib/components/toast'
 
   // На /messages чат працює full-screen без хедера сайту
   const hideHeader = $derived($page.url.pathname.startsWith('/messages'))
@@ -28,21 +28,8 @@
   })
 </script>
 
-<Toaster
-  position="top-center"
-  toastOptions={{
-    duration: 4000,
-    style:
-      'background: #ffffff; color: #0a0a0a; border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 12px; font-size: 14px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);',
-    iconTheme: {
-      primary: 'var(--primary)',
-      secondary: '#ffffff',
-    },
-  }}
-/>
-
+<Toaster position="top-right" />
 <ModeWatcher />
- 
 
 {#if !hideHeader}
   <Header />

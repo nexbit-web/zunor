@@ -81,6 +81,44 @@
      Брендовий помаранчевий — як у Vercel/Raycast. */
   --brand: oklch(0.68 0.22 35); /* #FF5C00 */
   --brand-foreground: oklch(1 0 0);
+
+  /* toster */
+
+  /* Warning */
+  --w-bg: #fff0c2;
+  --w-border: #f59e0b;
+  --w-icon: #d97706;
+  --w-text: #92400e;
+
+  /* Success */
+  --s-bg: #d1fae5;
+  --s-border: #10b981;
+  --s-icon: #059669;
+  --s-text: #065f46;
+
+  /* Error */
+  --e-bg: #fee2e2;
+  --e-border: #ef4444;
+  --e-icon: #dc2626;
+  --e-text: #991b1b;
+
+  /* Info */
+  --i-bg: #dbeafe;
+  --i-border: #3b82f6;
+  --i-icon: #2563eb;
+  --i-text: #1e40af;
+
+  /* Default */
+  --d-bg: #f8fafc;
+  --d-border: #cbd5e1;
+  --d-icon: #64748b;
+  --d-text: #334155;
+
+  /* Notification */
+  --n-bg: #ede9fe;
+  --n-border: #8b5cf6;
+  --n-icon: #7c3aed;
+  --n-text: #5b21b6;
 }
 
 .dark {
@@ -134,6 +172,44 @@
 
   --brand: oklch(0.7 0.22 35);
   --brand-foreground: oklch(1 0 0);
+
+  /* toster */
+
+  /* Warning (янтарний / шоколадний) */
+  --w-bg: #422400;
+  --w-border: #b87700;
+  --w-icon: #fab319;
+  --w-text: #fab319;
+
+  /* Success (смарагдовий) */
+  --s-bg: #00462d;
+  --s-border: #00b07e;
+  --s-icon: #00e6a0;
+  --s-text: #00e6a0;
+
+  /* Error (рубіновий) */
+  --e-bg: #3a0f14;
+  --e-border: #b20000;
+  --e-icon: #ff2323;
+  --e-text: #ff6a6a;
+
+  /* Info (сапфіровий) */
+  --i-bg: #0f1c3f;
+  --i-border: #2563eb;
+  --i-icon: #3b82f6;
+  --i-text: #3b82f6;
+
+  /* Default (графітовий) */
+  --d-bg: #1e1e1e;
+  --d-border: rgba(156, 163, 175, 0.3);
+  --d-icon: #9ca3af;
+  --d-text: #9ca3af;
+
+  /* Notification (аметистовий) */
+  --n-bg: #26153f;
+  --n-border: #7c3aed;
+  --n-icon: #c084fc;
+  --n-text: #c084fc;
 }
 
 @theme inline {
@@ -222,5 +298,222 @@ html #nprogress .bar {
 @media (max-width: 1023px) {
   main {
     padding-bottom: 40px;
+  }
+}
+
+/* toster */
+
+/* ─── Прив'язка палітри до типів ─── */
+.t-success {
+  background-color: var(--s-bg);
+  border-color: var(--s-border);
+  color: var(--s-text);
+}
+.t-success .t-icon,
+.t-success .t-close,
+.t-success .t-action {
+  color: var(--s-icon);
+}
+.t-success .t-close:hover {
+  background-color: color-mix(in srgb, var(--s-icon) 12%, transparent);
+}
+.t-success .t-progress-bar {
+  background-color: var(--s-icon);
+}
+.t-success .t-progress-track {
+  background-color: color-mix(in srgb, var(--s-border) 40%, transparent);
+}
+
+.t-error {
+  background-color: var(--e-bg);
+  border-color: var(--e-border);
+  color: var(--e-text);
+}
+.t-error .t-icon,
+.t-error .t-close,
+.t-error .t-action {
+  color: var(--e-icon);
+}
+.t-error .t-close:hover {
+  background-color: color-mix(in srgb, var(--e-icon) 12%, transparent);
+}
+.t-error .t-progress-bar {
+  background-color: var(--e-icon);
+}
+.t-error .t-progress-track {
+  background-color: color-mix(in srgb, var(--e-border) 40%, transparent);
+}
+
+.t-warning {
+  background-color: var(--w-bg);
+  border-color: var(--w-border);
+  color: var(--w-text);
+}
+.t-warning .t-icon,
+.t-warning .t-close,
+.t-warning .t-action {
+  color: var(--w-icon);
+}
+.t-warning .t-close:hover {
+  background-color: color-mix(in srgb, var(--w-icon) 12%, transparent);
+}
+.t-warning .t-progress-bar {
+  background-color: var(--w-icon);
+}
+.t-warning .t-progress-track {
+  background-color: color-mix(in srgb, var(--w-border) 40%, transparent);
+}
+
+.t-info {
+  background-color: var(--i-bg);
+  border-color: var(--i-border);
+  color: var(--i-text);
+}
+.t-info .t-icon,
+.t-info .t-close,
+.t-info .t-action {
+  color: var(--i-icon);
+}
+.t-info .t-close:hover {
+  background-color: color-mix(in srgb, var(--i-icon) 12%, transparent);
+}
+.t-info .t-progress-bar {
+  background-color: var(--i-icon);
+}
+.t-info .t-progress-track {
+  background-color: color-mix(in srgb, var(--i-border) 40%, transparent);
+}
+
+.t-default {
+  background-color: var(--d-bg);
+  border-color: var(--d-border);
+  color: var(--d-text);
+}
+.t-default .t-icon,
+.t-default .t-close,
+.t-default .t-action {
+  color: var(--d-icon);
+}
+.t-default .t-close:hover {
+  background-color: color-mix(in srgb, var(--d-icon) 12%, transparent);
+}
+.t-default .t-progress-bar {
+  background-color: var(--d-icon);
+}
+.t-default .t-progress-track {
+  background-color: color-mix(in srgb, var(--d-border) 40%, transparent);
+}
+
+.t-notification {
+  background-color: var(--n-bg);
+  border-color: var(--n-border);
+  color: var(--n-text);
+}
+.t-notification .t-icon,
+.t-notification .t-close,
+.t-notification .t-action {
+  color: var(--n-icon);
+}
+.t-notification .t-close:hover {
+  background-color: color-mix(in srgb, var(--n-icon) 12%, transparent);
+}
+.t-notification .t-progress-bar {
+  background-color: var(--n-icon);
+}
+.t-notification .t-progress-track {
+  background-color: color-mix(in srgb, var(--n-border) 40%, transparent);
+}
+
+/* ─── Анімація появи/зникнення ───
+   Трюк з grid-template-rows 0fr→1fr плавно розштовхує сусідні тости. */
+.toast-item {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    opacity 280ms cubic-bezier(0.165, 0.85, 0.45, 1),
+    transform 280ms cubic-bezier(0.165, 0.85, 0.45, 1),
+    grid-template-rows 280ms cubic-bezier(0.165, 0.85, 0.45, 1);
+}
+
+/* Напрямок виїзду залежить від позиції контейнера */
+.toast-item.from-right {
+  transform: translateX(calc(100% + 20px));
+}
+.toast-item.from-left {
+  transform: translateX(calc(-100% - 20px));
+}
+.toast-item.from-top {
+  transform: translateY(-16px) scale(0.96);
+}
+.toast-item.from-bottom {
+  transform: translateY(16px) scale(0.96);
+}
+
+/* Горизонтальне вирівнювання тоста в колонці за позицією.
+   Потрібно тому, що .toast-item — grid (display:grid), і flex-класи
+   justify-* на ньому не діють; вирівнюємо через justify-content гріда. */
+.toast-item.from-left {
+  justify-content: start;
+}
+.toast-item.from-right {
+  justify-content: end;
+}
+.toast-item.from-top,
+.toast-item.from-bottom {
+  justify-content: center;
+}
+
+.toast-item.in {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transform: translateX(0) translateY(0) scale(1);
+}
+
+.toast-item.out {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transform: translateX(0) scale(0.98);
+  transition:
+    opacity 240ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 240ms cubic-bezier(0.4, 0, 0.2, 1),
+    grid-template-rows 240ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.toast-inner {
+  overflow: hidden;
+}
+
+/* ─── Прогрес-бар: чистий CSS, нуль JS під час відліку ───
+   Тривалість задається інлайн (animation-duration), пауза — клас .paused. */
+@keyframes toast-progress {
+  from {
+    width: 0%;
+  }
+  to {
+    width: 100%;
+  }
+}
+.t-progress-bar {
+  width: 0;
+  animation-name: toast-progress;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+.t-progress-bar.paused {
+  animation-play-state: paused;
+}
+
+/* Повага до системного prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  .toast-item,
+  .toast-item.in,
+  .toast-item.out {
+    transition-duration: 1ms;
+    transform: none;
+  }
+  .t-progress-bar {
+    animation: none;
+    width: 100%;
   }
 }

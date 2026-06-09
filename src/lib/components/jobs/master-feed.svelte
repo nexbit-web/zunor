@@ -15,7 +15,6 @@
     ChevronRight,
     AlertCircle,
     Clock,
-    MapPin,
   } from 'lucide-svelte'
 
   import * as Icons from '@lucide/svelte'
@@ -131,6 +130,16 @@
   function initials(name: string | null | undefined) {
     return (name ?? '?')[0]?.toUpperCase() ?? '?'
   }
+  // Коректне укр. відмінювання (1 заявка, 2-4 заявки, 5+ заявок),
+  // з урахуванням винятків 11-14 → заявок та 21/22 → заявка/заявки.
+  function pluralizeJobs(n: number) {
+    const mod10 = n % 10
+    const mod100 = n % 100
+    if (mod10 === 1 && mod100 !== 11) return `${n} заявка`
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14))
+      return `${n} заявки`
+    return `${n} заявок`
+  }
 </script>
 
 <!-- Header -->
@@ -169,16 +178,11 @@
   </div>
 {:else}
   <!-- Фільтр по типу послуги -->
-  <div
-    class="filter-row mb-6 flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap sm:overflow-visible"
-  >
+  <div class="filters">
     <button
       type="button"
       onclick={() => (activeService = '')}
-      class="shrink-0 px-4 h-9 rounded-full text-sm font-medium cursor-pointer transition-all whitespace-nowrap
-        {activeService === ''
-        ? 'bg-foreground text-background'
-        : 'bg-secondary text-foreground hover:opacity-80'}"
+      class="fpill {activeService === '' ? 'fpill--on' : 'fpill--off'}"
     >
       Усі
     </button>
@@ -186,15 +190,16 @@
       <button
         type="button"
         onclick={() => (activeService = s.key)}
-        class="shrink-0 px-4 h-9 rounded-full text-sm font-medium cursor-pointer transition-all whitespace-nowrap
-          {activeService === s.key
-          ? 'bg-foreground text-background'
-          : 'bg-secondary text-foreground hover:opacity-80'}"
+        class="fpill {activeService === s.key ? 'fpill--on' : 'fpill--off'}"
       >
         {s.label}
       </button>
     {/each}
   </div>
+{/if}
+
+{#if !blockReason && visibleJobs.length > 0}
+  <p class="count">{pluralizeJobs(visibleJobs.length)}</p>
 {/if}
 
 <!-- List -->
@@ -223,61 +228,45 @@
     </p>
   </div>
 {:else}
-  <div class="space-y-3">
-    {#each visibleJobs as job, i (job.id)}
-      <a
-        href={`/jobs/${job.id}`}
+  <!-- key-блок перемонтує сітку при зміні фільтра → повтор анімації появи (як у прикладі) -->
+  {#key activeService}
+    <div class="grid">
+      {#each visibleJobs as job, i (job.id)}
+        <a
+          href={`/jobs/${job.id}`}
         in:fly={{
           y: 12,
           duration: 260,
           delay: Math.min(i, 6) * 40,
           easing: quintOut,
         }}
-        class="block rounded-2xl p-5 transition-all hover:-translate-y-0.5 hover:shadow-md group"
-        style="background-color: var(--card); border: 1px solid var(--border)"
+        class="jcard group"
       >
         <!-- Час -->
-        <div class="flex items-center justify-between gap-2 mb-2.5">
-          <span
-            class="text-xs inline-flex items-center gap-1"
-            style="color: var(--muted-foreground)"
-          >
+        <div class="jcard__top">
+          <span class="jmeta">
             <Clock class="size-3" />
             {formatRelative(job.createdAt)}
           </span>
-          <ChevronRight
-            class="size-5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-            style="color: var(--muted-foreground)"
-          />
+          <ChevronRight class="jchev size-[18px]" />
         </div>
 
         <!-- Заголовок (тип прибирання) -->
-        <h3
-          class="text-base sm:text-lg font-semibold leading-snug mb-3"
-          style="color: var(--foreground)"
-        >
-          {job.title}
-        </h3>
+        <h3 class="jcard__title">{job.title}</h3>
 
         <!-- Ключові деталі (чипи) -->
         {#if jobDetails(job).length > 0}
-          <div class="flex items-center gap-1.5 flex-wrap mb-3">
+          <div class="jcard__chips">
             {#each jobDetails(job) as d (d.label)}
               {@const Icon = iconByName(d.icon)}
               {#if d.label === 'Коли'}
                 <!-- Дата — акцентний чип (важливо майстру) -->
-                <span
-                  class="inline-flex items-center gap-1.5 px-2.5 h-7 rounded-full text-xs font-semibold"
-                  style="background-color: color-mix(in srgb, var(--brand) 12%, transparent); color: var(--brand)"
-                >
+                <span class="jchip jchip--when">
                   {#if Icon}<Icon class="size-3.5" />{/if}
                   {d.value}
                 </span>
               {:else}
-                <span
-                  class="inline-flex items-center gap-1.5 px-2.5 h-7 rounded-full text-xs font-medium"
-                  style="background-color: var(--secondary); color: var(--foreground)"
-                >
+                <span class="jchip">
                   {#if Icon}<Icon class="size-3.5 opacity-60" />{/if}
                   {d.value}
                 </span>
@@ -288,41 +277,34 @@
 
         <!-- Клієнт -->
         {#if job.client}
-          <div
-            class="flex items-center gap-2 pt-3"
-            style="border-top: 1px solid var(--border)"
-          >
-            <Avatar class="size-8 shrink-0">
+          <div class="jcard__foot">
+            <Avatar class="size-9 shrink-0">
               <AvatarImage
                 src={job.client.avatar ?? ''}
                 alt={job.client.name ?? ''}
               />
-              <AvatarFallback class="text-xs font-semibold"
+              <AvatarFallback class="javatar-fallback"
                 >{initials(job.client.name)}</AvatarFallback
               >
             </Avatar>
             <div class="min-w-0 flex-1">
-              <p
-                class="text-sm font-medium truncate"
-                style="color: var(--foreground)"
-              >
-                {job.client.name ?? 'Замовник'}
-              </p>
+              <p class="jclient-name">{job.client.name ?? 'Замовник'}</p>
+              {#if job.client.reviewsCount > 0}
+                <span class="jrating">
+                  <Star class="size-3" style="color: #f5a623; fill: #f5a623" />
+                  <strong>{job.client.avgRating.toFixed(1)}</strong>
+                  ({job.client.reviewsCount})
+                </span>
+              {:else}
+                <span class="jnewclient">Новий клієнт</span>
+              {/if}
             </div>
-            {#if job.client.reviewsCount > 0}
-              <span
-                class="text-[11px] inline-flex items-center gap-1 shrink-0"
-                style="color: var(--muted-foreground)"
-              >
-                <Star class="size-3" style="color: #f5a623; fill: #f5a623" />
-                {job.client.avgRating.toFixed(1)} ({job.client.reviewsCount})
-              </span>
-            {/if}
           </div>
         {/if}
       </a>
-    {/each}
-  </div>
+      {/each}
+    </div>
+  {/key}
 
   <div bind:this={sentinelEl} class="h-1"></div>
   {#if loadingMore}
@@ -338,10 +320,202 @@
 {/if}
 
 <style>
-  .filter-row {
-    scrollbar-width: none; /* Firefox */
+  /* ── filters (як у прикладі) ── */
+  .filters {
+    display: flex;
+    gap: 8px;
+    /* мобільний: один рядок з горизонтальним скролом */
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    /* витікання до країв екрана (компенсує px-4 контейнера) */
+    margin: 0 -5px 22px;
+    padding: 0 16px;
+    /* плавний скрол з прилипанням до пілюль */
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
   }
-  .filter-row::-webkit-scrollbar {
-    display: none; /* Chrome/Safari */
+  .filters::-webkit-scrollbar {
+    display: none;
+  }
+  .fpill {
+    scroll-snap-align: start;
+  }
+  /* десктоп: пілюлі переносяться на новий рядок, без скролу */
+  @media (min-width: 640px) {
+    .filters {
+      flex-wrap: wrap;
+      overflow-x: visible;
+      margin: 0 0 22px;
+      padding: 0;
+    }
+  }
+  .fpill {
+    height: 38px;
+    padding: 0 16px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    font-size: 13.5px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition:
+      background 0.15s ease,
+      color 0.15s ease,
+      opacity 0.15s ease;
+  }
+  .fpill--on {
+    background: var(--primary);
+    color: var(--primary-foreground);
+  }
+  .fpill--off {
+    background: var(--secondary);
+    color: var(--foreground);
+  }
+  .fpill--off:hover {
+    opacity: 0.72;
+  }
+
+  /* ── count (як у прикладі) ── */
+  .count {
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--muted-foreground);
+    margin: 0 0 16px;
+  }
+
+  /* ── grid (як у прикладі, але адаптивний) ── */
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  @media (min-width: 640px) {
+    .grid {
+      grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+    }
+  }
+
+  /* ── card ── */
+  .jcard {
+    display: block;
+    text-decoration: none;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 18px;
+    cursor: pointer;
+    transition:
+      transform 0.18s ease,
+      box-shadow 0.18s ease,
+      border-color 0.18s ease;
+  }
+  .jcard:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 28px -12px rgba(0, 0, 0, 0.2);
+    border-color: oklch(0.86 0 0);
+  }
+  .jcard__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 11px;
+  }
+  .jmeta {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    color: var(--muted-foreground);
+    font-weight: 500;
+  }
+  /* :global бо клас потрапляє на <svg>, який рендерить компонент ChevronRight */
+  .jcard :global(.jchev) {
+    color: var(--muted-foreground);
+    opacity: 0;
+    transform: translateX(-4px);
+    flex-shrink: 0;
+    transition:
+      opacity 0.18s ease,
+      transform 0.18s ease;
+  }
+  .jcard:hover :global(.jchev) {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  .jcard__title {
+    font-size: 17px;
+    line-height: 1.32;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--foreground);
+    margin: 0 0 14px;
+    text-wrap: pretty;
+  }
+  .jcard__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin-bottom: 16px;
+  }
+  .jchip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 11px;
+    border-radius: 999px;
+    font-size: 12.5px;
+    font-weight: 500;
+    background: var(--secondary);
+    color: var(--foreground);
+  }
+  .jchip--when {
+    font-weight: 600;
+    background: color-mix(in srgb, var(--brand) 12%, transparent);
+    color: var(--brand);
+  }
+  .jcard__foot {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+  }
+  .jclient-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--foreground);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin: 0;
+  }
+  .jrating {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--muted-foreground);
+    white-space: nowrap;
+  }
+  .jrating strong {
+    font-weight: 600;
+    color: var(--foreground);
+  }
+  .jnewclient {
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--muted-foreground);
+  }
+  /* аватар-заглушка під стиль прикладу (ініціали) */
+  .jcard :global(.javatar-fallback) {
+    background: var(--secondary);
+    color: var(--muted-foreground);
+    font-size: 13px;
+    font-weight: 600;
   }
 </style>

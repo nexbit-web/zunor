@@ -15,7 +15,7 @@
   import { Textarea } from '$lib/components/ui/textarea'
   import { cn } from '$lib/utils'
   import { tick } from 'svelte'
-  import toast from 'svelte-hot-french-toast'
+  import { toast } from '$lib/stores/toast-store.svelte'
   import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left'
   import ArrowRightIcon from '@lucide/svelte/icons/arrow-right'
   import CheckIcon from '@lucide/svelte/icons/check'

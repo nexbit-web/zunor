@@ -71,7 +71,7 @@
   <title>Мої відгуки · Zunor</title>
 </svelte:head>
 
-<div class="max-w-5xl mx-auto px-4 sm:px-6 py-8">
+<div class="max-w-230 mx-auto px-4 sm:px-6 py-8">
   <div class="flex items-start justify-between gap-4 mb-6">
     <div>
       <h1

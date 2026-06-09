@@ -26,7 +26,7 @@
   import PhotoGallery from '$lib/components/photo-gallery.svelte'
   import * as AlertDialog from '$lib/components/ui/alert-dialog'
   import Zuna from '$lib/components/zuna.svelte'
-  import toast from 'svelte-hot-french-toast'
+  import { toast } from '$lib/stores/toast-store.svelte'
   import {
     formatMoney,
     formatRelative,

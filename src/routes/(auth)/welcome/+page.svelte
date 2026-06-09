@@ -13,7 +13,7 @@
     SelectTrigger,
   } from '$lib/components/ui/select'
   import AvatarUploader from '$lib/components/avatar-uploader.svelte'
-  import toast from 'svelte-hot-french-toast'
+  import { toast } from '$lib/stores/toast-store.svelte'
   import type { PageData } from './$types'
   import { Spinner } from '$lib/components/ui/spinner'
 

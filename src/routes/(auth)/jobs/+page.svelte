@@ -16,7 +16,11 @@
   <title>{pageTitle} · Zunor</title>
 </svelte:head>
 
-<div class="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
+<div
+  class="mx-auto px-4 py-6 sm:py-10 {data.view === 'mine'
+    ? 'max-w-3xl sm:px-6'
+    : 'max-w-230 sm:px-8'}"
+>
   {#if data.view === 'mine'}
     <ClientJobs
       initialJobs={data.jobs}
