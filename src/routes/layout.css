@@ -18,6 +18,9 @@
   --catalog-sidebar-hover: #fafafa;
   --bg-header: #ffffff;
 
+  /* Shimmer */
+  /* --shimmer:  */
+
   /* Основа — чистий білий + глибокий чорний */
   --background: oklch(1 0 0); /* #FFFFFF */
   --foreground: oklch(0.145 0 0); /* #0A0A0A */

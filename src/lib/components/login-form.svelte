@@ -125,18 +125,18 @@
   <Card.Root class="overflow-hidden">
     <Card.Header class="text-center space-y-2">
       <Card.Title class="text-2xl font-bold tracking-tight">
-        Ласкаво просимо
+       Увійдіть у свій акаунт
       </Card.Title>
-      <Card.Description class="text-sm">
+      <!-- <Card.Description class="text-sm">
         Увійдіть у свій акаунт
-      </Card.Description>
+      </Card.Description> -->
     </Card.Header>
 
     <Card.Content>
       <form onsubmit={handleSubmit} novalidate autocomplete="on">
         <FieldGroup>
           <!-- ─── Social ─── -->
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <!-- <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <Button
               variant="outline"
               type="button"
@@ -179,7 +179,7 @@
 
           <FieldSeparator class="*:data-[slot=field-separator-content]:bg-card">
             Або email
-          </FieldSeparator>
+          </FieldSeparator> -->
 
           <!-- ─── Email ─── -->
           <Field>
@@ -188,7 +188,7 @@
               <Input
                 id="email-{id}"
                 type="email"
-                placeholder="ivan@example.com"
+                placeholder="name@example.com"
                 bind:value={email}
                 onblur={() => (touched.email = true)}
                 autocomplete="email"
@@ -233,6 +233,7 @@
               <Input
                 id="password-{id}"
                 type={showPassword ? 'text' : 'password'}
+                placeholder="••••••••••"
                 bind:value={password}
                 onblur={() => (touched.password = true)}
                 autocomplete="current-password"

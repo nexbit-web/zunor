@@ -4,6 +4,7 @@
   import JsonLd from '$lib/components/seo/JsonLd.svelte'
   import type { PageData } from './$types'
   import type { Component } from 'svelte'
+  import BecomeMaster from '$lib/components/home/become-master.svelte'
 
   // Svelte 5: Явна типізація контракту даних (Data Props Contract) згідно з SSR архитектурою
   let { data }: { data: PageData } = $props()
@@ -92,13 +93,13 @@
 		Компонент HeroSection віддається через SSR для миттєвої фіксації LCP (Largest Contentful Paint).
 	-->
   <HeroSection />
-
   <!-- 
 		Динамічний рендеринг: Захищаємо метрику INP (Interaction to Next Paint).
 		Запобігаємо тривалому блокуванню CPU під час ініціалізації великих JS-модулів.
 	-->
   {#if HowItWorksComponent}
     <HowItWorksComponent />
+    <BecomeMaster />
   {:else}
     <!-- 
 			Layout Placeholder: Жорстке резервування простору у вьюпорті.
