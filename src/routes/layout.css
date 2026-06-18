@@ -13,6 +13,30 @@
    для головної дії на сторінці.
    ═══════════════════════════════════════════════ */
 
+.text-zunor-gradient {
+  background-image: linear-gradient(
+    135deg,
+    #fab319 0%,
+    #00e6a0 12%,
+    #ff2323 30%,
+
+    #3b82f6 50%,
+    #2f072d 75%,
+    #ffffff 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* #0f172a 0%,
+    #425777 12%,
+    #dca5a7 30%,
+    #e0b861 50%,
+    #64b687 75%,
+    #309fcf 100% */
+
 :root {
   --nprogress-bar: #ff5c00;
   --catalog-sidebar-hover: #fafafa;
@@ -277,6 +301,7 @@
     @apply font-sans;
     scrollbar-width: none;
     -ms-overflow-style: none;
+    scroll-behavior: smooth;
   }
   html::-webkit-scrollbar {
     display: none;
@@ -301,6 +326,17 @@ html #nprogress .bar {
 @media (max-width: 1023px) {
   main {
     padding-bottom: 40px;
+  }
+}
+
+@layer base {
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  a[href],
+  label[for],
+  summary,
+  select:not(:disabled) {
+    cursor: pointer;
   }
 }
 

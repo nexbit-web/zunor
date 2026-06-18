@@ -74,7 +74,6 @@
           class="text-[10px] uppercase tracking-[0.06em] mt-0.5 font-medium"
           style="color: var(--muted-foreground)"
         >
-          бюджет
         </p>
       </div>
     </div>
@@ -123,9 +122,10 @@
         >
           {job.client.name}
         </span>
+
         <span class="ios-meta-divider"></span>
       {/if}
-
+hhhhhhhh
       <div
         class="flex items-center gap-2.5 text-[11.5px] min-w-0 overflow-hidden"
         style="color: var(--muted-foreground)"

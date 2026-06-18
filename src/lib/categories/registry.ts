@@ -11,7 +11,7 @@ export interface CategoryMeta {
 
 export const CATEGORY_META: Record<string, CategoryMeta> = {
   prybyrannya: {
-    banner: '/banners/web-development.gif', // тестовий, замінити на cleaning.webp
+    banner: '/banners/cleaning.webp',
   },
 }
 

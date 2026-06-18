@@ -1,4 +1,6 @@
 <script lang="ts" module>
+  import { dev } from '$app/environment'
+
   // ─── Module-level кеш міст ───
   interface CityRef {
     slug: string
@@ -23,7 +25,7 @@
         citiesCache = arr
         return arr
       } catch (err) {
-        console.error('[register] failed to load cities:', err)
+        if (dev) console.error('[register] failed to load cities:', err)
         citiesPromise = null
         throw err
       }
@@ -32,41 +34,40 @@
     return citiesPromise
   }
 
-  // ─── Валідатори (чисті функції, тестовані) ───
+  // ─── Валідатори (чисті функції) ───
   const NAME_RE = /^[\p{L}\s'-]{2,50}$/u
   const EMAIL_RE = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
-  const PHONE_DIGITS_RE = /^\d{12}$/ // +380XXXXXXXXX → 12 цифр
 
-  function normalizePhone(input: string): string {
-    // Прибираємо все крім цифр і +
-    let cleaned = input.replace(/[^\d+]/g, '')
-    // Якщо починається з 0 → перетворюємо на +380
-    if (/^0\d{9}$/.test(cleaned)) {
-      cleaned = '+38' + cleaned
-    }
-    // Якщо починається з 380 без + → додаємо +
-    if (/^380\d{9}$/.test(cleaned)) {
-      cleaned = '+' + cleaned
-    }
-    return cleaned
+  // Український мобільний: 9 цифр локальної частини (без +380).
+  // Коди операторів: 39, 50, 63, 66, 67, 68, 73, 91–99.
+  const UA_MOBILE_LOCAL_RE = /^(?:39|50|63|66|67|68|73|9[1-9])\d{7}$/
+
+  function isValidUaMobile(localDigits: string): boolean {
+    return UA_MOBILE_LOCAL_RE.test(localDigits)
   }
 
-  function isValidPhone(phone: string): boolean {
-    const normalized = normalizePhone(phone)
-    return /^\+\d{12}$/.test(normalized)
+  /** Витягує 9 локальних цифр із будь-якого вводу: +380.., 380.., 0.., чисті цифри. */
+  function extractUaLocal(input: string): string {
+    let d = input.replace(/\D/g, '')
+    if (d.startsWith('380')) d = d.slice(3)
+    else if (d.startsWith('0')) d = d.slice(1)
+    return d.slice(0, 9)
+  }
+
+  /** 9 цифр → "67 123 45 67". */
+  function formatUaLocal(d: string): string {
+    return [d.slice(0, 2), d.slice(2, 5), d.slice(5, 7), d.slice(7, 9)]
+      .filter(Boolean)
+      .join(' ')
   }
 
   function isValidName(name: string): boolean {
     return NAME_RE.test(name.trim())
   }
-
   function isValidEmail(email: string): boolean {
-    const trimmed = email.trim()
-    return (
-      trimmed.length >= 3 && trimmed.length <= 254 && EMAIL_RE.test(trimmed)
-    )
+    const t = email.trim()
+    return t.length >= 3 && t.length <= 254 && EMAIL_RE.test(t)
   }
-
   function passwordStrength(pw: string): {
     score: 0 | 1 | 2 | 3
     label: string
@@ -76,8 +77,7 @@
     if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) score++
     if (/\d/.test(pw)) score++
     if (/[^a-zA-Z0-9]/.test(pw) || pw.length >= 12) score++
-    if (score === 0) return { score: 1, label: 'Слабкий' }
-    if (score === 1) return { score: 1, label: 'Слабкий' }
+    if (score <= 1) return { score: 1, label: 'Слабкий' }
     if (score === 2) return { score: 2, label: 'Середній' }
     return { score: 3, label: 'Надійний' }
   }
@@ -86,11 +86,8 @@
 <script lang="ts">
   import { cn } from '$lib/utils.js'
   import { Button } from '$lib/components/ui/button/index.js'
-  import * as Card from '$lib/components/ui/card/index.js'
-  import * as Field from '$lib/components/ui/field/index.js'
   import * as Popover from '$lib/components/ui/popover/index.js'
   import * as Command from '$lib/components/ui/command/index.js'
-  import { Input } from '$lib/components/ui/input/index.js'
   import type { HTMLAttributes } from 'svelte/elements'
   import { signUp } from '$lib/auth-client'
   import { goto, invalidateAll } from '$app/navigation'
@@ -112,17 +109,18 @@
 
   let { class: className, ...restProps }: HTMLAttributes<HTMLDivElement> =
     $props()
+  const uid = $props.id() // унікальні id полів (захист від колізій при кількох інстансах)
 
   type Role = 'CLIENT' | 'MASTER'
-  type Step = 'role' | 'form' | 'otp' | 'success'
+  type Step = 'role' | 'form' | 'otp'
 
   // ─── State ───
   let step = $state<Step>('role')
-  let direction = $state<1 | -1>(1) // 1 = вперед, -1 = назад
+  let direction = $state<1 | -1>(1)
   let role = $state<Role | null>(null)
 
   let name = $state('')
-  let phone = $state('')
+  let phoneDigits = $state('')
   let email = $state('')
   let citySlug = $state('')
   let password = $state('')
@@ -130,7 +128,6 @@
   let agreeTerms = $state(false)
   let otp = $state('')
 
-  // Touched-стан — показуємо помилку лише після того як юзер вийшов з поля
   let touched = $state({
     name: false,
     phone: false,
@@ -158,7 +155,7 @@
     try {
       cities = await fetchCities()
     } catch {
-      // silent fail — буде fallback "Інше"
+      // silent fail — користувач зможе обрати пізніше / fallback на сервері
     } finally {
       citiesLoading = false
     }
@@ -168,17 +165,30 @@
     if (timerInterval) clearInterval(timerInterval)
   })
 
-  // ─── Derived: валідація кожного поля ───
+  // ─── Derived: валідація (UX-рівень; авторитет — сервер) ───
   const nameError = $derived(
     touched.name && !isValidName(name)
       ? "Введіть коректне ім'я (2-50 літер)"
       : '',
   )
+  const phone = $derived(phoneDigits ? '+380' + phoneDigits : '')
+  const phoneValid = $derived(isValidUaMobile(phoneDigits))
   const phoneError = $derived(
-    touched.phone && !isValidPhone(phone)
-      ? 'Введіть телефон у форматі +380...'
+    touched.phone && !phoneValid
+      ? phoneDigits.length === 0
+        ? 'Введіть номер телефону'
+        : 'Перевірте номер: +380 XX XXX XX XX'
       : '',
   )
+
+  function onPhoneInput(e: Event) {
+    const el = e.currentTarget as HTMLInputElement
+    phoneDigits = extractUaLocal(el.value)
+    // Примусово синхронізуємо поле: якщо зайвий символ обрізався, phoneDigits не змінюється,
+    // тож Svelte не перерендерить value — і символ лишиться в DOM. Ставимо вручну.
+    el.value = formatUaLocal(phoneDigits)
+  }
+
   const emailError = $derived(
     touched.email && !isValidEmail(email) ? 'Невірний формат email' : '',
   )
@@ -189,13 +199,11 @@
   const confirmError = $derived(
     touched.confirm && password !== confirm ? 'Паролі не збігаються' : '',
   )
-
   const pwStrength = $derived(passwordStrength(password))
 
-  // ─── Чи валідна вся форма ───
   const formValid = $derived(
     isValidName(name) &&
-      isValidPhone(phone) &&
+      phoneValid &&
       isValidEmail(email) &&
       !!citySlug &&
       password.length >= 8 &&
@@ -203,10 +211,10 @@
       agreeTerms,
   )
 
-  // ─── Вибраний місто (label для тригера) ───
   const selectedCityLabel = $derived(
     cities.find((c) => c.slug === citySlug)?.name ?? 'Оберіть місто',
   )
+  const stepIndex = $derived(step === 'role' ? 0 : step === 'form' ? 1 : 2)
 
   // ─── Actions ───
   function selectRole(r: Role) {
@@ -215,27 +223,23 @@
     serverError = ''
     step = 'form'
   }
-
   function backToRole() {
     direction = -1
     serverError = ''
     step = 'role'
   }
-
   function backToForm() {
     direction = -1
     serverError = ''
     otp = ''
     step = 'form'
   }
-
   function selectCity(slug: string) {
     citySlug = slug
     touched.city = true
     cityOpen = false
     tick().then(() => cityTriggerRef?.focus())
   }
-
   function startTimer() {
     resendTimer = 60
     if (timerInterval) clearInterval(timerInterval)
@@ -263,9 +267,7 @@
 
   async function handleForm(e: SubmitEvent) {
     e.preventDefault()
-    if (loading) return // захист від подвійного submit
-
-    // Помічаємо всі поля як touched, щоб показати всі помилки одразу
+    if (loading) return
     touched = {
       name: true,
       phone: true,
@@ -274,12 +276,10 @@
       password: true,
       confirm: true,
     }
-
     if (!formValid) {
       serverError = 'Перевірте правильність заповнення полів'
       return
     }
-
     loading = true
     serverError = ''
     try {
@@ -300,15 +300,12 @@
     e.preventDefault()
     if (loading) return
     serverError = ''
-
     if (otp.length !== 6 || !/^\d{6}$/.test(otp)) {
       serverError = 'Введіть 6-значний код'
       return
     }
-
     loading = true
     try {
-      // 1. Verify OTP
       const verifyRes = await fetch('/api/otp/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -316,11 +313,10 @@
       })
       const verifyData = await verifyRes.json().catch(() => ({}))
       if (!verifyRes.ok) {
-        serverError = verifyData.error ?? 'Невірний код'
+        serverError = verifyData.error ?? 'Невірний або застарілий код'
         return
       }
 
-      // 2. Sign up
       const { error: signUpError } = await signUp.email({
         name: name.trim(),
         email: email.trim().toLowerCase(),
@@ -331,26 +327,18 @@
         return
       }
 
-      // 3. Update profile (role, phone, city)
       const cityName = cities.find((c) => c.slug === citySlug)?.name ?? null
       await fetch('/api/user/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          role,
-          phone: normalizePhone(phone),
-          city: cityName,
-        }),
+        body: JSON.stringify({ role, phone, city: cityName }),
       })
 
       await invalidateAll()
       if (timerInterval) clearInterval(timerInterval)
-
-      // 4. Redirect
       goto('/dashboard')
-      
     } catch (err) {
-      console.error('[register] otp flow failed:', err)
+      if (dev) console.error('[register] otp flow failed:', err)
       serverError = 'Сталась помилка. Спробуйте ще раз.'
     } finally {
       loading = false
@@ -366,16 +354,46 @@
     else serverError = 'Не вдалось відправити код'
   }
 
-  // ─── Анімації між кроками ───
-  // direction = 1 (вперед): новий крок прилітає з правого боку, старий тікає вліво
-  // direction = -1 (назад): новий крок прилітає з лівого боку, старий тікає вправо
   const FLY_DURATION = 320
-  const FLY_DISTANCE = 32 // px
+  const FLY_DISTANCE = 32
 </script>
 
-<div class={cn('flex flex-col gap-6', className)} {...restProps}>
-  <Card.Root class="overflow-hidden">
-    <!-- ─── Крок 1: Роль (без змін, як просили) ─── -->
+{#snippet errBox(msg: string)}
+  <div
+    class="flex items-start gap-2.5 rounded-[13px] border border-destructive/20 bg-destructive/10 px-3.5 py-3 text-[13.5px] leading-snug text-destructive"
+    role="alert"
+  >
+    <AlertCircle class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+    <span>{msg}</span>
+  </div>
+{/snippet}
+
+<div
+  class={cn('reg-scope flex w-full max-w-113 flex-col gap-5', className)}
+  {...restProps}
+>
+  <!-- progress -->
+  <p class="sr-only" aria-live="polite">Крок {stepIndex + 1} із 3</p>
+  <div class="flex items-center justify-center gap-1.75" aria-hidden="true">
+    {#each [0, 1, 2] as i (i)}
+      <span
+        class={cn(
+          'h-1.75 rounded-full transition-all duration-300',
+          i === stepIndex
+            ? 'w-5.5 bg-foreground'
+            : i < stepIndex
+              ? 'w-1.75 bg-primary'
+              : 'w-1.75 bg-border',
+        )}
+      ></span>
+    {/each}
+  </div>
+
+  <!-- glass card -->
+  <div
+    class="overflow-hidden rounded-[32px] border border-border bg-card px-8 pt-8.5 pb-7.5 shadow-[0_24px_60px_-12px_rgba(0,0,0,0.1),0_8px_20px_-8px_rgba(0,0,0,0.05)]"
+  >
+    <!-- ─── Крок 1: Роль ─── -->
     {#if step === 'role'}
       <div
         in:fly={{
@@ -385,67 +403,55 @@
           opacity: 0,
         }}
       >
-        <Card.Header class="text-center pb-2">
-          <Card.Title
-            class="text-2xl font-bold tracking-tight text-[var(--foreground)]"
-          >
+        <div class="mb-6 text-center">
+          <h1 class="text-[23px] font-bold tracking-[-0.035em] text-foreground">
             Хто ви?
-          </Card.Title>
-        </Card.Header>
+          </h1>
+          <p class="mt-1.5 text-sm text-muted-foreground">
+            Оберіть, як ви плануєте користуватися Zunor
+          </p>
+        </div>
 
-        <Card.Content>
-          <div class="flex flex-col gap-4">
-            {#each [{ r: 'CLIENT' as Role, icon: UserCircle2, title: 'Я замовник', desc: 'Хочу замовити' }, { r: 'MASTER' as Role, icon: BriefcaseBusiness, title: 'Я майстер', desc: 'Хочу заробляти' }] as item}
-              <button
-                type="button"
-                onclick={() => selectRole(item.r)}
-                class="group relative flex items-center gap-5 p-5 rounded-2xl border cursor-pointer transition-all duration-300 text-left
-                bg-[var(--card)] border-[var(--border)]
-                hover:border-[var(--primary)] hover:shadow-lg hover:shadow-[var(--primary)]/5
-                active:scale-[0.98] active:duration-75"
+        <div class="flex flex-col gap-3">
+          {#each [{ r: 'CLIENT' as Role, icon: UserCircle2, title: 'Я замовник', desc: 'Хочу замовляти' }, { r: 'MASTER' as Role, icon: BriefcaseBusiness, title: 'Я майстер', desc: 'Хочу заробляти' }] as item (item.r)}
+            <button
+              type="button"
+              onclick={() => selectRole(item.r)}
+              class="group flex items-center gap-4.5 rounded-[20px] border border-transparent bg-muted p-4.5 text-left transition-all duration-200 hover:border-border hover:bg-card hover:shadow-[0_10px_30px_-12px_rgba(0,0,0,0.16)] active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              <span
+                class="flex size-13 shrink-0 items-center justify-center rounded-[15px] bg-card text-foreground shadow-sm transition-colors duration-200 group-hover:bg-foreground group-hover:text-background"
               >
-                <div
-                  class="w-14 h-14 rounded-xl flex items-center justify-center shrink-0 transition-colors duration-300
-                  bg-[color-mix(in_oklch,var(--primary)_10%,transparent)]
-                  group-hover:bg-[var(--primary)] group-hover:text-[var(--primary-foreground)] text-[var(--primary)]"
+                <item.icon size={26} strokeWidth={1.6} aria-hidden="true" />
+              </span>
+              <div>
+                <p
+                  class="text-base font-semibold tracking-[-0.01em] text-foreground"
                 >
-                  <item.icon size={28} strokeWidth={1.5} />
-                </div>
+                  {item.title}
+                </p>
+                <p class="mt-0.5 text-[13.5px] text-muted-foreground">
+                  {item.desc}
+                </p>
+              </div>
+              <span
+                class="ml-auto -translate-x-1.5 text-muted-foreground opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:text-foreground group-hover:opacity-100"
+              >
+                <ChevronRight size={20} aria-hidden="true" />
+              </span>
+            </button>
+          {/each}
+        </div>
 
-                <div class="flex flex-col gap-0.5">
-                  <p
-                    class="text-base font-semibold tracking-tight text-[var(--card-foreground)]"
-                  >
-                    {item.title}
-                  </p>
-                  <p
-                    class="text-sm text-[var(--muted-foreground)] transition-opacity group-hover:text-[var(--foreground)]"
-                  >
-                    {item.desc}
-                  </p>
-                </div>
-
-                <div
-                  class="ml-auto opacity-0 -translate-x-2 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-0 text-[var(--primary)]"
-                >
-                  <ChevronRight size={20} />
-                </div>
-              </button>
-            {/each}
-
-            <div class="mt-4 text-center">
-              <p class="text-sm text-[var(--muted-foreground)]">
-                Вже є акаунт?
-                <a
-                  href="/user/login"
-                  class="font-medium text-[var(--primary)] hover:underline underline-offset-4 cursor-pointer transition-all"
-                >
-                  Увійти
-                </a>
-              </p>
-            </div>
-          </div>
-        </Card.Content>
+        <p class="mt-4 text-center text-[13.5px] text-muted-foreground">
+          Вже є акаунт?
+          <a
+            href="/user/login"
+            class="rounded-sm font-semibold text-foreground underline-offset-[3px] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            Увійти
+          </a>
+        </p>
       </div>
 
       <!-- ─── Крок 2: Форма ─── -->
@@ -458,370 +464,429 @@
           opacity: 0,
         }}
       >
-        <Card.Header class="space-y-1">
-          <div class="flex items-center gap-2">
+        <div class="mb-6 text-center">
+          <h1
+            class="flex items-center justify-center gap-2.5 text-[23px] font-bold tracking-[-0.035em] text-foreground"
+          >
             {#if role === 'CLIENT'}
-              <UserCircle2 class="size-5" style="color: var(--primary)" />
+              <UserCircle2 size={20} strokeWidth={1.8} aria-hidden="true" />
             {:else}
-              <BriefcaseBusiness class="size-5" style="color: var(--primary)" />
+              <BriefcaseBusiness
+                size={20}
+                strokeWidth={1.8}
+                aria-hidden="true"
+              />
             {/if}
-            <Card.Title class="text-xl">
-              {role === 'CLIENT' ? 'Замовник' : 'Виконавець'}
-            </Card.Title>
-          </div>
-          <Card.Description>Заповніть дані для реєстрації</Card.Description>
-        </Card.Header>
+            {role === 'CLIENT' ? 'Замовник' : 'Виконавець'}
+          </h1>
+          <p class="mt-1.5 text-sm text-muted-foreground">
+            Заповніть дані для реєстрації
+          </p>
+        </div>
 
-        <Card.Content>
-          <form onsubmit={handleForm} novalidate autocomplete="on">
-            <Field.Group>
-              <!-- Ім'я -->
-              <Field.Field>
-                <Field.Label for="name">Ім'я</Field.Label>
-                <div class="relative">
-                  <Input
-                    id="name"
-                    type="text"
-                    placeholder="Іван Петренко"
-                    bind:value={name}
-                    onblur={() => (touched.name = true)}
-                    autocomplete="given-name"
-                    maxlength={50}
-                    aria-invalid={!!nameError}
-                    aria-describedby={nameError ? 'name-error' : undefined}
-                    class="pr-9"
-                    required
-                  />
-                  {#if touched.name && isValidName(name)}
-                    <CheckCircle2
-                      class="absolute right-3 top-1/2 -translate-y-1/2 size-4"
-                      style="color: var(--primary)"
-                    />
-                  {:else if nameError}
-                    <AlertCircle
-                      class="absolute right-3 top-1/2 -translate-y-1/2 size-4"
-                      style="color: var(--destructive)"
-                    />
-                  {/if}
-                </div>
-                {#if nameError}
-                  <Field.Description id="name-error" class="text-destructive">
-                    {nameError}
-                  </Field.Description>
-                {/if}
-              </Field.Field>
-
-              <!-- Телефон -->
-              <Field.Field>
-                <Field.Label for="phone">Телефон</Field.Label>
-                <div class="relative">
-                  <Input
-                    id="phone"
-                    type="tel"
-                    placeholder="+380 67 123 45 67"
-                    bind:value={phone}
-                    onblur={() => (touched.phone = true)}
-                    autocomplete="tel"
-                    maxlength={20}
-                    aria-invalid={!!phoneError}
-                    aria-describedby={phoneError ? 'phone-error' : undefined}
-                    class="pr-9"
-                    required
-                  />
-                  {#if touched.phone && isValidPhone(phone)}
-                    <CheckCircle2
-                      class="absolute right-3 top-1/2 -translate-y-1/2 size-4"
-                      style="color: var(--primary)"
-                    />
-                  {:else if phoneError}
-                    <AlertCircle
-                      class="absolute right-3 top-1/2 -translate-y-1/2 size-4"
-                      style="color: var(--destructive)"
-                    />
-                  {/if}
-                </div>
-                {#if phoneError}
-                  <Field.Description id="phone-error" class="text-destructive">
-                    {phoneError}
-                  </Field.Description>
-                {/if}
-              </Field.Field>
-
-              <!-- Email -->
-              <Field.Field>
-                <Field.Label for="email">Email</Field.Label>
-                <div class="relative">
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="ivan@example.com"
-                    bind:value={email}
-                    onblur={() => (touched.email = true)}
-                    autocomplete="email"
-                    maxlength={254}
-                    aria-invalid={!!emailError}
-                    aria-describedby={emailError ? 'email-error' : undefined}
-                    class="pr-9"
-                    required
-                  />
-                  {#if touched.email && isValidEmail(email)}
-                    <CheckCircle2
-                      class="absolute right-3 top-1/2 -translate-y-1/2 size-4"
-                      style="color: var(--primary)"
-                    />
-                  {:else if emailError}
-                    <AlertCircle
-                      class="absolute right-3 top-1/2 -translate-y-1/2 size-4"
-                      style="color: var(--destructive)"
-                    />
-                  {/if}
-                </div>
-                {#if emailError}
-                  <Field.Description id="email-error" class="text-destructive">
-                    {emailError}
-                  </Field.Description>
-                {/if}
-              </Field.Field>
-
-              <!-- Місто -->
-              <Field.Field>
-                <Field.Label for="city">Місто</Field.Label>
-                <Popover.Root bind:open={cityOpen}>
-                  <Popover.Trigger>
-                    {#snippet child({ props })}
-                      <Button
-                        {...props}
-                        bind:ref={cityTriggerRef}
-                        variant="outline"
-                        role="combobox"
-                        aria-expanded={cityOpen}
-                        aria-invalid={!!cityError}
-                        disabled={citiesLoading}
-                        onblur={() => (touched.city = true)}
-                        class="w-full h-9 justify-between rounded-lg px-3 font-normal text-sm cursor-pointer"
-                      >
-                        {#if citiesLoading}
-                          <span
-                            class="inline-flex items-center gap-2 opacity-60"
-                          >
-                            <LoaderCircle class="size-3.5 animate-spin" />
-                            Завантаження…
-                          </span>
-                        {:else}
-                          <span class:opacity-50={!citySlug}>
-                            {selectedCityLabel}
-                          </span>
-                          <ChevronsUpDown class="size-4 opacity-40 shrink-0" />
-                        {/if}
-                      </Button>
-                    {/snippet}
-                  </Popover.Trigger>
-                  <Popover.Content
-                    class="w-[--bits-popover-anchor-width] p-0 rounded-lg"
-                    align="start"
-                    sideOffset={4}
-                  >
-                    <Command.Root>
-                      <Command.Input
-                        placeholder="Пошук міста…"
-                        class="h-10 text-sm"
-                      />
-                      <Command.List class="max-h-64">
-                        <Command.Empty
-                          class="py-6 text-center text-sm opacity-60"
-                        >
-                          Не знайдено
-                        </Command.Empty>
-                        <Command.Group>
-                          {#each cities as c (c.slug)}
-                            <Command.Item
-                              value={c.name}
-                              onSelect={() => selectCity(c.slug)}
-                              class="flex items-center gap-2 px-3 py-2 rounded-md cursor-pointer text-sm"
-                            >
-                              <div
-                                class="w-4 flex items-center justify-center shrink-0"
-                              >
-                                {#if citySlug === c.slug}
-                                  <Check
-                                    class="size-4"
-                                    style="color: var(--primary)"
-                                  />
-                                {/if}
-                              </div>
-                              <span>{c.name}</span>
-                            </Command.Item>
-                          {/each}
-                        </Command.Group>
-                      </Command.List>
-                    </Command.Root>
-                  </Popover.Content>
-                </Popover.Root>
-                {#if cityError}
-                  <Field.Description class="text-destructive">
-                    {cityError}
-                  </Field.Description>
-                {/if}
-              </Field.Field>
-
-              <!-- Пароль + Повтор -->
-              <div class="grid grid-cols-2 gap-3">
-                <Field.Field>
-                  <Field.Label for="password">Пароль</Field.Label>
-                  <div class="relative">
-                    <Input
-                      id="password"
-                      type={showPassword ? 'text' : 'password'}
-                      bind:value={password}
-                      onblur={() => (touched.password = true)}
-                      autocomplete="new-password"
-                      minlength={8}
-                      maxlength={128}
-                      aria-invalid={!!passwordError}
-                      class="pr-9"
-                      required
-                    />
-                    <button
-                      type="button"
-                      onclick={() => (showPassword = !showPassword)}
-                      class="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded cursor-pointer hover:opacity-70"
-                      aria-label={showPassword ? 'Сховати' : 'Показати'}
-                      tabindex={-1}
-                    >
-                      {#if showPassword}
-                        <EyeOff class="size-4 opacity-60" />
-                      {:else}
-                        <Eye class="size-4 opacity-60" />
-                      {/if}
-                    </button>
-                  </div>
-                  {#if passwordError}
-                    <Field.Description class="text-destructive">
-                      {passwordError}
-                    </Field.Description>
-                  {/if}
-                </Field.Field>
-
-                <Field.Field>
-                  <Field.Label for="confirm">Повторіть</Field.Label>
-                  <Input
-                    id="confirm"
-                    type={showPassword ? 'text' : 'password'}
-                    bind:value={confirm}
-                    onblur={() => (touched.confirm = true)}
-                    autocomplete="new-password"
-                    minlength={8}
-                    maxlength={128}
-                    aria-invalid={!!confirmError}
-                    required
-                  />
-                  {#if confirmError}
-                    <Field.Description class="text-destructive">
-                      {confirmError}
-                    </Field.Description>
-                  {/if}
-                </Field.Field>
-              </div>
-
-              <!-- Індикатор сили пароля -->
-              {#if password.length > 0}
-                <div class="flex items-center gap-2 -mt-2">
-                  <div
-                    class="flex-1 h-1 rounded-full overflow-hidden"
-                    style="background-color: color-mix(in oklch, var(--foreground) 8%, transparent)"
-                  >
-                    <div
-                      class="h-full transition-all duration-300"
-                      style="width: {(pwStrength.score / 3) * 100}%;
-                             background-color: {pwStrength.score === 0
-                        ? 'var(--destructive)'
-                        : pwStrength.score === 1
-                          ? '#f59e0b'
-                          : pwStrength.score === 2
-                            ? '#eab308'
-                            : '#10b981'}"
-                    ></div>
-                  </div>
-                  <span
-                    class="text-xs font-medium tabular-nums"
-                    style="color: {pwStrength.score >= 2
-                      ? 'var(--foreground)'
-                      : 'var(--muted-foreground)'}"
-                  >
-                    {pwStrength.label}
-                  </span>
-                </div>
-              {/if}
-
-              <!-- Погодження -->
-              <div class="flex items-start gap-2">
-                <input
-                  id="terms"
-                  type="checkbox"
-                  bind:checked={agreeTerms}
-                  class="mt-0.5 w-4 h-4 rounded cursor-pointer accent-primary shrink-0"
+        <form
+          onsubmit={handleForm}
+          novalidate
+          autocomplete="on"
+          class="flex flex-col gap-4"
+        >
+          <!-- Ім'я -->
+          <div class="flex flex-col gap-2">
+            <label
+              for="name-{uid}"
+              class="text-[13.5px] font-semibold tracking-[-0.01em] text-foreground"
+              >Ім'я</label
+            >
+            <div class="relative">
+              <input
+                id="name-{uid}"
+                type="text"
+                placeholder="Іван Петренко"
+                bind:value={name}
+                onblur={() => (touched.name = true)}
+                autocomplete="name"
+                autocapitalize="words"
+                maxlength={50}
+                aria-invalid={!!nameError}
+                aria-describedby={nameError ? `name-err-${uid}` : undefined}
+                class={cn(
+                  'field-input pr-10',
+                  touched.name && isValidName(name) && 'is-valid',
+                )}
+                required
+              />
+              {#if touched.name && isValidName(name)}
+                <CheckCircle2
+                  class="pointer-events-none absolute top-1/2 right-3.5 size-4.5 -translate-y-1/2 text-emerald-500"
+                  aria-hidden="true"
                 />
-                <label
-                  for="terms"
-                  class="text-xs cursor-pointer leading-relaxed"
-                  style="color: var(--muted-foreground)"
-                >
-                  Я погоджуюсь з
-                  <a
-                    href="/terms"
-                    target="_blank"
-                    rel="noopener"
-                    class="hover:underline"
-                    style="color: var(--primary)">правилами сервісу</a
-                  >
-                  та
-                  <a
-                    href="/privacy"
-                    target="_blank"
-                    rel="noopener"
-                    class="hover:underline"
-                    style="color: var(--primary)">політикою конфіденційності</a
-                  >
-                </label>
-              </div>
-
-              {#if serverError}
-                <div
-                  class="flex items-start gap-2 p-3 rounded-lg text-sm"
-                  style="background-color: color-mix(in oklch, var(--destructive) 8%, transparent);
-                         color: var(--destructive);
-                         border: 1px solid color-mix(in oklch, var(--destructive) 25%, transparent)"
-                  role="alert"
-                >
-                  <AlertCircle class="size-4 shrink-0 mt-0.5" />
-                  <span>{serverError}</span>
-                </div>
+              {:else if nameError}
+                <AlertCircle
+                  class="pointer-events-none absolute top-1/2 right-3.5 size-4.5 -translate-y-1/2 text-destructive"
+                  aria-hidden="true"
+                />
               {/if}
-
-              <Button
-                type="submit"
-                disabled={loading || !formValid}
-                class="w-full h-11 rounded-lg cursor-pointer disabled:cursor-not-allowed"
+            </div>
+            {#if nameError}<p
+                id="name-err-{uid}"
+                class="text-[12.5px] text-destructive"
               >
-                {#if loading}
-                  <LoaderCircle class="size-4 animate-spin mr-2" />
-                  Відправляємо код…
-                {:else}
-                  Отримати код
-                {/if}
-              </Button>
+                {nameError}
+              </p>{/if}
+          </div>
 
-              <button
-                type="button"
-                onclick={backToRole}
-                class="text-xs text-center cursor-pointer hover:opacity-70 w-full"
-                style="color: var(--muted-foreground)"
+          <!-- Телефон -->
+          <div class="flex flex-col gap-2">
+            <label
+              for="phone-{uid}"
+              class="text-[13.5px] font-semibold tracking-[-0.01em] text-foreground"
+            >
+              Телефон
+            </label>
+            <div class="relative">
+              <!-- фіксований префікс -->
+              <span
+                class="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 text-[14.5px] font-medium text-muted-foreground select-none"
               >
-                ← Змінити роль
-              </button>
-            </Field.Group>
-          </form>
-        </Card.Content>
+                +380
+              </span>
+              <input
+                id="phone-{uid}"
+                type="tel"
+                inputmode="numeric"
+                autocomplete="tel-national"
+                placeholder="XX XXX XX XX"
+                value={formatUaLocal(phoneDigits)}
+                oninput={onPhoneInput}
+                onblur={() => (touched.phone = true)}
+                aria-invalid={!!phoneError}
+                aria-describedby={phoneError ? `phone-err-${uid}` : undefined}
+                class={cn(
+                  'field-input has-prefix pr-10',
+                  touched.phone && phoneValid && 'is-valid',
+                )}
+                required
+              />
+              {#if touched.phone && phoneValid}
+                <CheckCircle2
+                  class="pointer-events-none absolute top-1/2 right-3.5 size-4.5 -translate-y-1/2 text-emerald-500"
+                  aria-hidden="true"
+                />
+              {:else if phoneError}
+                <AlertCircle
+                  class="pointer-events-none absolute top-1/2 right-3.5 size-4.5 -translate-y-1/2 text-destructive"
+                  aria-hidden="true"
+                />
+              {/if}
+            </div>
+            {#if phoneError}
+              <p id="phone-err-{uid}" class="text-[12.5px] text-destructive">
+                {phoneError}
+              </p>
+            {/if}
+          </div>
+
+          <!-- Email -->
+          <div class="flex flex-col gap-2">
+            <label
+              for="email-{uid}"
+              class="text-[13.5px] font-semibold tracking-[-0.01em] text-foreground"
+              >Email</label
+            >
+            <div class="relative">
+              <input
+                id="email-{uid}"
+                type="email"
+                inputmode="email"
+                autocapitalize="none"
+                spellcheck="false"
+                placeholder="ivan@example.com"
+                bind:value={email}
+                onblur={() => (touched.email = true)}
+                autocomplete="email"
+                maxlength={254}
+                aria-invalid={!!emailError}
+                aria-describedby={emailError ? `email-err-${uid}` : undefined}
+                class={cn(
+                  'field-input pr-10',
+                  touched.email && isValidEmail(email) && 'is-valid',
+                )}
+                required
+              />
+              {#if touched.email && isValidEmail(email)}
+                <CheckCircle2
+                  class="pointer-events-none absolute top-1/2 right-3.5 size-4.5 -translate-y-1/2 text-emerald-500"
+                  aria-hidden="true"
+                />
+              {:else if emailError}
+                <AlertCircle
+                  class="pointer-events-none absolute top-1/2 right-3.5 size-4.5 -translate-y-1/2 text-destructive"
+                  aria-hidden="true"
+                />
+              {/if}
+            </div>
+            {#if emailError}<p
+                id="email-err-{uid}"
+                class="text-[12.5px] text-destructive"
+              >
+                {emailError}
+              </p>{/if}
+          </div>
+
+          <!-- Місто -->
+          <div class="flex flex-col gap-2">
+            <label
+              for="city-{uid}"
+              class="text-[13.5px] font-semibold tracking-[-0.01em] text-foreground"
+              >Місто</label
+            >
+            <Popover.Root bind:open={cityOpen}>
+              <Popover.Trigger>
+                {#snippet child({ props })}
+                  <button
+                    {...props}
+                    id="city-{uid}"
+                    bind:this={cityTriggerRef}
+                    type="button"
+                    role="combobox"
+                    aria-expanded={cityOpen}
+                    aria-invalid={!!cityError}
+                    aria-describedby={cityError ? `city-err-${uid}` : undefined}
+                    disabled={citiesLoading}
+                    onblur={() => (touched.city = true)}
+                    class="field-input flex items-center justify-between pr-4 text-left disabled:opacity-60"
+                  >
+                    {#if citiesLoading}
+                      <span class="inline-flex items-center gap-2 opacity-60">
+                        <LoaderCircle
+                          class="size-3.5 animate-spin"
+                          aria-hidden="true"
+                        />Завантаження…
+                      </span>
+                    {:else}
+                      <span class={cn(!citySlug && 'text-muted-foreground')}
+                        >{selectedCityLabel}</span
+                      >
+                      <ChevronsUpDown
+                        class="size-4 shrink-0 opacity-40"
+                        aria-hidden="true"
+                      />
+                    {/if}
+                  </button>
+                {/snippet}
+              </Popover.Trigger>
+              <Popover.Content
+                class="w-[--bits-popover-anchor-width] rounded-2xl p-0"
+                align="start"
+                sideOffset={6}
+              >
+                <Command.Root>
+                  <Command.Input
+                    placeholder="Пошук міста…"
+                    class="h-11 text-sm"
+                  />
+                  <Command.List class="max-h-64">
+                    <Command.Empty class="py-6 text-center text-sm opacity-60"
+                      >Не знайдено</Command.Empty
+                    >
+                    <Command.Group>
+                      {#each cities as c (c.slug)}
+                        <Command.Item
+                          value={c.name}
+                          onSelect={() => selectCity(c.slug)}
+                          class="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm"
+                        >
+                          <div
+                            class="flex w-4 shrink-0 items-center justify-center"
+                          >
+                            {#if citySlug === c.slug}<Check
+                                class="size-4 text-primary"
+                                aria-hidden="true"
+                              />{/if}
+                          </div>
+                          <span>{c.name}</span>
+                        </Command.Item>
+                      {/each}
+                    </Command.Group>
+                  </Command.List>
+                </Command.Root>
+              </Popover.Content>
+            </Popover.Root>
+            {#if cityError}<p
+                id="city-err-{uid}"
+                class="text-[12.5px] text-destructive"
+              >
+                {cityError}
+              </p>{/if}
+          </div>
+
+          <!-- Пароль + Повтор -->
+          <div class="flex flex-col gap-4">
+            <!-- Пароль -->
+            <div class="flex flex-col gap-2">
+              <label
+                for="password-{uid}"
+                class="text-[13.5px] font-semibold tracking-[-0.01em] text-foreground"
+              >
+                Пароль
+              </label>
+              <div class="relative">
+                <input
+                  id="password-{uid}"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="••••••••••"
+                  bind:value={password}
+                  onblur={() => (touched.password = true)}
+                  autocomplete="new-password"
+                  minlength={8}
+                  maxlength={128}
+                  aria-invalid={!!passwordError}
+                  aria-describedby={passwordError ? `pw-err-${uid}` : undefined}
+                  class="field-input pr-10"
+                  required
+                />
+                <button
+                  type="button"
+                  onclick={() => (showPassword = !showPassword)}
+                  class="absolute top-1/2 right-2 flex size-8.5 -translate-y-1/2 items-center justify-center rounded-[9px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  aria-label={showPassword
+                    ? 'Сховати паролі'
+                    : 'Показати паролі'}
+                  aria-pressed={showPassword}
+                >
+                  {#if showPassword}
+                    <EyeOff class="size-4.5" aria-hidden="true" />
+                  {:else}
+                    <Eye class="size-4.5" aria-hidden="true" />
+                  {/if}
+                </button>
+              </div>
+              {#if passwordError}
+                <p id="pw-err-{uid}" class="text-[12.5px] text-destructive">
+                  {passwordError}
+                </p>
+              {/if}
+            </div>
+
+            <!-- Повторіть -->
+            <div class="flex flex-col gap-2">
+              <label
+                for="confirm-{uid}"
+                class="text-[13.5px] font-semibold tracking-[-0.01em] text-foreground"
+              >
+                Повторіть пароль
+              </label>
+              <input
+                id="confirm-{uid}"
+                type={showPassword ? 'text' : 'password'}
+                placeholder="••••••••••"
+                bind:value={confirm}
+                onblur={() => (touched.confirm = true)}
+                autocomplete="new-password"
+                minlength={8}
+                maxlength={128}
+                aria-invalid={!!confirmError}
+                aria-describedby={confirmError
+                  ? `confirm-err-${uid}`
+                  : undefined}
+                class="field-input"
+                required
+              />
+              {#if confirmError}
+                <p
+                  id="confirm-err-{uid}"
+                  class="text-[12.5px] text-destructive"
+                >
+                  {confirmError}
+                </p>
+              {/if}
+            </div>
+          </div>
+
+          <!-- Індикатор сили пароля -->
+          {#if password.length > 0}
+            <div class="-mt-1 flex items-center gap-2.5">
+              <div class="h-1.25 flex-1 overflow-hidden rounded-full bg-muted">
+                <div
+                  class={cn(
+                    'h-full rounded-full transition-all duration-300',
+                    pwStrength.score === 0
+                      ? 'bg-destructive'
+                      : pwStrength.score === 1
+                        ? 'bg-amber-500'
+                        : pwStrength.score === 2
+                          ? 'bg-yellow-500'
+                          : 'bg-emerald-500',
+                  )}
+                  style:width={`${(pwStrength.score / 3) * 100}%`}
+                ></div>
+              </div>
+              <span
+                class={cn(
+                  'text-xs font-semibold tabular-nums',
+                  pwStrength.score >= 2
+                    ? 'text-foreground'
+                    : 'text-muted-foreground',
+                )}
+              >
+                {pwStrength.label}
+              </span>
+            </div>
+          {/if}
+
+          <!-- Погодження -->
+          <div class="flex items-start gap-2.5">
+            <input
+              id="terms-{uid}"
+              type="checkbox"
+              bind:checked={agreeTerms}
+              class="mt-0.5 size-4.25 shrink-0 cursor-pointer rounded-[5px] accent-foreground"
+            />
+            <label
+              for="terms-{uid}"
+              class="cursor-pointer text-[12.5px] leading-relaxed text-muted-foreground"
+            >
+              Я погоджуюсь з
+              <a
+                href="/terms"
+                target="_blank"
+                rel="noopener"
+                class="font-medium text-foreground hover:underline"
+                >правилами сервісу</a
+              >
+              та
+              <a
+                href="/privacy"
+                target="_blank"
+                rel="noopener"
+                class="font-medium text-foreground hover:underline"
+                >політикою конфіденційності</a
+              >
+            </label>
+          </div>
+
+          {#if serverError}{@render errBox(serverError)}{/if}
+
+          <Button
+            type="submit"
+            disabled={loading || !formValid}
+            aria-busy={loading}
+            class="mt-1 inline-flex h-13 w-full items-center justify-center gap-2.5 rounded-[14px] bg-foreground text-[15px] font-semibold tracking-[-0.01em] text-background transition hover:-translate-y-px active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+          >
+            {#if loading}<LoaderCircle
+                class="size-4.5 animate-spin"
+                aria-hidden="true"
+              />Відправляємо код…{:else}Отримати код{/if}
+          </Button>
+
+          <button
+            type="button"
+            onclick={backToRole}
+            class="w-full rounded-sm p-1 text-center text-[12.5px] text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            ← Змінити роль
+          </button>
+        </form>
       </div>
 
       <!-- ─── Крок 3: OTP ─── -->
@@ -834,99 +899,152 @@
           opacity: 0,
         }}
       >
-        <Card.Header class="text-center">
-          <Card.Title class="text-xl">Підтвердіть email</Card.Title>
-          <Card.Description>
+        <div class="mb-6 text-center">
+          <h1 class="text-[23px] font-bold tracking-[-0.035em] text-foreground">
+            Підтвердіть email
+          </h1>
+          <p class="mt-1.5 text-sm text-muted-foreground">
             Ми надіслали 6-значний код на<br />
-            <span class="font-medium" style="color: var(--foreground)">
-              {email}
-            </span>
-          </Card.Description>
-        </Card.Header>
+            <span class="font-semibold text-foreground">{email}</span>
+          </p>
+        </div>
 
-        <Card.Content>
-          <form onsubmit={handleOtp} novalidate>
-            <Field.Group>
-              <Field.Field>
-                <Field.Label for="otp">Код підтвердження</Field.Label>
-                <Input
-                  id="otp"
-                  type="text"
-                  inputmode="numeric"
-                  pattern="[0-9]*"
-                  maxlength={6}
-                  placeholder="000000"
-                  bind:value={otp}
-                  autocomplete="one-time-code"
-                  class="text-center text-2xl font-bold tracking-widest h-14"
-                  required
-                />
-                <Field.Description>Код дійсний 10 хвилин</Field.Description>
-              </Field.Field>
+        <form onsubmit={handleOtp} novalidate class="flex flex-col gap-4">
+          <div class="flex flex-col gap-2">
+            <label
+              for="otp-{uid}"
+              class="text-[13.5px] font-semibold tracking-[-0.01em] text-foreground"
+              >Код підтвердження</label
+            >
+            <input
+              id="otp-{uid}"
+              type="text"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              maxlength={6}
+              placeholder="000000"
+              bind:value={otp}
+              autocomplete="one-time-code"
+              aria-describedby="otp-hint-{uid}"
+              class="field-input otp pl-[0.4em] text-center text-[26px] font-bold tracking-[0.4em]"
+              required
+            />
+            <span
+              id="otp-hint-{uid}"
+              class="text-[12.5px] text-muted-foreground"
+              >Код дійсний 10 хвилин</span
+            >
+          </div>
 
-              {#if serverError}
-                <div
-                  class="flex items-start gap-2 p-3 rounded-lg text-sm"
-                  style="background-color: color-mix(in oklch, var(--destructive) 8%, transparent);
-                         color: var(--destructive);
-                         border: 1px solid color-mix(in oklch, var(--destructive) 25%, transparent)"
-                  role="alert"
+          {#if serverError}{@render errBox(serverError)}{/if}
+
+          <button
+            type="submit"
+            disabled={loading || otp.length !== 6}
+            aria-busy={loading}
+            class="inline-flex h-13 w-full items-center justify-center gap-2.5 rounded-[14px] bg-foreground text-[15px] font-semibold tracking-[-0.01em] text-background transition hover:-translate-y-px active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+          >
+            {#if loading}<LoaderCircle
+                class="size-4.5 animate-spin"
+                aria-hidden="true"
+              />Перевіряємо…{:else}Підтвердити{/if}
+          </button>
+
+          <div class="text-center">
+            {#if resendTimer > 0}
+              <p class="text-[12.5px] text-muted-foreground">
+                Повторний код через <span class="font-semibold text-foreground"
+                  >{resendTimer}с</span
                 >
-                  <AlertCircle class="size-4 shrink-0 mt-0.5" />
-                  <span>{serverError}</span>
-                </div>
-              {/if}
-
-              <Button
-                type="submit"
-                disabled={loading || otp.length !== 6}
-                class="w-full h-11 rounded-lg cursor-pointer disabled:cursor-not-allowed"
-              >
-                {#if loading}
-                  <LoaderCircle class="size-4 animate-spin mr-2" />
-                  Перевіряємо…
-                {:else}
-                  Підтвердити
-                {/if}
-              </Button>
-
-              <div class="text-center">
-                {#if resendTimer > 0}
-                  <p class="text-xs" style="color: var(--muted-foreground)">
-                    Повторний код через {resendTimer}с
-                  </p>
-                {:else}
-                  <button
-                    type="button"
-                    onclick={handleResend}
-                    disabled={loading}
-                    class="text-xs cursor-pointer hover:opacity-70 disabled:opacity-50"
-                    style="color: var(--primary)"
-                  >
-                    Надіслати код повторно
-                  </button>
-                {/if}
-              </div>
-
+              </p>
+            {:else}
               <button
                 type="button"
-                onclick={backToForm}
-                class="text-xs text-center cursor-pointer hover:opacity-70 w-full"
-                style="color: var(--muted-foreground)"
+                onclick={handleResend}
+                disabled={loading}
+                class="rounded-sm text-[12.5px] font-semibold text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50"
               >
-                ← Змінити email
+                Надіслати код повторно
               </button>
-            </Field.Group>
-          </form>
-        </Card.Content>
+            {/if}
+          </div>
+
+          <button
+            type="button"
+            onclick={backToForm}
+            class="w-full rounded-sm p-1 text-center text-[12.5px] text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            ← Змінити email
+          </button>
+        </form>
       </div>
     {/if}
-  </Card.Root>
+  </div>
 </div>
 
 <style>
-  /* Прибираємо синє виділення на мобайлі */
-  :global(button) {
+  /* Тонований фон — на токенах, адаптується до теми. */
+  :global(body:has(.reg-scope)) {
+    background:
+      radial-gradient(
+        130% 100% at 12% -5%,
+        color-mix(in oklch, var(--muted) 55%, var(--background)) 0%,
+        transparent 50%
+      ),
+      radial-gradient(
+        130% 100% at 100% 105%,
+        color-mix(in oklch, var(--secondary) 60%, var(--background)) 0%,
+        transparent 52%
+      ),
+      var(--background);
+  }
+  /* Прибираємо синє виділення на тач-пристроях лише в межах форми. */
+  .reg-scope :global(button) {
     -webkit-tap-highlight-color: transparent;
+  }
+
+  .field-input {
+    width: 100%;
+    height: 50px;
+    padding-left: 16px;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: var(--muted);
+    color: var(--foreground);
+    font-size: 14.5px;
+    font-weight: 500;
+    outline: none;
+    transition:
+      border-color 0.16s ease,
+      background 0.16s ease,
+      box-shadow 0.16s ease;
+  }
+  .field-input.otp {
+    height: 62px;
+  }
+
+  .field-input.has-prefix {
+    padding-left: 58px;
+  }
+
+  .field-input::placeholder {
+    color: var(--muted-foreground);
+    font-weight: 400;
+  }
+  .field-input:focus {
+    background: var(--background);
+    border-color: var(--ring);
+    box-shadow: 0 0 0 4px color-mix(in oklch, var(--ring) 22%, transparent);
+  }
+  .field-input[aria-invalid='true'] {
+    border-color: var(--destructive);
+  }
+  .field-input.is-valid {
+    border-color: color-mix(in oklch, var(--primary) 45%, transparent);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .field-input {
+      transition: none;
+    }
   }
 </style>

@@ -1,12 +1,9 @@
-<!-- src/lib/components/profile/freelancer-profile-view.svelte -->
 <script lang="ts">
-  import { Badge } from '$lib/components/ui/badge'
   import {
     Avatar,
     AvatarFallback,
     AvatarImage,
   } from '$lib/components/ui/avatar'
-  import { Button } from '$lib/components/ui/button'
   import { Skeleton } from '$lib/components/ui/skeleton'
   import { goto } from '$app/navigation'
   import {
@@ -23,19 +20,21 @@
     Sparkles,
     Image,
   } from 'lucide-svelte'
-
   import type { FreelancerProfileData as ProfileData } from '$lib/components/profile/types'
   import { getBannerForCategories } from '$lib/categories/registry'
   import PhotoGallery from '$lib/components/photo-gallery.svelte'
+  import { Button } from '../ui/button'
 
   interface Props {
     user: ProfileData
     isOwner: boolean
+    /** Зарезервовано: гейт для CTA «написати майстру», коли зʼявиться чат із профілю. */
     isAuthenticated: boolean
   }
+  // isAuthenticated поки не використовується у в'ю — не деструктуруємо, щоб не плодити m's warning.
+  let { user, isOwner }: Props = $props()
 
-  let { user, isOwner, isAuthenticated }: Props = $props()
-
+  // ── Безпечний JSON-LD: екрануємо символи, що можуть зламати <script> або HTML-контекст ──
   function safeJsonLd(data: Record<string, unknown>): string {
     const map: Record<string, string> = {
       '<': '\\u003c',
@@ -68,7 +67,7 @@
     return (Number.isFinite(value) ? value : 0).toFixed(1)
   }
 
-  /** Ціле число зірок 0–5. Array(n) кидає помилку на дробі/відʼємному. */
+  /** Ціле число зірок 0–5. Захист від дробу/відʼємного. */
   function starCount(rating: number): number {
     if (!Number.isFinite(rating)) return 0
     return Math.max(0, Math.min(5, Math.round(rating)))
@@ -91,7 +90,6 @@
       year: 'numeric',
     }),
   )
-
   const profileUrl = $derived(
     user.username ? `/@${user.username}` : `/dashboard`,
   )
@@ -128,10 +126,7 @@
     }),
   )
 
-  // Стан завантаження аватара (для скелетона)
   let avatarLoaded = $state(false)
-
-  // Копіювання нікнейма з тимчасовим станом «скопійовано»
   let copied = $state(false)
   let copyTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -146,8 +141,7 @@
       // Clipboard недоступний (HTTP / дозволи) — мовчки ігноруємо.
     }
   }
-
-  // Чистимо таймер при розмонтуванні
+  // Чистимо таймер при розмонтуванні.
   $effect(() => () => clearTimeout(copyTimer))
 
   const initials = $derived(
@@ -158,395 +152,294 @@
       .map((w) => w[0]?.toUpperCase() ?? '')
       .join('') || '?',
   )
-
-  // Топ-виконавець: 50+ виконаних замовлень
   const isTopPerformer = $derived(user.completedOrders >= 50)
-
-  // Банер за першою категорією майстра
   const bannerUrl = $derived(
     user.categorySlugs.length > 0
       ? getBannerForCategories(user.categorySlugs)
       : null,
   )
 
-  function goEdit() {
+  // Категорія, до якої належить майстер (на MVP — одна: «Прибирання»).
+  const primaryCategory = $derived(user.categories[0] ?? null)
+
+  function goEdit(): void {
     goto('/onboarding')
   }
 </script>
 
 <svelte:head>
-  {@html `<script type="application/ld+json">${personJsonLd}</script>`}
+  {@html `<script type="application/ld+json">${personJsonLd}<\/script>`}
 </svelte:head>
 
 <article
-  class="min-h-screen pb-20 md:pb-10"
-  style="background-color: var(--background)"
+  class="fprofile-scope min-h-svh px-5 pt-7 pb-20 md:pb-12"
   itemscope
   itemtype="https://schema.org/Person"
 >
-  <!-- ═══════ Банер категорії ═══════ -->
-  <header class="px-4 pt-4 sm:px-6 sm:pt-6">
-    <div
-      class="relative w-full h-32 xs:h-40 sm:h-52 rounded-2xl overflow-hidden"
-      style="background: linear-gradient(135deg,
-              color-mix(in oklch, var(--primary) 25%, transparent),
-              color-mix(in oklch, var(--primary) 10%, transparent),
-              color-mix(in oklch, var(--foreground) 5%, transparent));"
-    >
-      {#if bannerUrl}
-        <img
-          src={bannerUrl}
-          alt=""
-          aria-hidden="true"
-          loading="eager"
-          decoding="async"
-          class="absolute inset-0 w-full h-full object-cover"
-        />
-      {/if}
-      <div
-        class="absolute inset-0 pointer-events-none"
-        style="background: linear-gradient(180deg, transparent 50%, rgba(0,0,0,0.35))"
-      ></div>
-    </div>
-  </header>
-
-  <div class="max-w-2xl mx-auto px-4 sm:px-8">
-    <!-- ═══════ Аватар + CTA ═══════ -->
-    <div class="flex items-start justify-between gap-3">
-      <div class="-mt-12 sm:-mt-14 relative">
-        {#if user.avatar && !avatarLoaded}
-          <div
-            class="absolute inset-0 size-24 sm:size-32 rounded-full border-4 overflow-hidden z-10"
-            style="border-color: var(--background)"
-          >
-            <Skeleton class="w-full h-full rounded-full" />
-          </div>
+  <div class="mx-auto flex max-w-[620px] flex-col gap-4">
+    <!-- ═══ HERO: banner + avatar ═══ -->
+    <div class="card overflow-hidden">
+      <div class="relative h-[180px] bg-gradient-to-br from-muted to-secondary">
+        {#if bannerUrl}
+          <img
+            src={bannerUrl}
+            alt=""
+            aria-hidden="true"
+            loading="eager"
+            decoding="async"
+            class="absolute inset-0 size-full object-cover"
+          />
         {/if}
-        <Avatar
-          class="size-24 sm:size-32 border-4 shadow-lg"
-          style="border-color: var(--background)"
-        >
-          {#if user.avatar}
-            <AvatarImage
-              src={user.avatar}
-              alt="Аватар {user.name}"
-              loading="eager"
-              fetchpriority="high"
-              decoding="async"
-              onload={() => (avatarLoaded = true)}
-              onerror={() => (avatarLoaded = true)}
-            />
-            <meta itemprop="image" content={user.avatar} />
-          {/if}
-          <AvatarFallback
-            class="text-3xl sm:text-4xl font-semibold cursor-default"
-            style="background-color: var(--primary); color: var(--primary-foreground)"
-          >
-            {initials}
-          </AvatarFallback>
-        </Avatar>
+        <div
+          class="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 to-transparent"
+        ></div>
       </div>
 
-      {#if isOwner}
-        <nav
-          aria-label="Дії з профілем"
-          class="hidden sm:flex items-center gap-2 mt-4"
-        >
-          <Button onclick={goEdit} class="h-10 rounded-full gap-1.5">
-            <Pencil class="size-3.5" aria-hidden="true" />
-            Редагувати профіль
-          </Button>
-        </nav>
-      {/if}
-    </div>
+      <div class="px-7 pb-[26px]">
+        <div class="mt-[-52px] mb-4 flex items-end justify-between gap-4">
+          <div class="relative">
+            {#if user.avatar && !avatarLoaded}
+              <div
+                class="absolute inset-0 z-10 size-[104px] overflow-hidden rounded-full border-4 border-card"
+              >
+                <Skeleton class="size-full rounded-full" />
+              </div>
+            {/if}
+            <Avatar class="size-[104px] border-4 border-card shadow-md">
+              {#if user.avatar}
+                <AvatarImage
+                  src={user.avatar}
+                  alt="Аватар {user.name}"
+                  loading="eager"
+                  fetchpriority="high"
+                  decoding="async"
+                  onload={() => (avatarLoaded = true)}
+                  onerror={() => (avatarLoaded = true)}
+                />
+                <meta itemprop="image" content={user.avatar} />
+              {/if}
+              <AvatarFallback
+                class="cursor-default bg-foreground text-[38px] font-bold text-background"
+              >
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+          </div>
 
-    <!-- ═══════ Імʼя + статус ═══════ -->
-    <section class="mt-3 mb-5" aria-label="Основна інформація">
-      <div class="flex items-start justify-between gap-2 mb-1">
-        <div class="flex items-center gap-1.5 min-w-0">
+          {#if isOwner}
+            <Button
+              type="button"
+              onclick={goEdit}
+              class="mb-1 inline-flex h-[42px] items-center gap-[7px] rounded-full bg-foreground px-[18px] text-[13.5px] font-semibold text-background transition-transform hover:-translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground/40 motion-reduce:transition-none"
+            >
+              <Pencil class="size-[15px]" aria-hidden="true" /> Редагувати
+            </Button>
+          {/if}
+        </div>
+
+        <div class="flex items-center gap-[7px]">
           <h1
-            class="text-xl font-semibold truncate"
-            style="color: var(--foreground)"
+            class="truncate text-[23px] font-bold tracking-[-0.03em] text-foreground"
             itemprop="name"
           >
             {user.name}
           </h1>
           {#if user.verificationStatus === 'VERIFIED'}
             <BadgeCheck
-              class="size-5 shrink-0"
-              style="color: var(--primary); fill: var(--primary); stroke: var(--primary-foreground)"
+              class="size-5 shrink-0 fill-primary stroke-primary-foreground"
               aria-label="Верифікований"
             />
           {/if}
         </div>
-      </div>
 
-      {#if user.username}
-        <p
-          class="text-sm flex items-center gap-1.5 mb-2"
-          style="color: var(--muted-foreground)"
-        >
-          <span itemprop="alternateName">@{user.username}</span>
+        {#if user.username}
+          <p
+            class="mt-1 flex items-center gap-[7px] text-sm text-muted-foreground"
+          >
+            <span itemprop="alternateName">@{user.username}</span>
+            <button
+              type="button"
+              onclick={copyUsername}
+              class="rounded-sm cursor-pointer text-muted-foreground/70 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground/40"
+              aria-label={copied ? 'Нікнейм скопійовано' : 'Скопіювати нікнейм'}
+            >
+              {#if copied}
+                <Check class="size-3 text-emerald-500" aria-hidden="true" />
+              {:else}
+                <Copy class="size-3" aria-hidden="true" />
+              {/if}
+            </button>
+          </p>
+        {/if}
+
+        <div class="my-3.5 flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+          <span
+            class="inline-flex items-center gap-1.5 text-[13px] font-medium text-muted-foreground"
+          >
+            <Calendar class="size-[13px]" aria-hidden="true" />
+            <time datetime={created.iso}>З нами з {created.display}</time>
+          </span>
+          {#if user.city}
+            <span class="text-muted-foreground/50" aria-hidden="true">·</span>
+            <span
+              class="inline-flex items-center gap-1.5 text-[13px] font-medium text-muted-foreground"
+              itemprop="address"
+              itemscope
+              itemtype="https://schema.org/PostalAddress"
+            >
+              <MapPin class="size-[13px]" aria-hidden="true" />
+              <span itemprop="addressLocality">{user.city}</span>
+            </span>
+          {/if}
+        </div>
+
+        <div class="flex flex-wrap gap-2">
+          <span
+            class="inline-flex h-[30px] items-center gap-1.5 rounded-full bg-secondary px-[13px] text-[12.5px] font-semibold text-secondary-foreground"
+          >
+            <Sparkles class="size-3" aria-hidden="true" /> Майстер
+          </span>
+          {#if isTopPerformer}
+            <span
+              class="inline-flex h-[30px] items-center gap-1.5 rounded-full bg-amber-500/10 px-[13px] text-[12.5px] font-semibold text-amber-700 dark:text-amber-400"
+            >
+              <Star class="size-3" aria-hidden="true" /> Топ виконавець
+            </span>
+          {/if}
+        </div>
+
+        {#if isOwner}
           <button
             type="button"
-            onclick={copyUsername}
-            class="cursor-pointer transition-colors hover:text-foreground"
-            aria-label={copied ? 'Нікнейм скопійовано' : 'Скопіювати нікнейм'}
+            onclick={goEdit}
+            class="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-foreground text-[14.5px] font-semibold text-background transition-transform hover:-translate-y-px active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground/40 motion-reduce:transition-none sm:hidden"
           >
-            {#if copied}
-              <Check class="size-3" style="color: #10b981" aria-hidden="true" />
-            {:else}
-              <Copy class="size-3" aria-hidden="true" />
-            {/if}
+            <Pencil class="size-4" aria-hidden="true" /> Редагувати профіль
           </button>
-        </p>
-      {/if}
-
-      <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mb-3">
-        <span
-          class="flex items-center gap-1 text-xs"
-          style="color: var(--muted-foreground)"
-        >
-          <Calendar class="size-3" aria-hidden="true" />
-          <time datetime={created.iso}>{created.display}</time>
-        </span>
-        {#if user.city}
-          <span class="text-xs opacity-30" aria-hidden="true">·</span>
-          <span
-            class="flex items-center gap-1 text-xs"
-            style="color: var(--muted-foreground)"
-            itemprop="address"
-            itemscope
-            itemtype="https://schema.org/PostalAddress"
-          >
-            <MapPin class="size-3" aria-hidden="true" />
-            <span itemprop="addressLocality">{user.city}</span>
-          </span>
         {/if}
       </div>
+    </div>
 
-      <p class="text-sm mb-4" style="color: var(--muted-foreground)">
-        <span class="font-medium" style="color: var(--foreground)">
-          {user.completedOrders ?? 0}
-        </span>
-        замовлень
-        {#if user.reviewsCount > 0}
-          ·
-          <span class="font-medium" style="color: var(--primary)">
-            {user.reviewsCount}
-            {reviewsLabel(user.reviewsCount)}
-          </span>
-          ·
-          <span style="color: #f5a623; font-weight: 500">
-            ★ {fmtRating(user.avgRating)}
-          </span>
-        {/if}
-      </p>
-
-      <div class="flex flex-wrap gap-2">
-        <Badge
-          variant="outline"
-          class="rounded-full text-xs font-normal px-3 py-1 cursor-default gap-1.5"
-        >
-          <Sparkles class="size-3" aria-hidden="true" />
-          Майстер
-        </Badge>
-
-        {#if isTopPerformer}
-          <Badge
-            variant="outline"
-            class="rounded-full text-xs font-normal px-3 py-1 cursor-default gap-1.5"
-            style="border-color: color-mix(in oklch, #f59e0b 30%, transparent); color: #b45309"
-          >
-            <Star class="size-3" aria-hidden="true" />
-            Топ виконавець
-          </Badge>
-        {/if}
-      </div>
-
-      {#if isOwner}
-        <nav class="flex sm:hidden mt-4">
-          <Button onclick={goEdit} class="w-full h-11 rounded-full gap-2">
-            <Pencil class="size-4" aria-hidden="true" />
-            Редагувати профіль
-          </Button>
-        </nav>
-      {/if}
-    </section>
-
-    <div
-      class="border-t"
-      style="border-color: color-mix(in oklch, var(--foreground) 6%, transparent)"
-    ></div>
-
-    <!-- ═══════ Про себе ═══════ -->
-    <section class="py-5 space-y-4" aria-labelledby="about-heading">
+    <!-- ═══ ABOUT + CATEGORY ═══ -->
+    <section aria-labelledby="about-heading" class="card p-7">
       <h2
         id="about-heading"
-        class="text-[11px] font-medium tracking-widest uppercase flex items-center gap-1.5"
-        style="color: var(--muted-foreground)"
+        class="mb-4 inline-flex items-center gap-[7px] text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase"
       >
         <User class="size-3.5" aria-hidden="true" /> Про себе
       </h2>
 
       {#if user.bio}
         <p
-          class="text-sm leading-relaxed"
-          style="color: var(--muted-foreground); overflow-wrap: anywhere"
+          class="text-[14.5px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]"
           itemprop="description"
         >
           {user.bio}
         </p>
       {:else}
-        <p
-          class="text-sm italic"
-          style="color: var(--muted-foreground); opacity: 0.6"
-        >
+        <p class="text-[14.5px] text-muted-foreground/60 italic">
           {isOwner ? 'Ти ще не додав опис.' : 'Майстер ще не додав опис.'}
         </p>
       {/if}
 
-      {#if user.categories.length > 0}
-        <div class="flex items-start justify-between gap-4">
-          <span class="text-sm shrink-0" style="color: var(--muted-foreground)">
-            Категорії
+      {#if primaryCategory}
+        <div class="mt-5 flex items-center gap-2.5">
+          <span class="text-[13px] text-muted-foreground">Категорія</span>
+          <span
+            class="inline-flex h-8 items-center rounded-full bg-secondary px-3.5 text-[13px] font-medium text-secondary-foreground"
+          >
+            {primaryCategory}
           </span>
-          <div class="flex flex-wrap gap-1.5 justify-end">
-            {#each user.categories as cat (cat)}
-              <Badge
-                class="rounded-full text-xs font-normal"
-                style="background-color: color-mix(in oklch, var(--primary) 12%, transparent);
-                       color: var(--primary);
-                       border: 1px solid color-mix(in oklch, var(--primary) 25%, transparent)"
-              >
-                {cat}
-              </Badge>
-            {/each}
-          </div>
         </div>
       {/if}
     </section>
 
-    <div
-      class="border-t"
-      style="border-color: color-mix(in oklch, var(--foreground) 6%, transparent)"
-    ></div>
-
-    <!-- ═══════ Приклади робіт ═══════ -->
+    <!-- ═══ PORTFOLIO ═══ -->
     {#if user.portfolioImages.length > 0}
-      <section class="py-5 space-y-4" aria-labelledby="portfolio-heading">
+      <section aria-labelledby="portfolio-heading" class="card p-7">
         <h2
           id="portfolio-heading"
-          class="text-[11px] font-medium tracking-widest uppercase flex items-center gap-1.5"
-          style="color: var(--muted-foreground)"
+          class="mb-4 inline-flex items-center gap-[7px] text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase"
         >
           <Image class="size-3.5" aria-hidden="true" /> Приклади робіт
         </h2>
         <PhotoGallery images={user.portfolioImages} />
       </section>
-
-      <div
-        class="border-t"
-        style="border-color: color-mix(in oklch, var(--foreground) 6%, transparent)"
-      ></div>
     {/if}
 
-    <!-- ═══════ Статистика ═══════ -->
-    <section class="py-5" aria-labelledby="stats-heading">
+    <!-- ═══ STATS ═══ -->
+    <section aria-labelledby="stats-heading" class="card p-7">
       <h2
         id="stats-heading"
-        class="text-[11px] font-medium tracking-widest uppercase mb-4 flex items-center gap-1.5"
-        style="color: var(--muted-foreground)"
+        class="mb-4 inline-flex items-center gap-[7px] text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase"
       >
         <Zap class="size-3.5" aria-hidden="true" /> Статистика
       </h2>
-
-      <dl class="grid grid-cols-2 gap-2 sm:gap-3">
-        <div
-          class="rounded-lg px-3 sm:px-4 py-3 border"
-          style="background-color: color-mix(in oklch, var(--foreground) 3%, transparent);
-                 border-color: color-mix(in oklch, var(--foreground) 6%, transparent)"
-        >
+      <dl class="grid grid-cols-2 gap-2.5">
+        <div class="rounded-2xl bg-muted px-[18px] py-4">
           <dt
-            class="text-xs mb-1 flex items-center gap-1.5"
-            style="color: var(--muted-foreground)"
+            class="mb-1.5 inline-flex items-center gap-1.5 text-[12.5px] text-muted-foreground"
           >
-            <Star class="size-3" aria-hidden="true" /> Рейтинг
+            <Star
+              class="size-3 fill-amber-400 text-amber-400"
+              aria-hidden="true"
+            /> Рейтинг
           </dt>
           <dd
-            class="text-lg sm:text-xl font-semibold tabular-nums m-0"
-            style="color: var(--foreground)"
+            class="m-0 text-2xl font-bold tracking-[-0.03em] text-foreground tabular-nums"
           >
             {fmtRating(user.avgRating)}
-            <span
-              class="text-xs sm:text-sm font-normal"
-              style="color: var(--muted-foreground)"
+            <span class="text-[13px] font-medium text-muted-foreground"
+              >/ 5.0</span
             >
-              / 5.0
-            </span>
           </dd>
         </div>
-
-        <div
-          class="rounded-lg px-3 sm:px-4 py-3 border"
-          style="background-color: color-mix(in oklch, var(--foreground) 3%, transparent);
-                 border-color: color-mix(in oklch, var(--foreground) 6%, transparent)"
-        >
+        <div class="rounded-2xl bg-muted px-[18px] py-4">
           <dt
-            class="text-xs mb-1 flex items-center gap-1.5"
-            style="color: var(--muted-foreground)"
+            class="mb-1.5 inline-flex items-center gap-1.5 text-[12.5px] text-muted-foreground"
           >
             <BadgeCheck class="size-3" aria-hidden="true" /> Виконано
           </dt>
           <dd
-            class="text-lg sm:text-xl font-semibold tabular-nums m-0"
-            style="color: var(--foreground)"
+            class="m-0 text-2xl font-bold tracking-[-0.03em] text-foreground tabular-nums"
           >
             {user.completedOrders ?? 0}
-            <span
-              class="text-xs sm:text-sm font-normal"
-              style="color: var(--muted-foreground)"
+            <span class="text-[13px] font-medium text-muted-foreground"
+              >замовлень</span
             >
-              замовлень
-            </span>
           </dd>
         </div>
       </dl>
     </section>
 
-    <div
-      class="border-t"
-      style="border-color: color-mix(in oklch, var(--foreground) 6%, transparent)"
-    ></div>
-
-    <!-- ═══════ Відгуки ═══════ -->
-    <section class="py-5" aria-labelledby="reviews-heading">
-      <div class="flex items-center justify-between mb-6">
+    <!-- ═══ REVIEWS ═══ -->
+    <section aria-labelledby="reviews-heading" class="card p-7">
+      <div class="mb-4 flex items-center justify-between">
         <h2
           id="reviews-heading"
-          class="text-[11px] font-medium tracking-widest uppercase flex items-center gap-1.5"
-          style="color: var(--muted-foreground)"
+          class="inline-flex items-center gap-[7px] text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase"
         >
           <MessageSquare class="size-3.5" aria-hidden="true" /> Відгуки
         </h2>
         {#if user.reviewsCount > 0}
           <span
-            class="text-xs flex items-center gap-1"
-            style="color: var(--muted-foreground)"
+            class="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-muted-foreground"
           >
             <Star
-              class="size-3"
-              style="color: #f5a623; fill: #f5a623"
+              class="size-3 fill-amber-400 text-amber-400"
               aria-hidden="true"
             />
-            {fmtRating(user.avgRating)} · {user.reviewsCount}
+            <b class="font-semibold text-foreground"
+              >{fmtRating(user.avgRating)}</b
+            >
+            · {user.reviewsCount}
             {reviewsLabel(user.reviewsCount)}
           </span>
         {/if}
       </div>
 
       {#if user.reviews.length > 0}
-        <ul class="list-none p-0 m-0">
+        <ul class="m-0 list-none p-0">
           {#each user.reviews as review, i (review.id ?? i)}
             {@const stars = starCount(review.rating)}
             {@const reviewDate = formatDate(review.createdAt, {
@@ -555,33 +448,26 @@
               year: 'numeric',
             })}
             <li
-              class="py-5 first:pt-0"
-              style="border-top: {i === 0
-                ? 'none'
-                : '1px solid color-mix(in oklch, var(--foreground) 5%, transparent)'}"
+              class="border-t border-border py-[18px] first:border-t-0 first:pt-0"
               itemprop="review"
               itemscope
               itemtype="https://schema.org/Review"
             >
-              <div class="flex items-center gap-2 mb-2">
+              <div class="mb-2.5 flex items-center gap-2.5">
                 <div
-                  class="size-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 border"
-                  style="background-color: color-mix(in oklch, var(--foreground) 4%, transparent);
-                         border-color: color-mix(in oklch, var(--foreground) 8%, transparent);
-                         color: var(--primary)"
+                  class="flex size-[30px] shrink-0 items-center justify-center rounded-full bg-muted text-[11.5px] font-semibold text-foreground"
                   aria-hidden="true"
                 >
                   {review.authorInitials}
                 </div>
                 <span
-                  class="text-sm font-medium"
-                  style="color: var(--foreground)"
+                  class="flex-1 truncate text-sm font-semibold text-foreground"
                   itemprop="author"
                 >
                   {review.authorName}
                 </span>
                 <div
-                  class="flex ml-auto gap-0.5"
+                  class="ml-auto flex gap-0.5"
                   itemprop="reviewRating"
                   itemscope
                   itemtype="https://schema.org/Rating"
@@ -591,38 +477,27 @@
                   <meta itemprop="bestRating" content="5" />
                   {#each Array(stars) as _, j (j)}
                     <Star
-                      class="size-3"
-                      style="color: #f5a623; fill: #f5a623"
+                      class="size-3 fill-amber-400 text-amber-400"
                       aria-hidden="true"
                     />
                   {/each}
                 </div>
               </div>
               <p
-                class="text-sm leading-relaxed pl-9"
-                style="color: var(--muted-foreground); overflow-wrap: anywhere"
+                class="pl-10 text-sm leading-relaxed text-muted-foreground [overflow-wrap:anywhere]"
                 itemprop="reviewBody"
               >
                 {review.text}
               </p>
-              <p
-                class="text-[11px] mt-2 pl-9"
-                style="color: color-mix(in oklch, var(--muted-foreground) 60%, transparent)"
-              >
+              <p class="mt-2 pl-10 text-[11.5px] text-muted-foreground/70">
                 <time datetime={reviewDate.iso}>{reviewDate.display}</time>
               </p>
             </li>
           {/each}
         </ul>
       {:else}
-        <div
-          class="text-center py-8 rounded-xl"
-          style="background-color: color-mix(in oklch, var(--foreground) 2%, transparent)"
-        >
-          <p
-            class="text-sm"
-            style="color: var(--muted-foreground); opacity: 0.7"
-          >
+        <div class="rounded-2xl bg-muted py-8 text-center">
+          <p class="text-sm text-muted-foreground">
             {isOwner
               ? 'Поки що немає відгуків. Виконай перше замовлення — і клієнти почнуть лишати відгуки.'
               : 'Ще немає відгуків'}
@@ -632,3 +507,31 @@
     </section>
   </div>
 </article>
+
+<style>
+  /* Тонований фон сторінки — на токенах, тож адаптується до теми. */
+  :global(body:has(.fprofile-scope)) {
+    background:
+      radial-gradient(
+        120% 70% at 12% -5%,
+        color-mix(in oklch, var(--muted) 55%, var(--background)) 0%,
+        transparent 48%
+      ),
+      radial-gradient(
+        120% 70% at 100% 102%,
+        color-mix(in oklch, var(--secondary) 65%, var(--background)) 0%,
+        transparent 50%
+      ),
+      var(--background);
+  }
+
+  /* Єдине джерело правди для картки: радіус, рамка, фон, тінь. Тінь — alpha-чорний (працює в обох темах). */
+  .card {
+    border-radius: 28px;
+    border: 1px solid var(--border);
+    background-color: var(--card);
+    box-shadow:
+      0 20px 50px -16px rgba(0, 0, 0, 0.1),
+      0 4px 12px -6px rgba(0, 0, 0, 0.05);
+  }
+</style>
