@@ -1,28 +1,23 @@
-<!--
-  Блок «Стати майстром» — Zunor, у стилі Hero.
-  CTA зі свіченням + shimmer, панель зображення зі skeleton/fade/обробкою помилки.
-  Зображення видиме на всіх екранах; на мобайлі — зверху над текстом.
-  Залежності: lucide-svelte, $lib/components/ui/skeleton.
--->
 <script lang="ts">
   import { Skeleton } from '$lib/components/ui/skeleton'
 
-  interface Props {
+  interface BecomeMasterProps {
     illustration?: string | null
     alt?: string
   }
 
-  let { illustration = '/master-test4.png', alt = 'Майстер Zunor' }: Props =
+  let { illustration = '/master-test4.png', alt = 'Майстер Zunor' }: BecomeMasterProps =
     $props()
 
   let isImageLoaded = $state(false)
   let hasError = $state(false)
 
-  // Захист від XSS через протоколи (javascript:, data: тощо):
-  // лише відносний шлях (один слеш, не //) або http(s).
   const safeSrc = $derived.by(() => {
     if (!illustration) return ''
-    return /^(https?:\/\/|\/(?!\/))/.test(illustration) ? illustration : ''
+    const src = illustration.trim()
+    if (/^https?:\/\//i.test(src)) return src
+    if (src.startsWith('/') && !/^\/[/\\]/.test(src)) return src
+    return ''
   })
 </script>
 
@@ -90,11 +85,10 @@
 </section>
 
 <style>
+  /* Уніфіковано з Hero: одна спокійна тінь на hover, без shimmer і без подвійного neon-glow. */
   .cta-btn {
     width: 100%;
     max-width: 320px;
-    position: relative;
-    overflow: hidden;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -107,10 +101,9 @@
     border-radius: 14px;
     text-decoration: none;
     box-shadow: 0 4px 14px rgba(0, 142, 96, 0.2);
-    will-change: transform, box-shadow;
     transition:
       transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
-      box-shadow 0.25s ease;
+      box-shadow 0.2s ease;
   }
 
   @media (min-width: 640px) {
@@ -121,46 +114,21 @@
 
   .cta-btn:hover {
     transform: translateY(-2px);
-    box-shadow:
-      0 0 24px 4px rgba(0, 142, 96, 0.4),
-      0 0 60px 14px rgba(0, 142, 96, 0.15);
+    box-shadow: 0 8px 20px rgba(0, 142, 96, 0.28);
   }
 
   .cta-btn:active {
     transform: scale(0.98) translateY(-1px);
   }
 
-  .cta-btn::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: -150%;
-    width: 80%;
-    height: 100%;
-    background: linear-gradient(
-      100deg,
-      transparent 20%,
-      rgba(169, 169, 169, 0.53) 50%,
-      transparent 80%
-    );
-    animation: shimmer 4s infinite linear;
-    pointer-events: none;
-  }
-
-  @keyframes shimmer {
-    0% {
-      transform: translateX(0);
-    }
-    30%,
-    100% {
-      transform: translateX(375%);
-    }
+  /* Кастомна кнопка без нативного outline — фокус обов'язково потрібен явно (клавіатурна навігація) */
+  .cta-btn:focus-visible {
+    outline: 2px solid var(--foreground);
+    outline-offset: 3px;
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .cta-btn,
-    .cta-btn::after {
-      animation: none !important;
+    .cta-btn {
       transition: none !important;
       transform: none !important;
     }

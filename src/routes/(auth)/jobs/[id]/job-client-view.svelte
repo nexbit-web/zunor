@@ -1,15 +1,18 @@
 <!-- src/routes/(auth)/jobs/[id]/job-client-view.svelte -->
+<!--
+  Заявка очима клієнта + пропозиції майстрів — на токенах теми.
+  Логіка 1:1: describeJob, cancelJob / acceptProposal (з модалками), showAll
+  (recommended vs others), статуси/бейджі, Zuna waiting, форматтери.
+  Усе клієнтське — UX; сервер валідує власність і права повторно.
+-->
 <script lang="ts">
   import { goto } from '$app/navigation'
-  import { Button } from '$lib/components/ui/button'
-  import { Badge } from '$lib/components/ui/badge'
   import {
     Avatar,
     AvatarFallback,
     AvatarImage,
   } from '$lib/components/ui/avatar'
-  import { Card, CardContent } from '$lib/components/ui/card'
-  import { Separator } from '$lib/components/ui/separator'
+  import { Spinner } from '$lib/components/ui/spinner'
   import {
     ArrowLeft,
     MapPin,
@@ -20,8 +23,6 @@
     Wallet,
     CheckCircle2,
   } from 'lucide-svelte'
-  import type { PageData } from './$types'
-  import { Spinner } from '$lib/components/ui/spinner'
   import { describeJob } from '$lib/categories/cleaning/describe'
   import PhotoGallery from '$lib/components/photo-gallery.svelte'
   import * as AlertDialog from '$lib/components/ui/alert-dialog'
@@ -32,11 +33,10 @@
     formatRelative,
     expiresIn,
     initials,
-    statusVariant,
     statusLabel,
     proposalStatusLabel,
-    proposalStatusVariant,
   } from '$lib/components/jobs/display'
+  import type { PageData } from './$types'
 
   let { data }: { data: PageData } = $props()
   let acceptingId = $state<string | null>(null)
@@ -48,6 +48,18 @@
   let pendingAcceptId = $state<string | null>(null)
 
   const details = $derived(describeJob(data.job.metadata))
+
+  // статуси → семантичні кольори (emerald/amber — статус, не акцент бренду)
+  function statusBadge(status: string): string {
+    if (status === 'OPEN') return 'bg-emerald-500/10 text-emerald-600'
+    if (status === 'IN_PROGRESS') return 'bg-amber-500/10 text-amber-700'
+    return 'bg-muted text-foreground'
+  }
+  function proposalBadge(status: string): string {
+    if (status === 'ACCEPTED') return 'bg-emerald-500/10 text-emerald-600'
+    if (status === 'REJECTED') return 'bg-destructive/10 text-destructive'
+    return 'bg-amber-500/10 text-amber-700'
+  }
 
   async function cancelJob() {
     if (cancelling) return
@@ -88,334 +100,320 @@
       acceptingId = null
     }
   }
+
+  const cardCls =
+    'rounded-[26px] border border-border bg-card shadow-[0_20px_50px_-16px_rgba(0,0,0,0.1),0_4px_12px_-6px_rgba(0,0,0,0.04)]'
+  const badgeBase =
+    'inline-flex h-[22px] items-center gap-1 rounded-full px-2.5 text-[10px] font-bold tracking-[0.06em] uppercase'
 </script>
 
-<!-- Back -->
-<button
-  type="button"
-  onclick={() => goto('/jobs')}
-  class="inline-flex items-center gap-1.5 text-sm mb-5 cursor-pointer hover:opacity-70 transition-opacity"
-  style="color: var(--muted-foreground)"
->
-  <ArrowLeft class="size-4" /> До моїх заявок
-</button>
-
-<!-- Header card -->
-<Card class="rounded-2xl mb-3">
-  <CardContent class="p-5 sm:p-6">
-    <div class="flex items-center gap-2 flex-wrap mb-3">
-      <Badge
-        variant={statusVariant(data.job.status)}
-        class="text-[10px] uppercase font-bold"
-      >
-        {statusLabel(data.job.status)}
-      </Badge>
-      <span class="text-xs" style="color: var(--muted-foreground)">
-        {formatRelative(data.job.createdAt)}
-      </span>
-      {#if data.job.status === 'OPEN'}
-        <span class="text-xs" style="color: var(--muted-foreground)">
-          · Активна ще {expiresIn(data.job.expiresAt)}
-        </span>
-      {/if}
-    </div>
-
-    <h1
-      class="text-xl sm:text-2xl font-bold tracking-tight mb-3"
-      style="color: var(--foreground); letter-spacing: -0.02em"
-    >
-      {data.job.title}
-    </h1>
-
-    {#if data.job.description}
-      <p
-        class="text-sm leading-relaxed whitespace-pre-wrap mb-4"
-        style="color: var(--foreground)"
-      >
-        {data.job.description}
-      </p>
-    {/if}
-
-    <!-- Характеристики заявки -->
-    {#if details.length > 0}
-      <div class="rounded-xl border border-border overflow-hidden mb-4">
-        {#each details as d, i (d.label)}
-          {#if d.items}
-            <div
-              class="px-4 py-3 text-sm"
-              class:border-t={i > 0}
-              style="border-color: var(--border)"
-            >
-              <span class="block mb-2.5" style="color: var(--muted-foreground)"
-                >{d.label}</span
-              >
-              <div class="space-y-2">
-                {#each d.items as it (it.name)}
-                  <div class="flex items-center justify-between gap-3">
-                    <span class="font-medium" style="color: var(--foreground)"
-                      >{it.name}</span
-                    >
-                    <span
-                      class="shrink-0 inline-flex items-center justify-center min-w-7 h-6 px-2 rounded-full text-xs font-semibold tabular-nums"
-                      style="background-color: var(--secondary); color: var(--foreground)"
-                    >
-                      ×{it.qty}
-                    </span>
-                  </div>
-                {/each}
-              </div>
-            </div>
-          {:else}
-            <div
-              class="flex items-center justify-between px-4 py-2.5 text-sm gap-4"
-              class:border-t={i > 0}
-              style="border-color: var(--border)"
-            >
-              <span class="shrink-0" style="color: var(--muted-foreground)"
-                >{d.label}</span
-              >
-              <span
-                class="font-medium text-right"
-                style="color: var(--foreground)"
-              >
-                {d.value}
-              </span>
-            </div>
-          {/if}
-        {/each}
-      </div>
-    {/if}
-
-    <!-- Фото обсягу робіт -->
-    {#if data.job.attachments && data.job.attachments.length > 0}
-      <div class="mb-4">
-        <PhotoGallery images={data.job.attachments} />
-      </div>
-    {/if}
-
-    <!-- Місто -->
-    <div
-      class="flex items-center gap-1.5 text-sm mb-4"
-      style="color: var(--muted-foreground)"
-    >
-      <MapPin class="size-3.5" />
-      {data.job.city}
-    </div>
-
-    <Separator class="my-4" />
-
-    <div
-      class="flex items-center gap-4 text-xs"
-      style="color: var(--muted-foreground)"
-    >
-      <span class="inline-flex items-center gap-1">
-        <MessageSquare class="size-3.5" />
-        {data.job.proposalsCount} пропозиц{data.job.proposalsCount === 1
-          ? 'ія'
-          : 'ій'}
-      </span>
-      <span class="inline-flex items-center gap-1">
-        <Eye class="size-3.5" />
-        {data.job.viewsCount} переглядів
-      </span>
-    </div>
-
-    {#if data.job.status === 'OPEN'}
-      <Separator class="my-4" />
-      <button
-        type="button"
-        onclick={() => (cancelDialogOpen = true)}
-        disabled={cancelling}
-        class="inline-flex items-center gap-1.5 text-sm font-medium cursor-pointer transition-opacity hover:opacity-70 disabled:opacity-50"
-        style="color: var(--destructive)"
-      >
-        {#if cancelling}
-          <Spinner /> Скасовуємо…
-        {:else}
-          Скасувати заявку
-        {/if}
-      </button>
-    {/if}
-  </CardContent>
-</Card>
-
-<!-- Proposals -->
-{#if data.proposals.length > 0}
-  {@const recommended = data.proposals.filter((p) => p.recommended)}
-  {@const others = data.proposals.filter((p) => !p.recommended)}
-  {@const visible = showAll ? data.proposals : recommended}
-
-  <div class="flex items-center justify-between mb-3 mt-6 px-1">
-    <h2
-      class="text-base font-bold tracking-tight"
-      style="color: var(--foreground); letter-spacing: -0.01em"
-    >
-      {#if recommended.length > 0 && !showAll}
-        Рекомендуємо для вас
-      {:else}
-        Відгуки майстрів
-      {/if}
-    </h2>
-    <span class="text-xs tabular-nums" style="color: var(--muted-foreground)">
-      {data.proposals.length}
-    </span>
-  </div>
-
-  <div class="space-y-3">
-    {#each visible as p (p.id)}
-      <Card class="rounded-2xl transition-all hover:-translate-y-0.5">
-        <CardContent class="p-5">
-          <div class="flex items-start justify-between gap-3 mb-3">
-            <a
-              href={p.master.username ? `/@${p.master.username}` : '#'}
-              class="flex items-center gap-2.5 min-w-0 group"
-            >
-              <Avatar class="size-10 shrink-0">
-                <AvatarImage
-                  src={p.master.avatar ?? ''}
-                  alt={p.master.name ?? ''}
-                />
-                <AvatarFallback class="text-sm font-semibold">
-                  {initials(p.master.name)}
-                </AvatarFallback>
-              </Avatar>
-              <div class="min-w-0">
-                <p
-                  class="text-sm font-semibold group-hover:underline truncate"
-                  style="color: var(--foreground)"
-                >
-                  {p.master.name ?? 'Майстер'}
-                </p>
-                <div
-                  class="flex items-center gap-1.5 text-xs mt-0.5"
-                  style="color: var(--muted-foreground)"
-                >
-                  {#if p.master.reviewsCount > 0}
-                    <span class="inline-flex items-center gap-1">
-                      <Star
-                        class="size-3"
-                        style="color: #f5a623; fill: #f5a623"
-                      />
-                      {p.master.avgRating.toFixed(1)} ({p.master.reviewsCount})
-                    </span>
-                    <span>·</span>
-                  {/if}
-                  <span>{formatRelative(p.createdAt)}</span>
-                </div>
-              </div>
-            </a>
-            <div class="flex items-center gap-1.5 shrink-0">
-              {#if p.recommended}
-                <Badge variant="default" class="text-[10px] uppercase gap-1">
-                  <Star class="size-3" style="fill: currentColor" />
-                  Топ
-                </Badge>
-              {/if}
-              {#if p.isNew}
-                <Badge
-                  variant="outline"
-                  class="text-[10px] uppercase gap-1"
-                  style="border-color: var(--brand); color: var(--brand)"
-                >
-                  Новачок
-                </Badge>
-              {/if}
-              <Badge
-                variant={proposalStatusVariant(p.status)}
-                class="text-[10px] uppercase"
-              >
-                {proposalStatusLabel(p.status)}
-              </Badge>
-            </div>
-          </div>
-
-          <p
-            class="text-sm leading-relaxed mb-4 whitespace-pre-wrap"
-            style="color: var(--foreground)"
-          >
-            {p.message}
-          </p>
-
-          <Separator class="mb-3" />
-
-          <div class="flex items-center justify-between gap-3 flex-wrap">
-            <div class="flex items-center gap-2 flex-wrap">
-              <Badge variant="outline" class="font-normal gap-1 text-xs">
-                <Clock class="size-3" />
-                {p.estimatedDays} дн
-              </Badge>
-              <Badge
-                variant="secondary"
-                class="font-semibold tabular-nums text-xs gap-1"
-              >
-                <Wallet class="size-3" />
-                {formatMoney(p.priceCents, data.job.currency)}
-              </Badge>
-            </div>
-            {#if p.status === 'SENT' && data.job.status === 'OPEN'}
-              <Button
-                size="sm"
-                disabled={acceptingId !== null}
-                onclick={() => {
-                  pendingAcceptId = p.id
-                  acceptDialogOpen = true
-                }}
-                class="rounded-full gap-1.5"
-              >
-                {#if acceptingId === p.id}
-                  <Spinner />
-                  Приймаємо…
-                {:else}
-                  <CheckCircle2 class="size-3.5" /> Прийняти
-                {/if}
-              </Button>
-            {/if}
-          </div>
-        </CardContent>
-      </Card>
-    {/each}
-  </div>
-
-  {#if !showAll && others.length > 0}
+<div class="jobclient-scope min-h-svh px-5 py-12">
+  <div class="mx-auto w-full max-w-135">
+    <!-- Back -->
     <button
       type="button"
-      onclick={() => (showAll = true)}
-      class="w-full mt-3 py-3 rounded-2xl text-sm font-medium cursor-pointer transition-colors"
-      style="color: var(--foreground); background-color: var(--secondary)"
+      onclick={() => goto('/jobs')}
+      class="mb-3.5 inline-flex cursor-pointer items-center gap-1.5 rounded-md text-[13.5px] font-medium text-muted-foreground transition-opacity hover:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
     >
-      Показати всі відгуки ({data.proposals.length})
+      <ArrowLeft class="size-4" aria-hidden="true" /> До моїх заявок
     </button>
-  {/if}
-{:else if data.job.status === 'OPEN'}
-  <Card class="rounded-2xl">
-    <CardContent class="p-5">
-      <Zuna
-        variant="card"
-        size={48}
-        showName
-        online
-        typewriter
-        text="Шукаю для тебе майстрів. Можеш спокійно займатися справами — я надішлю сповіщення, щойно хтось відгукнеться."
-      />
-    </CardContent>
-  </Card>
-{/if}
+
+    <!-- ═══ HEADER CARD ═══ -->
+    <div class="{cardCls} mb-3">
+      <div class="p-6">
+        <div class="mb-3.5 flex flex-wrap items-center gap-2.5">
+          <span class="{badgeBase} {statusBadge(data.job.status)}"
+            >{statusLabel(data.job.status)}</span
+          >
+          <span class="text-xs text-muted-foreground"
+            >{formatRelative(data.job.createdAt)}</span
+          >
+          {#if data.job.status === 'OPEN'}
+            <span class="text-xs text-muted-foreground"
+              >· Активна ще {expiresIn(data.job.expiresAt)}</span
+            >
+          {/if}
+        </div>
+
+        <h1
+          class="mb-3 text-[22px] font-bold tracking-[-0.025em] wrap-break-word text-foreground"
+        >
+          {data.job.title}
+        </h1>
+
+        {#if data.job.description}
+          <p
+            class="mb-4.5 text-sm leading-relaxed whitespace-pre-wrap wrap-break-word text-foreground"
+          >
+            {data.job.description}
+          </p>
+        {/if}
+
+        {#if details.length > 0}
+          <div class="mb-4.5 overflow-hidden rounded-2xl border border-border">
+            {#each details as d, i (d.label)}
+              {#if d.items}
+                <div
+                  class="px-4 py-3 text-sm {i > 0
+                    ? 'border-t border-border'
+                    : ''}"
+                >
+                  <span class="mb-2.5 block text-muted-foreground"
+                    >{d.label}</span
+                  >
+                  <div class="space-y-2">
+                    {#each d.items as it (it.name)}
+                      <div class="flex items-center justify-between gap-3">
+                        <span
+                          class="min-w-0 font-medium wrap-break-word text-foreground"
+                          >{it.name}</span
+                        >
+                        <span
+                          class="inline-flex h-6 min-w-7 shrink-0 items-center justify-center rounded-full bg-muted px-2 text-xs font-bold tabular-nums text-foreground"
+                          >×{it.qty}</span
+                        >
+                      </div>
+                    {/each}
+                  </div>
+                </div>
+              {:else}
+                <div
+                  class="flex items-center justify-between gap-4 px-4 py-3 text-sm {i >
+                  0
+                    ? 'border-t border-border'
+                    : ''}"
+                >
+                  <span class="shrink-0 text-muted-foreground">{d.label}</span>
+                  <span
+                    class="min-w-0 text-right font-semibold wrap-break-word text-foreground"
+                    >{d.value}</span
+                  >
+                </div>
+              {/if}
+            {/each}
+          </div>
+        {/if}
+
+        {#if data.job.attachments && data.job.attachments.length > 0}
+          <div class="mb-4.5">
+            <PhotoGallery images={data.job.attachments} />
+          </div>
+        {/if}
+
+        <div
+          class="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground"
+        >
+          <MapPin class="size-3.75" aria-hidden="true" />{data.job.city}
+        </div>
+
+        <hr class="my-4 border-border" />
+
+        <div
+          class="flex items-center gap-4.5 text-[12.5px] text-muted-foreground"
+        >
+          <span class="inline-flex items-center gap-1.5">
+            <MessageSquare class="size-3.75" aria-hidden="true" />
+            {data.job.proposalsCount} пропозиц{data.job.proposalsCount === 1
+              ? 'ія'
+              : 'ій'}
+          </span>
+          <span class="inline-flex items-center gap-1.5"
+            ><Eye class="size-3.75" aria-hidden="true" />{data.job.viewsCount} переглядів</span
+          >
+        </div>
+
+        {#if data.job.status === 'OPEN'}
+          <hr class="my-4 border-border" />
+          <button
+            type="button"
+            onclick={() => (cancelDialogOpen = true)}
+            disabled={cancelling}
+            class="inline-flex cursor-pointer items-center gap-1.5 rounded-md text-sm font-medium text-destructive transition-opacity hover:opacity-70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-destructive disabled:opacity-50"
+          >
+            {#if cancelling}
+              <Spinner /> Скасовуємо…
+            {:else}
+              Скасувати заявку
+            {/if}
+          </button>
+        {/if}
+      </div>
+    </div>
+
+    <!-- ═══ PROPOSALS ═══ -->
+    {#if data.proposals.length > 0}
+      {@const recommended = data.proposals.filter((p) => p.recommended)}
+      {@const others = data.proposals.filter((p) => !p.recommended)}
+      {@const visible = showAll
+        ? data.proposals
+        : recommended.length > 0
+          ? recommended
+          : data.proposals}
+
+      <div class="mt-6 mb-3 flex items-center justify-between px-1">
+        <h2 class="text-base font-bold tracking-[-0.01em] text-foreground">
+          {recommended.length > 0 && !showAll
+            ? 'Рекомендуємо для вас'
+            : 'Відгуки майстрів'}
+        </h2>
+        <span class="text-xs tabular-nums text-muted-foreground"
+          >{data.proposals.length}</span
+        >
+      </div>
+
+      <div class="space-y-3">
+        {#each visible as p (p.id)}
+          <div
+            class="{cardCls} group p-6 transition-all hover:-translate-y-0.5 hover:shadow-[0_24px_54px_-18px_rgba(0,0,0,0.16),0_6px_14px_-8px_rgba(0,0,0,0.05)] motion-reduce:transition-none motion-reduce:hover:translate-y-0 {p.recommended
+              ? 'border-amber-400/40!'
+              : ''}"
+          >
+            <div class="mb-3.5 flex items-start justify-between gap-3">
+              <a
+                href={p.master.username ? `/@${p.master.username}` : '#'}
+                class="group/m flex min-w-0 items-center gap-2.75 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              >
+                <Avatar
+                  class="size-10.5 shrink-0 shadow-[inset_0_1px_3px_rgba(0,0,0,0.06)]"
+                >
+                  <AvatarImage
+                    src={p.master.avatar ?? ''}
+                    alt={p.master.name ?? ''}
+                  />
+                  <AvatarFallback
+                    class="bg-muted text-sm font-bold text-muted-foreground"
+                    >{initials(p.master.name)}</AvatarFallback
+                  >
+                </Avatar>
+                <div class="min-w-0">
+                  <p
+                    class="truncate text-[14.5px] font-semibold text-foreground group-hover/m:underline"
+                  >
+                    {p.master.name ?? 'Майстер'}
+                  </p>
+                  <div
+                    class="mt-0.5 flex items-center gap-1.75 text-[12.5px] text-muted-foreground"
+                  >
+                    {#if p.master.reviewsCount > 0}
+                      <span class="inline-flex items-center gap-1"
+                        ><Star
+                          class="size-3 fill-amber-400 text-amber-400"
+                          aria-hidden="true"
+                        />{p.master.avgRating.toFixed(1)} ({p.master
+                          .reviewsCount})</span
+                      >
+                      <span>·</span>
+                    {/if}
+                    <span>{formatRelative(p.createdAt)}</span>
+                  </div>
+                </div>
+              </a>
+              <div class="flex shrink-0 items-center gap-1.75">
+                {#if p.recommended}
+                  <span class="{badgeBase} bg-foreground text-background"
+                    ><Star
+                      class="size-3 fill-current"
+                      aria-hidden="true"
+                    />Топ</span
+                  >
+                {/if}
+                {#if p.isNew}
+                  <span
+                    class="{badgeBase} border bg-card"
+                    style="border-color: var(--brand); color: var(--brand)"
+                    >Новачок</span
+                  >
+                {/if}
+                <span class="{badgeBase} {proposalBadge(p.status)}"
+                  >{proposalStatusLabel(p.status)}</span
+                >
+              </div>
+            </div>
+
+            <p
+              class="mb-4 text-sm leading-relaxed whitespace-pre-wrap wrap-break-word text-foreground"
+            >
+              {p.message}
+            </p>
+
+            <div
+              class="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3.5"
+            >
+              <div class="flex flex-wrap items-center gap-2">
+                <span
+                  class="inline-flex h-7 items-center gap-1.5 rounded-full border border-border px-2.75 text-[12.5px] font-medium text-muted-foreground"
+                  ><Clock class="size-3" aria-hidden="true" />{p.estimatedDays} дн</span
+                >
+                <span
+                  class="inline-flex h-7 items-center gap-1.5 rounded-full bg-muted px-2.75 text-[12.5px] font-bold tabular-nums text-foreground"
+                  ><Wallet class="size-3" aria-hidden="true" />{formatMoney(
+                    p.priceCents,
+                    data.job.currency,
+                  )}</span
+                >
+              </div>
+              {#if p.status === 'SENT' && data.job.status === 'OPEN'}
+                <button
+                  type="button"
+                  disabled={acceptingId !== null}
+                  aria-busy={acceptingId === p.id}
+                  onclick={() => {
+                    pendingAcceptId = p.id
+                    acceptDialogOpen = true
+                  }}
+                  class="inline-flex h-10 cursor-pointer items-center gap-1.75 rounded-full bg-foreground px-4.5 text-[13.5px] font-semibold text-background transition hover:-translate-y-px active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+                >
+                  {#if acceptingId === p.id}
+                    <Spinner /> Приймаємо…
+                  {:else}
+                    <CheckCircle2 class="size-3.75" aria-hidden="true" /> Прийняти
+                  {/if}
+                </button>
+              {/if}
+            </div>
+          </div>
+        {/each}
+      </div>
+
+      {#if !showAll && others.length > 0 && recommended.length > 0}
+        <button
+          type="button"
+          onclick={() => (showAll = true)}
+          class="mt-1 w-full cursor-pointer rounded-2xl bg-muted py-3.25 text-sm font-semibold text-foreground transition-colors hover:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          Показати всі відгуки ({data.proposals.length})
+        </button>
+      {/if}
+    {:else if data.job.status === 'OPEN'}
+      <div class="{cardCls} p-6">
+        <Zuna
+          variant="card"
+          size={48}
+          showName
+          online
+          typewriter
+          text="Шукаю для тебе майстрів. Можеш спокійно займатися справами — я надішлю сповіщення, щойно хтось відгукнеться."
+        />
+      </div>
+    {/if}
+  </div>
+</div>
 
 <!-- Модалка скасування заявки -->
 <AlertDialog.Root bind:open={cancelDialogOpen}>
   <AlertDialog.Content>
     <AlertDialog.Header>
       <AlertDialog.Title>Скасувати заявку?</AlertDialog.Title>
-      <AlertDialog.Description>
-        Усі отримані відгуки буде відхилено. Цю дію не можна скасувати.
-      </AlertDialog.Description>
+      <AlertDialog.Description
+        >Усі отримані відгуки буде відхилено. Цю дію не можна скасувати.</AlertDialog.Description
+      >
     </AlertDialog.Header>
     <AlertDialog.Footer>
       <AlertDialog.Cancel disabled={cancelling}>Назад</AlertDialog.Cancel>
       <AlertDialog.Action
         onclick={cancelJob}
         disabled={cancelling}
-        class="bg-destructive text-white hover:bg-destructive/90"
+        class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
       >
         {cancelling ? 'Скасовуємо…' : 'Скасувати заявку'}
       </AlertDialog.Action>
@@ -428,9 +426,9 @@
   <AlertDialog.Content>
     <AlertDialog.Header>
       <AlertDialog.Title>Прийняти пропозицію?</AlertDialog.Title>
-      <AlertDialog.Description>
-        Інші відгуки буде відхилено, і відкриється чат з обраним клінером.
-      </AlertDialog.Description>
+      <AlertDialog.Description
+        >Інші відгуки буде відхилено, і відкриється чат з обраним клінером.</AlertDialog.Description
+      >
     </AlertDialog.Header>
     <AlertDialog.Footer>
       <AlertDialog.Cancel disabled={acceptingId !== null}
@@ -448,3 +446,20 @@
     </AlertDialog.Footer>
   </AlertDialog.Content>
 </AlertDialog.Root>
+
+<style>
+  :global(body:has(.jobclient-scope)) {
+    background:
+      radial-gradient(
+        130% 90% at 12% -5%,
+        color-mix(in oklch, var(--muted) 55%, var(--background)) 0%,
+        transparent 50%
+      ),
+      radial-gradient(
+        130% 90% at 100% 105%,
+        color-mix(in oklch, var(--secondary) 60%, var(--background)) 0%,
+        transparent 52%
+      ),
+      var(--background);
+  }
+</style>

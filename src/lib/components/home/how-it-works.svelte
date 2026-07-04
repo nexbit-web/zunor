@@ -1,9 +1,3 @@
-<!--
-  Секція «Як це працює» — Zunor.
-  Чорно-білий преміум-мінімалізм, шрифт Onest (успадковується). Без акцентних кольорів.
-  Стилі — Tailwind v4 на семантичних токенах (підтримує тему). Без обіцянок щодо часу.
-  Залежності: lucide-svelte.
--->
 <script lang="ts">
   import { UserCheck } from 'lucide-svelte'
   import { MessagesSquare } from 'lucide-svelte'
@@ -29,7 +23,8 @@
 </script>
 
 <section
-  class="px-[clamp(20px,5vw,56px)]   text-foreground"
+  aria-labelledby="how-it-works-heading"
+  class="px-[clamp(20px,5vw,56px)] py-[clamp(48px,6vw,80px)] text-foreground"
 >
   <div class="mx-auto max-w-270">
     <!-- Заголовок -->
@@ -41,6 +36,7 @@
         Як це працює?
       </p>
       <h2
+        id="how-it-works-heading"
         class="mb-4 text-[clamp(30px,4vw,46px)] leading-[1.06] font-bold tracking-[-0.035em] text-balance"
       >
         Три кроки до чистого дому
@@ -59,7 +55,6 @@
           >
             <span class="text-foreground">{String(i + 1).padStart(2, '0')}</span
             >
-            &nbsp;/&nbsp; 0{steps.length}
           </span>
 
           <div class="mb-5 text-foreground">
