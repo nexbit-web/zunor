@@ -274,21 +274,21 @@
     <button
       type="button"
       onclick={() => onnavigate('/user/login')}
-      class="hidden sm:flex items-center h-8 px-3 rounded-full text-[13px] font-normal cursor-pointer text-white/80 hover:text-white hover:bg-white/8 transition-colors"
+      class="hidden sm:flex items-center h-8 px-3 rounded-full text-[13px] font-normal cursor-pointer text-foreground/80 hover:text-foreground hover:bg-muted transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
     >
       Увійти
     </button>
     <button
       type="button"
       onclick={() => onnavigate('/user/register')}
-      class="flex items-center h-8 px-4 rounded-full text-[13px] font-medium cursor-pointer bg-white text-black hover:bg-white/90 transition-colors"
+      class="flex items-center h-8 px-4 rounded-full text-[13px] font-medium cursor-pointer bg-primary text-primary-foreground hover:bg-primary-hover transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
     >
       Реєстрація
     </button>
   {:else}
     <a
       href="/jobs"
-      class="relative flex items-center justify-center h-9 w-9 rounded-full cursor-pointer text-white/75 hover:text-white hover:bg-white/8 transition-colors"
+      class="relative flex items-center justify-center h-9 w-9 rounded-full cursor-pointer text-foreground/75 hover:text-foreground hover:bg-muted transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       aria-label="Замовлення"
     >
       <ClipboardList class="size-5" strokeWidth={1.75} />
@@ -298,13 +298,15 @@
     <button
       type="button"
       onclick={() => onnavigate('/messages')}
-      class="relative flex items-center justify-center h-9 w-9 rounded-full cursor-pointer text-white/75 hover:text-white hover:bg-white/8 transition-colors"
-      aria-label="Повідомлення"
+      class="relative flex items-center justify-center h-9 w-9 rounded-full cursor-pointer text-foreground/75 hover:text-foreground hover:bg-muted transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      aria-label="Повідомлення{messageCount > 0
+        ? `, ${messageCount} непрочитаних`
+        : ''}"
     >
-      <MessageCircle class="size-5" strokeWidth={1.75} />
+      <MessageCircle class="size-5" strokeWidth={1.75} aria-hidden="true" />
       {#if messageCount > 0}
         <span
-          class="absolute top-0.5 right-0.5 min-w-4 h-4 text-[10px] font-bold rounded-full flex items-center justify-center px-1 bg-white text-black"
+          class="absolute top-0.5 right-0.5 min-w-4 h-4 text-[10px] font-bold rounded-full flex items-center justify-center px-1 bg-primary text-primary-foreground"
         >
           {formatBadge(messageCount)}
         </span>
@@ -318,13 +320,15 @@
           <button
             {...props}
             type="button"
-            class="relative flex items-center justify-center h-9 w-9 rounded-full cursor-pointer text-white/75 hover:text-white hover:bg-white/8 transition-colors"
-            aria-label="Сповіщення"
+            class="relative flex items-center justify-center h-9 w-9 rounded-full cursor-pointer text-foreground/75 hover:text-foreground hover:bg-muted transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            aria-label="Сповіщення{notifUnreadCount > 0
+              ? `, ${notifUnreadCount} непрочитаних`
+              : ''}"
           >
-            <Bell class="size-5" strokeWidth={1.75} />
+            <Bell class="size-5" strokeWidth={1.75} aria-hidden="true" />
             {#if notifUnreadCount > 0}
               <span
-                class="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 text-[10px] font-semibold rounded-full flex items-center justify-center bg-red-500 text-white tabular-nums"
+                class="absolute top-0.5 right-0.5 min-w-4 h-4 text-[10px] font-bold rounded-full flex items-center justify-center bg-red-500 text-white tabular-nums"
               >
                 {formatBadge(notifUnreadCount)}
               </span>
@@ -491,22 +495,23 @@
           <button
             {...props}
             type="button"
-            class="flex items-center justify-center h-9 w-9 rounded-full cursor-pointer hover:bg-white/8 transition-colors"
+            class="flex items-center justify-center h-9 w-9 rounded-full cursor-pointer hover:bg-muted transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             aria-label="Меню профілю"
           >
             {#if user?.avatar}
               <Avatar class="size-7">
                 <AvatarImage src={user.avatar} alt={user.name} />
                 <AvatarFallback
-                  class="text-[9px] font-semibold bg-white/12 text-white"
+                  class="text-[9px] font-semibold bg-muted text-foreground"
                 >
                   {user.initials}
                 </AvatarFallback>
               </Avatar>
             {:else}
               <CircleUserRound
-                class="size-5 text-white/75"
+                class="size-5 text-foreground/75"
                 strokeWidth={1.75}
+                aria-hidden="true"
               />
             {/if}
           </button>

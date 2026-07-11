@@ -122,8 +122,8 @@
     padding: 18px 32px;
     font-size: 18px;
     font-weight: 500;
-    color: var(--background);
-    background: var(--foreground);
+    color: #fff;
+    background: var(--primary);
     border-radius: 14px;
     cursor: pointer;
     text-decoration: none;
@@ -140,8 +140,8 @@
   }
 
   .cta-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(0, 142, 96, 0.28);
+    transition: 5ms linear;
+    background-color: var(--primary-hover);
   }
 
   .cta-btn:active {

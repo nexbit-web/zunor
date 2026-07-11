@@ -148,7 +148,7 @@
           aria-label="Видалити фото {i + 1}"
         >
           {#if removingIdx === i}
-            <Spinner class="size-3 text-white" />
+            <Spinner class=" text-white" />
           {:else}
             <XIcon class="size-3.5 text-white" aria-hidden="true" />
           {/if}

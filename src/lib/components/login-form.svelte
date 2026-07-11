@@ -71,7 +71,7 @@
 </script>
 
 <div
-  class={cn('login-scope flex w-full max-w-104 flex-col gap-4.5', className)}
+  class={cn('  flex w-full max-w-104 flex-col gap-4.5', className)}
   {...restProps}
 >
   <!-- glass card -->
@@ -79,10 +79,12 @@
     class="rounded-[32px] border border-border bg-card px-9 pt-10 pb-8.5 shadow-[0_24px_60px_-12px_rgba(0,0,0,0.1),0_8px_20px_-8px_rgba(0,0,0,0.05)]"
   >
     <div class="mb-6 text-center">
-      <h1 class="text-[24px] font-bold tracking-[-0.035em] text-foreground">
-        Увійдіть у свій акаунт
+      <h1
+        class="text-[26px] leading-tight font-bold tracking-[-0.01em] text-foreground"
+      >
+        Вхід до Zunor
       </h1>
-      <p class="mt-1.5 text-[14.5px] text-muted-foreground">
+      <p class="mt-2 text-[15px] leading-[1.45] text-muted-foreground">
         Раді бачити вас знову
       </p>
     </div>
@@ -151,7 +153,7 @@
           </label>
           <a
             href="/user/forgot"
-            class="rounded-sm text-[12.5px] text-muted-foreground underline-offset-[3px] hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            class="rounded-sm text-[12.5px] font-medium text-primary underline-offset-[3px] hover:text-primary-hover hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             Забули пароль?
           </a>
@@ -206,13 +208,21 @@
         type="submit"
         disabled={loading || !formValid}
         aria-busy={loading}
-        class="mt-1.5 inline-flex h-13.5 w-full items-center justify-center gap-2.5 rounded-[16px] bg-foreground text-[15.5px] font-semibold tracking-[-0.01em] text-background transition hover:-translate-y-px active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:translate-y-0 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+        class="relative mt-1.5 inline-flex h-13.5 w-full items-center justify-center rounded-[16px] bg-primary text-[15.5px] font-semibold tracking-[-0.01em] text-primary-foreground transition hover:-translate-y-px hover:bg-primary-hover active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:translate-y-0 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
       >
+        <span class="pointer-events-none">
+          {#if loading}
+            Зачекайте...
+          {:else}
+            Увійти
+          {/if}
+        </span>
+
         {#if loading}
-          <Spinner aria-hidden="true" />
-          <span class="sr-only">Виконуємо вхід…</span>
-        {:else}
-          Увійти
+          <Spinner
+            class="absolute right-4 animate-spin"
+            aria-hidden="true"
+          />
         {/if}
       </Button>
 
@@ -220,7 +230,7 @@
         Немає облікового запису?
         <a
           href="/user/register"
-          class="rounded-sm font-semibold text-foreground underline-offset-[3px] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          class="rounded-sm font-semibold text-primary underline-offset-[3px] hover:text-primary-hover hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           Зареєструватися
         </a>
@@ -234,35 +244,22 @@
       href="/terms"
       target="_blank"
       rel="noopener"
-      class="underline-offset-2 hover:underline">Умовами</a
+      class="rounded-sm text-primary underline-offset-2 hover:text-primary-hover hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      >Умовами</a
     >
     та
     <a
       href="/privacy"
       target="_blank"
       rel="noopener"
-      class="underline-offset-2 hover:underline">Політикою</a
+      class="rounded-sm text-primary underline-offset-2 hover:text-primary-hover hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      >Політикою</a
     >.
   </p>
 </div>
 
 <style>
-  /* Тонований фон сторінки — на токенах, адаптується до теми. */
-  :global(body:has(.login-scope)) {
-    background:
-      radial-gradient(
-        130% 100% at 12% -5%,
-        color-mix(in oklch, var(--muted) 55%, var(--background)) 0%,
-        transparent 50%
-      ),
-      radial-gradient(
-        130% 100% at 100% 105%,
-        color-mix(in oklch, var(--secondary) 60%, var(--background)) 0%,
-        transparent 52%
-      ),
-      var(--background);
-  }
-
+ 
   .field-input {
     width: 100%;
     height: 54px;

@@ -229,7 +229,7 @@
   <title>{isEdit ? 'Редагування профілю' : 'Оформлення профілю'} · Zunor</title>
 </svelte:head>
 
-<div class="onb-scope min-h-svh px-5 pt-8 pb-20 md:pt-12">
+<div class="min-h-svh px-5 pt-8 pb-20 md:pt-12">
   <div class="mx-auto flex max-w-118 flex-col gap-5">
     <!-- Top bar -->
     <div class="flex items-center justify-between">
@@ -253,7 +253,7 @@
         <div
           class={cn(
             'h-1 flex-1 rounded-full transition-colors duration-500',
-            i < step ? 'bg-foreground' : 'bg-foreground/10',
+            i < step ? 'bg-primary' : 'bg-primary/10',
           )}
         ></div>
       {/each}
@@ -500,7 +500,7 @@
                     class={cn(
                       'inline-flex cursor-pointer items-center gap-1.75 rounded-[14px] px-4 py-2.75 text-sm font-medium transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
                       sel
-                        ? 'border border-transparent bg-foreground text-background'
+                        ? 'border border-transparent bg-primary text-white'
                         : 'border border-border bg-card text-foreground hover:border-ring',
                       disabled &&
                         'cursor-not-allowed opacity-40 hover:border-border',
@@ -666,7 +666,7 @@
           type="button"
           onclick={back}
           disabled={step === 1}
-          class="inline-flex h-12.5 cursor-pointer items-center gap-1.75 rounded-[14px] px-4.5 text-[14.5px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent"
+          class="inline-flex h-12.5 cursor-pointer items-center gap-1.75 rounded-[14px] px-4.5 text-[14.5px] font-medium text-muted-foreground transition-colors hover:bg-primary-hover/10 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent"
         >
           <ArrowLeftIcon class="size-4" aria-hidden="true" />
           Назад
@@ -680,18 +680,27 @@
             avatarUploading ||
             portfolioUploading}
           aria-busy={submitting}
-          class="inline-flex h-12.5 min-w-47.5 items-center justify-center gap-2.25 rounded-[14px] bg-foreground px-6 text-[14.5px] font-semibold text-background transition hover:-translate-y-px active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50 disabled:hover:translate-y-0 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+          class="relative inline-flex h-12.5 min-w-47.5 items-center justify-center rounded-[14px] bg-primary px-6 text-[14.5px] font-semibold text-white transition hover:-translate-y-px active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50 disabled:hover:translate-y-0 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
         >
-          {#if success}
-            <CircleCheckBigIcon class="size-4" aria-hidden="true" /> Надіслано!
-          {:else if submitting}
-            <Spinner /> Зберігаємо...
+          {#if submitting}
+            <span class="pointer-events-none">Зачекайте...</span>
+            <Spinner
+              class="absolute right-4 animate-spin"
+              aria-hidden="true"
+            />
+          {:else if success}
+            <span class="pointer-events-none inline-flex items-center gap-2.25">
+              <CircleCheckBigIcon class="size-4" aria-hidden="true" /> Надіслано!
+            </span>
           {:else if step === TOTAL_STEPS}
-            {isEdit ? 'Зберегти зміни' : 'Надіслати на модерацію'}
-            <CheckIcon class="size-4" aria-hidden="true" />
+            <span class="pointer-events-none inline-flex items-center gap-2.25">
+              {isEdit ? 'Зберегти' : 'Надіслати на модерацію'}
+            </span>
           {:else}
-            Далі
-            <ArrowRightIcon class="size-4" aria-hidden="true" />
+            <span class="pointer-events-none inline-flex items-center gap-2.25">
+              Далі
+              <ArrowRightIcon class="size-4" aria-hidden="true" />
+            </span>
           {/if}
         </Button>
       </div>

@@ -17,6 +17,9 @@
   import { toast } from '$lib/stores/toast-store.svelte'
   import type { PageData } from './$types'
   import { LoaderCircle, CheckCircle2, AlertCircle } from 'lucide-svelte'
+  import { Button } from '$lib/components/ui/button'
+  import { Spinner } from '$lib/components/ui/spinner'
+  import { Input } from '$lib/components/ui/input'
 
   let { data }: { data: PageData } = $props()
 
@@ -293,38 +296,34 @@
         </div>
       </div>
 
-      <button
+      <Button
         onclick={submit}
         disabled={!canSubmit}
         aria-busy={submitting}
-        class="mt-7 inline-flex h-13.5 w-full items-center justify-center gap-2.5 rounded-[16px] bg-foreground text-[15.5px] font-semibold tracking-[-0.01em] text-background transition hover:-translate-y-px active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+        class="mt-7 relative inline-flex h-13.5 w-full items-center  justify-center rounded-[16px] text-[15.5px] font-semibold tracking-[-0.01em] text-white transition hover:-translate-y-px active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
       >
+        <span class="pointer-events-none">
+          {#if submitting}
+            Зачекайте…
+          {:else}
+            Готово
+          {/if}
+        </span>
+
         {#if submitting}
-          <LoaderCircle class="size-4.5 animate-spin" aria-hidden="true" /> Зберігаємо…
-        {:else}
-          Готово
+          <Spinner
+            class="absolute right-4 animate-spin"
+            aria-hidden="true"
+          />
         {/if}
-      </button>
+      </Button>
     </div>
   </div>
 </div>
 
 <style>
-  /* Тонований фон на токенах — адаптується до теми. */
-  :global(body:has(.welcome-scope)) {
-    background:
-      radial-gradient(
-        130% 90% at 12% -5%,
-        color-mix(in oklch, var(--muted) 55%, var(--background)) 0%,
-        transparent 50%
-      ),
-      radial-gradient(
-        130% 90% at 100% 105%,
-        color-mix(in oklch, var(--secondary) 60%, var(--background)) 0%,
-        transparent 52%
-      ),
-      var(--background);
-  }
+  
+  
 
   /* Спільний вигляд input / select-trigger / textarea.
      :global бо клас потрапляє і на елемент усередині Select-компонента;

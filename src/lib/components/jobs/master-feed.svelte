@@ -15,6 +15,7 @@
     ChevronRight,
     AlertCircle,
     Clock,
+    Info,
   } from 'lucide-svelte'
 
   import * as Icons from '@lucide/svelte'
@@ -205,18 +206,14 @@
 <!-- List -->
 {#if visibleJobs.length === 0 && !loadingMore}
   <div
-    class="rounded-2xl px-6 py-16 text-center"
+    class="rounded-4xl px-6 py-16 text-center"
     style="background-color: var(--card); border: 1px solid var(--border)"
   >
     <div
-      class="size-14 rounded-2xl mx-auto mb-4 flex items-center justify-center"
-      style="background-color: var(--muted)"
+      class="size-14 rounded-4xl mx-auto mb-2 flex items-center justify-center"
+     
     >
-      <Briefcase
-        class="size-6"
-        style="color: var(--muted-foreground)"
-        strokeWidth={1.75}
-      />
+      <Info class="size-10" style="color: var(--w-icon)" strokeWidth={1.75} />
     </div>
     <h2 class="text-base font-semibold mb-1" style="color: var(--foreground)">
       {activeService ? 'Немає заявок цього типу' : 'Поки немає заявок'}
@@ -234,49 +231,49 @@
       {#each visibleJobs as job, i (job.id)}
         <a
           href={`/jobs/${job.id}`}
-        in:fly={{
-          y: 12,
-          duration: 260,
-          delay: Math.min(i, 6) * 40,
-          easing: quintOut,
-        }}
-        class="jcard group"
-      >
-        <!-- Час -->
-        <div class="jcard__top">
-          <span class="jmeta">
-            <Clock class="size-3" />
-            {formatRelative(job.createdAt)}
-          </span>
-          <ChevronRight class="jchev size-[18px]" />
-        </div>
-
-        <!-- Заголовок (тип прибирання) -->
-        <h3 class="jcard__title">{job.title}</h3>
-
-        <!-- Ключові деталі (чипи) -->
-        {#if jobDetails(job).length > 0}
-          <div class="jcard__chips">
-            {#each jobDetails(job) as d (d.label)}
-              {@const Icon = iconByName(d.icon)}
-              {#if d.label === 'Коли'}
-                <!-- Дата — акцентний чип (важливо майстру) -->
-                <span class="jchip jchip--when">
-                  {#if Icon}<Icon class="size-3.5" />{/if}
-                  {d.value}
-                </span>
-              {:else}
-                <span class="jchip">
-                  {#if Icon}<Icon class="size-3.5 opacity-60" />{/if}
-                  {d.value}
-                </span>
-              {/if}
-            {/each}
+          in:fly={{
+            y: 12,
+            duration: 260,
+            delay: Math.min(i, 6) * 40,
+            easing: quintOut,
+          }}
+          class="jcard group"
+        >
+          <!-- Час -->
+          <div class="jcard__top">
+            <span class="jmeta">
+              <Clock class="size-3" />
+              {formatRelative(job.createdAt)}
+            </span>
+            <ChevronRight class="jchev size-[18px]" />
           </div>
-        {/if}
 
-        <!-- Клієнт -->
-        {#if job.client}
+          <!-- Заголовок (тип прибирання) -->
+          <h3 class="jcard__title">{job.title}</h3>
+
+          <!-- Ключові деталі (чипи) -->
+          {#if jobDetails(job).length > 0}
+            <div class="jcard__chips">
+              {#each jobDetails(job) as d (d.label)}
+                {@const Icon = iconByName(d.icon)}
+                {#if d.label === 'Коли'}
+                  <!-- Дата — акцентний чип (важливо майстру) -->
+                  <span class="jchip jchip--when">
+                    {#if Icon}<Icon class="size-3.5" />{/if}
+                    {d.value}
+                  </span>
+                {:else}
+                  <span class="jchip">
+                    {#if Icon}<Icon class="size-3.5 opacity-60" />{/if}
+                    {d.value}
+                  </span>
+                {/if}
+              {/each}
+            </div>
+          {/if}
+
+          <!-- Клієнт -->
+          <!-- {#if job.client}
           <div class="jcard__foot">
             <Avatar class="size-9 shrink-0">
               <AvatarImage
@@ -300,8 +297,8 @@
               {/if}
             </div>
           </div>
-        {/if}
-      </a>
+        {/if} -->
+        </a>
       {/each}
     </div>
   {/key}
@@ -404,7 +401,7 @@
     text-decoration: none;
     background: var(--card);
     border: 1px solid var(--border);
-    border-radius: 16px;
+    border-radius: 2rem;
     padding: 18px;
     cursor: pointer;
     transition:
@@ -415,7 +412,7 @@
   .jcard:hover {
     transform: translateY(-2px);
     box-shadow: 0 10px 28px -12px rgba(0, 0, 0, 0.2);
-    border-color: oklch(0.86 0 0);
+    border-color: var(--primary);
   }
   .jcard__top {
     display: flex;
@@ -434,7 +431,7 @@
   }
   /* :global бо клас потрапляє на <svg>, який рендерить компонент ChevronRight */
   .jcard :global(.jchev) {
-    color: var(--muted-foreground);
+    color: var(--primary);
     opacity: 0;
     transform: translateX(-4px);
     flex-shrink: 0;
@@ -475,8 +472,8 @@
   }
   .jchip--when {
     font-weight: 600;
-    background: color-mix(in srgb, var(--brand) 12%, transparent);
-    color: var(--brand);
+    background: color-mix(in srgb, var(--primary) 12%, transparent);
+    color: var(--primary-hover);
   }
   .jcard__foot {
     display: flex;

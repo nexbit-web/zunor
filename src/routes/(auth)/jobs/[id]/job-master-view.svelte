@@ -32,6 +32,7 @@
     proposalStatusLabel,
   } from '$lib/components/jobs/display'
   import type { PageData } from './$types'
+  import { Button } from '$lib/components/ui/button'
 
   let { data }: { data: PageData } = $props()
 
@@ -324,7 +325,7 @@
             <!-- CTA -->
             <div class="py-1 text-center">
               <div
-                class="mx-auto mb-3.5 flex size-12.5 items-center justify-center rounded-2xl bg-foreground text-background shadow-sm"
+                class="mx-auto mb-3.5 flex size-12.5 items-center justify-center rounded-2xl bg-primary text-white shadow-sm"
               >
                 <Send class="size-5" aria-hidden="true" />
               </div>
@@ -338,13 +339,13 @@
               >
                 Запропонуйте ціну та термін — клієнт одразу отримає сповіщення.
               </p>
-              <button
+              <Button
                 type="button"
                 onclick={() => (formOpen = true)}
-                class="inline-flex h-12.5 cursor-pointer items-center justify-center gap-2.25 rounded-full bg-foreground px-6.5 text-[14.5px] font-semibold text-background transition hover:-translate-y-px active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+                class="inline-flex h-12.5 cursor-pointer items-center justify-center gap-2.25 rounded-full bg-primary px-6.5 text-[14.5px] font-semibold text-white transition hover:-translate-y-px active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none motion-reduce:hover:translate-y-0"
               >
                 <Send class="size-4" aria-hidden="true" /> Подати пропозицію
-              </button>
+              </Button>
             </div>
           {:else}
             <!-- ФОРМА -->
@@ -439,7 +440,8 @@
               {/if}
 
               <div class="flex items-center gap-2.5 pt-1">
-                <button
+                <Button
+                  variant="outline"
                   type="button"
                   onclick={() => {
                     formOpen = false
@@ -447,21 +449,29 @@
                   }}
                   disabled={submitting}
                   class="inline-flex h-12.5 cursor-pointer items-center rounded-full px-5 text-[14.5px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50"
-                  >Скасувати</button
+                  >Скасувати</Button
                 >
-                <button
+                <Button
                   type="button"
                   onclick={submitProposal}
                   disabled={!canSubmit}
                   aria-busy={submitting}
-                  class="inline-flex h-12.5 flex-1 cursor-pointer items-center justify-center gap-2.25 rounded-full bg-foreground text-[15px] font-semibold text-background transition hover:-translate-y-px active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:translate-y-0 disabled:opacity-40 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+                  class="relative inline-flex h-12.5 flex-1 cursor-pointer items-center justify-center rounded-full bg-primary text-[15px] font-semibold text-white transition hover:-translate-y-px active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:translate-y-0 disabled:opacity-40 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
                 >
                   {#if submitting}
-                    <Spinner /> Відправляємо…
+                    <span class="pointer-events-none">Зачекайте…</span>
+                    <Spinner
+                      class="absolute right-4"
+                      aria-hidden="true"
+                    />
                   {:else}
-                    <Send class="size-4" aria-hidden="true" /> Відправити відгук
+                    <span
+                      class="pointer-events-none inline-flex items-center gap-2.25"
+                    >
+                      <Send class="size-4" aria-hidden="true" /> Відправити відгук
+                    </span>
                   {/if}
-                </button>
+                </Button>
               </div>
             </div>
           {/if}

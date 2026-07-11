@@ -25,6 +25,8 @@
   import PhotoGallery from '$lib/components/photo-gallery.svelte'
   import { Button } from '../ui/button'
 
+  import { toast } from '$lib/stores/toast-store.svelte'
+
   interface Props {
     user: ProfileData
     isOwner: boolean
@@ -136,7 +138,8 @@
       await navigator.clipboard.writeText('@' + user.username)
       copied = true
       clearTimeout(copyTimer)
-      copyTimer = setTimeout(() => (copied = false), 1200)
+      copyTimer = setTimeout(() => (copied = false), 2000)
+      toast.success('Скопійовано', { duration: 2000 })
     } catch {
       // Clipboard недоступний (HTTP / дозволи) — мовчки ігноруємо.
     }
@@ -172,7 +175,7 @@
 </svelte:head>
 
 <article
-  class="fprofile-scope min-h-svh px-5 pt-7 pb-20 md:pb-12"
+  class=" min-h-svh px-5 pt-7 pb-20 md:pb-12"
   itemscope
   itemtype="https://schema.org/Person"
 >
@@ -230,7 +233,7 @@
             <Button
               type="button"
               onclick={goEdit}
-              class="mb-1 inline-flex h-[42px] items-center gap-[7px] rounded-full bg-foreground px-[18px] text-[13.5px] font-semibold text-background transition-transform hover:-translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground/40 motion-reduce:transition-none"
+              class="mb-1 inline-flex h-[42px] items-center gap-[7px] rounded-full bg-primary px-[18px] text-[13.5px] font-semibold text-white transition-transform hover:-translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground/40 motion-reduce:transition-none"
             >
               <Pencil class="size-[15px]" aria-hidden="true" /> Редагувати
             </Button>
@@ -239,7 +242,7 @@
 
         <div class="flex items-center gap-[7px]">
           <h1
-            class="truncate text-[23px] font-bold tracking-[-0.03em] text-foreground"
+            class="truncate text-[25px] font-bold tracking-[-0.03em] text-foreground"
             itemprop="name"
           >
             {user.name}
@@ -264,9 +267,9 @@
               aria-label={copied ? 'Нікнейм скопійовано' : 'Скопіювати нікнейм'}
             >
               {#if copied}
-                <Check class="size-3 text-emerald-500" aria-hidden="true" />
+                <Check class="size-4 text-emerald-500" aria-hidden="true" />
               {:else}
-                <Copy class="size-3" aria-hidden="true" />
+                <Copy class="size-4" aria-hidden="true" />
               {/if}
             </button>
           </p>
@@ -509,22 +512,6 @@
 </article>
 
 <style>
-  /* Тонований фон сторінки — на токенах, тож адаптується до теми. */
-  :global(body:has(.fprofile-scope)) {
-    background:
-      radial-gradient(
-        120% 70% at 12% -5%,
-        color-mix(in oklch, var(--muted) 55%, var(--background)) 0%,
-        transparent 48%
-      ),
-      radial-gradient(
-        120% 70% at 100% 102%,
-        color-mix(in oklch, var(--secondary) 65%, var(--background)) 0%,
-        transparent 50%
-      ),
-      var(--background);
-  }
-
   /* Єдине джерело правди для картки: радіус, рамка, фон, тінь. Тінь — alpha-чорний (працює в обох темах). */
   .card {
     border-radius: 28px;

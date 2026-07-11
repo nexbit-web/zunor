@@ -99,7 +99,7 @@
 </svelte:head>
 
 <article
-  class="profile-scope min-h-svh px-5 pt-11 pb-24 sm:pb-16"
+  class="min-h-svh px-5 pt-11 pb-24 sm:pb-16"
   itemscope
   itemtype="https://schema.org/Person"
 >
@@ -139,15 +139,15 @@
         {#if isOwner}
           <a
             href="/welcome"
-            class="inline-flex h-10.5 items-center gap-1.75 rounded-full bg-foreground px-4.5 text-[13.5px] font-semibold text-background transition-transform hover:-translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground/40 motion-reduce:transition-none"
+            class="inline-flex h-10.5 items-center gap-1.75 rounded-full bg-primary hover:bg-primary-hover px-4.5 text-[13.5px] font-semibold text-white transition-transform hover:-translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground/40 motion-reduce:transition-none"
           >
-            <Pencil class="size-3.75" aria-hidden="true" /> Редагувати
+            <Pencil class="size-3.75 text-white" aria-hidden="true" /> Редагувати
           </a>
         {/if}
       </div>
 
       <h1
-        class="mb-2 truncate text-[22px] font-bold tracking-[-0.03em] text-foreground"
+        class="mb-2 truncate text-[25px] font-bold tracking-[-0.03em] text-foreground"
         itemprop="name"
       >
         {user.name || 'Без імені'}
@@ -352,7 +352,7 @@
     {#if isOwner}
       <a
         href="/onboarding"
-        class="group flex w-full items-center justify-between gap-4 rounded-[28px] bg-foreground p-5.5 text-left text-background shadow-[0_16px_40px_-16px_rgba(0,0,0,0.5)] transition hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground/40 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+        class="group flex w-full items-center justify-between gap-4 rounded-[28px] bg-primary p-5.5 text-left text-white shadow-[0_16px_40px_-16px_rgba(0,0,0,0.5)] transition hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground/40 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
       >
         <span class="flex min-w-0 items-center gap-3.75">
           <span
@@ -364,13 +364,13 @@
             <span class="block text-[15px] font-semibold"
               >Хочете заробляти?</span
             >
-            <span class="mt-0.5 block text-[13px] text-background/65">
+            <span class="mt-0.5 block text-[13px] text-white/90">
               Створіть профіль майстра і пропонуйте свої послуги.
             </span>
           </span>
         </span>
         <ArrowRight
-          class="size-5 shrink-0 text-background/80 transition-transform group-hover:translate-x-1 motion-reduce:transition-none"
+          class="size-5 shrink-0 text-white/80 transition-transform group-hover:translate-x-1 motion-reduce:transition-none"
           aria-hidden="true"
         />
       </a>
@@ -379,22 +379,6 @@
 </article>
 
 <style>
-  /* Тонований фон сторінки — на токенах, адаптується до теми. */
-  :global(body:has(.profile-scope)) {
-    background:
-      radial-gradient(
-        120% 70% at 12% -5%,
-        color-mix(in oklch, var(--muted) 55%, var(--background)) 0%,
-        transparent 48%
-      ),
-      radial-gradient(
-        120% 70% at 100% 102%,
-        color-mix(in oklch, var(--secondary) 65%, var(--background)) 0%,
-        transparent 50%
-      ),
-      var(--background);
-  }
-
   /* Єдине джерело правди для картки. Тінь — alpha-чорний (працює в обох темах). */
   .card {
     border-radius: 28px;

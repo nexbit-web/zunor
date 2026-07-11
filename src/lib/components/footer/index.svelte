@@ -85,7 +85,7 @@
     href={link.href}
     target={link.external ? '_blank' : undefined}
     rel={link.external ? 'noopener noreferrer' : undefined}
-    class="w-fit rounded-sm text-[13px] text-white/55 transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/50"
+    class="w-fit rounded-sm text-[13px] text-primary transition-colors hover:text-primary-hover hover:underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/50"
   >
     {link.label}
   </a>
@@ -121,7 +121,7 @@
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label={social.label}
-                  class="flex size-9 items-center justify-center rounded-full text-white/60 transition-colors hover:bg-white/8 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/50"
+                  class="flex size-9 items-center justify-center rounded-full text-primary transition-colors hover:bg-primary/18 hover:text-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/50"
                 >
                   <BrandIcon name={social.icon} class="size-4.5" />
                 </a>
@@ -165,7 +165,7 @@
         {#each legalLinks as link (link.href)}
           <a
             href={link.href}
-            class="rounded-sm text-[12px] text-white/40 transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/50"
+            class="w-fit rounded-sm text-[13px] text-primary transition-all hover:text-primary-hover hover:underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/50"
           >
             {link.label}
           </a>

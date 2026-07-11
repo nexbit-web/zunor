@@ -107,7 +107,7 @@
     'inline-flex h-[22px] items-center gap-1 rounded-full px-2.5 text-[10px] font-bold tracking-[0.06em] uppercase'
 </script>
 
-<div class="jobclient-scope min-h-svh px-5 py-12">
+<div class="  min-h-svh px-5 py-12">
   <div class="mx-auto w-full max-w-135">
     <!-- Back -->
     <button
@@ -403,23 +403,26 @@
 <AlertDialog.Root bind:open={cancelDialogOpen}>
   <AlertDialog.Content>
     <AlertDialog.Header>
-      <AlertDialog.Title>Скасувати заявку?</AlertDialog.Title>
+      <AlertDialog.Title>Видалити замовлення</AlertDialog.Title>
       <AlertDialog.Description
-        >Усі отримані відгуки буде відхилено. Цю дію не можна скасувати.</AlertDialog.Description
+        >Ви дійсно хочете видалити це замовлення?</AlertDialog.Description
       >
     </AlertDialog.Header>
     <AlertDialog.Footer>
-      <AlertDialog.Cancel disabled={cancelling}>Назад</AlertDialog.Cancel>
+      <AlertDialog.Cancel disabled={cancelling}>Скасувати</AlertDialog.Cancel>
       <AlertDialog.Action
         onclick={cancelJob}
         disabled={cancelling}
-        class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+        variant="destructive"
+        class="  text-[#ff595a] hover:bg-[#ff595a]/10"
       >
-        {cancelling ? 'Скасовуємо…' : 'Скасувати заявку'}
+        {cancelling ? 'Зачекайте…' : 'Видалити'}
       </AlertDialog.Action>
     </AlertDialog.Footer>
   </AlertDialog.Content>
 </AlertDialog.Root>
+
+ 
 
 <!-- Модалка прийняття пропозиції -->
 <AlertDialog.Root bind:open={acceptDialogOpen}>
@@ -447,19 +450,4 @@
   </AlertDialog.Content>
 </AlertDialog.Root>
 
-<style>
-  :global(body:has(.jobclient-scope)) {
-    background:
-      radial-gradient(
-        130% 90% at 12% -5%,
-        color-mix(in oklch, var(--muted) 55%, var(--background)) 0%,
-        transparent 50%
-      ),
-      radial-gradient(
-        130% 90% at 100% 105%,
-        color-mix(in oklch, var(--secondary) 60%, var(--background)) 0%,
-        transparent 52%
-      ),
-      var(--background);
-  }
-</style>
+ 

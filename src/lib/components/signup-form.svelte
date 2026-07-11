@@ -106,6 +106,7 @@
   import { onMount, onDestroy, tick } from 'svelte'
   import { fly } from 'svelte/transition'
   import { cubicOut } from 'svelte/easing'
+  import { Checkbox } from './ui/checkbox'
 
   let { class: className, ...restProps }: HTMLAttributes<HTMLDivElement> =
     $props()
@@ -380,7 +381,7 @@
         class={cn(
           'h-1.75 rounded-full transition-all duration-300',
           i === stepIndex
-            ? 'w-5.5 bg-foreground'
+            ? 'w-5.5 bg-primary'
             : i < stepIndex
               ? 'w-1.75 bg-primary'
               : 'w-1.75 bg-border',
@@ -420,7 +421,7 @@
               class="group flex items-center gap-4.5 rounded-[20px] border border-transparent bg-muted p-4.5 text-left transition-all duration-200 hover:border-border hover:bg-card hover:shadow-[0_10px_30px_-12px_rgba(0,0,0,0.16)] active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             >
               <span
-                class="flex size-13 shrink-0 items-center justify-center rounded-[15px] bg-card text-foreground shadow-sm transition-colors duration-200 group-hover:bg-foreground group-hover:text-background"
+                class="flex size-13 shrink-0 items-center justify-center rounded-[15px] bg-card text-foreground shadow-sm transition-colors duration-200 group-hover:bg-primary group-hover:text-primary-foreground"
               >
                 <item.icon size={26} strokeWidth={1.6} aria-hidden="true" />
               </span>
@@ -435,7 +436,7 @@
                 </p>
               </div>
               <span
-                class="ml-auto -translate-x-1.5 text-muted-foreground opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:text-foreground group-hover:opacity-100"
+                class="ml-auto -translate-x-1.5 text-muted-foreground opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:text-primary group-hover:opacity-100"
               >
                 <ChevronRight size={20} aria-hidden="true" />
               </span>
@@ -447,7 +448,7 @@
           Вже є акаунт?
           <a
             href="/user/login"
-            class="rounded-sm font-semibold text-foreground underline-offset-[3px] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            class="rounded-sm font-semibold text-primary underline-offset-[3px] hover:text-primary-hover hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             Увійти
           </a>
@@ -836,14 +837,16 @@
 
           <!-- Погодження -->
           <div class="flex items-start gap-2.5">
-            <input
+            <Checkbox
               id="terms-{uid}"
-              type="checkbox"
               bind:checked={agreeTerms}
-              class="mt-0.5 size-4.25 shrink-0 cursor-pointer rounded-[5px] accent-foreground"
+              required
+              aria-describedby="terms-desc-{uid}"
+              class="terms-checkbox mt-0.5 shrink-0"
             />
             <label
               for="terms-{uid}"
+              id="terms-desc-{uid}"
               class="cursor-pointer text-[12.5px] leading-relaxed text-muted-foreground"
             >
               Я погоджуюсь з
@@ -851,7 +854,7 @@
                 href="/terms"
                 target="_blank"
                 rel="noopener"
-                class="font-medium text-foreground hover:underline"
+                class="font-medium text-primary hover:text-primary-hover hover:underline"
                 >правилами сервісу</a
               >
               та
@@ -859,7 +862,7 @@
                 href="/privacy"
                 target="_blank"
                 rel="noopener"
-                class="font-medium text-foreground hover:underline"
+                class="font-medium text-primary hover:text-primary-hover hover:underline"
                 >політикою конфіденційності</a
               >
             </label>
@@ -871,7 +874,7 @@
             type="submit"
             disabled={loading || !formValid}
             aria-busy={loading}
-            class="mt-1 inline-flex h-13 w-full items-center justify-center gap-2.5 rounded-[14px] bg-foreground text-[15px] font-semibold tracking-[-0.01em] text-background transition hover:-translate-y-px active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+            class="mt-1 inline-flex h-13 w-full items-center justify-center gap-2.5 rounded-[14px] bg-primary text-[15px] font-semibold tracking-[-0.01em] text-primary-foreground transition hover:-translate-y-px hover:bg-primary-hover active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
           >
             {#if loading}<LoaderCircle
                 class="size-4.5 animate-spin"
@@ -942,7 +945,7 @@
             type="submit"
             disabled={loading || otp.length !== 6}
             aria-busy={loading}
-            class="inline-flex h-13 w-full items-center justify-center gap-2.5 rounded-[14px] bg-foreground text-[15px] font-semibold tracking-[-0.01em] text-background transition hover:-translate-y-px active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+            class="inline-flex h-13 w-full items-center justify-center gap-2.5 rounded-[14px] bg-primary text-[15px] font-semibold tracking-[-0.01em] text-primary-foreground transition hover:-translate-y-px hover:bg-primary-hover active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
           >
             {#if loading}<LoaderCircle
                 class="size-4.5 animate-spin"
@@ -962,7 +965,7 @@
                 type="button"
                 onclick={handleResend}
                 disabled={loading}
-                class="rounded-sm text-[12.5px] font-semibold text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50"
+                class="rounded-sm text-[12.5px] font-semibold text-primary hover:text-primary-hover hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50"
               >
                 Надіслати код повторно
               </button>
@@ -1046,5 +1049,15 @@
     .field-input {
       transition: none;
     }
+  }
+
+  /* Рамка чекбокса «Погодження» — темніше за замовчуванням border-input,
+     щоб було видно на bg-muted фоні форми. Не займового Checkbox-компонент,
+     аби не зачепити чекбокси в інших місцях застосунку. */
+  .reg-scope :global(.terms-checkbox) {
+    border-color: var(--foreground);
+  }
+  .reg-scope :global(.terms-checkbox[data-state='checked']) {
+    border-color: var(--primary);
   }
 </style>

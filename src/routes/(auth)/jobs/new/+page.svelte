@@ -298,20 +298,20 @@
   const tileCls =
     'group flex min-h-[124px] cursor-pointer flex-col items-start gap-3.5 rounded-[22px] border border-border bg-card p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-ring hover:shadow-md active:scale-[0.985] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none motion-reduce:hover:translate-y-0'
   const tileIcCls =
-    'flex size-[46px] items-center justify-center rounded-[14px] bg-muted text-foreground transition-colors group-hover:bg-foreground group-hover:text-background'
+    'flex size-[46px] items-center justify-center rounded-[14px] bg-muted text-foreground transition-colors group-hover:bg-primary group-hover:text-primary-foreground'
   function optCls(active: boolean, left = false) {
     return [
       'cursor-pointer rounded-[14px] border p-[13px] text-sm font-medium transition-all active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
       left ? 'text-left' : 'text-center',
       active
-        ? 'border-transparent bg-foreground text-background'
+        ? 'border-transparent bg-primary text-primary-foreground'
         : 'border-border bg-card text-foreground hover:border-ring',
     ].join(' ')
   }
   const stepBtnCls =
     'flex size-[34px] items-center justify-center rounded-full border border-border bg-card text-foreground transition-colors hover:border-ring hover:bg-muted active:scale-90 disabled:opacity-30 disabled:hover:bg-card focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
   const primaryCls =
-    'mt-1.5 inline-flex h-[52px] w-full items-center justify-center gap-[9px] rounded-2xl bg-foreground text-[15px] font-semibold text-background transition hover:-translate-y-px active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:translate-y-0 disabled:opacity-40 motion-reduce:transition-none motion-reduce:hover:translate-y-0'
+    'mt-1.5 inline-flex h-[52px] w-full items-center justify-center gap-[9px] rounded-2xl bg-primary text-[15px] font-semibold text-primary-foreground transition hover:-translate-y-px hover:bg-primary-hover active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:translate-y-0 disabled:opacity-40 motion-reduce:transition-none motion-reduce:hover:translate-y-0'
   const quickCls =
     'flex-1 cursor-pointer rounded-[18px] border border-border bg-card p-4 text-[14.5px] font-semibold text-foreground shadow-sm transition-all hover:-translate-y-0.5 hover:border-ring hover:shadow-md active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none motion-reduce:hover:translate-y-0'
 </script>
@@ -360,7 +360,7 @@
           >
         </div>
         <div
-          class="h-1 w-full overflow-hidden rounded-full bg-foreground/10"
+          class="h-1 w-full overflow-hidden rounded-full bg-muted"
           role="progressbar"
           aria-valuenow={step}
           aria-valuemin={1}
@@ -368,7 +368,7 @@
           aria-label="Прогрес замовлення"
         >
           <div
-            class="h-full rounded-full bg-foreground transition-all duration-400 ease-out"
+            class="h-full rounded-full bg-primary transition-all duration-400 ease-out"
             style:width={`${(step / 5) * 100}%`}
           ></div>
         </div>
@@ -774,12 +774,21 @@
               onclick={submit}
               disabled={submitting || uploading}
               aria-busy={submitting}
-              class={primaryCls}
+              class={`${primaryCls} relative`}
             >
+              <span class="pointer-events-none inline-flex items-center gap-2">
+                {#if submitting}
+                  Зачекайте...
+                {:else}
+                   Замовити прибирання
+                {/if}
+              </span>
+
               {#if submitting}
-                <Spinner /> Створюємо...
-              {:else}
-                <Check class="size-5" aria-hidden="true" /> Замовити прибирання
+                <Spinner
+                  class="absolute right-4 animate-spin"
+                  aria-hidden="true"
+                />
               {/if}
             </button>
           </div>
@@ -790,20 +799,7 @@
 </div>
 
 <style>
-  :global(body:has(.job-scope)) {
-    background:
-      radial-gradient(
-        130% 90% at 12% -5%,
-        color-mix(in oklch, var(--muted) 55%, var(--background)) 0%,
-        transparent 50%
-      ),
-      radial-gradient(
-        130% 90% at 100% 105%,
-        color-mix(in oklch, var(--secondary) 60%, var(--background)) 0%,
-        transparent 52%
-      ),
-      var(--background);
-  }
+ 
 
   /* Input / Textarea — на токенах. :global бо клас іде в shadcn-компонент;
      обмежено .job-scope. padding-left/right (не shorthand), щоб py-* у textarea не конфліктував. */
