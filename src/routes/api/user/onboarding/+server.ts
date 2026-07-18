@@ -5,6 +5,7 @@ import { prisma } from '$lib/prisma'
 import { cloudinary } from '$lib/cloudinary'
 import { validateUsername } from '$lib/username'
 import type { RequestHandler } from './$types'
+import { safeTrigger, channels, events } from '$lib/server/pusher'
 
 const PHONE_RE = /^\+380\d{9}$/
 const NAME_MIN = 2
@@ -178,6 +179,14 @@ export const POST: RequestHandler = async ({ request }) => {
       },
     }),
   ])
+
+  // ─── Сповіщення адмінів у CRM ───
+  // Кожна подача = запит на (повторну) модерацію: майстер міг змінити дані,
+  // тому сповіщаємо ЩОРАЗУ. Від зловживань захищає rate-limit на цьому endpoint.
+  await safeTrigger(channels.admin, events.moderationNew, {
+    name,
+    resubmission: Boolean(me.masterProfile), // профіль уже існував → повторна подача
+  })
 
   return json({ success: true }, { status: 200 })
 }

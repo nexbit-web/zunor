@@ -1,4 +1,11 @@
 <!-- src/routes/(auth)/orders/[id]/+page.svelte -->
+<!--
+  Сторінка замовлення — на токенах теми (десктоп: контент + sticky sidebar).
+  Логіка 1:1: describeJob, derived (isClient/isMaster/peer/peerRating/peerHref),
+  статуси + statusDescription, відгуки, copyOrderId + onDestroy, openChat, формат.
+  ВАЖЛИВО (безпека): сервер у load має пускати лише сторони замовлення і віддавати
+  peer.phone тільки авторизованому — телефон приватний.
+-->
 <script lang="ts">
   import { goto } from '$app/navigation'
   import {
@@ -6,23 +13,11 @@
     AvatarFallback,
     AvatarImage,
   } from '$lib/components/ui/avatar'
-  import {
-    Clock,
-    Copy,
-    Check,
-    Phone,
-    LoaderCircle,
-    MessageSquare,
-    Star,
-  } from 'lucide-svelte'
+  import { Clock, Copy, Check, Phone, MessageSquare, Star } from 'lucide-svelte'
   import { Button } from '$lib/components/ui/button'
   import OrderActions from '$lib/components/orders/order-actions.svelte'
   import ReviewForm from '$lib/components/orders/review-form.svelte'
-  import {
-    ORDER_STATUS_LABEL,
-    ORDER_STATUS_COLOR,
-    formatPrice,
-  } from '$lib/orders/labels'
+  import { ORDER_STATUS_LABEL, formatPrice } from '$lib/orders/labels'
   import { onDestroy } from 'svelte'
   import type { PageData } from './$types'
   import { describeJob } from '$lib/categories/cleaning/describe'
@@ -31,16 +26,12 @@
 
   const details = $derived(describeJob((data.order as any).metadata))
 
-  // ═══════════════════════════════════════════════════════════
-  // Derived
-  // ═══════════════════════════════════════════════════════════
-
+  // ─── Derived ───
   const order = $derived(data.order)
   const isClient = $derived(data.viewerId === order.clientId)
   const isMaster = $derived(data.viewerId === order.masterId)
   const peer = $derived(isClient ? order.master : order.client)
 
-  // peer — це або master, або client, у них різні поля рейтингу
   const peerRating = $derived(
     isClient
       ? {
@@ -52,8 +43,6 @@
           count: order.client.reviewsCountAsClient,
         },
   )
-
-  // Клієнт → майстер має публічну сторінку /@username; майстер → клієнт за /client/[id]
   const peerHref = $derived(
     isClient
       ? order.master.username
@@ -63,7 +52,6 @@
   )
 
   const statusLabel = $derived(ORDER_STATUS_LABEL[order.status])
-  const statusColor = $derived(ORDER_STATUS_COLOR[order.status])
 
   const reviewFromClient = $derived(
     order.reviews.find((r: any) => r.direction === 'CLIENT_TO_MASTER') ?? null,
@@ -103,11 +91,15 @@
         return ''
     }
   }
+  function statusDot(status: string): string {
+    if (status === 'COMPLETED')
+      return 'bg-emerald-500 ring-4 ring-emerald-500/20'
+    if (status === 'CANCELLED')
+      return 'bg-destructive ring-4 ring-destructive/20'
+    return 'bg-amber-500 ring-4 ring-amber-500/20'
+  }
 
-  // ═══════════════════════════════════════════════════════════
-  // Actions
-  // ═══════════════════════════════════════════════════════════
-
+  // ─── Actions ───
   let copyConfirm = $state(false)
   let copyTimeout: ReturnType<typeof setTimeout> | null = null
 
@@ -118,7 +110,7 @@
       if (copyTimeout) clearTimeout(copyTimeout)
       copyTimeout = setTimeout(() => (copyConfirm = false), 1500)
     } catch {
-      // ignore
+      /* ignore */
     }
   }
 
@@ -129,6 +121,11 @@
   onDestroy(() => {
     if (copyTimeout) clearTimeout(copyTimeout)
   })
+
+  const eyebrow =
+    'text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase'
+  const scard =
+    'rounded-[24px] border border-border bg-card shadow-[0_16px_40px_-18px_rgba(0,0,0,0.12)]'
 </script>
 
 <svelte:head>
@@ -136,456 +133,377 @@
   <meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 
-<div class="max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
-  <!-- ─── Breadcrumb + meta ─── -->
-  <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
-    <a
-      href="/orders"
-      class="text-xs hover:underline inline-flex items-center gap-1"
-      style="color: var(--muted-foreground)"
-    >
-      ← Усі замовлення
-    </a>
+<div class="order-scope min-h-svh px-6 py-10">
+  <div class="mx-auto max-w-250">
+    <!-- Breadcrumb + ID -->
+    <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <a
+        href="/orders"
+        class="rounded-sm text-xs text-muted-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >← Усі замовлення</a
+      >
+      <button
+        type="button"
+        onclick={copyOrderId}
+        class="inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-semibold tabular-nums text-muted-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        aria-label="Скопіювати ID замовлення"
+      >
+        <span>#{orderShortId}</span>
+        {#if copyConfirm}<Check
+            class="size-3 text-emerald-600"
+            aria-hidden="true"
+          />{:else}<Copy class="size-3 opacity-50" aria-hidden="true" />{/if}
+      </button>
+      <span class="sr-only" aria-live="polite"
+        >{copyConfirm ? 'ID замовлення скопійовано' : ''}</span
+      >
+    </div>
 
-    <button
-      type="button"
-      onclick={copyOrderId}
-      class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium tabular-nums cursor-pointer transition-colors hover:bg-[var(--muted)]"
-      style="color: var(--muted-foreground)"
-      aria-label="Скопіювати ID замовлення"
-    >
-      <span>#{orderShortId}</span>
-      {#if copyConfirm}
-        <Check class="size-3" style="color: #16a34a" />
-      {:else}
-        <Copy class="size-3 opacity-50" />
-      {/if}
-    </button>
-  </div>
-
-  <!-- ─── Header ─── -->
-  <header class="mb-5">
     <h1
-      class="text-2xl sm:text-3xl font-bold tracking-tight leading-tight"
-      style="color: var(--foreground)"
+      class="mb-4.5 text-[28px] font-bold leading-[1.15] tracking-[-0.03em] wrap-break-word text-foreground"
     >
       {order.title}
     </h1>
-  </header>
 
-  <!-- ─── Status Banner ─── -->
-  <div
-    class="rounded-xl px-4 py-3 mb-6 flex items-center gap-3"
-    style="background-color: color-mix(in oklch, var(--muted) 60%, transparent);
-           border: 1px solid var(--border)"
-  >
-    <span
-      class="size-2 rounded-full shrink-0"
-      style="background-color: var(--{statusColor}-500, var(--primary));
-             box-shadow: 0 0 0 4px color-mix(in oklch, var(--primary) 12%, transparent)"
-      aria-hidden="true"
-    ></span>
-    <div class="min-w-0">
-      <p
-        class="text-[11px] font-bold uppercase tracking-[0.08em]"
-        style="color: var(--foreground)"
-      >
-        {statusLabel}
-      </p>
-      <p
-        class="text-xs mt-0.5 leading-snug"
-        style="color: var(--muted-foreground)"
-      >
-        {statusDescription(order.status)}
-      </p>
+    <!-- Status banner -->
+    <div
+      class="mb-6.5 flex items-center gap-3.5 rounded-2xl border border-border bg-card px-4.5 py-4 shadow-[0_10px_30px_-16px_rgba(0,0,0,0.1)]"
+    >
+      <span
+        class="size-2.25 shrink-0 rounded-full {statusDot(order.status)}"
+        aria-hidden="true"
+      ></span>
+      <div class="min-w-0">
+        <p
+          class="text-[11px] font-bold tracking-[0.08em] text-foreground uppercase"
+        >
+          {statusLabel}
+        </p>
+        <p class="mt-0.5 text-[13px] text-muted-foreground">
+          {statusDescription(order.status)}
+        </p>
+      </div>
     </div>
-  </div>
 
-  <!-- ═══════ Layout ═══════ -->
-  <div class="grid lg:grid-cols-[1fr_340px] gap-6 lg:gap-8">
-    <!-- ━━━ ОСНОВНИЙ КОНТЕНТ ━━━ -->
-    <div class="min-w-0 space-y-6">
-      <!-- Деталі прибирання -->
-      {#if details.length > 0}
-        <section>
-          <h2
-            class="text-[11px] font-semibold uppercase tracking-[0.08em] mb-3"
-            style="color: var(--muted-foreground)"
-          >
-            Деталі замовлення
-          </h2>
-          <div
-            class="rounded-xl border overflow-hidden"
-            style="border-color: var(--border)"
-          >
-            {#each details as d, i (d.label)}
-              {#if d.items}
-                <div
-                  class="px-4 py-3 text-sm"
-                  style="border-color: var(--border); {i > 0
-                    ? 'border-top: 1px solid var(--border)'
-                    : ''}"
-                >
-                  <span
-                    class="block mb-2.5"
-                    style="color: var(--muted-foreground)">{d.label}</span
+    <!-- Layout -->
+    <div class="grid items-start gap-7 lg:grid-cols-[1fr_340px]">
+      <!-- MAIN -->
+      <div class="flex min-w-0 flex-col gap-6.5">
+        {#if details.length > 0}
+          <section>
+            <h2 class="{eyebrow} mb-3">Деталі замовлення</h2>
+            <div
+              class="overflow-hidden rounded-2xl border border-border bg-card"
+            >
+              {#each details as d, i (d.label)}
+                {#if d.items}
+                  <div
+                    class="px-4 py-3 text-sm {i > 0
+                      ? 'border-t border-border'
+                      : ''}"
                   >
-                  <div class="space-y-2">
-                    {#each d.items as it (it.name)}
-                      <div class="flex items-center justify-between gap-3">
-                        <span
-                          class="font-medium"
-                          style="color: var(--foreground)">{it.name}</span
-                        >
-                        <span
-                          class="shrink-0 inline-flex items-center justify-center min-w-7 h-6 px-2 rounded-full text-xs font-semibold tabular-nums"
-                          style="background-color: var(--secondary); color: var(--foreground)"
-                          >×{it.qty}</span
-                        >
-                      </div>
+                    <span class="mb-2.5 block text-muted-foreground"
+                      >{d.label}</span
+                    >
+                    <div class="space-y-2">
+                      {#each d.items as it (it.name)}
+                        <div class="flex items-center justify-between gap-3">
+                          <span
+                            class="min-w-0 font-medium wrap-break-word text-foreground"
+                            >{it.name}</span
+                          >
+                          <span
+                            class="inline-flex h-6 min-w-7 shrink-0 items-center justify-center rounded-full bg-muted px-2 text-xs font-bold tabular-nums text-foreground"
+                            >×{it.qty}</span
+                          >
+                        </div>
+                      {/each}
+                    </div>
+                  </div>
+                {:else}
+                  <div
+                    class="flex items-center justify-between gap-4 px-4 py-3 text-sm {i >
+                    0
+                      ? 'border-t border-border'
+                      : ''}"
+                  >
+                    <span class="shrink-0 text-muted-foreground">{d.label}</span
+                    >
+                    <span
+                      class="min-w-0 text-right font-semibold wrap-break-word text-foreground"
+                      >{d.value}</span
+                    >
+                  </div>
+                {/if}
+              {/each}
+            </div>
+          </section>
+        {/if}
+
+        {#if order.description}
+          <section>
+            <h2 class="{eyebrow} mb-2">Коментар</h2>
+            <p
+              class="text-[14.5px] leading-relaxed whitespace-pre-wrap wrap-break-word text-foreground"
+            >
+              {order.description}
+            </p>
+          </section>
+        {/if}
+
+        {#if order.cancelReason && order.status === 'CANCELLED'}
+          <section
+            class="rounded-2xl border border-destructive/20 bg-destructive/10 p-5"
+          >
+            <h3
+              class="mb-1.5 text-[11px] font-semibold tracking-[0.08em] text-destructive uppercase"
+            >
+              Причина скасування
+            </h3>
+            <p class="text-sm leading-relaxed wrap-break-word text-foreground">
+              {order.cancelReason}
+            </p>
+          </section>
+        {/if}
+
+        <!-- Reviews -->
+        {#if order.status === 'COMPLETED'}
+          <section>
+            <h2 class="{eyebrow} mb-3">Відгуки</h2>
+
+            {#if reviewFromClient}
+              <article
+                class="mb-3 rounded-[18px] border border-border bg-card p-4"
+              >
+                <header class="mb-2 flex items-center justify-between gap-2">
+                  <span class="text-[12.5px] font-medium text-muted-foreground"
+                    >Відгук клієнта про майстра</span
+                  >
+                  <div
+                    class="flex items-center gap-0.5"
+                    role="img"
+                    aria-label="Оцінка {reviewFromClient.rating} з 5"
+                  >
+                    {#each Array(5) as _, i (i)}
+                      <Star
+                        class="size-3.5 {i < reviewFromClient.rating
+                          ? 'fill-amber-400 text-amber-400'
+                          : 'fill-transparent text-border'}"
+                        aria-hidden="true"
+                      />
                     {/each}
                   </div>
-                </div>
-              {:else}
-                <div
-                  class="flex items-center justify-between px-4 py-2.5 text-sm gap-4"
-                  style={i > 0 ? 'border-top: 1px solid var(--border)' : ''}
-                >
-                  <span class="shrink-0" style="color: var(--muted-foreground)"
-                    >{d.label}</span
+                </header>
+                {#if reviewFromClient.comment}<p
+                    class="text-[13.5px] leading-relaxed wrap-break-word text-foreground"
                   >
-                  <span
-                    class="font-medium text-right"
-                    style="color: var(--foreground)">{d.value}</span
-                  >
-                </div>
-              {/if}
-            {/each}
-          </div>
-        </section>
-      {/if}
-
-      <!-- Коментар клієнта -->
-      {#if order.description}
-        <section>
-          <h2
-            class="text-[11px] font-semibold uppercase tracking-[0.08em] mb-2"
-            style="color: var(--muted-foreground)"
-          >
-            Коментар
-          </h2>
-          <p
-            class="text-[14.5px] leading-relaxed whitespace-pre-wrap"
-            style="color: var(--foreground)"
-          >
-            {order.description}
-          </p>
-        </section>
-      {/if}
-
-      <!-- Cancellation reason -->
-      {#if order.cancelReason && order.status === 'CANCELLED'}
-        <section
-          class="rounded-2xl p-5"
-          style="background-color: color-mix(in oklch, var(--destructive) 5%, transparent);
-                 border: 1px solid color-mix(in oklch, var(--destructive) 18%, transparent)"
-        >
-          <h3
-            class="text-[11px] font-semibold uppercase tracking-[0.08em] mb-1.5"
-            style="color: var(--destructive)"
-          >
-            Причина скасування
-          </h3>
-          <p class="text-sm leading-relaxed" style="color: var(--foreground)">
-            {order.cancelReason}
-          </p>
-        </section>
-      {/if}
-
-      <!-- ─── Reviews ─── -->
-      {#if order.status === 'COMPLETED'}
-        <section class="space-y-3">
-          <h2
-            class="text-[11px] font-semibold uppercase tracking-[0.08em]"
-            style="color: var(--muted-foreground)"
-          >
-            Відгуки
-          </h2>
-
-          <!-- Відгук клієнта про майстра -->
-          {#if reviewFromClient}
-            <article
-              class="rounded-2xl p-4"
-              style="background-color: var(--card); border: 1px solid var(--border)"
-            >
-              <header class="flex items-center justify-between gap-2 mb-2">
-                <span
-                  class="text-xs font-medium"
-                  style="color: var(--muted-foreground)"
-                >
-                  Відгук клієнта про майстра
-                </span>
-                <div class="flex items-center gap-0.5">
-                  {#each Array(5) as _, i (i)}
-                    <Star
-                      class="size-3.5"
-                      style="color: {i < reviewFromClient.rating
-                        ? '#f59e0b'
-                        : 'var(--border)'};
-                             fill: {i < reviewFromClient.rating
-                        ? '#f59e0b'
-                        : 'transparent'}"
-                    />
-                  {/each}
-                </div>
-              </header>
-              {#if reviewFromClient.comment}
-                <p
-                  class="text-[13.5px] leading-relaxed"
-                  style="color: var(--foreground)"
-                >
-                  {reviewFromClient.comment}
-                </p>
-              {/if}
-            </article>
-          {:else if canClientLeaveReview}
-            <ReviewForm
-              orderId={order.id}
-              peerLabel="майстра"
-              peerName={order.master.name ?? ''}
-            />
-          {:else if isMaster}
-            <div
-              class="rounded-2xl px-4 py-5 text-center"
-              style="background-color: var(--card); border: 1px solid var(--border); border-style: dashed"
-            >
-              <p class="text-xs" style="color: var(--muted-foreground)">
-                Очікуємо відгук від клієнта
-              </p>
-            </div>
-          {/if}
-
-          <!-- Відгук майстра про клієнта -->
-          {#if reviewFromMaster}
-            <article
-              class="rounded-2xl p-4"
-              style="background-color: var(--card); border: 1px solid var(--border)"
-            >
-              <header class="flex items-center justify-between gap-2 mb-2">
-                <span
-                  class="text-xs font-medium"
-                  style="color: var(--muted-foreground)"
-                >
-                  Відгук майстра про клієнта
-                </span>
-                <div class="flex items-center gap-0.5">
-                  {#each Array(5) as _, i (i)}
-                    <Star
-                      class="size-3.5"
-                      style="color: {i < reviewFromMaster.rating
-                        ? '#f59e0b'
-                        : 'var(--border)'};
-                             fill: {i < reviewFromMaster.rating
-                        ? '#f59e0b'
-                        : 'transparent'}"
-                    />
-                  {/each}
-                </div>
-              </header>
-              {#if reviewFromMaster.comment}
-                <p
-                  class="text-[13.5px] leading-relaxed"
-                  style="color: var(--foreground)"
-                >
-                  {reviewFromMaster.comment}
-                </p>
-              {/if}
-            </article>
-          {:else if canMasterLeaveReview}
-            <ReviewForm
-              orderId={order.id}
-              peerLabel="клієнта"
-              peerName={order.client.name ?? ''}
-            />
-          {:else if isClient}
-            <div
-              class="rounded-2xl px-4 py-5 text-center"
-              style="background-color: var(--card); border: 1px solid var(--border); border-style: dashed"
-            >
-              <p class="text-xs" style="color: var(--muted-foreground)">
-                Очікуємо відгук від майстра
-              </p>
-            </div>
-          {/if}
-        </section>
-      {/if}
-
-      <!-- Events timeline (простой список вместо компонента) -->
-      {#if order.events && order.events.length > 0}
-        <section>
-          <h2
-            class="text-[11px] font-semibold uppercase tracking-[0.08em] mb-3"
-            style="color: var(--muted-foreground)"
-          >
-            Історія подій
-          </h2>
-          <ul class="list-none p-0 m-0 space-y-2">
-            {#each order.events as event (event.id)}
-              <li
-                class="flex items-start gap-3 p-3 rounded-lg"
-                style="background-color: var(--muted)"
+                    {reviewFromClient.comment}
+                  </p>{/if}
+              </article>
+            {:else if canClientLeaveReview}
+              <ReviewForm
+                orderId={order.id}
+                peerLabel="майстра"
+                peerName={order.master.name ?? ''}
+              />
+            {:else if isMaster}
+              <div
+                class="mb-3 rounded-[18px] border border-dashed border-border bg-card px-4 py-5 text-center"
               >
-                <Clock
-                  class="size-3.5 shrink-0 mt-0.5"
-                  style="color: var(--muted-foreground)"
-                />
-                <div class="min-w-0 flex-1">
-                  <p
-                    class="text-xs font-medium"
-                    style="color: var(--foreground)"
-                  >
-                    {event.type}
-                  </p>
-                  <p
-                    class="text-[11px] mt-0.5"
-                    style="color: var(--muted-foreground)"
-                  >
-                    {formatDate(event.createdAt)}
-                  </p>
-                </div>
-              </li>
-            {/each}
-          </ul>
-        </section>
-      {/if}
-    </div>
+                <p class="text-xs text-muted-foreground">
+                  Очікуємо відгук від клієнта
+                </p>
+              </div>
+            {/if}
 
-    <!-- ━━━ SIDEBAR ━━━ -->
-    <aside class="lg:sticky lg:top-6 lg:self-start space-y-3">
-      <!-- Price -->
-      <div
-        class="rounded-2xl p-5"
-        style="background-color: var(--card); border: 1px solid var(--border)"
-      >
-        <p
-          class="text-[10px] uppercase tracking-[0.08em] font-semibold"
-          style="color: var(--muted-foreground)"
-        >
-          Сума замовлення
-        </p>
-        <p
-          class="text-3xl font-bold tabular-nums tracking-tight mt-1.5"
-          style="color: var(--foreground)"
-        >
-          {formatPrice(order.priceCents, order.currency)}
-        </p>
+            {#if reviewFromMaster}
+              <article class="rounded-[18px] border border-border bg-card p-4">
+                <header class="mb-2 flex items-center justify-between gap-2">
+                  <span class="text-[12.5px] font-medium text-muted-foreground"
+                    >Відгук майстра про клієнта</span
+                  >
+                  <div
+                    class="flex items-center gap-0.5"
+                    role="img"
+                    aria-label="Оцінка {reviewFromMaster.rating} з 5"
+                  >
+                    {#each Array(5) as _, i (i)}
+                      <Star
+                        class="size-3.5 {i < reviewFromMaster.rating
+                          ? 'fill-amber-400 text-amber-400'
+                          : 'fill-transparent text-border'}"
+                        aria-hidden="true"
+                      />
+                    {/each}
+                  </div>
+                </header>
+                {#if reviewFromMaster.comment}<p
+                    class="text-[13.5px] leading-relaxed wrap-break-word text-foreground"
+                  >
+                    {reviewFromMaster.comment}
+                  </p>{/if}
+              </article>
+            {:else if canMasterLeaveReview}
+              <ReviewForm
+                orderId={order.id}
+                peerLabel="клієнта"
+                peerName={order.client.name ?? ''}
+              />
+            {:else if isClient}
+              <div
+                class="rounded-[18px] border border-dashed border-border bg-card px-4 py-5 text-center"
+              >
+                <p class="text-xs text-muted-foreground">
+                  Очікуємо відгук від майстра
+                </p>
+              </div>
+            {/if}
+          </section>
+        {/if}
 
-        {#if order.createdAt}
-          <div class="mt-4 pt-4" style="border-top: 1px solid var(--border)">
-            <div
-              class="flex items-center gap-2 text-xs"
-              style="color: var(--muted-foreground)"
-            >
-              <Clock class="size-3.5 shrink-0" />
-              <span>Створено {formatDate(order.createdAt)}</span>
-            </div>
-          </div>
+        <!-- Events -->
+        {#if order.events && order.events.length > 0}
+          <section>
+            <h2 class="{eyebrow} mb-3">Історія подій</h2>
+            <ul class="m-0 flex list-none flex-col gap-2 p-0">
+              {#each order.events as event (event.id)}
+                <li
+                  class="flex items-start gap-3 rounded-xl bg-muted px-3.5 py-3"
+                >
+                  <Clock
+                    class="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                  <div class="min-w-0 flex-1">
+                    <p
+                      class="text-[12.5px] font-semibold wrap-break-word text-foreground"
+                    >
+                      {event.type}
+                    </p>
+                    <p class="mt-0.5 text-[11px] text-muted-foreground">
+                      {formatDate(event.createdAt)}
+                    </p>
+                  </div>
+                </li>
+              {/each}
+            </ul>
+          </section>
         {/if}
       </div>
 
-      <!-- Peer card -->
-      <div
-        class="rounded-2xl p-4"
-        style="background-color: var(--card); border: 1px solid var(--border)"
-      >
-        <p
-          class="text-[10px] uppercase tracking-[0.08em] font-semibold mb-3"
-          style="color: var(--muted-foreground)"
-        >
-          {isClient ? 'Майстер' : 'Замовник'}
-        </p>
-
-        <a href={peerHref} class="flex items-center gap-3 mb-3 group">
-          <Avatar class="size-12 shrink-0">
-            <AvatarImage src={peer.avatar ?? ''} alt={peer.name ?? ''} />
-            <AvatarFallback
-              class="text-sm font-semibold"
-              style="background-color: var(--muted); color: var(--foreground)"
+      <!-- SIDEBAR -->
+      <aside class="flex flex-col gap-3 lg:sticky lg:top-6 lg:self-start">
+        <!-- Price -->
+        <div class="{scard} p-5.5">
+          <p class={eyebrow}>Сума замовлення</p>
+          <p
+            class="mt-1.5 text-[32px] font-extrabold tracking-[-0.03em] tabular-nums text-foreground"
+          >
+            {formatPrice(order.priceCents, order.currency)}
+          </p>
+          {#if order.createdAt}
+            <div
+              class="mt-4 flex items-center gap-2 border-t border-border pt-4 text-xs text-muted-foreground"
             >
-              {peer.name?.[0]?.toUpperCase() ?? '?'}
-            </AvatarFallback>
-          </Avatar>
-          <div class="min-w-0">
-            <div class="flex items-center gap-1">
+              <Clock class="size-3.5 shrink-0" aria-hidden="true" /><span
+                >Створено {formatDate(order.createdAt)}</span
+              >
+            </div>
+          {/if}
+        </div>
+
+        <!-- Peer -->
+        <div class="{scard} p-4.5">
+          <p class={eyebrow}>{isClient ? 'Майстер' : 'Замовник'}</p>
+          <a
+            href={peerHref}
+            class="group my-3 flex items-center gap-3.5 rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            <Avatar
+              class="size-12 shrink-0 shadow-[inset_0_1px_3px_rgba(0,0,0,0.06)]"
+            >
+              <AvatarImage src={peer.avatar ?? ''} alt={peer.name ?? ''} />
+              <AvatarFallback
+                class="bg-muted text-[17px] font-bold text-muted-foreground"
+                >{peer.name?.[0]?.toUpperCase() ?? '?'}</AvatarFallback
+              >
+            </Avatar>
+            <div class="min-w-0">
               <p
-                class="text-sm font-semibold truncate group-hover:underline"
-                style="color: var(--foreground)"
+                class="truncate text-[14.5px] font-semibold text-foreground group-hover:underline"
               >
                 {peer.name}
               </p>
+              {#if peerRating.count > 0}
+                <p
+                  class="mt-0.5 inline-flex items-center gap-1.5 text-[11.5px] text-muted-foreground"
+                >
+                  <Star
+                    class="size-3 fill-amber-400 text-amber-400"
+                    aria-hidden="true"
+                  />
+                  <span class="tabular-nums">{peerRating.avg.toFixed(1)}</span
+                  ><span>({peerRating.count})</span>
+                </p>
+              {/if}
             </div>
-            {#if peerRating.count > 0}
-              <p
-                class="text-[11px] inline-flex items-center gap-1 mt-0.5"
-                style="color: var(--muted-foreground)"
-              >
-                <Star class="size-3" style="fill: #f59e0b; color: #f59e0b" />
-                <span class="tabular-nums">
-                  {peerRating.avg.toFixed(1)}
-                </span>
-                <span>({peerRating.count})</span>
-              </p>
-            {/if}
-          </div>
-        </a>
-
-        <!-- Телефон співрозмовника (видно лише після створення замовлення) -->
-        {#if peer.phone}
-          <a
-            href="tel:{peer.phone}"
-            class="flex items-center gap-2.5 w-full h-11 px-3 rounded-lg mb-2 transition-colors hover:bg-[var(--muted)]"
-            style="border: 1px solid var(--border)"
-          >
-            <Phone class="size-4 shrink-0" style="color: var(--primary)" />
-            <span
-              class="text-sm font-medium tabular-nums"
-              style="color: var(--foreground)"
-            >
-              {peer.phone}
-            </span>
           </a>
-        {/if}
 
-        <Button
-          variant="outline"
-          class="w-full h-10 rounded-lg cursor-pointer"
-          onclick={openChat}
-          disabled={!order.chatId}
-        >
-          <MessageSquare class="size-4 mr-2" />
-          Перейти в чат
-        </Button>
-      </div>
+          {#if peer.phone}
+            <a
+              href="tel:{peer.phone}"
+              class="mb-2.5 flex h-11.5 w-full items-center gap-2.5 rounded-[13px] border border-border bg-muted px-3.5 transition-colors hover:border-ring hover:bg-card focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              <Phone
+                class="size-4 shrink-0 text-foreground"
+                aria-hidden="true"
+              />
+              <span
+                class="text-[14.5px] font-semibold tabular-nums text-foreground"
+                >{peer.phone}</span
+              >
+            </a>
+          {/if}
 
-      <!-- Actions -->
-      <div
-        class="rounded-2xl p-4"
-        style="background-color: var(--card); border: 1px solid var(--border)"
-      >
-        <p
-          class="text-[10px] uppercase tracking-[0.08em] font-semibold mb-3"
-          style="color: var(--muted-foreground)"
-        >
-          Дії
-        </p>
-        <OrderActions
-          orderId={order.id}
-          status={order.status}
-          {isClient}
-          {isMaster}
-          chatId={order.chatId}
-        />
-      </div>
-    </aside>
+          <Button
+            variant="outline"
+            class="h-11 w-full cursor-pointer rounded-[13px] font-semibold"
+            onclick={openChat}
+            disabled={!order.chatId}
+          >
+            <MessageSquare class="mr-2 size-4" aria-hidden="true" /> Перейти в чат
+          </Button>
+        </div>
+
+        <!-- Actions -->
+        <div class="{scard} p-4.5">
+          <p class="{eyebrow} mb-3">Дії</p>
+          <OrderActions
+            orderId={order.id}
+            status={order.status}
+            {isClient}
+            {isMaster}
+            chatId={order.chatId}
+          />
+        </div>
+      </aside>
+    </div>
   </div>
 </div>
+
+<style>
+  :global(body:has(.order-scope)) {
+    background:
+      radial-gradient(
+        120% 70% at 12% -5%,
+        color-mix(in oklch, var(--muted) 55%, var(--background)) 0%,
+        transparent 48%
+      ),
+      radial-gradient(
+        120% 70% at 100% 102%,
+        color-mix(in oklch, var(--secondary) 60%, var(--background)) 0%,
+        transparent 50%
+      ),
+      var(--background);
+  }
+</style>

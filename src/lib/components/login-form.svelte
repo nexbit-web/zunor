@@ -1,29 +1,15 @@
 <script lang="ts">
-  import { Button } from '$lib/components/ui/button/index.js'
-  import * as Card from '$lib/components/ui/card/index.js'
-  import {
-    FieldGroup,
-    Field,
-    FieldLabel,
-    FieldDescription,
-    FieldSeparator,
-  } from '$lib/components/ui/field/index.js'
-  import { Input } from '$lib/components/ui/input/index.js'
   import { cn } from '$lib/utils.js'
   import type { HTMLAttributes } from 'svelte/elements'
   import { signIn } from '$lib/auth-client'
   import { goto, invalidateAll } from '$app/navigation'
-  import {
-    AlertCircle,
-    CheckCircle2,
-    Eye,
-    EyeOff,
-  } from 'lucide-svelte'
+  import { dev } from '$app/environment'
+  import { AlertCircle, CheckCircle2, Eye, EyeOff } from 'lucide-svelte'
+  import { Button } from './ui/button'
   import { Spinner } from './ui/spinner'
 
   let { class: className, ...restProps }: HTMLAttributes<HTMLDivElement> =
     $props()
-
   const id = $props.id()
 
   // ─── State ───
@@ -32,43 +18,31 @@
   let loading = $state(false)
   let serverError = $state('')
   let showPassword = $state(false)
+  let touched = $state({ email: false, password: false })
 
-  let touched = $state({
-    email: false,
-    password: false,
-  })
-
-  // ─── Валідація ───
+  // ─── Валідація (UX-рівень; авторитет — сервер) ───
   const EMAIL_RE = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
-
   function isValidEmail(e: string): boolean {
-    const trimmed = e.trim()
-    return (
-      trimmed.length >= 3 && trimmed.length <= 254 && EMAIL_RE.test(trimmed)
-    )
+    const t = e.trim()
+    return t.length >= 3 && t.length <= 254 && EMAIL_RE.test(t)
   }
 
-  // ─── Derived ───
   const emailError = $derived(
     touched.email && !isValidEmail(email) ? 'Невірний формат email' : '',
   )
   const passwordError = $derived(
     touched.password && password.length < 1 ? 'Введіть пароль' : '',
   )
-
   const formValid = $derived(isValidEmail(email) && password.length > 0)
 
   async function handleSubmit(e: SubmitEvent) {
     e.preventDefault()
     if (loading) return
-
     touched = { email: true, password: true }
-
     if (!formValid) {
       serverError = 'Перевірте правильність заповнення полів'
       return
     }
-
     loading = true
     serverError = ''
     try {
@@ -77,242 +51,250 @@
         password,
       })
       if (err) {
-        if (err.status === 403) {
-          serverError = 'Підтвердіть email перед входом'
-        } else if (err.status === 429) {
+        // Generic-повідомлення: не розкриваємо, що саме невірно (захист від перебору).
+        if (err.status === 403) serverError = 'Підтвердіть email перед входом'
+        else if (err.status === 429)
           serverError = 'Забагато спроб. Спробуйте через хвилину.'
-        } else {
-          serverError = 'Невірний email або пароль'
-        }
+        else serverError = 'Невірний email або пароль'
         return
       }
       await invalidateAll()
       goto('/dashboard')
     } catch (err) {
-      console.error('[login] failed:', err)
+      // Лог лише в dev — у проді не світимо деталей у консоль користувача.
+      if (dev) console.error('[login] failed:', err)
       serverError = "Помилка з'єднання. Перевірте інтернет."
     } finally {
       loading = false
     }
   }
-
-  async function handleGoogle() {
-    if (loading) return
-    loading = true
-    try {
-      await signIn.social({ provider: 'google', callbackURL: '/' })
-    } catch (err) {
-      console.error('[login] google failed:', err)
-      serverError = 'Не вдалось увійти через Google'
-      loading = false
-    }
-  }
-
-  async function handleApple() {
-    if (loading) return
-    loading = true
-    try {
-      await signIn.social({ provider: 'apple', callbackURL: '/' })
-    } catch (err) {
-      console.error('[login] apple failed:', err)
-      serverError = 'Не вдалось увійти через Apple'
-      loading = false
-    }
-  }
 </script>
 
-<div class={cn('flex flex-col gap-6', className)} {...restProps}>
-  <Card.Root class="overflow-hidden">
-    <Card.Header class="text-center space-y-2">
-      <Card.Title class="text-2xl font-bold tracking-tight">
-        Ласкаво просимо
-      </Card.Title>
-      <Card.Description class="text-sm">
-        Увійдіть у свій акаунт
-      </Card.Description>
-    </Card.Header>
+<div
+  class={cn('  flex w-full max-w-104 flex-col gap-4.5', className)}
+  {...restProps}
+>
+  <!-- glass card -->
+  <div
+    class="rounded-[32px] border border-border bg-card px-9 pt-10 pb-8.5 shadow-[0_24px_60px_-12px_rgba(0,0,0,0.1),0_8px_20px_-8px_rgba(0,0,0,0.05)]"
+  >
+    <div class="mb-6 text-center">
+      <h1
+        class="text-[26px] leading-tight font-bold tracking-[-0.01em] text-foreground"
+      >
+        Вхід до Zunor
+      </h1>
+      <p class="mt-2 text-[15px] leading-[1.45] text-muted-foreground">
+        Раді бачити вас знову
+      </p>
+    </div>
 
-    <Card.Content>
-      <form onsubmit={handleSubmit} novalidate autocomplete="on">
-        <FieldGroup>
-          <!-- ─── Social ─── -->
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <Button
-              variant="outline"
-              type="button"
-              onclick={handleApple}
-              disabled={loading}
-              class="h-11 rounded-lg cursor-pointer disabled:cursor-not-allowed"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                class="size-4 mr-2"
-              >
-                <path
-                  d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"
-                  fill="currentColor"
-                />
-              </svg>
-              <span class="text-sm">Apple</span>
-            </Button>
-            <Button
-              variant="outline"
-              type="button"
-              onclick={handleGoogle}
-              disabled={loading}
-              class="h-11 rounded-lg cursor-pointer disabled:cursor-not-allowed"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                class="size-4 mr-2"
-              >
-                <path
-                  d="M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 16.133 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-5.213 2.84-7.667 0-.76-.053-1.467-.173-2.053H12.48z"
-                  fill="currentColor"
-                />
-              </svg>
-              <span class="text-sm">Google</span>
-            </Button>
-          </div>
-
-          <FieldSeparator class="*:data-[slot=field-separator-content]:bg-card">
-            Або email
-          </FieldSeparator>
-
-          <!-- ─── Email ─── -->
-          <Field>
-            <FieldLabel for="email-{id}">Email</FieldLabel>
-            <div class="relative">
-              <Input
-                id="email-{id}"
-                type="email"
-                placeholder="ivan@example.com"
-                bind:value={email}
-                onblur={() => (touched.email = true)}
-                autocomplete="email"
-                maxlength={254}
-                aria-invalid={!!emailError}
-                aria-describedby={emailError ? `email-err-${id}` : undefined}
-                class="h-11 rounded-lg pr-9"
-                required
-              />
-              {#if touched.email && isValidEmail(email)}
-                <CheckCircle2
-                  class="absolute right-3 top-1/2 -translate-y-1/2 size-4"
-                  style="color: var(--primary)"
-                />
-              {:else if emailError}
-                <AlertCircle
-                  class="absolute right-3 top-1/2 -translate-y-1/2 size-4"
-                  style="color: var(--destructive)"
-                />
-              {/if}
-            </div>
-            {#if emailError}
-              <FieldDescription id="email-err-{id}" class="text-destructive">
-                {emailError}
-              </FieldDescription>
-            {/if}
-          </Field>
-
-          <!-- ─── Password ─── -->
-          <Field>
-            <div class="flex items-center">
-              <FieldLabel for="password-{id}">Пароль</FieldLabel>
-              <a
-                href="/user/forgot"
-                class="ms-auto text-xs underline-offset-4 hover:underline"
-                style="color: var(--muted-foreground)"
-              >
-                Забули пароль?
-              </a>
-            </div>
-            <div class="relative">
-              <Input
-                id="password-{id}"
-                type={showPassword ? 'text' : 'password'}
-                bind:value={password}
-                onblur={() => (touched.password = true)}
-                autocomplete="current-password"
-                aria-invalid={!!passwordError}
-                aria-describedby={passwordError ? `pw-err-${id}` : undefined}
-                class="h-11 rounded-lg pr-9"
-                required
-              />
-              <button
-                type="button"
-                onclick={() => (showPassword = !showPassword)}
-                class="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded cursor-pointer hover:opacity-70"
-                aria-label={showPassword ? 'Сховати пароль' : 'Показати пароль'}
-                tabindex={-1}
-              >
-                {#if showPassword}
-                  <EyeOff class="size-4 opacity-60" />
-                {:else}
-                  <Eye class="size-4 opacity-60" />
-                {/if}
-              </button>
-            </div>
-            {#if passwordError}
-              <FieldDescription id="pw-err-{id}" class="text-destructive">
-                {passwordError}
-              </FieldDescription>
-            {/if}
-          </Field>
-
-          <!-- ─── Server error ─── -->
-          {#if serverError}
-            <div
-              class="flex items-start gap-2 p-3 rounded-lg text-sm"
-              style="background-color: color-mix(in oklch, var(--destructive) 8%, transparent);
-                     color: var(--destructive);
-                     border: 1px solid color-mix(in oklch, var(--destructive) 25%, transparent)"
-              role="alert"
-            >
-              <AlertCircle class="size-4 shrink-0 mt-0.5" />
-              <span>{serverError}</span>
-            </div>
+    <form
+      onsubmit={handleSubmit}
+      novalidate
+      autocomplete="on"
+      class="flex flex-col gap-4.5"
+    >
+      <!-- Email -->
+      <div class="flex flex-col gap-2">
+        <label
+          for="email-{id}"
+          class="text-sm font-semibold tracking-[-0.01em] text-foreground"
+        >
+          Email
+        </label>
+        <div class="relative">
+          <input
+            id="email-{id}"
+            type="email"
+            inputmode="email"
+            autocapitalize="none"
+            autocomplete="email"
+            spellcheck="false"
+            placeholder="name@example.com"
+            bind:value={email}
+            onblur={() => (touched.email = true)}
+            maxlength={254}
+            aria-invalid={!!emailError}
+            aria-describedby={emailError ? `email-err-${id}` : undefined}
+            class={cn(
+              'field-input pr-10',
+              touched.email && isValidEmail(email) && 'is-valid',
+            )}
+            required
+          />
+          {#if touched.email && isValidEmail(email)}
+            <CheckCircle2
+              class="pointer-events-none absolute top-1/2 right-3.5 size-4.5 -translate-y-1/2 text-emerald-500"
+              aria-hidden="true"
+            />
+          {:else if emailError}
+            <AlertCircle
+              class="pointer-events-none absolute top-1/2 right-3.5 size-4.5 -translate-y-1/2 text-destructive"
+              aria-hidden="true"
+            />
           {/if}
+        </div>
+        {#if emailError}
+          <p id="email-err-{id}" class="text-[12.5px] text-destructive">
+            {emailError}
+          </p>
+        {/if}
+      </div>
 
-          <!-- ─── Submit ─── -->
-          <Field>
-            <Button
-              type="submit"
-              disabled={loading || !formValid}
-              class="w-full h-11 rounded-lg cursor-pointer disabled:cursor-not-allowed"
-            >
-              {#if loading}
-                <Spinner />
-              {:else}
-                Увійти
-              {/if}
-            </Button>
-            <FieldDescription class="text-center text-xs">
-              Немає облікового запису?
-              <a
-                href="/user/register"
-                class="font-medium hover:underline"
-                style="color: var(--primary)"
-              >
-                Зареєструватися
-              </a>
-            </FieldDescription>
-          </Field>
-        </FieldGroup>
-      </form>
-    </Card.Content>
-  </Card.Root>
+      <!-- Password -->
+      <div class="flex flex-col gap-2">
+        <div class="flex items-center justify-between">
+          <label
+            for="password-{id}"
+            class="text-sm font-semibold tracking-[-0.01em] text-foreground"
+          >
+            Пароль
+          </label>
+          <a
+            href="/user/forgot"
+            class="rounded-sm text-[12.5px] font-medium text-primary underline-offset-[3px] hover:text-primary-hover hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            Забули пароль?
+          </a>
+        </div>
+        <div class="relative">
+          <input
+            id="password-{id}"
+            type={showPassword ? 'text' : 'password'}
+            placeholder="••••••••••"
+            bind:value={password}
+            onblur={() => (touched.password = true)}
+            autocomplete="current-password"
+            aria-invalid={!!passwordError}
+            aria-describedby={passwordError ? `pw-err-${id}` : undefined}
+            class="field-input pr-11"
+            required
+          />
+          <button
+            type="button"
+            onclick={() => (showPassword = !showPassword)}
+            class="absolute cursor-pointer top-1/2 right-2 flex size-8.5 -translate-y-1/2 items-center justify-center rounded-[9px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            aria-label={showPassword ? 'Сховати пароль' : 'Показати пароль'}
+            aria-pressed={showPassword}
+          >
+            {#if showPassword}
+              <EyeOff class="size-4.5" aria-hidden="true" />
+            {:else}
+              <Eye class="size-4.5" aria-hidden="true" />
+            {/if}
+          </button>
+        </div>
+        {#if passwordError}
+          <p id="pw-err-{id}" class="text-[12.5px] text-destructive">
+            {passwordError}
+          </p>
+        {/if}
+      </div>
 
-  <FieldDescription class="px-6 text-center text-xs">
+      <!-- Server error -->
+      {#if serverError}
+        <div
+          class="flex items-start gap-2.5 rounded-[13px] border border-destructive/20 bg-destructive/10 px-3.5 py-3 text-[13.5px] leading-snug text-destructive"
+          role="alert"
+        >
+          <AlertCircle class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          <span>{serverError}</span>
+        </div>
+      {/if}
+
+      <!-- Submit -->
+      <Button
+        type="submit"
+        disabled={loading || !formValid}
+        aria-busy={loading}
+        class="relative mt-1.5 inline-flex h-13.5 w-full items-center justify-center rounded-[16px] bg-primary text-[15.5px] font-semibold tracking-[-0.01em] text-primary-foreground transition hover:-translate-y-px hover:bg-primary-hover active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:translate-y-0 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+      >
+        <span class="pointer-events-none">
+          {#if loading}
+            Зачекайте...
+          {:else}
+            Увійти
+          {/if}
+        </span>
+
+        {#if loading}
+          <Spinner
+            class="absolute right-4 animate-spin"
+            aria-hidden="true"
+          />
+        {/if}
+      </Button>
+
+      <p class="text-center text-[13.5px] text-muted-foreground">
+        Немає облікового запису?
+        <a
+          href="/user/register"
+          class="rounded-sm font-semibold text-primary underline-offset-[3px] hover:text-primary-hover hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          Зареєструватися
+        </a>
+      </p>
+    </form>
+  </div>
+
+  <p class="px-3 text-center text-xs leading-relaxed text-muted-foreground">
     Натискаючи «Увійти», ви погоджуєтеся з нашими
-    <a href="/terms" target="_blank" rel="noopener" class="hover:underline"
+    <a
+      href="/terms"
+      target="_blank"
+      rel="noopener"
+      class="rounded-sm text-primary underline-offset-2 hover:text-primary-hover hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       >Умовами</a
     >
     та
-    <a href="/privacy" target="_blank" rel="noopener" class="hover:underline"
+    <a
+      href="/privacy"
+      target="_blank"
+      rel="noopener"
+      class="rounded-sm text-primary underline-offset-2 hover:text-primary-hover hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       >Політикою</a
     >.
-  </FieldDescription>
+  </p>
 </div>
+
+<style>
+ 
+  .field-input {
+    width: 100%;
+    height: 54px;
+    padding-left: 18px;
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    background: var(--muted);
+    color: var(--foreground);
+    font-size: 15px;
+    font-weight: 500;
+    outline: none;
+    transition:
+      border-color 0.16s ease,
+      background 0.16s ease,
+      box-shadow 0.16s ease;
+  }
+  .field-input::placeholder {
+    color: var(--muted-foreground);
+    font-weight: 400;
+  }
+  .field-input:focus {
+    background: var(--background);
+    border-color: var(--ring);
+    box-shadow: 0 0 0 4px color-mix(in oklch, var(--ring) 22%, transparent);
+  }
+  /* Стан помилки керується через aria-invalid — без зайвого класу. */
+  .field-input[aria-invalid='true'] {
+    border-color: var(--destructive);
+  }
+  .field-input.is-valid {
+    border-color: color-mix(in oklch, var(--primary) 45%, transparent);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .field-input {
+      transition: none;
+    }
+  }
+</style>

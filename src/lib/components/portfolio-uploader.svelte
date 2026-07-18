@@ -1,9 +1,9 @@
-<!-- src/lib/components/portfolio-uploader.svelte -->
 <script lang="ts">
+  import { dev } from '$app/environment'
   import { Spinner } from '$lib/components/ui/spinner'
   import PlusIcon from '@lucide/svelte/icons/plus'
   import XIcon from '@lucide/svelte/icons/x'
-  import Image from '@lucide/svelte/icons/image'
+  import ImageIcon from '@lucide/svelte/icons/image'
 
   let {
     images = $bindable<string[]>([]),
@@ -45,7 +45,10 @@
 
     const upRes = await fetch(
       `https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`,
-      { method: 'POST', body: fd },
+      {
+        method: 'POST',
+        body: fd,
+      },
     )
     if (!upRes.ok) {
       const upErr = await upRes.json().catch(() => ({}))
@@ -57,7 +60,7 @@
   }
 
   async function handleChange(e: Event) {
-    const input = e.target as HTMLInputElement
+    const input = e.currentTarget as HTMLInputElement
     const files = Array.from(input.files ?? [])
     if (!files.length) return
 
@@ -81,7 +84,7 @@
         images = [...images, r.url]
         publicIds = [...publicIds, r.publicId]
       } catch (err) {
-        console.error('[portfolio-uploader]', err)
+        if (dev) console.error('[portfolio-uploader]', err)
         onError?.(err instanceof Error ? err.message : 'Помилка завантаження')
       }
     }
@@ -107,7 +110,7 @@
       images = images.filter((_, idx) => idx !== i)
       publicIds = publicIds.filter((_, idx) => idx !== i)
     } catch (err) {
-      console.error('[portfolio-uploader:remove]', err)
+      if (dev) console.error('[portfolio-uploader:remove]', err)
       onError?.(err instanceof Error ? err.message : 'Не вдалось видалити фото')
     } finally {
       removingIdx = null
@@ -115,104 +118,85 @@
   }
 </script>
 
-<div class="space-y-3">
+<div class="space-y-4">
   <div class="grid grid-cols-3 gap-2.5">
     {#each images as img, i (img)}
       <div
-        class="group relative aspect-square rounded-2xl overflow-hidden shadow-sm"
-        style="background-color: color-mix(in oklch, var(--foreground) 6%, transparent)"
+        class="group relative aspect-square overflow-hidden rounded-[18px] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.05)]"
       >
         <img
           src={img}
           alt="Робота {i + 1}"
-          class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+          class="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
           loading="lazy"
+          decoding="async"
+          draggable="false"
         />
 
-        <!-- gradient overlay -->
+        <!-- легкий градієнт для контрасту бейджа (декоративний) -->
         <div
-          class="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-          style="background: linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 50%)"
+          class="pointer-events-none absolute inset-0 bg-linear-to-t from-black/35 via-transparent to-transparent"
+          aria-hidden="true"
         ></div>
 
-        <!-- delete button -->
+        <!-- видалення — завжди видиме (тач без hover) -->
         <button
           type="button"
           onclick={() => remove(i)}
           disabled={removingIdx === i}
-          class="cursor-pointer absolute top-2 right-2 size-7 rounded-full flex items-center justify-center
-                 opacity-0 group-hover:opacity-100 transition-all duration-200
-                 hover:scale-110 active:scale-95 disabled:cursor-not-allowed"
-          style="background-color: rgba(0,0,0,0.7);
-                 backdrop-filter: blur(8px);
-                 border: 1px solid rgba(255,255,255,0.15)"
+          class="absolute top-2 right-2 flex size-7 cursor-pointer items-center justify-center rounded-full border border-white/20 bg-black/60 backdrop-blur-md transition-transform duration-200 hover:scale-110 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-60"
           aria-label="Видалити фото {i + 1}"
         >
           {#if removingIdx === i}
-            <Spinner class="size-3 text-white" />
+            <Spinner class=" text-white" />
           {:else}
-            <XIcon class="size-3.5 text-white" />
+            <XIcon class="size-3.5 text-white" aria-hidden="true" />
           {/if}
         </button>
 
-        <!-- full overlay during delete -->
+        <!-- оверлей під час видалення -->
         {#if removingIdx === i}
           <div
-            class="absolute inset-0 flex items-center justify-center"
-            style="background-color: rgba(0,0,0,0.5); backdrop-filter: blur(2px)"
+            class="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-[2px]"
           >
             <Spinner class="text-white" />
           </div>
         {/if}
 
-        <!-- index badge -->
-        <div
-          class="absolute bottom-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+        <!-- порядковий бейдж — завжди видимий -->
+        <span
+          class="absolute bottom-2 left-2 rounded-md bg-black/55 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-white/90 backdrop-blur-sm"
         >
-          <span
-            class="text-[10px] font-medium px-1.5 py-0.5 rounded-md"
-            style="background-color: rgba(0,0,0,0.6);
-                   backdrop-filter: blur(4px);
-                   color: rgba(255,255,255,0.9)"
-          >
-            {i + 1} / {maxItems}
-          </span>
-        </div>
+          {i + 1} / {maxItems}
+        </span>
       </div>
     {/each}
 
-    <!-- upload slot -->
+    <!-- слот завантаження -->
     {#if images.length < maxItems}
       <label
-        class="group aspect-square rounded-2xl flex flex-col items-center justify-center gap-2
-               transition-all duration-200 cursor-pointer"
-        class:cursor-not-allowed={uploading}
-        style="background-color: color-mix(in oklch, var(--foreground) 3%, transparent);
-               border: 1.5px dashed color-mix(in oklch, var(--foreground) 18%, transparent)"
+        class={[
+          'group flex aspect-square cursor-pointer flex-col items-center justify-center gap-2.25 rounded-[18px] border-[1.5px] border-dashed border-border bg-muted transition-colors duration-200 hover:border-muted-foreground hover:bg-card focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring',
+          uploading && 'pointer-events-none',
+        ]}
         aria-label="Додати фото"
       >
         {#if uploading}
-          <Spinner />
           <span
-            class="text-[11px] font-medium"
-            style="color: var(--muted-foreground)"
+            class="size-5.5 animate-spin rounded-full border-[2.5px] border-foreground/15 border-t-foreground"
+          ></span>
+          <span class="text-[11.5px] font-medium text-muted-foreground"
+            >Завантаження...</span
           >
-            Завантаження...
-          </span>
         {:else}
-          <div
-            class="size-10 rounded-full flex items-center justify-center transition-all duration-200
-                   group-hover:scale-110"
-            style="background-color: color-mix(in oklch, var(--foreground) 7%, transparent)"
-          >
-            <PlusIcon class="size-5" style="color: var(--muted-foreground)" />
-          </div>
           <span
-            class="text-[11px] font-medium"
-            style="color: var(--muted-foreground)"
+            class="flex size-10.5 items-center justify-center rounded-full bg-card text-muted-foreground shadow-sm transition-transform duration-200 group-hover:scale-110"
           >
-            Додати
+            <PlusIcon class="size-5" aria-hidden="true" />
           </span>
+          <span class="text-[11.5px] font-medium text-muted-foreground"
+            >Додати</span
+          >
         {/if}
 
         <input
@@ -226,46 +210,42 @@
       </label>
     {/if}
 
-    <!-- empty placeholder slots to always show 3 columns -->
+    <!-- порожні плейсхолдери, щоб тримати 3 колонки -->
     {#if images.length === 0 && !uploading}
-      {#each Array(Math.max(0, 2)) as _}
+      {#each Array(2) as _, i (i)}
         <div
-          class="aspect-square rounded-2xl flex items-center justify-center"
-          style="background-color: color-mix(in oklch, var(--foreground) 2%, transparent);
-                 border: 1.5px dashed color-mix(in oklch, var(--foreground) 8%, transparent)"
+          class="flex aspect-square items-center justify-center rounded-[18px] border-[1.5px] border-dashed border-border bg-muted/40 text-muted-foreground/40"
+          aria-hidden="true"
         >
-          <Image class="text-gray-60" />
+          <ImageIcon class="size-5.5" />
         </div>
       {/each}
     {/if}
   </div>
 
-  <!-- footer -->
+  <!-- футер -->
   <div class="flex items-center justify-between px-0.5">
-    <div class="flex items-center gap-2">
-      <div class="flex gap-0.5">
-        {#each Array(maxItems) as _, i}
+    <div class="flex items-center gap-2.5">
+      <div class="flex gap-0.75" aria-hidden="true">
+        {#each Array(maxItems) as _, i (i)}
           <div
-            class="h-1 rounded-full transition-all duration-300"
-            style="width: {i < images.length ? '16px' : '6px'};
-                   background-color: {i < images.length
-              ? 'var(--foreground)'
-              : 'color-mix(in oklch, var(--foreground) 15%, transparent)'}"
+            class={[
+              'h-1 rounded-full transition-all duration-300',
+              i < images.length ? 'bg-foreground' : 'bg-foreground/15',
+            ]}
+            style:width={i < images.length ? '16px' : '6px'}
           ></div>
         {/each}
       </div>
-      <span
-        class="text-[11px] tabular-nums"
-        style="color: var(--muted-foreground)"
+      <span class="text-[11.5px] tabular-nums text-muted-foreground"
+        >{images.length} з {maxItems}</span
       >
-        {images.length} з {maxItems}
-      </span>
     </div>
 
     {#if images.length > 0}
-      <span class="text-[11px]" style="color: var(--muted-foreground)">
-        JPG, PNG до {MAX_MB} МБ
-      </span>
+      <span class="text-[11.5px] text-muted-foreground"
+        >JPG, PNG до {MAX_MB} МБ</span
+      >
     {/if}
   </div>
 </div>

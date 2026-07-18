@@ -1,17 +1,14 @@
 <!-- src/routes/(auth)/jobs/[id]/job-master-view.svelte -->
 <script lang="ts">
   import { goto, invalidateAll } from '$app/navigation'
-  import { Button } from '$lib/components/ui/button'
-  import { Badge } from '$lib/components/ui/badge'
   import {
     Avatar,
     AvatarFallback,
     AvatarImage,
   } from '$lib/components/ui/avatar'
-  import { Card, CardContent } from '$lib/components/ui/card'
   import { Textarea } from '$lib/components/ui/textarea'
   import { Label } from '$lib/components/ui/label'
-  import { Separator } from '$lib/components/ui/separator'
+  import { Spinner } from '$lib/components/ui/spinner'
   import {
     ArrowLeft,
     MapPin,
@@ -21,9 +18,8 @@
     Star,
     XCircle,
     Send,
+    ChevronRight,
   } from 'lucide-svelte'
-  import type { PageData } from './$types'
-  import { Spinner } from '$lib/components/ui/spinner'
   import { describeJob } from '$lib/categories/cleaning/describe'
   import PhotoGallery from '$lib/components/photo-gallery.svelte'
   import {
@@ -32,11 +28,11 @@
     expiresIn,
     memberSince,
     initials,
-    statusVariant,
     statusLabel,
     proposalStatusLabel,
-    proposalStatusVariant,
   } from '$lib/components/jobs/display'
+  import type { PageData } from './$types'
+  import { Button } from '$lib/components/ui/button'
 
   let { data }: { data: PageData } = $props()
 
@@ -50,12 +46,14 @@
   let submitting = $state(false)
   let errorMsg = $state<string | null>(null)
 
-  // Дзеркало серверних меж (клієнтська перевірка — лише для UX).
   const messageLen = $derived(message.trim().length)
+  const messageInvalid = $derived(
+    messageLen > 0 && (messageLen < 20 || messageLen > 922),
+  )
   const canSubmit = $derived(
     !submitting &&
       messageLen >= 20 &&
-      messageLen <= 2000 &&
+      messageLen <= 922 &&
       typeof priceUah === 'number' &&
       priceUah >= 50 &&
       priceUah <= 500_000 &&
@@ -63,6 +61,18 @@
       estimatedDays >= 1 &&
       estimatedDays <= 180,
   )
+
+  // статуси → семантичні кольори (emerald/amber — статус, не акцент бренду)
+  function statusBadge(status: string): string {
+    if (status === 'OPEN') return 'bg-emerald-500/10 text-emerald-600'
+    if (status === 'IN_PROGRESS') return 'bg-amber-500/10 text-amber-700'
+    return 'bg-muted text-foreground'
+  }
+  function proposalBadge(status: string): string {
+    if (status === 'ACCEPTED') return 'bg-emerald-500/10 text-emerald-600'
+    if (status === 'REJECTED') return 'bg-destructive/10 text-destructive'
+    return 'bg-amber-500/10 text-amber-700'
+  }
 
   async function submitProposal() {
     if (!canSubmit) return
@@ -90,382 +100,445 @@
       submitting = false
     }
   }
+
+  const cardCls =
+    'rounded-[26px] border border-border bg-card shadow-[0_20px_50px_-16px_rgba(0,0,0,0.1),0_4px_12px_-6px_rgba(0,0,0,0.04)]'
+  const badgeBase =
+    'inline-flex h-[22px] items-center rounded-full px-2.5 text-[10px] font-bold tracking-[0.06em] uppercase'
 </script>
 
-<!-- Back -->
-<button
-  type="button"
-  onclick={() => goto('/jobs')}
-  class="inline-flex items-center gap-1.5 text-sm mb-5 cursor-pointer hover:opacity-70 transition-opacity"
-  style="color: var(--muted-foreground)"
->
-  <ArrowLeft class="size-4" /> До списку
-</button>
+<div class="jobview-scope min-h-svh px-5 py-8">
+  <div class="mx-auto flex w-full max-w-135 flex-col gap-3">
+    <!-- Back -->
+    <button
+      type="button"
+      onclick={() => goto('/jobs')}
+      class="inline-flex cursor-pointer items-center gap-1.5 self-start rounded-md text-[13.5px] font-medium text-muted-foreground transition-opacity hover:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+    >
+      <ArrowLeft class="size-4" aria-hidden="true" /> До списку
+    </button>
 
-<!-- Header card -->
-<Card class="rounded-2xl mb-3">
-  <CardContent class="p-5 sm:p-6">
-    <div class="flex items-center gap-2 flex-wrap mb-3">
-      <Badge
-        variant={statusVariant(data.job.status)}
-        class="text-[10px] uppercase font-bold"
-      >
-        {statusLabel(data.job.status)}
-      </Badge>
-      <span class="text-xs" style="color: var(--muted-foreground)">
-        {formatRelative(data.job.createdAt)}
-      </span>
-      {#if data.job.status === 'OPEN'}
-        <span class="text-xs" style="color: var(--muted-foreground)">
-          · Активна ще {expiresIn(data.job.expiresAt)}
-        </span>
-      {/if}
+    <!-- ═══ HEADER CARD ═══ -->
+    <div class={cardCls}>
+      <div class="p-6">
+        <div class="mb-3.5 flex flex-wrap items-center gap-2.5">
+          <span class="{badgeBase} {statusBadge(data.job.status)}"
+            >{statusLabel(data.job.status)}</span
+          >
+          <span class="text-xs text-muted-foreground"
+            >{formatRelative(data.job.createdAt)}</span
+          >
+          {#if data.job.status === 'OPEN'}
+            <span class="text-xs text-muted-foreground"
+              >· Активна ще {expiresIn(data.job.expiresAt)}</span
+            >
+          {/if}
+        </div>
+
+        <h1
+          class="mb-3 text-[22px] font-bold tracking-[-0.025em] text-foreground"
+        >
+          {data.job.title}
+        </h1>
+
+        {#if data.job.description}
+          <p
+            class="mb-4.5 text-sm leading-relaxed whitespace-pre-wrap wrap-break-word text-foreground"
+          >
+            {data.job.description}
+          </p>
+        {/if}
+
+        <!-- Характеристики -->
+        {#if details.length > 0}
+          <div class="mb-4.5 overflow-hidden rounded-2xl border border-border">
+            {#each details as d, i (d.label)}
+              {#if d.items}
+                <div
+                  class="px-4 py-3 text-sm {i > 0
+                    ? 'border-t border-border'
+                    : ''}"
+                >
+                  <span class="mb-2.5 block text-muted-foreground"
+                    >{d.label}</span
+                  >
+                  <div class="space-y-2">
+                    {#each d.items as it (it.name)}
+                      <div class="flex items-center justify-between gap-3">
+                        <span class="font-medium text-foreground"
+                          >{it.name}</span
+                        >
+                        <span
+                          class="inline-flex h-6 min-w-7 shrink-0 items-center justify-center rounded-full bg-muted px-2 text-xs font-bold tabular-nums text-foreground"
+                          >×{it.qty}</span
+                        >
+                      </div>
+                    {/each}
+                  </div>
+                </div>
+              {:else}
+                <div
+                  class="flex items-center justify-between gap-4 px-4 py-3 text-sm {i >
+                  0
+                    ? 'border-t border-border'
+                    : ''}"
+                >
+                  <span class="shrink-0 text-muted-foreground">{d.label}</span>
+                  <span class="text-right font-semibold text-foreground"
+                    >{d.value}</span
+                  >
+                </div>
+              {/if}
+            {/each}
+          </div>
+        {/if}
+
+        <!-- Фото обсягу робіт -->
+        {#if data.job.attachments && data.job.attachments.length > 0}
+          <div class="mb-4.5">
+            <PhotoGallery images={data.job.attachments} />
+          </div>
+        {/if}
+
+        <!-- Місто -->
+        <div
+          class="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground"
+        >
+          <MapPin class="size-3.75" aria-hidden="true" />{data.job.city}
+        </div>
+
+        <hr class="my-4 border-border" />
+
+        <div
+          class="flex items-center gap-4.5 text-[12.5px] text-muted-foreground"
+        >
+          <span class="inline-flex items-center gap-1.5">
+            <MessageSquare class="size-3.75" aria-hidden="true" />
+            {data.job.proposalsCount} пропозиц{data.job.proposalsCount === 1
+              ? 'ія'
+              : 'ій'}
+          </span>
+          <span class="inline-flex items-center gap-1.5"
+            ><Eye class="size-3.75" aria-hidden="true" />{data.job
+              .viewsCount}</span
+          >
+        </div>
+      </div>
     </div>
 
-    <h1
-      class="text-xl sm:text-2xl font-bold tracking-tight mb-3"
-      style="color: var(--foreground); letter-spacing: -0.02em"
-    >
-      {data.job.title}
-    </h1>
-
-    {#if data.job.description}
-      <p
-        class="text-sm leading-relaxed whitespace-pre-wrap mb-4"
-        style="color: var(--foreground)"
-      >
-        {data.job.description}
-      </p>
-    {/if}
-
-    <!-- Характеристики заявки -->
-    {#if details.length > 0}
-      <div class="rounded-xl border border-border overflow-hidden mb-4">
-        {#each details as d, i (d.label)}
-          {#if d.items}
-            <div
-              class="px-4 py-3 text-sm"
-              class:border-t={i > 0}
-              style="border-color: var(--border)"
+    <!-- ═══ CLIENT CARD ═══ -->
+    <div class={cardCls}>
+      <div class="p-6">
+        <p
+          class="mb-3.5 text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase"
+        >
+          Замовник
+        </p>
+        <a
+          href="/client/{data.job.client.id}"
+          class="group flex items-center gap-3.5 rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          <Avatar class="size-11.5 shadow-[inset_0_1px_3px_rgba(0,0,0,0.06)]">
+            <AvatarImage
+              src={data.job.client.avatar ?? ''}
+              alt={data.job.client.name ?? ''}
+            />
+            <AvatarFallback
+              class="bg-muted text-base font-bold text-muted-foreground"
+              >{initials(data.job.client.name)}</AvatarFallback
             >
-              <span class="block mb-2.5" style="color: var(--muted-foreground)"
-                >{d.label}</span
+          </Avatar>
+          <div class="min-w-0 flex-1">
+            <p
+              class="text-[14.5px] font-semibold text-foreground group-hover:underline"
+            >
+              {data.job.client.name ?? 'Замовник'}
+            </p>
+            <div
+              class="mt-0.5 flex items-center gap-1.75 text-[12.5px] text-muted-foreground"
+            >
+              {#if data.job.client.reviewsCount > 0}
+                <span class="inline-flex items-center gap-1"
+                  ><Star
+                    class="size-3 fill-amber-400 text-amber-400"
+                    aria-hidden="true"
+                  />{data.job.client.avgRating.toFixed(1)} ({data.job.client
+                    .reviewsCount})</span
+                >
+                <span>·</span>
+              {/if}
+              <span>З {memberSince(data.job.client.createdAt)}</span>
+            </div>
+          </div>
+          <ChevronRight
+            class="ml-auto size-4.5 text-muted-foreground"
+            aria-hidden="true"
+          />
+        </a>
+      </div>
+    </div>
+
+    <!-- ═══ ACTION AREA ═══ -->
+    {#if data.proposals.length > 0}
+      <!-- Майстер уже подав пропозицію -->
+      {#each data.proposals as p (p.id)}
+        <div class={cardCls}>
+          <div class="p-6">
+            <div class="mb-3.5 flex items-center justify-between">
+              <p
+                class="text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase"
               >
-              <div class="space-y-2">
-                {#each d.items as it (it.name)}
-                  <div class="flex items-center justify-between gap-3">
-                    <span class="font-medium" style="color: var(--foreground)"
-                      >{it.name}</span
-                    >
-                    <span
-                      class="shrink-0 inline-flex items-center justify-center min-w-7 h-6 px-2 rounded-full text-xs font-semibold tabular-nums"
-                      style="background-color: var(--secondary); color: var(--foreground)"
-                    >
-                      ×{it.qty}
-                    </span>
-                  </div>
-                {/each}
+                Ваша пропозиція
+              </p>
+              <span class="{badgeBase} {proposalBadge(p.status)}"
+                >{proposalStatusLabel(p.status)}</span
+              >
+            </div>
+
+            <p
+              class="mb-4 text-sm leading-relaxed whitespace-pre-wrap wrap-break-word text-foreground"
+            >
+              {p.message}
+            </p>
+
+            <hr class="my-3 border-border" />
+
+            <div
+              class="flex items-center gap-3 text-[12.5px] text-muted-foreground"
+            >
+              <span class="inline-flex items-center gap-1.5"
+                ><Clock class="size-3.75" aria-hidden="true" />{p.estimatedDays} дн</span
+              >
+              <span>·</span>
+              <span class="font-bold tabular-nums text-foreground"
+                >{formatMoney(p.priceCents, data.job.currency)}</span
+              >
+              <span class="ml-auto">{formatRelative(p.createdAt)}</span>
+            </div>
+          </div>
+        </div>
+      {/each}
+    {:else if data.canPropose}
+      <div class={cardCls}>
+        <div class="p-6">
+          {#if !formOpen}
+            <!-- CTA -->
+            <div class="py-1 text-center">
+              <div
+                class="mx-auto mb-3.5 flex size-12.5 items-center justify-center rounded-2xl bg-primary text-white shadow-sm"
+              >
+                <Send class="size-5" aria-hidden="true" />
               </div>
+              <p
+                class="mb-1.25 text-[17px] font-bold tracking-[-0.02em] text-foreground"
+              >
+                Зацікавила заявка?
+              </p>
+              <p
+                class="mx-auto mb-4.5 max-w-75 text-[13.5px] leading-relaxed text-muted-foreground"
+              >
+                Запропонуйте ціну та термін — клієнт одразу отримає сповіщення.
+              </p>
+              <Button
+                type="button"
+                onclick={() => (formOpen = true)}
+                class="inline-flex h-12.5 cursor-pointer items-center justify-center gap-2.25 rounded-full bg-primary px-6.5 text-[14.5px] font-semibold text-white transition hover:-translate-y-px active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+              >
+                <Send class="size-4" aria-hidden="true" /> Подати пропозицію
+              </Button>
             </div>
           {:else}
-            <div
-              class="flex items-center justify-between px-4 py-2.5 text-sm gap-4"
-              class:border-t={i > 0}
-              style="border-color: var(--border)"
-            >
-              <span class="shrink-0" style="color: var(--muted-foreground)"
-                >{d.label}</span
-              >
-              <span
-                class="font-medium text-right"
-                style="color: var(--foreground)"
-              >
-                {d.value}
-              </span>
-            </div>
-          {/if}
-        {/each}
-      </div>
-    {/if}
+            <!-- ФОРМА -->
+            <div class="space-y-5">
+              <!-- Ціна -->
+              <div>
+                <Label
+                  for="proposal-price"
+                  class="mb-2 block text-[13.5px] font-semibold text-foreground"
+                  >Ваша ціна</Label
+                >
+                <div
+                  class="jv-field flex h-16.5 items-center gap-2.5 rounded-[18px] px-5"
+                >
+                  <input
+                    id="proposal-price"
+                    type="number"
+                    inputmode="numeric"
+                    bind:value={priceUah}
+                    min={50}
+                    max={500000}
+                    placeholder="0"
+                    class="min-w-0 flex-1 bg-transparent text-[30px] font-bold tabular-nums text-foreground outline-none placeholder:text-muted-foreground"
+                  />
+                  <span
+                    class="shrink-0 text-2xl font-bold text-muted-foreground"
+                    >₴</span
+                  >
+                </div>
+              </div>
 
-    <!-- Фото обсягу робіт -->
-    {#if data.job.attachments && data.job.attachments.length > 0}
-      <div class="mb-4">
-        <PhotoGallery images={data.job.attachments} />
-      </div>
-    {/if}
+              <!-- Термін -->
+              <div>
+                <Label
+                  for="proposal-days"
+                  class="mb-2 block text-[13.5px] font-semibold text-foreground"
+                  >Термін виконання</Label
+                >
+                <div
+                  class="jv-field flex h-12.5 items-center gap-2 rounded-[14px] px-4"
+                >
+                  <input
+                    id="proposal-days"
+                    type="number"
+                    inputmode="numeric"
+                    bind:value={estimatedDays}
+                    min={1}
+                    max={180}
+                    placeholder="3"
+                    class="min-w-0 flex-1 bg-transparent text-[15px] font-semibold tabular-nums text-foreground outline-none placeholder:text-muted-foreground"
+                  />
+                  <span class="shrink-0 text-[13.5px] text-muted-foreground"
+                    >днів</span
+                  >
+                </div>
+              </div>
 
-    <!-- Місто -->
-    <div
-      class="flex items-center gap-1.5 text-sm mb-4"
-      style="color: var(--muted-foreground)"
-    >
-      <MapPin class="size-3.5" />
-      {data.job.city}
-    </div>
+              <!-- Повідомлення -->
+              <div>
+                <div class="mb-2 flex items-center justify-between">
+                  <Label
+                    for="proposal-msg"
+                    class="text-[13.5px] font-semibold text-foreground"
+                    >Повідомлення клієнту</Label
+                  >
+                  <span
+                    class="text-[11px] tabular-nums {messageInvalid
+                      ? 'text-destructive'
+                      : 'text-muted-foreground'}">{messageLen} / 922</span
+                  >
+                </div>
+                <Textarea
+                  id="proposal-msg"
+                  bind:value={message}
+                  rows={4}
+                  aria-invalid={messageInvalid}
+                  placeholder="Розкажіть, як виконаєте роботу. Що входить, які матеріали, досвід. Мінімум 20 символів."
+                  class="jv-input resize-none"
+                />
+              </div>
 
-    <Separator class="my-4" />
-
-    <div
-      class="flex items-center gap-4 text-xs"
-      style="color: var(--muted-foreground)"
-    >
-      <span class="inline-flex items-center gap-1">
-        <MessageSquare class="size-3.5" />
-        {data.job.proposalsCount} пропозиц{data.job.proposalsCount === 1
-          ? 'ія'
-          : 'ій'}
-      </span>
-      <span class="inline-flex items-center gap-1">
-        <Eye class="size-3.5" />
-        {data.job.viewsCount}
-      </span>
-    </div>
-  </CardContent>
-</Card>
-
-<!-- Client card -->
-<Card class="rounded-2xl mb-3">
-  <CardContent class="p-4 sm:p-5">
-    <p
-      class="text-[11px] font-semibold uppercase tracking-widest mb-3"
-      style="color: var(--muted-foreground)"
-    >
-      Замовник
-    </p>
-    <a
-      href="/client/{data.job.client.id}"
-      class="flex items-center gap-3 group"
-    >
-      <Avatar class="size-11">
-        <AvatarImage
-          src={data.job.client.avatar ?? ''}
-          alt={data.job.client.name ?? ''}
-        />
-        <AvatarFallback class="text-base font-semibold">
-          {initials(data.job.client.name)}
-        </AvatarFallback>
-      </Avatar>
-      <div class="min-w-0 flex-1">
-        <p
-          class="text-sm font-semibold group-hover:underline"
-          style="color: var(--foreground)"
-        >
-          {data.job.client.name ?? 'Замовник'}
-        </p>
-        <div
-          class="flex items-center gap-2 text-xs mt-0.5"
-          style="color: var(--muted-foreground)"
-        >
-          {#if data.job.client.reviewsCount > 0}
-            <span class="inline-flex items-center gap-1">
-              <Star class="size-3" style="color: #f5a623; fill: #f5a623" />
-              {data.job.client.avgRating.toFixed(1)} ({data.job.client
-                .reviewsCount})
-            </span>
-            <span>·</span>
-          {/if}
-          <span>З {memberSince(data.job.client.createdAt)}</span>
-        </div>
-      </div>
-    </a>
-  </CardContent>
-</Card>
-
-<!-- Action area -->
-{#if data.proposals.length > 0}
-  <!-- Майстер уже подав пропозицію -->
-  {#each data.proposals as p (p.id)}
-    <Card class="rounded-2xl mb-3">
-      <CardContent class="p-5">
-        <div class="flex items-center justify-between mb-3">
-          <p
-            class="text-[11px] font-semibold uppercase tracking-widest"
-            style="color: var(--muted-foreground)"
-          >
-            Ваша пропозиція
-          </p>
-          <Badge
-            variant={proposalStatusVariant(p.status)}
-            class="text-[10px] uppercase"
-          >
-            {proposalStatusLabel(p.status)}
-          </Badge>
-        </div>
-
-        <p
-          class="text-sm leading-relaxed mb-4 whitespace-pre-wrap"
-          style="color: var(--foreground)"
-        >
-          {p.message}
-        </p>
-
-        <Separator class="my-3" />
-
-        <div
-          class="flex items-center gap-3 text-xs"
-          style="color: var(--muted-foreground)"
-        >
-          <span class="inline-flex items-center gap-1">
-            <Clock class="size-3.5" />
-            {p.estimatedDays} дн
-          </span>
-          <span>·</span>
-          <span
-            class="font-semibold tabular-nums"
-            style="color: var(--foreground)"
-          >
-            {formatMoney(p.priceCents, data.job.currency)}
-          </span>
-          <span class="ml-auto">{formatRelative(p.createdAt)}</span>
-        </div>
-      </CardContent>
-    </Card>
-  {/each}
-{:else if data.canPropose}
-  <Card class="rounded-2xl">
-    <CardContent class="p-5 sm:p-6">
-      {#if !formOpen}
-        <div class="text-center py-2">
-          <div
-            class="size-12 rounded-2xl mx-auto mb-3 flex items-center justify-center"
-            style="background-color: var(--secondary)"
-          >
-            <Send class="size-5" style="color: var(--foreground)" />
-          </div>
-          <p class="text-base font-bold mb-1" style="color: var(--foreground)">
-            Зацікавила заявка?
-          </p>
-          <p
-            class="text-sm mb-4 max-w-xs mx-auto"
-            style="color: var(--muted-foreground)"
-          >
-            Запропонуйте ціну та термін — клієнт одразу отримає сповіщення
-          </p>
-          <Button
-            onclick={() => (formOpen = true)}
-            class="rounded-full gap-2 h-11 px-6 font-semibold"
-          >
-            <Send class="size-4" /> Подати пропозицію
-          </Button>
-        </div>
-      {:else}
-        <div class="space-y-5">
-          <!-- Ціна — великий акцентний інпут -->
-          <div>
-            <Label
-              for="proposal-price"
-              class="text-sm font-semibold mb-2 block"
-            >
-              Ваша ціна
-            </Label>
-            <div
-              class="flex items-center gap-2 rounded-2xl border px-4 h-16 transition-colors focus-within:border-foreground"
-              style="border-color: var(--border); background-color: var(--secondary)"
-            >
-              <input
-                id="proposal-price"
-                type="number"
-                bind:value={priceUah}
-                min={50}
-                max={500000}
-                placeholder="0"
-                class="flex-1 min-w-0 bg-transparent outline-none text-3xl font-bold tabular-nums"
-                style="color: var(--foreground)"
-              />
-              <span
-                class="text-2xl font-bold shrink-0"
-                style="color: var(--muted-foreground)">₴</span
-              >
-            </div>
-          </div>
-
-          <!-- Термін -->
-          <div>
-            <Label for="proposal-days" class="text-sm font-semibold mb-2 block">
-              Термін виконання
-            </Label>
-            <div
-              class="flex items-center gap-2 rounded-xl border px-4 h-12"
-              style="border-color: var(--border)"
-            >
-              <input
-                id="proposal-days"
-                type="number"
-                bind:value={estimatedDays}
-                min={1}
-                max={180}
-                placeholder="3"
-                class="flex-1 min-w-0 bg-transparent outline-none text-base font-medium tabular-nums"
-                style="color: var(--foreground)"
-              />
-              <span
-                class="text-sm shrink-0"
-                style="color: var(--muted-foreground)">днів</span
-              >
-            </div>
-          </div>
-
-          <!-- Повідомлення -->
-          <div>
-            <div class="flex items-center justify-between mb-2">
-              <Label for="proposal-msg" class="text-sm font-semibold">
-                Повідомлення клієнту
-              </Label>
-              <span
-                class="text-[11px] tabular-nums"
-                style="color: {messageLen < 20 || messageLen > 2000
-                  ? 'var(--destructive)'
-                  : 'var(--muted-foreground)'}"
-              >
-                {messageLen} / 2000
-              </span>
-            </div>
-            <Textarea
-              id="proposal-msg"
-              bind:value={message}
-              rows={4}
-              placeholder="Розкажіть, як виконаєте роботу. Що входить, які матеріали, досвід. Мінімум 20 символів."
-              class="resize-none"
-            />
-          </div>
-
-          {#if errorMsg}
-            <div
-              class="text-sm flex items-start gap-2 rounded-xl px-3 py-2.5"
-              style="background-color: color-mix(in srgb, var(--destructive) 10%, transparent); color: var(--destructive)"
-            >
-              <XCircle class="size-4 shrink-0 mt-0.5" />
-              <span>{errorMsg}</span>
-            </div>
-          {/if}
-
-          <div class="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              onclick={() => {
-                formOpen = false
-                errorMsg = null
-              }}
-              disabled={submitting}
-              class="rounded-full"
-            >
-              Скасувати
-            </Button>
-            <Button
-              onclick={submitProposal}
-              disabled={!canSubmit}
-              class="flex-1 rounded-full gap-2 h-12 text-base font-semibold"
-            >
-              {#if submitting}
-                <Spinner /> Відправляємо…
-              {:else}
-                <Send class="size-4" /> Відправити відгук
+              {#if errorMsg}
+                <div
+                  class="flex items-start gap-2 rounded-[14px] border border-destructive/20 bg-destructive/10 px-3 py-2.5 text-sm text-destructive"
+                  role="alert"
+                >
+                  <XCircle
+                    class="mt-0.5 size-4 shrink-0"
+                    aria-hidden="true"
+                  /><span>{errorMsg}</span>
+                </div>
               {/if}
-            </Button>
-          </div>
+
+              <div class="flex items-center gap-2.5 pt-1">
+                <Button
+                  variant="outline"
+                  type="button"
+                  onclick={() => {
+                    formOpen = false
+                    errorMsg = null
+                  }}
+                  disabled={submitting}
+                  class="inline-flex h-12.5 cursor-pointer items-center rounded-full px-5 text-[14.5px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50"
+                  >Скасувати</Button
+                >
+                <Button
+                  type="button"
+                  onclick={submitProposal}
+                  disabled={!canSubmit}
+                  aria-busy={submitting}
+                  class="relative inline-flex h-12.5 flex-1 cursor-pointer items-center justify-center rounded-full bg-primary text-[15px] font-semibold text-white transition hover:-translate-y-px active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:translate-y-0 disabled:opacity-40 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+                >
+                  {#if submitting}
+                    <span class="pointer-events-none">Зачекайте…</span>
+                    <Spinner
+                      class="absolute right-4"
+                      aria-hidden="true"
+                    />
+                  {:else}
+                    <span
+                      class="pointer-events-none inline-flex items-center gap-2.25"
+                    >
+                      <Send class="size-4" aria-hidden="true" /> Відправити відгук
+                    </span>
+                  {/if}
+                </Button>
+              </div>
+            </div>
+          {/if}
         </div>
-      {/if}
-    </CardContent>
-  </Card>
-{/if}
+      </div>
+    {/if}
+  </div>
+</div>
+
+<style>
+  :global(body:has(.jobview-scope)) {
+    background:
+      radial-gradient(
+        130% 90% at 12% -5%,
+        color-mix(in oklch, var(--muted) 55%, var(--background)) 0%,
+        transparent 50%
+      ),
+      radial-gradient(
+        130% 90% at 100% 105%,
+        color-mix(in oklch, var(--secondary) 60%, var(--background)) 0%,
+        transparent 52%
+      ),
+      var(--background);
+  }
+
+  /* Textarea відгуку — на токенах (:global, бо клас іде в shadcn-компонент). */
+  .jobview-scope :global(.jv-input) {
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: var(--muted);
+    color: var(--foreground);
+    font-size: 14.5px;
+    padding: 16px;
+    outline: none;
+    transition:
+      border-color 0.16s ease,
+      background 0.16s ease,
+      box-shadow 0.16s ease;
+  }
+  .jobview-scope :global(.jv-input::placeholder) {
+    color: var(--muted-foreground);
+  }
+  .jobview-scope :global(.jv-input:focus) {
+    background: var(--background);
+    border-color: var(--ring);
+    box-shadow: 0 0 0 4px color-mix(in oklch, var(--ring) 22%, transparent);
+  }
+
+  /* Обгортки числових полів (ціна/термін) — focus-within ring. */
+  .jv-field {
+    border: 1px solid var(--border);
+    background: var(--muted);
+    transition:
+      border-color 0.16s ease,
+      background 0.16s ease,
+      box-shadow 0.16s ease;
+  }
+  .jv-field:focus-within {
+    border-color: var(--ring);
+    background: var(--background);
+    box-shadow: 0 0 0 4px color-mix(in oklch, var(--ring) 22%, transparent);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .jobview-scope :global(.jv-input),
+    .jv-field {
+      transition: none;
+    }
+  }
+</style>

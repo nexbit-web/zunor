@@ -1,6 +1,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils.js'
-  import LoaderIcon from '@lucide/svelte/icons/loader'
+  import { LoaderCircle } from 'lucide-svelte'
+ 
   import type { SVGAttributes } from 'svelte/elements'
 
   let {
@@ -15,12 +16,12 @@
   }: SVGAttributes<SVGSVGElement> = $props()
 </script>
 
-<LoaderIcon
+<LoaderCircle
   {role}
   name={name === null ? undefined : name}
   color={color === null ? undefined : color}
   stroke={stroke === null ? undefined : stroke}
   aria-label={ariaLabel}
-  class={cn('size-4 animate-spin', className)}
+  class={cn('size-6 animate-spin', className)}
   {...restProps}
 />

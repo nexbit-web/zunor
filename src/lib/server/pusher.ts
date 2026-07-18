@@ -24,6 +24,7 @@ export const channels = {
   chat: (chatId: string) => `private-chat-${chatId}`,
   user: (userId: string) => `private-user-${userId}`,
   presence: (chatId: string) => `presence-chat-${chatId}`,
+  admin: 'private-admin', // ← канал CRM-адмінів
 }
 
 // ─── Події ───
@@ -34,6 +35,7 @@ export const events = {
   messageRead: 'message:read',
   chatUpdate: 'chat:update',
   typing: 'client-typing',
+  moderationNew: 'moderation:new',
 } as const
 
 /**

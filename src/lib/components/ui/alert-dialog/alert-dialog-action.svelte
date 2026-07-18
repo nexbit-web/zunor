@@ -1,27 +1,33 @@
 <script lang="ts">
 	import { AlertDialog as AlertDialogPrimitive } from "bits-ui";
-	import {
-		buttonVariants,
-		type ButtonVariant,
-		type ButtonSize,
-	} from "$lib/components/ui/button/index.js";
 	import { cn } from "$lib/utils.js";
 
 	let {
 		ref = $bindable(null),
 		class: className,
 		variant = "default",
-		size = "default",
 		...restProps
 	}: AlertDialogPrimitive.ActionProps & {
-		variant?: ButtonVariant;
-		size?: ButtonSize;
+		variant?: "default" | "destructive" | "destructive-filled";
 	} = $props();
+
+	const variants = {
+		default:
+			"text-primary hover:bg-primary/10 active:bg-primary/15",
+		destructive:
+			"text-destructive hover:bg-destructive/10 active:bg-destructive/15",
+		"destructive-filled":
+			"bg-destructive text-white hover:brightness-110 active:brightness-95 px-5",
+	};
 </script>
 
 <AlertDialogPrimitive.Action
 	bind:ref
 	data-slot="alert-dialog-action"
-	class={cn(buttonVariants({ variant, size }), "cn-alert-dialog-action", className)}
+	class={cn(
+		"cn-alert-dialog-action inline-flex h-10 items-center justify-center rounded-[16px] px-3 text-[15px] font-medium uppercase tracking-[0.02em] transition disabled:pointer-events-none disabled:opacity-50",
+		variants[variant],
+		className
+	)}
 	{...restProps}
 />
