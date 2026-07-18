@@ -7,9 +7,14 @@
   import { Toaster } from '$lib/components/toast'
   import Footer from '$lib/components/footer/index.svelte'
 
-  // На /messages чат працює full-screen без хедера сайту
-  const hideHeader = $derived(page.url.pathname.startsWith('/messages'))
-  const hideFooter = $derived(page.url.pathname.startsWith('/messages'))
+  // без хедера і футера
+  const hiddenLayoutRoutes = ['/messages', '/jobs/new/ai', '/terms', '/privacy']
+  const hideHeader = $derived(
+    hiddenLayoutRoutes.some((route) => page.url.pathname.startsWith(route)),
+  )
+  const hideFooter = $derived(
+    hiddenLayoutRoutes.some((route) => page.url.pathname.startsWith(route)),
+  )
 
   import NProgress from 'nprogress'
   import 'nprogress/nprogress.css'

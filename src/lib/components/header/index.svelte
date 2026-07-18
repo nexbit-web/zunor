@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte'
   import { fade } from 'svelte/transition'
   import { goto } from '$app/navigation'
   import { page } from '$app/state'
@@ -9,14 +10,29 @@
 
   const NAV_LINKS = [
     { href: '/how-it-works', label: 'Як це працює' },
-
     { href: '/about', label: 'Про нас' },
   ]
 
   let mobileOpen = $state(false)
 
+  // ─── Прозорий хедер вгорі сторінки, фон з'являється при скролі ───
+  // Поріг у пікселях — після якого хедер вважається "прижатим" і
+  // отримує фон/блюр/тінь. Трохи більше за 0, щоб не мигало на
+  // мікроскопічних侵 колейбаунсах скролу (напр. на iOS).
+  const SCROLL_THRESHOLD = 8
+  let scrolled = $state(false)
+
+  function handleScroll() {
+    scrolled = window.scrollY > SCROLL_THRESHOLD
+  }
+
+  onMount(() => {
+    handleScroll() // врахувати стан одразу (напр. якщо сторінка відкрита не з самого верху)
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  })
+
   // Головна відрізняється: точна відповідність "/", решта — startsWith
-  // (щоб "/services/123" теж підсвічував "Послуги").
   function isActive(href: string): boolean {
     return href === '/'
       ? page.url.pathname === '/'
@@ -30,7 +46,10 @@
 </script>
 
 <div class="sticky top-0 z-50">
-  <header class="h-14 bg-background/85 backdrop-blur-2xl">
+  <header
+    class="h-14 transition-[background-color,backdrop-filter,box-shadow] duration-300 ease-out"
+    class:header-scrolled={scrolled}
+  >
     <div
       class="mx-auto flex h-full w-full max-w-6xl items-center justify-between gap-6 px-6"
     >
@@ -126,6 +145,15 @@
 <MobileNav onnavigate={navigate} hasNotifications={true} />
 
 <style>
+  /* За замовчуванням хедер повністю прозорий — фон hero-секції видно
+     наскрізь. Клас .header-scrolled додається лише після того, як
+     сторінку проскролили за SCROLL_THRESHOLD. */
+  .header-scrolled {
+    background-color: color-mix(in oklch, var(--background) 85%, transparent);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+
   .nav-link {
     padding: 4px 12px;
     font-size: 15px;
@@ -151,7 +179,6 @@
     color: var(--primary);
     font-weight: 600;
   }
-  /* Тонка підкреслена риска під активним пунктом — як на telegram.org. */
   .nav-link.is-active::after {
     content: '';
     position: absolute;
@@ -190,7 +217,8 @@
 
   @media (prefers-reduced-motion: reduce) {
     .nav-link,
-    .mob-link {
+    .mob-link,
+    header {
       transition: none;
     }
   }

@@ -1,163 +1,213 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
-  import { ArrowRight, MapPin } from 'lucide-svelte'
-  import { Skeleton } from '$lib/components/ui/skeleton'
+  import { ArrowRight, ArrowUp, MapPin, Plus } from 'lucide-svelte'
+  import { fly } from 'svelte/transition'
+  import { quintOut } from 'svelte/easing'
+  import { goto } from '$app/navigation'
 
-  interface HeroProps {
-    illustration?: string | null
-    alt?: string
+  let input = $state('')
+  let textareaEl: HTMLTextAreaElement | undefined = $state()
+
+  // ─── Бегущий плейсхолдер (тот же, что на /jobs/new/ai) ───
+  const HERO_PREFIX = 'Треба '
+  const HERO_SUFFIXES = [
+    'прибрати квартиру...',
+    'помити вікна...',
+    'хімчистка дивана...',
+    'генеральне прибирання...',
+    'прибрати після ремонту...',
+  ]
+  let heroPlaceholder = $state(HERO_PREFIX)
+
+  function sleep(ms: number) {
+    return new Promise((r) => setTimeout(r, ms))
   }
 
-  let {
-    illustration = '/home-img.webp',
-    alt = 'Прибирання Zunor Одеса',
-  }: HeroProps = $props()
+  $effect(() => {
+    let cancelled = false
 
-  let canLoad = $state<boolean>(false)
-  let isImageLoaded = $state<boolean>(false)
-  let hasError = $state<boolean>(false)
+    async function loop() {
+      let phraseIndex = 0
+      while (!cancelled) {
+        const suffix = HERO_SUFFIXES[phraseIndex]
 
-  const sanitizedSrc = $derived.by(() => {
-    if (!illustration) return ''
-    const isRelative =
-      illustration.startsWith('/') && !illustration.startsWith('//')
-    const isAbsoluteHttp =
-      illustration.startsWith('http://') || illustration.startsWith('https://')
-    return isRelative || isAbsoluteHttp ? illustration : ''
-  })
+        for (let i = 1; i <= suffix.length && !cancelled; i++) {
+          heroPlaceholder = HERO_PREFIX + suffix.slice(0, i)
+          const prevChar = suffix[i - 1]
+          const base = 40 + Math.random() * 40
+          await sleep(prevChar === ' ' ? base + 50 : base)
+        }
+        if (cancelled) break
+        await sleep(1500)
 
-  onMount(() => {
-    const handlePageLoad = (): void => {
-      if (window.matchMedia('(min-width: 1024px)').matches) {
-        canLoad = true
+        for (let i = suffix.length; i >= 0 && !cancelled; i--) {
+          heroPlaceholder = HERO_PREFIX + suffix.slice(0, i)
+          await sleep(18 + Math.random() * 12)
+        }
+        if (cancelled) break
+        await sleep(200)
+
+        phraseIndex = (phraseIndex + 1) % HERO_SUFFIXES.length
       }
     }
 
-    if (document.readyState === 'complete') {
-      handlePageLoad()
-    } else {
-      window.addEventListener('load', handlePageLoad, { once: true })
-    }
-
+    loop()
     return () => {
-      window.removeEventListener('load', handlePageLoad)
+      cancelled = true
     }
   })
+
+  function autoResize() {
+    if (!textareaEl) return
+    textareaEl.style.height = 'auto'
+    textareaEl.style.height = `${Math.min(textareaEl.scrollHeight, 160)}px`
+  }
+
+  // ─── Переход в чат с текстом из инпута ───
+  function goToChat(text = input) {
+    const value = text.trim()
+    if (!value) return
+    goto(`/jobs/new/ai?q=${encodeURIComponent(value)}`)
+  }
+
+  function handleHeroKeydown(e: KeyboardEvent) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      goToChat()
+    }
+  }
 </script>
 
 <section
-  class="mx-auto max-w-6xl px-4 py-12 sm:px-8 md:py-16 lg:px-16"
-  aria-label="Главный экран"
+  class="relative -mt-14 flex min-h-screen w-full flex-col items-center justify-center overflow-hidden bg-background px-4 pt-14 sm:px-8"
+  aria-label="Головний екран"
 >
+
+  <!-- цветной аврора-слой: мягкие размытые пятна под сеткой -->
   <div
-    class="grid grid-cols-1 items-center gap-10 lg:grid-cols-[1fr_410px] lg:gap-16 xl:grid-cols-[520px_1fr] xl:gap-20"
+    class="pointer-events-none absolute inset-0 overflow-hidden"
+    aria-hidden="true"
   >
-    <div class="flex flex-col items-start gap-5 text-left">
-      <div class="flex items-center gap-1.5">
-        <MapPin class="size-4" aria-hidden="true" />
-        <span>Одеса, UA</span>
-      </div>
+    <div class="hero-aurora"></div>
+  </div>
 
-      <h1
-        class="text-foreground font-sans text-4xl font-bold tracking-tight sm:text-5xl sm:leading-tight lg:text-[52px] lg:leading-16"
-      >
-        Замовляйте прибирання коли завгодно з Zunor
-      </h1>
+  <div
+    class="pointer-events-none absolute inset-0 opacity-40 bg-[linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)] bg-[length:48px_48px] [mask-image:radial-gradient(ellipse_80%_60%_at_50%_0%,black_40%,transparent_90%)]"
+    aria-hidden="true"
+  ></div>
 
-      <a
-        href="/jobs/new"
-        class="cta-btn group"
-        aria-label="Перейдіть до оформлення замовлення на прибирання"
-      >
-        Замовити послугу
-        <ArrowRight class="size-5" aria-hidden="true" />
-      </a>
+  <div
+    class="relative mx-auto flex max-w-3xl flex-col items-center text-center"
+  >
+    <div
+      class="mb-5 inline-flex items-center gap-2 rounded-full border border-border bg-card px-3.5 py-1.5 text-[13px] font-medium text-muted-foreground"
+    >
+      <MapPin class="size-4 text-primary" aria-hidden="true" />
+      <span>Одеса, UA</span>
     </div>
 
-    <div class="hidden justify-end lg:flex">
-      <div
-        class="relative aspect-square w-full max-w-102.5 overflow-hidden rounded-[10px] bg-linear-to-br from-[#e8f7f0] via-[#f3f4f6] to-[#eef0f2] shadow-sm"
-      >
-        {#if sanitizedSrc && !hasError}
-          {#if !isImageLoaded}
-            <Skeleton class="absolute inset-0 z-10 size-full" />
-          {/if}
+    <h1
+      class="max-w-[34ch] text-[40px] leading-[1.1] font-bold tracking-[-0.02em] text-foreground sm:text-[56px]"
+    >
+      Замовляйте прибирання<br class="hidden sm:block" />
+      коли завгодно з Zunor
+    </h1>
 
-          {#if canLoad}
-            <img
-              class="absolute inset-0 size-full object-cover opacity-0 transition-opacity duration-700 ease-out"
-              class:opacity-100={isImageLoaded}
-              src={sanitizedSrc}
-              {alt}
-              decoding="async"
-              loading="lazy"
-              onload={() => {
-                isImageLoaded = true
-              }}
-              onerror={() => {
-                hasError = true
-              }}
-            />
-          {/if}
-        {:else}
-          <div
-            class="absolute inset-0 size-full bg-linear-to-br from-[#008e60]/10 to-[#eef0f2]"
-            role="img"
-            aria-label="Zunor Cleaning"
-          ></div>
-        {/if}
+    <p
+      class="mt-4 max-w-[42ch] text-[17px] leading-[1.6] text-muted-foreground"
+    >
+      Опублікуйте замовлення та оберіть клінерку, яка найкраще підходить саме
+      вам.
+    </p>
+
+    <!-- chat input вместо кнопки -->
+    <div
+      class="mt-8 flex w-full max-w-2xl flex-col gap-3 z-1"
+      in:fly={{ y: 10, duration: 400, delay: 80, easing: quintOut }}
+    >
+      <div
+        class="flex flex-col rounded-[28px] border border-border bg-muted p-3 shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition-shadow duration-200 focus-within:shadow-[0_4px_16px_rgba(0,0,0,0.1)]"
+      >
+        <textarea
+          bind:this={textareaEl}
+          bind:value={input}
+          oninput={autoResize}
+          onkeydown={handleHeroKeydown}
+          rows="1"
+          placeholder={heroPlaceholder}
+          class="job-input-plain flex-1 w-full resize-none bg-transparent px-2 py-2 text-[16px] leading-snug text-foreground placeholder:text-muted-foreground focus:outline-none"
+        ></textarea>
+
+        <div class="flex items-center justify-between pt-2">
+          <button
+            type="button"
+            aria-label="Додати фото"
+            class="flex size-8 items-center shadow-[0_2px_8px_rgba(0,0,0,0.06)] justify-center rounded-full border border-border bg-muted text-muted-foreground transition-all duration-150 hover:text-foreground active:scale-[0.97]"
+            style="background: var(--bg-translucent);"
+          >
+            <Plus size={16} strokeWidth={2.1} aria-hidden="true" />
+          </button>
+
+          <div class="flex items-center gap-2">
+            <span
+              class="rounded-full border border-border bg-background px-3 py-1.5 text-[12.5px] font-medium text-muted-foreground"
+              style="background: var(--bg-translucent);"
+            >
+              Прибирання · Одеса
+            </span>
+            <button
+              type="button"
+              onclick={() => goToChat()}
+              disabled={!input.trim()}
+              aria-label="Надіслати"
+              class="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-foreground text-background transition disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              <ArrowUp size={16} aria-hidden="true" />
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 </section>
 
 <style>
-  .cta-btn {
-    width: 100%;
-    max-width: 320px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    padding: 18px 32px;
-    font-size: 18px;
-    font-weight: 500;
-    color: #fff;
-    background: var(--primary);
-    border-radius: 14px;
-    cursor: pointer;
-    text-decoration: none;
-    box-shadow: 0 4px 14px rgba(0, 142, 96, 0.2);
-    transition:
-      transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
-      box-shadow 0.2s ease;
+  .job-input-plain::placeholder {
+    color: var(--muted-foreground);
   }
 
-  @media (min-width: 640px) {
-    .cta-btn {
-      width: auto;
+  /* мягкий цветной меш: 4 больших размытых пятна, лёгкий дрейф.
+     opacity низкая — это подложка под светлую тему, а не отдельный неоновый хиро */
+  .hero-aurora {
+    position: absolute;
+    left: -10%;
+    right: -10%;
+    bottom: 0;
+    height: 100vh;
+    filter: blur(90px);
+    opacity: 0.55;
+    background:
+      radial-gradient(38% 30% at 22% 18%, rgba(92, 126, 244, 0.55), transparent 70%),
+      radial-gradient(34% 26% at 68% 8%,  rgba(249, 128, 222, 0.45), transparent 70%),
+      radial-gradient(42% 32% at 52% 46%, rgba(252, 35, 106, 0.35), transparent 70%),
+      radial-gradient(36% 26% at 80% 60%, rgba(254, 99, 39, 0.30), transparent 70%);
+    animation: aurora-drift 22s ease-in-out infinite alternate;
+  }
+
+  @keyframes aurora-drift {
+    0% {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    50% {
+      transform: translate3d(-1.5%, 1.5%, 0) scale(1.03);
+    }
+    100% {
+      transform: translate3d(1.5%, -1%, 0) scale(1);
     }
   }
 
-  .cta-btn:hover {
-    transition: 5ms linear;
-    background-color: var(--primary-hover);
-  }
-
-  .cta-btn:active {
-    transform: scale(0.98) translateY(-1px);
-  }
-
-  /* Явное состояние фокуса — обязательно при кастомной кнопке без нативного outline */
-  .cta-btn:focus-visible {
-    outline: 2px solid var(--foreground);
-    outline-offset: 3px;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .cta-btn {
-      transition: none !important;
-      transform: none !important;
+  @media (prefers-color-scheme: dark) {
+    .hero-aurora {
+      opacity: 0.8;
     }
   }
 </style>

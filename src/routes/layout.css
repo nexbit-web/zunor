@@ -53,7 +53,7 @@
   --bg-header: #ffffff;
 
   /* ─── Монохромна база: фон/текст/картки/бордери ─── */
-  --background: oklch(1 0 0); /* #FFFFFF */
+  --background: #fcfbf8; /* #FFFFFF */
   --foreground: oklch(0.145 0 0); /* #0A0A0A */
 
   --card: oklch(1 0 0);
@@ -63,6 +63,8 @@
   /* Було помилково #3390ec — увесь текст у попап-меню ставав синім. Фікс. */
   --popover-foreground: oklch(0.145 0 0);
 
+  --bg-translucent: lab(100% 0 0/.8);
+  --fg-primary: #030303;
   /* ─── Єдиний акцент: #3390ec. Керує primary-кнопками, посиланнями,
      focus-ring і фокусною рамкою інпутів (shadcn Input вже прив'язаний
      до --ring через focus-visible:border-ring focus-visible:ring-ring/50,
@@ -77,7 +79,7 @@
   --secondary: oklch(0.97 0 0); /* #F4F4F5 */
   --secondary-foreground: oklch(0.145 0 0);
 
-  --muted: oklch(97.913% 0.00011 271.152);
+  --muted: #fafafa;
   --muted-foreground: oklch(0.55 0 0); /* #71717A */
 
   --accent: oklch(0.96 0 0);
@@ -87,7 +89,7 @@
 
   /* Бордери в звичайному стані лишаються нейтральними — синім стає
      тільки фокус (через --ring), не дефолтний стан поля. */
-  --border: oklch(0.92 0 0); /* #E4E4E7 */
+  --border: #e6e6e2; /* #E4E4E7 */
   --input: oklch(0.92 0 0);
 
   --chart-1: oklch(0.145 0 0);
@@ -145,84 +147,91 @@
 }
 
 .dark {
-  --nprogress-bar: #3390ec;
-  --catalog-sidebar-hover: #18181b;
-  --bg-header: oklch(0.145 0 0);
+  --nprogress-bar: oklch(52.43% 0.2396 264.41);
+  --catalog-sidebar-hover: oklch(27.2% 0.002 107);
+  --bg-header: oklch(20.42% 0.002 107);
 
-  --background: oklch(0.145 0 0); /* #0A0A0A */
-  --foreground: oklch(0.985 0 0); /* #FAFAFA */
+  --background: #1c1c1c;
+  --foreground: oklch(100% 0 0);
 
-  --card: oklch(0.18 0 0); /* #18181B */
-  --card-foreground: oklch(0.985 0 0);
+  --card: oklch(23% 0.002 107);
+  --card-foreground: oklch(100% 0 0);
 
-  --popover: oklch(0.18 0 0);
-  --popover-foreground: oklch(0.985 0 0);
+  --bg-translucent: lab(49.8943% -0.875205 3.29613/0.16);
+  --fg-primary: lab(100% 0 0);
 
-  /* Той самий акцент, що й у світлій темі — єдина марка кольору
-     незалежно від теми (раніше в dark кнопки були білими/монохромними). */
+  --popover: oklch(23% 0.002 107);
+  --popover-foreground: oklch(100% 0 0);
+
   --primary: #8774e1;
   --primary-foreground: oklch(1 0 0);
   --primary-hover: #7863dc;
   --ring: #8774e1;
 
-  --secondary: oklch(0.22 0 0); /* #27272A */
-  --secondary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(27.2% 0.002 107);
+  --secondary-foreground: oklch(90.95% 0.002 107);
 
-  --muted: oklch(0.22 0 0);
-  --muted-foreground: oklch(0.65 0 0); /* #A1A1AA */
+  --muted: #212120;
+  --muted-foreground: oklch(72.34% 0.002 107);
 
-  --accent: oklch(0.22 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --accent: oklch(27.2% 0.002 107);
+  --accent-foreground: oklch(100% 0 0);
 
-  --destructive: oklch(0.704 0.191 22.216);
+  --destructive: oklch(58.53% 0.2203 26.56);
 
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 12%);
+  --border: #3c3c3a;
+  --input: oklch(37.2% 0.004 107 / 40%);
 
-  --chart-1: oklch(0.985 0 0);
-  --chart-2: oklch(0.78 0 0);
-  --chart-3: oklch(0.58 0 0);
-  --chart-4: oklch(0.4 0 0);
-  --chart-5: oklch(0.25 0 0);
+  --chart-1: oklch(70.62% 0.1391 264.41);
+  --chart-2: oklch(72.92% 0.155 138.23);
+  --chart-3: oklch(75.82% 0.1594 40.04);
+  --chart-4: oklch(76.61% 0.1614 294.88);
+  --chart-5: oklch(76.15% 0.1564 26.56);
 
-  --sidebar: oklch(0.18 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: #3390ec;
-  --sidebar-primary-foreground: oklch(1 0 0);
-  --sidebar-accent: oklch(0.22 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: #3390ec;
+  --sidebar: oklch(23% 0.002 107);
+  --sidebar-foreground: oklch(100% 0 0);
+  --sidebar-primary: oklch(52.43% 0.2396 264.41);
+  --sidebar-primary-foreground: oklch(100% 0 0);
+  --sidebar-accent: oklch(27.2% 0.002 107);
+  --sidebar-accent-foreground: oklch(100% 0 0);
+  --sidebar-border: oklch(34.74% 0.004 107 / 40%);
+  --sidebar-ring: oklch(70.62% 0.1391 264.41);
 
-  --w-bg: #422400;
-  --w-border: #b87700;
-  --w-icon: #fab319;
-  --w-text: #fab319;
+  /* Warning */
+  --w-bg: oklch(58.01% 0.1819 40.04 / 20%);
+  --w-border: oklch(58.01% 0.1819 40.04 / 40%);
+  --w-icon: oklch(75.82% 0.1594 40.04);
+  --w-text: oklch(75.82% 0.1594 40.04);
 
-  --s-bg: #00462d;
-  --s-border: #00b07e;
-  --s-icon: #00e6a0;
-  --s-text: #00e6a0;
+  /* Success */
+  --s-bg: oklch(54.42% 0.1689 138.23 / 20%);
+  --s-border: oklch(54.42% 0.1689 138.23 / 40%);
+  --s-icon: oklch(72.92% 0.155 138.23);
+  --s-text: oklch(72.92% 0.155 138.23);
 
-  --e-bg: #3a0f14;
-  --e-border: #b20000;
-  --e-icon: #ff2323;
-  --e-text: #ff6a6a;
+  /* Error */
+  --e-bg: oklch(58.53% 0.2203 26.56 / 20%);
+  --e-border: oklch(58.53% 0.2203 26.56 / 40%);
+  --e-icon: oklch(76.15% 0.1564 26.56);
+  --e-text: oklch(76.15% 0.1564 26.56);
 
-  --i-bg: #0f1c3f;
-  --i-border: #2563eb;
-  --i-icon: #3b82f6;
-  --i-text: #3b82f6;
+  /* Info */
+  --i-bg: oklch(52.43% 0.2396 264.41 / 20%);
+  --i-border: oklch(52.43% 0.2396 264.41 / 40%);
+  --i-icon: oklch(70.62% 0.1391 264.41);
+  --i-text: oklch(70.62% 0.1391 264.41);
 
-  --d-bg: #1e1e1e;
-  --d-border: rgba(156, 163, 175, 0.3);
-  --d-icon: #9ca3af;
-  --d-text: #9ca3af;
+  /* Default */
+  --d-bg: oklch(30% 0.002 107);
+  --d-border: oklch(40% 0.004 107 / 40%);
+  --d-icon: oklch(72.34% 0.002 107);
+  --d-text: oklch(72.34% 0.002 107);
 
-  --n-bg: #26153f;
-  --n-border: #7c3aed;
-  --n-icon: #c084fc;
-  --n-text: #c084fc;
+  /* Neutral / Special */
+  --n-bg: oklch(58.99% 0.2523 294.88 / 20%);
+  --n-border: oklch(58.99% 0.2523 294.88 / 40%);
+  --n-icon: oklch(76.61% 0.1614 294.88);
+  --n-text: oklch(76.61% 0.1614 294.88);
 }
 
 @theme inline {
@@ -309,7 +318,7 @@
 }
 
 html #nprogress .bar {
-  background:  var(--primary);
+  background: var(--primary);
   height: 2.5px;
 }
 
