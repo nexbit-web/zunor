@@ -287,7 +287,7 @@
       success = true
       celebrate()
       playSuccessSound()
-      setTimeout(() => goto('/jobs', { invalidateAll: true }), REDIRECT_DELAY)
+      setTimeout(() => goto('/dashboard/jobs', { invalidateAll: true }), REDIRECT_DELAY)
     } catch {
       serverError = "Помилка з'єднання. Перевірте інтернет і спробуйте ще раз."
       submitting = false

@@ -110,7 +110,7 @@
   <div class="flex justify-center my-3" data-message-id={message.id}>
     {#if orderIdFromMessage}
       <a
-        href={`/orders/${orderIdFromMessage}`}
+        href={`/dashboard/orders/${orderIdFromMessage}`}
         class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors hover:opacity-80 cursor-pointer max-w-[90%]"
         style="background-color: var(--muted); color: var(--foreground)"
       >

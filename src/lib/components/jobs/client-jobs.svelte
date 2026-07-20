@@ -175,7 +175,7 @@
       </p>
     </div>
     <Button
-      onclick={() => goto('/jobs/new')}
+      onclick={() => goto('/dashboard/jobs/new')}
       class="rounded-full gap-2 shrink-0"
     >
       <Plus class="size-4" strokeWidth={2.25} />
@@ -240,7 +240,7 @@
         : 'Спробуйте інший фільтр'}
     </p>
     {#if counts.all === 0}
-      <Button onclick={() => goto('/jobs/new')} class="mt-5 rounded-full gap-2">
+      <Button onclick={() => goto('/dashboard/jobs/new')} class="mt-5 rounded-full gap-2">
         <Plus class="size-4" />
         Створити заявку
       </Button>
@@ -250,7 +250,7 @@
   <div class="space-y-3">
     {#each filtered as job (job.id)}
       <a
-        href={`/jobs/${job.id}`}
+        href={`/dashboard/jobs/${job.id}`}
         class="block rounded-2xl p-5 transition-all hover:-translate-y-0.5 group"
         style="background-color: var(--card); border: 1px solid var(--border)"
       >

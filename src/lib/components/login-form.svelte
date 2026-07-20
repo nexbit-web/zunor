@@ -7,6 +7,7 @@
   import { AlertCircle, CheckCircle2, Eye, EyeOff } from 'lucide-svelte'
   import { Button } from './ui/button'
   import { Spinner } from './ui/spinner'
+  import toast from 'svelte-hot-french-toast'
 
   let { class: className, ...restProps }: HTMLAttributes<HTMLDivElement> =
     $props()
@@ -46,12 +47,11 @@
     loading = true
     serverError = ''
     try {
-      const { error: err } = await signIn.email({
+      const { data, error: err } = await signIn.email({
         email: email.trim().toLowerCase(),
         password,
       })
       if (err) {
-        // Generic-повідомлення: не розкриваємо, що саме невірно (захист від перебору).
         if (err.status === 403) serverError = 'Підтвердіть email перед входом'
         else if (err.status === 429)
           serverError = 'Забагато спроб. Спробуйте через хвилину.'
@@ -60,6 +60,11 @@
       }
       await invalidateAll()
       goto('/dashboard')
+
+      const name = data?.user?.name ?? ''
+      toast(name ? `Вітаємо, ${name}!` : 'Вітаємо!', {
+        icon: '😊',
+      })
     } catch (err) {
       // Лог лише в dev — у проді не світимо деталей у консоль користувача.
       if (dev) console.error('[login] failed:', err)
@@ -219,10 +224,7 @@
         </span>
 
         {#if loading}
-          <Spinner
-            class="absolute right-4 animate-spin"
-            aria-hidden="true"
-          />
+          <Spinner class="absolute right-4 animate-spin" aria-hidden="true" />
         {/if}
       </Button>
 
@@ -259,7 +261,6 @@
 </div>
 
 <style>
- 
   .field-input {
     width: 100%;
     height: 54px;

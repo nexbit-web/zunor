@@ -160,7 +160,7 @@ class ChatStore {
 
     notif.onclick = () => {
       window.focus()
-      window.location.href = `/messages/${data.chatId}`
+      window.location.href = `/dashboard/messages/${data.chatId}`
       notif.close()
     }
   }

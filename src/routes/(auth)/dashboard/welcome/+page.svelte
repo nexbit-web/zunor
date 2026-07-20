@@ -14,12 +14,13 @@
     SelectTrigger,
   } from '$lib/components/ui/select'
   import AvatarUploader from '$lib/components/avatar-uploader.svelte'
-  import { toast } from '$lib/stores/toast-store.svelte'
+  // import { toast } from '$lib/stores/toast-store.svelte'
   import type { PageData } from './$types'
   import { LoaderCircle, CheckCircle2, AlertCircle } from 'lucide-svelte'
   import { Button } from '$lib/components/ui/button'
   import { Spinner } from '$lib/components/ui/spinner'
-  import { Input } from '$lib/components/ui/input'
+  
+  import toast from 'svelte-hot-french-toast'
 
   let { data }: { data: PageData } = $props()
 
@@ -119,10 +120,10 @@
         toast.error(json?.error ?? 'Не вдалось зберегти')
         return
       }
-      toast.success('Вітаю! Тепер можна замовляти')
       await invalidateAll()
       await new Promise((r) => setTimeout(r, 800))
       goto('/dashboard')
+      toast.success('Зміни збережено')
     } catch {
       toast.error('Помилка зʼєднання')
     } finally {

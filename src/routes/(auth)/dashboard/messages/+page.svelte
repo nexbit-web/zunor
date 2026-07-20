@@ -37,7 +37,7 @@
 
     const exists = data.chats.some((c) => c.id === lastId)
     if (exists) {
-      goto(`/messages/${lastId}`, { replaceState: true })
+      goto(`/dashboard/messages/${lastId}`, { replaceState: true })
     } else {
       // Чат видалений / закритий — чистимо storage
       localStorage.removeItem(LAST_CHAT_KEY)

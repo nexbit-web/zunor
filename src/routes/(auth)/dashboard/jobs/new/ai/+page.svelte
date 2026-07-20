@@ -17,6 +17,7 @@
   import { quintOut } from 'svelte/easing'
   import { page } from '$app/stores'
   import { goto } from '$app/navigation'
+  import GradientHeart from '$lib/components/gradient-heart.svelte'
 
   // ─── Візуальний макет. Сценарій нижче — заглушка замість реального
   // виклику DeepSeek API, щоб оцінити інтерфейс окремо від бекенду. ───
@@ -76,6 +77,7 @@
   let started = $state(false)
   let copiedId = $state<number | null>(null)
   let showScrollButton = $state(false)
+  let heartVisible = $state(false)
   let scrollEl: HTMLDivElement | undefined
   let textareaEl: HTMLTextAreaElement | undefined
 
@@ -293,6 +295,7 @@
   // ─── Hero (стартовий екран, поки started === false) ───
   async function startChat(text: string) {
     if (!text.trim() || started || waiting) return
+    heartVisible = false
     started = true
     input = ''
     resetTextareaHeight()
@@ -357,6 +360,13 @@
   onMount(() => {
     document.body.style.overflow = 'hidden'
 
+    // Форсуємо реальний "вхід" елемента вже після монтування на клієнті —
+    // інакше Svelte пропускає in:-transition при SSR-гідратації, і серце
+    // просто миттєво з'являється без анімації при першому заході.
+    requestAnimationFrame(() => {
+      heartVisible = true
+    })
+
     // ─── Автозапуск чату, якщо прийшли з головної з готовим текстом ───
     const initialQuery = $page.url.searchParams.get('q')
     if (initialQuery) {
@@ -385,17 +395,10 @@
 </script>
 
 <div
-  class="job-scope fixed inset-0 z-0 flex flex-col overflow-hidden bg-background"
+  class="job-scope relative flex h-full min-h-0 flex-col overflow-hidden bg-background"
 >
-  <!-- ── Невеликий кольоровий градієнт вгорі екрану ───────────────────
-       Тонка смужка, лежить лише поки триває hero-екран (як на
-       референсі), не розтягується на весь фон. -->
-  {#if !started}
-    <div class="top-glow" aria-hidden="true" out:fade={{ duration: 300 }}></div>
-  {/if}
-
   <!-- header -->
-  <div
+  <!-- <div
     class="relative z-10 flex shrink-0 items-center justify-between px-4 py-3.5"
   >
     <a
@@ -405,7 +408,26 @@
       <ArrowLeft class="size-4" aria-hidden="true" />
       Головна
     </a>
-  </div>
+  </div> -->
+  {#if heartVisible}
+    <div
+      class="pointer-events-none absolute inset-0 z-0 flex items-end justify-center overflow-hidden"
+      aria-hidden="true"
+    >
+      <div
+        class="translate-y-1/3"
+        in:fly={{ y: 80, duration: 1400, easing: quintOut }}
+        out:fade={{ duration: 900, easing: quintOut }}
+      >
+        <GradientHeart
+          size={640}
+          blur={60}
+          stretchWidth={3300}
+          stretchHeight={1000}
+        />
+      </div>
+    </div>
+  {/if}
 
   {#if finished}
     <div
@@ -436,7 +458,15 @@
         in:fly={{ y: 8, duration: 350, easing: quintOut }}
       >
         <!-- <Logo /> -->
-        <h1 class="text-[38px] font-bold tracking-[-0.02em]">Що прибрати?</h1>
+        <!-- <h1 class="text-[38px] font-medium">Що прибрати?</h1> -->
+
+        <h1
+          class="text-primary-pulse flex items-center gap-1 transition-opacity duration-500 md:gap-0 md:text-3xl text-2xl leading-tight font-medium opacity-100"
+        >
+          <span class="min-h-6 pt-0.5 sm:min-h-7 md:min-h-8 md:pt-0"
+            >Що прибрати?</span
+          >
+        </h1>
 
         <!-- <p class="mt-1 text-[15px] text-muted-foreground">
           Просто опиши задачу — AI оформить замовлення.
@@ -448,7 +478,7 @@
         in:fly={{ y: 10, duration: 400, delay: 80, easing: quintOut }}
       >
         <div
-          class="flex flex-col rounded-[28px] border border-border bg-muted p-3 shadow-[0_2px_8px_rgba(0,0,0,0.06)]"
+          class="flex flex-col rounded-[28px] border border-border bg-card  p-3 shadow-[0_2px_8px_rgba(0,0,0,0.06)]"
         >
           <textarea
             bind:this={textareaEl}
@@ -495,7 +525,7 @@
             <button
               type="button"
               onclick={() => heroPick(c)}
-              class="cursor-pointer rounded-full border border-border bg-muted px-4 py-2 text-[13.5px] font-medium text-foreground hover:bg-muted/70 active:scale-[0.98]"
+              class="cursor-pointer rounded-full border border-border bg-card px-4 py-2 text-[13.5px] font-medium text-foreground transition-all duration-300 hover:bg-muted active:scale-[0.98]"
             >
               {c}
             </button>
@@ -523,7 +553,7 @@
                 in:fly={{ y: 6, duration: 280, easing: quintOut }}
               >
                 <div
-                  class="w-fit max-w-[75%] border border-border rounded-3xl rounded-br-md bg-muted px-4 py-3 text-[16px] leading-5.5 whitespace-pre-wrap wrap-break-word text-foreground"
+                  class="w-fit max-w-[75%] border border-border rounded-3xl rounded-br-md bg-card px-4 py-3 text-[16px] leading-5.5 whitespace-pre-wrap wrap-break-word text-foreground"
                 >
                   {m.text}
                 </div>
@@ -591,7 +621,7 @@
             {:else}
               <!-- summary card -->
               <div
-                class="rounded-2xl bg-muted p-4"
+                class="rounded-3xl border border-border bg-card p-4"
                 in:fly={{ y: 8, duration: 380, easing: quintOut }}
               >
                 <p class="mb-3 text-[13px] font-semibold text-foreground">
@@ -675,7 +705,7 @@
       <!-- інпут floats поверх повідомлень; кольоровий градієнт довершує
            ефект розмиття суцільним фоном ближче до самого низу -->
       <div
-        class="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex flex-col justify-end bg-linear-to-t from-background from-55% via-background/80 to-transparent"
+        class="pointer-events-none absolute left-0 right-2 bottom-0 z-10 flex flex-col justify-end bg-linear-to-t from-background from-55% via-background/80 to-transparent"
         style:height="{fadeZone}px"
       >
         <!-- pr-[22px] = px-4(16px) + 6px ширини скролбару .scroll-area,
@@ -692,7 +722,7 @@
                   <button
                     type="button"
                     onclick={() => pick(c)}
-                    class="cursor-pointer rounded-full border border-border bg-muted px-4 py-2 text-[13.5px] font-medium text-foreground hover:bg-muted/70 active:scale-[0.98]"
+                    class="cursor-pointer rounded-full border border-border bg-card px-4 py-2 text-[13.5px] font-medium text-foreground transition-all duration-300 hover:border-primary   active:scale-[0.98]"
                   >
                     {c}
                   </button>
@@ -701,7 +731,7 @@
             {/if}
 
             <div
-              class="rounded-[28px] border border-border bg-muted p-3 shadow-[0_2px_8px_rgba(0,0,0,0.06)]"
+              class="rounded-[28px] border border-border bg-card p-3 shadow-[0_2px_8px_rgba(0,0,0,0.06)]"
             >
               <textarea
                 bind:this={textareaEl}
@@ -755,48 +785,6 @@
 </div>
 
 <style>
-  /* ── Невеликий кольоровий градієнт вгорі екрану ───────────────────
-     Тонка смужка на весь горизонт (як на референсі): кілька
-     radial-gradient'ів різних кольорів, обрізаних невеликою висотою
-     й розмитих. Не розтягується на весь фон, лежить лише під
-     хедером, поки триває hero-екран. */
-  .top-glow {
-    position: absolute;
-    top: -170px;
-    left: 50%;
-    transform: translateX(-50%);
-
-    width: 50%;
-    height: 260px;
-
-    pointer-events: none;
-    z-index: 0;
-
-    background:
-      radial-gradient(
-        34% 180% at 14% -15%,
-        rgba(249, 115, 22, 0.9),
-        transparent 68%
-      ),
-      radial-gradient(
-        34% 180% at 38% -15%,
-        rgba(236, 72, 153, 0.95),
-        transparent 68%
-      ),
-      radial-gradient(
-        34% 180% at 62% -15%,
-        rgba(168, 85, 247, 0.95),
-        transparent 68%
-      ),
-      radial-gradient(
-        36% 180% at 86% -15%,
-        rgba(59, 130, 246, 0.9),
-        transparent 70%
-      );
-
-    filter: blur(55px);
-  }
-
   /* ── "Thinking" індикатор ──────────────────────────────────────────
      Текст отримує рухомий градієнтний "блиск" (shimmer) — читається
      як живий процес думання, а не статичний пульсуючий напис. */

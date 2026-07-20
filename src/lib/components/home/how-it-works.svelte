@@ -30,9 +30,9 @@
 
   // Реалістична адресна строка під кожен крок майстра.
   const urls = [
-    { prefix: 'zunor.org/jobs/', id: 'new' },
-    { prefix: 'zunor.org/jobs/', id: 'cmri2z2230001hku6usd8in4z' },
-    { prefix: 'zunor.org/orders/', id: 'cmri4clqp000bhku6h74in0c8' },
+    { prefix: 'zunor.org/dashboard/jobs/', id: 'new' },
+    { prefix: 'zunor.org/dashboard/jobs/', id: 'cmri2z2230001hku6usd8in4z' },
+    { prefix: 'zunor.org/dashboard/orders/', id: 'cmri4clqp000bhku6h74in0c8' },
   ]
 
   const DURATION = 5200
