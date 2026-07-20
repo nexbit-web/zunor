@@ -230,7 +230,7 @@
     <div class="grid">
       {#each visibleJobs as job, i (job.id)}
         <a
-          href={`/jobs/${job.id}`}
+          href={`/dashboard/jobs/${job.id}`}
           in:fly={{
             y: 12,
             duration: 260,
@@ -273,7 +273,7 @@
           {/if}
 
           <!-- Клієнт -->
-          <!-- {#if job.client}
+          {#if job.client}
           <div class="jcard__foot">
             <Avatar class="size-9 shrink-0">
               <AvatarImage
@@ -297,7 +297,7 @@
               {/if}
             </div>
           </div>
-        {/if} -->
+        {/if}
         </a>
       {/each}
     </div>
@@ -368,11 +368,14 @@
     color: var(--primary-foreground);
   }
   .fpill--off {
-    background: var(--secondary);
+    background: var(--card);
     color: var(--foreground);
+    border: 1px solid var(--border);
+    transition: all 0.3s;
   }
   .fpill--off:hover {
-    opacity: 0.72;
+    /* opacity: 0.72; */
+    border: 1px solid var(--primary);
   }
 
   /* ── count (як у прикладі) ── */

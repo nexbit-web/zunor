@@ -21,6 +21,7 @@
   import { onDestroy } from 'svelte'
   import type { PageData } from './$types'
   import { describeJob } from '$lib/categories/cleaning/describe'
+  import toast from 'svelte-hot-french-toast'
 
   let { data }: { data: PageData } = $props()
 
@@ -48,7 +49,7 @@
       ? order.master.username
         ? `/@${order.master.username}`
         : '#'
-      : `/client/${order.client.id}`,
+      : `/dashboard/client/${order.client.id}`,
   )
 
   const statusLabel = $derived(ORDER_STATUS_LABEL[order.status])
@@ -108,14 +109,15 @@
       await navigator.clipboard.writeText(order.id)
       copyConfirm = true
       if (copyTimeout) clearTimeout(copyTimeout)
-      copyTimeout = setTimeout(() => (copyConfirm = false), 1500)
+      copyTimeout = setTimeout(() => (copyConfirm = false), 2000)
+    toast.success('Скопійовано', { duration: 2000 })
     } catch {
       /* ignore */
     }
   }
 
   function openChat() {
-    if (order.chatId) goto(`/messages/${order.chatId}`)
+    if (order.chatId) goto(`/dashboard/messages/${order.chatId}`)
   }
 
   onDestroy(() => {
@@ -138,7 +140,7 @@
     <!-- Breadcrumb + ID -->
     <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
       <a
-        href="/orders"
+        href="/dashboard/orders"
         class="rounded-sm text-xs text-muted-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >← Усі замовлення</a
       >

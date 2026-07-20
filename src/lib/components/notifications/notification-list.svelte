@@ -75,11 +75,11 @@
 
   // ─── Куди веде сповіщення (та сама логіка, що в дзвіночку) ───
   function linkFor(n: NotificationItem): string {
-    if (n.orderId) return `/orders/${n.orderId}`
+    if (n.orderId) return `/dashboard/orders/${n.orderId}`
     if (n.proposalId) return `/dashboard/proposals`
-    if (n.jobId) return `/jobs/${n.jobId}`
-    if (n.chatId) return `/messages/${n.chatId}`
-    return '/notifications'
+    if (n.jobId) return `/dashboard/jobs/${n.jobId}`
+    if (n.chatId) return `/dashboard/messages/${n.chatId}`
+    return '/dashboard/notifications'
   }
 
   // ─── Час ───
@@ -289,7 +289,7 @@
   <Button
     variant={filter === 'all' ? 'default' : 'secondary'}
     size="sm"
-    class="rounded-full"
+    class="rounded-full border border-border transition-all duration-300 hover:border-primary"
     onclick={() => setFilter('all')}
   >
     Усі
@@ -297,7 +297,7 @@
   <Button
     variant={filter === 'unread' ? 'default' : 'secondary'}
     size="sm"
-    class="rounded-full"
+    class="rounded-full  border border-border transition-all duration-300 hover:border-primary"
     onclick={() => setFilter('unread')}
   >
     Непрочитані
@@ -339,7 +339,7 @@
       {group.label}
     </h2>
     <ul
-      class="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card"
+      class="divide-y divide-border overflow-hidden rounded-3xl border border-border bg-card transition-all duration-300 hover:border-primary "
     >
       {#each group.items as n (n.id)}
         {@const Icon = iconFor(n.type)}
@@ -390,7 +390,7 @@
           <Button
             variant="ghost"
             size="icon-sm"
-            class="shrink-0 text-muted-foreground hover:text-destructive"
+            class="shrink-0 text-muted-foreground transition-all duration-300 hover:text-destructive"
             onclick={() => remove(n)}
             aria-label="Видалити сповіщення"
           >

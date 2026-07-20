@@ -107,6 +107,7 @@
   import { fly } from 'svelte/transition'
   import { cubicOut } from 'svelte/easing'
   import { Checkbox } from './ui/checkbox'
+  import toast from 'svelte-hot-french-toast'
 
   let { class: className, ...restProps }: HTMLAttributes<HTMLDivElement> =
     $props()
@@ -338,6 +339,11 @@
       await invalidateAll()
       if (timerInterval) clearInterval(timerInterval)
       goto('/dashboard')
+
+      const firstName = name.trim()
+      toast(firstName ? `Ласкаво просимо, ${firstName}!` : 'Ласкаво просимо!', {
+        icon: '❤️',
+      })
     } catch (err) {
       if (dev) console.error('[register] otp flow failed:', err)
       serverError = 'Сталась помилка. Спробуйте ще раз.'

@@ -181,13 +181,18 @@
           class="size-12 mb-3 rounded-full flex items-center justify-center"
           style="background-color: var(--muted)"
         >
-          <MessageSquare class="size-5" style="color: var(--muted-foreground)" />
+          <MessageSquare
+            class="size-5"
+            style="color: var(--muted-foreground)"
+          />
         </div>
         <p class="text-sm font-medium mb-1" style="color: var(--foreground)">
           {search ? 'Нічого не знайдено' : 'Немає чатів'}
         </p>
         <p class="text-xs" style="color: var(--muted-foreground)">
-          {search ? 'Спробуйте інший запит' : 'Знайдіть майстра і напишіть йому'}
+          {search
+            ? 'Спробуйте інший запит'
+            : 'Знайдіть майстра і напишіть йому'}
         </p>
       </div>
     {:else}
@@ -197,9 +202,11 @@
           {@const hasUnread = chat.unreadCount > 0}
           <button
             type="button"
-            onclick={() => goto(`/messages/${chat.id}`)}
+            onclick={() => goto(`/dashboard/messages/${chat.id}`)}
             class="w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-left cursor-pointer transition-colors"
-            style="background-color: {isActive ? 'var(--accent)' : 'transparent'}"
+            style="background-color: {isActive
+              ? 'var(--accent)'
+              : 'transparent'}"
             onmouseenter={(e) => {
               if (!isActive)
                 (e.currentTarget as HTMLElement).style.backgroundColor =

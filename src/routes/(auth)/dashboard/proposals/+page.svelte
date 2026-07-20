@@ -84,7 +84,7 @@
         Відгуки на заявки клієнтів
       </p>
     </div>
-    <Button variant="outline" onclick={() => goto('/jobs')}>
+    <Button variant="outline" onclick={() => goto('/dashboard/jobs')}>
       <Briefcase class="size-4 mr-1" />
       Знайти роботу
     </Button>
@@ -185,7 +185,7 @@
               <div class="flex items-start justify-between gap-3 mb-2">
                 <div class="flex-1 min-w-0">
                   <a
-                    href={`/jobs/${proposal.job.id}`}
+                    href={`/dashboard/jobs/${proposal.job.id}`}
                     class="text-[15px] font-semibold hover:underline block"
                     style="color: var(--foreground)"
                   >

@@ -94,7 +94,7 @@
       // Перейдем у замовлення (буде створено у Підзаході 4.4)
       // Поки — у чат
       if (order.chatId) {
-        goto(`/messages/${order.chatId}`)
+        goto(`/dashboard/messages/${order.chatId}`)
       } else {
         await invalidateAll()
       }

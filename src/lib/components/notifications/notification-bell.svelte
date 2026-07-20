@@ -99,10 +99,10 @@
   }
 
   function notificationLink(n: Notification): string {
-    if (n.orderId) return `/orders/${n.orderId}`
+    if (n.orderId) return `/dashboard/orders/${n.orderId}`
     if (n.proposalId) return `/dashboard/proposals`
-    if (n.jobId) return `/jobs/${n.jobId}`
-    if (n.chatId) return `/messages/${n.chatId}`
+    if (n.jobId) return `/dashboard/jobs/${n.jobId}`
+    if (n.chatId) return `/dashboard/messages/${n.chatId}`
     return '#'
   }
 

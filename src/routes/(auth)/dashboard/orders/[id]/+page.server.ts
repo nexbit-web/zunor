@@ -9,7 +9,7 @@ export const load: PageServerLoad = async ({ params, request }) => {
   if (!session) {
     throw redirect(
       302,
-      `/user/login?next=${encodeURIComponent(`/orders/${params.id}`)}`,
+      `/user/login?next=${encodeURIComponent(`/dashboard/orders/${params.id}`)}`,
     )
   }
 

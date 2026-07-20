@@ -561,7 +561,7 @@
   <!-- ═══════ ACTIVE ORDER BADGE ═══════ -->
   {#if activeOrder}
     <a
-      href={`/orders/${activeOrder.id}`}
+      href={`/dashboard/orders/${activeOrder.id}`}
       class="flex items-center gap-2 px-4 py-2 shrink-0 transition-colors hover:opacity-90"
       style="background-color: var(--muted); border-bottom: 1px solid var(--border)"
     >

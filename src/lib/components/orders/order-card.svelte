@@ -49,7 +49,7 @@
 </script>
 
 <a
-  href={`/orders/${order.id}`}
+  href={`/dashboard/orders/${order.id}`}
   class="block rounded-xl p-4 transition-all hover:opacity-95"
   style="background-color: var(--card); border: 1px solid var(--border)"
 >

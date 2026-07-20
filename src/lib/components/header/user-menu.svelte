@@ -179,11 +179,11 @@
 
   // ─── Navigation ───
   function notifLink(n: Notification): string {
-    if (n.orderId) return `/orders/${n.orderId}`
-    if (n.type === 'NEW_PROPOSAL' && n.jobId) return `/jobs/${n.jobId}`
-    if (n.jobId) return `/jobs/${n.jobId}`
-    if (n.chatId) return `/messages/${n.chatId}`
-    return '/notifications'
+    if (n.orderId) return `/dashboard/orders/${n.orderId}`
+    if (n.type === 'NEW_PROPOSAL' && n.jobId) return `/dashboard/jobs/${n.jobId}`
+    if (n.jobId) return `/dashboard/jobs/${n.jobId}`
+    if (n.chatId) return `/dashboard/messages/${n.chatId}`
+    return '/dashboard/notifications'
   }
 
   async function handleNotifClick(n: Notification) {

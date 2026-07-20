@@ -27,7 +27,7 @@
   import PhotoGallery from '$lib/components/photo-gallery.svelte'
   import * as AlertDialog from '$lib/components/ui/alert-dialog'
   import Zuna from '$lib/components/zuna.svelte'
-  import { toast } from '$lib/stores/toast-store.svelte'
+  import toast from 'svelte-hot-french-toast'
   import {
     formatMoney,
     formatRelative,
@@ -71,7 +71,7 @@
         toast.error(json?.message ?? 'Не вдалось скасувати')
         return
       }
-      goto('/jobs', { invalidateAll: true })
+      goto('/dashboard/jobs', { invalidateAll: true })
     } catch {
       toast.error('Помилка зʼєднання')
     } finally {
@@ -92,7 +92,7 @@
         toast.error(json?.message ?? 'Не вдалось прийняти')
         return
       }
-      if (json.orderId) goto(`/orders/${json.orderId}`, { invalidateAll: true })
+      if (json.orderId) goto(`/dashboard/orders/${json.orderId}`, { invalidateAll: true })
       else location.reload()
     } catch {
       toast.error('Помилка зʼєднання')
@@ -112,7 +112,7 @@
     <!-- Back -->
     <button
       type="button"
-      onclick={() => goto('/jobs')}
+      onclick={() => goto('/dashboard/jobs')}
       class="mb-3.5 inline-flex cursor-pointer items-center gap-1.5 rounded-md text-[13.5px] font-medium text-muted-foreground transition-opacity hover:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
     >
       <ArrowLeft class="size-4" aria-hidden="true" /> До моїх заявок

@@ -78,7 +78,7 @@
   }
 
   function openChat() {
-    if (chatId) goto(`/messages/${chatId}`)
+    if (chatId) goto(`/dashboard/messages/${chatId}`)
   }
 
   // ─── Логіка кнопок ───

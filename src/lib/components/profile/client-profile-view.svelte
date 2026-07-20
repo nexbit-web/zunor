@@ -138,7 +138,7 @@
 
         {#if isOwner}
           <a
-            href="/welcome"
+            href="/dashboard/welcome"
             class="inline-flex h-10.5 items-center gap-1.75 rounded-full bg-primary hover:bg-primary-hover px-4.5 text-[13.5px] font-semibold text-white transition-transform hover:-translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground/40 motion-reduce:transition-none"
           >
             <Pencil class="size-3.75 text-white" aria-hidden="true" /> Редагувати
@@ -351,7 +351,7 @@
     <!-- ═══ BECOME MASTER (тільки owner) ═══ -->
     {#if isOwner}
       <a
-        href="/onboarding"
+        href="/dashboard/onboarding"
         class="group flex w-full items-center justify-between gap-4 rounded-[28px] bg-primary p-5.5 text-left text-white shadow-[0_16px_40px_-16px_rgba(0,0,0,0.5)] transition hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground/40 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
       >
         <span class="flex min-w-0 items-center gap-3.75">

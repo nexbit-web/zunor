@@ -33,6 +33,7 @@
   } from '$lib/components/jobs/display'
   import type { PageData } from './$types'
   import { Button } from '$lib/components/ui/button'
+  import toast from 'svelte-hot-french-toast'
 
   let { data }: { data: PageData } = $props()
 
@@ -101,6 +102,37 @@
     }
   }
 
+  // ─── Жартівливі реакції на суму/термін ───
+  function priceJoke(v: number): string | null {
+    if (v >= 300_000) return 'Ого! Таких грошей навіть у нас немає'
+    if (v >= 100_000) return 'Опа, а це вже цікаво'
+    if (v >= 50_001) return '50 тисяч - це максемум'
+    if (v >= 50_000) return 'Це вже гроші'
+    if (v > 0 && v < 100) return 'Чого так мало?'
+    if (v == 0 ) return 'Мало коштів'
+    return null
+  }
+
+  function daysJoke(v: number): string | null {
+    if (v >= 90) return '🐢 Три місяці? Клієнт встигне переїхати двічі.'
+    if (v >= 30) return '📅 '
+    if (v >= 10) return 'А ви не поспішаєте'
+    if (v === 0) return 'Як це 0?'
+    return null
+  }
+
+  function onPriceBlur() {
+    if (typeof priceUah !== 'number') return
+    const joke = priceJoke(priceUah)
+    if (joke) toast(joke, { id: 'price-joke', duration: 3500 })
+  }
+
+  function onDaysBlur() {
+    if (typeof estimatedDays !== 'number') return
+    const joke = daysJoke(estimatedDays)
+    if (joke) toast(joke, { id: 'days-joke', duration: 3500 })
+  }
+
   const cardCls =
     'rounded-[26px] border border-border bg-card shadow-[0_20px_50px_-16px_rgba(0,0,0,0.1),0_4px_12px_-6px_rgba(0,0,0,0.04)]'
   const badgeBase =
@@ -112,7 +144,7 @@
     <!-- Back -->
     <button
       type="button"
-      onclick={() => goto('/jobs')}
+      onclick={() => goto('/dashboard/jobs')}
       class="inline-flex cursor-pointer items-center gap-1.5 self-start rounded-md text-[13.5px] font-medium text-muted-foreground transition-opacity hover:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
     >
       <ArrowLeft class="size-4" aria-hidden="true" /> До списку
@@ -235,7 +267,7 @@
           Замовник
         </p>
         <a
-          href="/client/{data.job.client.id}"
+          href="/dashboard/client/{data.job.client.id}"
           class="group flex items-center gap-3.5 rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           <Avatar class="size-11.5 shadow-[inset_0_1px_3px_rgba(0,0,0,0.06)]">
@@ -365,6 +397,7 @@
                     type="number"
                     inputmode="numeric"
                     bind:value={priceUah}
+                    onblur={onPriceBlur}
                     min={50}
                     max={500000}
                     placeholder="0"
@@ -392,6 +425,7 @@
                     type="number"
                     inputmode="numeric"
                     bind:value={estimatedDays}
+                    onblur={onDaysBlur}
                     min={1}
                     max={180}
                     placeholder="3"
@@ -460,10 +494,7 @@
                 >
                   {#if submitting}
                     <span class="pointer-events-none">Зачекайте…</span>
-                    <Spinner
-                      class="absolute right-4"
-                      aria-hidden="true"
-                    />
+                    <Spinner class="absolute right-4" aria-hidden="true" />
                   {:else}
                     <span
                       class="pointer-events-none inline-flex items-center gap-2.25"

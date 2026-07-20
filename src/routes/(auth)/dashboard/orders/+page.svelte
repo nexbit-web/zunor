@@ -64,7 +64,7 @@
     if (activeTab !== 'ACTIVE') params.set('status', activeTab)
 
     const qs = params.toString()
-    goto(qs ? `/orders?${qs}` : '/orders', {
+    goto(qs ? `/dashboard/orders?${qs}` : '/dashboard/orders', {
       keepFocus: true,
       noScroll: true,
     })
@@ -171,9 +171,9 @@
       {#if isClient}
         <button
           type="button"
-          onclick={() => goto('/orders/new')}
+          onclick={() => goto('/dashboard/jobs/new')}
           class="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold cursor-pointer transition-all hover:opacity-90 active:scale-95 shrink-0"
-          style="background-color: var(--foreground); color: var(--background)"
+          style="background-color: var(--primary); color: white"
         >
           <Plus class="size-4" strokeWidth={2.25} />
           Нове замовлення
@@ -309,7 +309,7 @@
             {#if isClient}
               <button
                 type="button"
-                onclick={() => goto('/orders/new')}
+                onclick={() => goto('/dashboard/jobs/new')}
                 class="inline-flex items-center gap-2 mt-5 px-5 py-2.5 rounded-full text-sm font-medium cursor-pointer transition-opacity hover:opacity-90"
                 style="background-color: var(--foreground); color: var(--background)"
               >
@@ -319,7 +319,7 @@
             {:else if isMaster}
               <button
                 type="button"
-                onclick={() => goto('/jobs')}
+                onclick={() => goto('/dashboard/jobs')}
                 class="inline-flex items-center gap-2 mt-5 px-5 py-2.5 rounded-full text-sm font-medium cursor-pointer transition-opacity hover:opacity-90"
                 style="background-color: var(--foreground); color: var(--background)"
               >

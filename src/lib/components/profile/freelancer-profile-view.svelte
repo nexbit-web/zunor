@@ -25,7 +25,7 @@
   import PhotoGallery from '$lib/components/photo-gallery.svelte'
   import { Button } from '../ui/button'
 
-  import { toast } from '$lib/stores/toast-store.svelte'
+  import toast from 'svelte-hot-french-toast'
 
   interface Props {
     user: ProfileData
@@ -166,7 +166,7 @@
   const primaryCategory = $derived(user.categories[0] ?? null)
 
   function goEdit(): void {
-    goto('/onboarding')
+    goto('/dashboard/onboarding')
   }
 </script>
 
