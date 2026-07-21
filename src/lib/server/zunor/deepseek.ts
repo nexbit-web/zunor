@@ -61,7 +61,7 @@ export async function chatCompletion(
       messages,
       tools,
       temperature: 0.7,
-      max_tokens: 600, // стеля витрат: відповіді агента короткі за визначенням
+      max_tokens: 1500, // стеля витрат: відповіді агента короткі за визначенням
       stream: false,
     }),
     signal: AbortSignal.timeout(TIMEOUT_MS),

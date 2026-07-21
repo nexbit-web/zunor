@@ -70,11 +70,10 @@
      focus-ring і фокусною рамкою інпутів (shadcn Input вже прив'язаний
      до --ring через focus-visible:border-ring focus-visible:ring-ring/50,
      тож інпути підхоплюють це без правок компонентів). ─── */
-  --primary: #3390ec;
+  --primary: #d97757;
   --primary-foreground: oklch(1 0 0);
-  /* Hover-стан для primary-кнопок і посилань — темніший відтінок акценту. */
-  --primary-hover: #2086ea;
-  --ring: #3390ec;
+  --primary-hover: #d3704f;
+  --ring: #d97757;
 
   /* Secondary/muted/accent — нейтральні, без кольору. */
   --secondary: oklch(0.97 0 0); /* #F4F4F5 */
@@ -165,10 +164,10 @@
   --popover: oklch(23% 0.002 107);
   --popover-foreground: oklch(100% 0 0);
 
-  --primary: #8774e1;
+  --primary: #d97757;
   --primary-foreground: oklch(1 0 0);
-  --primary-hover: #7863dc;
-  --ring: #8774e1;
+  --primary-hover: #d3704f;
+  --ring: #d97757;
 
   --secondary: oklch(27.2% 0.002 107);
   --secondary-foreground: oklch(90.95% 0.002 107);
@@ -323,6 +322,12 @@ html #nprogress .bar {
   background: var(--primary);
   height: 2.5px;
 }
+
+/* Светящийся «хвост» на переднем крае полосы — убираем */
+html #nprogress .peg {
+  display: none;
+}
+
 
 @media (max-width: 1023px) {
   main {
@@ -557,4 +562,3 @@ html #nprogress .bar {
     width: 100%;
   }
 }
-

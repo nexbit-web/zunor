@@ -6,7 +6,14 @@
   import { page } from '$app/state'
   import Footer from '$lib/components/footer/index.svelte'
 
-  const hiddenLayoutRoutes = ['/messages', '/terms', '/privacy', '/dashboard']
+  const hiddenLayoutRoutes = [
+    '/messages',
+    '/terms',
+    '/privacy',
+    '/dashboard',
+    '/user/login',
+    '/user/register',
+  ]
   const hideHeader = $derived(
     hiddenLayoutRoutes.some((route) => page.url.pathname.startsWith(route)),
   )

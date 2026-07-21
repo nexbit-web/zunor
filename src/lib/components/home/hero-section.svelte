@@ -158,7 +158,7 @@
               onclick={() => goToChat()}
               disabled={!input.trim()}
               aria-label="Надіслати"
-              class="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-foreground text-background transition disabled:cursor-not-allowed disabled:opacity-30"
+              class="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-primary text-white transition disabled:cursor-not-allowed disabled:opacity-30"
             >
               <ArrowUp size={16} aria-hidden="true" />
             </button>

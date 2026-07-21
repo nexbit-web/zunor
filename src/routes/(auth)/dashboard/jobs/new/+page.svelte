@@ -33,6 +33,7 @@
     ZunorResponse,
     ZunorClientMessage,
   } from '$lib/types/zunor'
+  import ThinkingLogo from '$lib/components/thinking-logo.svelte'
 
   // ─── AI-оформлення заявки ───
   // Діалог веде Zunor-агент через POST /api/zunor/chat (сервер → DeepSeek).
@@ -308,7 +309,8 @@
     ]
     await scrollToBottom()
 
-    const speed = 14
+    // Короткі відповіді друкуємо вдумливо, довгі — швидше, щоб не нудити.
+    const speed = text.length > 160 ? 6 : text.length > 80 ? 10 : 14
     for (let i = 1; i <= text.length; i++) {
       await sleep(speed)
       messages = messages.map((m) =>
@@ -792,7 +794,7 @@
                   uploading ||
                   (!input.trim() && !pendingPhotos.length)}
                 aria-label="Надіслати"
-                class="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-foreground text-background transition disabled:cursor-not-allowed disabled:opacity-30"
+                class="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-primary text-white transition disabled:cursor-not-allowed disabled:opacity-30"
               >
                 <ArrowUp size={16} aria-hidden="true" />
               </button>
@@ -959,11 +961,11 @@
                   onclick={() => confirmOrder(m.draft)}
                   disabled={submitting || uploading}
                   aria-busy={submitting}
-                  class="relative flex h-[50px] w-full cursor-pointer items-center justify-center rounded-[14px] bg-primary text-[15px] font-semibold tracking-[-0.01em] text-white transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+                  class="mt-1.5 inline-flex h-13.5 w-full items-center justify-center rounded-[16px] bg-primary text-[15.5px] font-semibold tracking-[-0.01em] text-primary-foreground transition hover:-translate-y-px hover:bg-primary-hover active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:translate-y-0 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
                 >
                   {#if submitting}
                     <Spinner
-                      class="absolute right-4 size-4 animate-spin"
+                      class="absolute right-4 animate-spin"
                       aria-hidden="true"
                     />
                     Зачекайте...
@@ -977,7 +979,7 @@
                   type="button"
                   onclick={requestEdit}
                   disabled={submitting}
-                  class="mt-3 block w-full cursor-pointer rounded-[14px] bg-transparent p-2 text-center text-[13.5px] font-medium text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary disabled:opacity-50"
+                  class="mt-3 block w-full cursor-pointer rounded-[14px] bg-transparent h-13.5 text-center text-[15.5px] font-medium text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary disabled:opacity-50"
                 >
                   Змінити деталі
                 </button>
@@ -1000,7 +1002,10 @@
             <div
               class="thinking-row flex items-center gap-2"
               in:fade={{ duration: 200 }}
+              role="status"
+              aria-live="polite"
             >
+              <ThinkingLogo size={20} />
               <span class="thinking-text">Thinking</span>
             </div>
           {/if}
@@ -1087,7 +1092,7 @@
                       uploading ||
                       (!input.trim() && !pendingPhotos.length)}
                     aria-label="Надіслати"
-                    class="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-foreground text-background transition disabled:cursor-not-allowed disabled:opacity-30"
+                    class="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-primary text-white transition disabled:cursor-not-allowed disabled:opacity-30"
                   >
                     <ArrowUp size={16} aria-hidden="true" />
                   </button>
