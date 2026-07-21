@@ -146,7 +146,7 @@
 
   const navItems: NavItem[] = [
     {
-      href: '/dashboard/jobs/new/ai',
+      href: '/dashboard/jobs/new',
       label: 'Головна',
       icon: HouseHeart,
       exact: true,
@@ -171,28 +171,28 @@
   const settingsActive = $derived(pathname.startsWith('/dashboard/settings'))
 
   // Один активный пункт — точное совпадение всегда в приоритете,
-// иначе побеждает самый длинный префикс. '/' на конце защищает
-// от ложного совпадения вида /dashboard/jobs vs /dashboard/jobsboard.
-const activeHref = $derived.by(() => {
-  const exactMatch = navItems.find(
-    (item) => item.exact && pathname === item.href,
-  )
-  if (exactMatch) return exactMatch.href
-
-  const prefixMatches = navItems
-    .filter(
-      (item) =>
-        !item.exact &&
-        (pathname === item.href || pathname.startsWith(item.href + '/')),
+  // иначе побеждает самый длинный префикс. '/' на конце защищает
+  // от ложного совпадения вида /dashboard/jobs vs /dashboard/jobsboard.
+  const activeHref = $derived.by(() => {
+    const exactMatch = navItems.find(
+      (item) => item.exact && pathname === item.href,
     )
-    .sort((a, b) => b.href.length - a.href.length)
+    if (exactMatch) return exactMatch.href
 
-  return prefixMatches[0]?.href ?? null
-})
+    const prefixMatches = navItems
+      .filter(
+        (item) =>
+          !item.exact &&
+          (pathname === item.href || pathname.startsWith(item.href + '/')),
+      )
+      .sort((a, b) => b.href.length - a.href.length)
 
-function isActive(item: NavItem): boolean {
-  return item.href === activeHref
-}
+    return prefixMatches[0]?.href ?? null
+  })
+
+  function isActive(item: NavItem): boolean {
+    return item.href === activeHref
+  }
 
   function badgeFor(href: string): number {
     if (href === '/dashboard/messages') return messageCount
@@ -210,8 +210,10 @@ function isActive(item: NavItem): boolean {
     chatStore.unsubscribeAll()
     disconnectPusher()
     await signOut()
-    await invalidateAll()
-    goto('/')
+    // Повне перезавантаження документа замість SPA-переходу:
+    // скидає ВЕСЬ клієнтський стан (стори, чати, page.data) і не лишає
+    // "живих" сторінок дашборду, до яких можна повернутись кнопкою назад.
+    window.location.href = '/'
   }
 </script>
 
@@ -232,7 +234,9 @@ function isActive(item: NavItem): boolean {
             ? 'color: #ffff; background-color: var(--primary);'
             : 'color: var(--sidebar-foreground);'}
         >
-        <span class="nav-icon relative flex size-8.5 shrink-0 items-center justify-center">
+          <span
+            class="nav-icon relative flex size-8.5 shrink-0 items-center justify-center"
+          >
             <item.icon size={17} strokeWidth={1.75} aria-hidden="true" />
             {#if badge > 0 && collapsed}
               <span
@@ -384,7 +388,9 @@ function isActive(item: NavItem): boolean {
                 ? 'color: var(--accent-foreground); background-color: var(--accent);'
                 : 'color: var(--sidebar-foreground);'}
             >
-              <span class="nav-icon flex size-8 shrink-0 items-center justify-center">
+              <span
+                class="nav-icon flex size-8 shrink-0 items-center justify-center"
+              >
                 <Settings size={17} strokeWidth={1.75} aria-hidden="true" />
               </span>
               {#if !collapsed}
@@ -505,7 +511,7 @@ function isActive(item: NavItem): boolean {
   /* Inline SVG резервирует место под "хвостики" текста как обычный текст,
    из-за чего внутри flex items-center justify-center иконка съезжает
    на пару пикселей. display:block убирает этот резерв. */
-.nav-icon :global(svg) {
-  display: block;
-}
+  .nav-icon :global(svg) {
+    display: block;
+  }
 </style>

@@ -109,7 +109,7 @@
     if (v >= 50_001) return '50 тисяч - це максемум'
     if (v >= 50_000) return 'Це вже гроші'
     if (v > 0 && v < 100) return 'Чого так мало?'
-    if (v == 0 ) return 'Мало коштів'
+    if (v == 0) return 'Мало коштів'
     return null
   }
 
@@ -124,12 +124,14 @@
   function onPriceBlur() {
     if (typeof priceUah !== 'number') return
     const joke = priceJoke(priceUah)
+    toast.dismiss('price-joke')
     if (joke) toast(joke, { id: 'price-joke', duration: 3500 })
   }
 
   function onDaysBlur() {
     if (typeof estimatedDays !== 'number') return
     const joke = daysJoke(estimatedDays)
+    toast.dismiss('days-joke')
     if (joke) toast(joke, { id: 'days-joke', duration: 3500 })
   }
 
