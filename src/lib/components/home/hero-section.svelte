@@ -66,7 +66,7 @@
   function goToChat(text = input) {
     const value = text.trim()
     if (!value) return
-    goto(`/jobs/new/ai?q=${encodeURIComponent(value)}`)
+    goto(`/user/login`)
   }
 
   function handleHeroKeydown(e: KeyboardEvent) {
@@ -81,7 +81,6 @@
   class="relative -mt-14 flex min-h-screen w-full flex-col items-center justify-center overflow-hidden bg-background px-4 pt-14 sm:px-8"
   aria-label="Головний екран"
 >
-
   <!-- цветной аврора-слой: мягкие размытые пятна под сеткой -->
   <div
     class="pointer-events-none absolute inset-0 overflow-hidden"
@@ -186,10 +185,26 @@
     filter: blur(90px);
     opacity: 0.55;
     background:
-      radial-gradient(38% 30% at 22% 18%, rgba(92, 126, 244, 0.55), transparent 70%),
-      radial-gradient(34% 26% at 68% 8%,  rgba(249, 128, 222, 0.45), transparent 70%),
-      radial-gradient(42% 32% at 52% 46%, rgba(252, 35, 106, 0.35), transparent 70%),
-      radial-gradient(36% 26% at 80% 60%, rgba(254, 99, 39, 0.30), transparent 70%);
+      radial-gradient(
+        38% 30% at 22% 18%,
+        rgba(92, 126, 244, 0.55),
+        transparent 70%
+      ),
+      radial-gradient(
+        34% 26% at 68% 8%,
+        rgba(249, 128, 222, 0.45),
+        transparent 70%
+      ),
+      radial-gradient(
+        42% 32% at 52% 46%,
+        rgba(252, 35, 106, 0.35),
+        transparent 70%
+      ),
+      radial-gradient(
+        36% 26% at 80% 60%,
+        rgba(254, 99, 39, 0.3),
+        transparent 70%
+      );
     animation: aurora-drift 22s ease-in-out infinite alternate;
   }
 

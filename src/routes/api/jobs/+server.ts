@@ -7,6 +7,7 @@ import { dispatchJob } from '$lib/server/dispatch'
 import { CATEGORY_SLUG } from '$lib/categories/cleaning/presets'
 import { validateCleaningMetadata } from '$lib/categories/cleaning/validate'
 import { generateTitle } from '$lib/categories/cleaning/title-gen'
+import { sanitizeJobTitle, sanitizeJobDescription } from '$lib/server/job-copy'
 import type { RequestHandler } from './$types'
 
 const JOB_EXPIRES_DAYS = 7
@@ -143,15 +144,20 @@ export const POST: RequestHandler = async ({ request }) => {
   }
   const metadata = validation.clean
 
-  const title = generateTitle(metadata)
+  // AI-потік (Zunor) передає title/description; ручна форма — ні.
+  // Обидва санітизуються як недовірений ввід; фолбек — шаблонна генерація.
+  const title = sanitizeJobTitle(body.title) ?? generateTitle(metadata)
+  const aiDescription = sanitizeJobDescription(body.description)
 
   const note =
     typeof body.note === 'string' ? body.note.trim().slice(0, 1000) : ''
 
+  // Приймаємо лише наші Cloudinary-URL: чужі посилання у стрічці майстрів —
+  // це і фішинг-вектор, і витік IP майстрів на сторонній сервер.
+  const isOurUpload = (s: unknown): s is string =>
+    typeof s === 'string' && s.startsWith('https://res.cloudinary.com/')
   const attachments = Array.isArray(body.attachments)
-    ? body.attachments
-        .filter((s: unknown) => typeof s === 'string')
-        .slice(0, 10)
+    ? body.attachments.filter(isOurUpload).slice(0, 10)
     : []
   const attachmentsPublicIds = Array.isArray(body.attachmentsPublicIds)
     ? body.attachmentsPublicIds
@@ -188,7 +194,7 @@ export const POST: RequestHandler = async ({ request }) => {
       category: CATEGORY_SLUG,
       city,
       title,
-      description: note || null,
+      description: aiDescription ?? (note || null),
       metadata: metadata as unknown as object,
       currency: 'UAH',
       attachments,

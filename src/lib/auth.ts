@@ -4,6 +4,8 @@ import { BETTER_AUTH_URL, BETTER_AUTH_SECRET } from '$env/static/private'
 import { dev } from '$app/environment'
 import { prisma } from './prisma'
 import { sendResetPasswordEmail } from './email'
+import { sveltekitCookies } from 'better-auth/svelte-kit'
+import { getRequestEvent } from '$app/server'
 
 // ─── Better-auth ───
 export const auth = betterAuth({
@@ -102,6 +104,13 @@ export const auth = betterAuth({
       },
     },
   },
+
+  // ─── Plugins ───
+  // sveltekitCookies: без нього Set-Cookie від server-side викликів
+  // (getSession у hooks оновлює cookie-cache) не потрапляє у відповідь.
+  // Вимога пакета: має бути ОСТАННІМ елементом у масиві plugins
+  // (зараз він єдиний — умова виконана автоматично).
+  plugins: [sveltekitCookies(getRequestEvent)],
 })
 
 export type Session = typeof auth.$Infer.Session

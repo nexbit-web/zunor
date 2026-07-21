@@ -8,6 +8,8 @@
   import { Button } from './ui/button'
   import { Spinner } from './ui/spinner'
   import toast from 'svelte-hot-french-toast'
+  import { page } from '$app/state'
+  import { safeRedirectTarget } from '$lib/utils/redirect'
 
   let { class: className, ...restProps }: HTMLAttributes<HTMLDivElement> =
     $props()
@@ -59,7 +61,9 @@
         return
       }
       await invalidateAll()
-      goto('/dashboard')
+      // Гість, якого guard відправив на логін, повертається туди, куди йшов.
+      // safeRedirectTarget відсікає open-redirect (//evil.com) і auth-петлі.
+      goto(safeRedirectTarget(page.url.searchParams.get('redirectTo')))
 
       const name = data?.user?.name ?? ''
       toast(name ? `Вітаємо, ${name}!` : 'Вітаємо!', {

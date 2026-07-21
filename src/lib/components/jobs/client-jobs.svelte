@@ -218,7 +218,7 @@
 <!-- List -->
 {#if filtered.length === 0}
   <div
-    class="rounded-2xl px-6 py-16 text-center"
+    class="rounded-3xl px-6 py-16 text-center"
     style="background-color: var(--card); border: 1px solid var(--border)"
   >
     <div
@@ -251,7 +251,7 @@
     {#each filtered as job (job.id)}
       <a
         href={`/dashboard/jobs/${job.id}`}
-        class="block rounded-2xl p-5 transition-all hover:-translate-y-0.5 group"
+        class="block rounded-3xl p-5 transition-all hover:-translate-y-0.5 group"
         style="background-color: var(--card); border: 1px solid var(--border)"
       >
         <div class="flex items-center justify-between gap-2 mb-2.5">

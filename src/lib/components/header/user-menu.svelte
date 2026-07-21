@@ -180,7 +180,8 @@
   // ─── Navigation ───
   function notifLink(n: Notification): string {
     if (n.orderId) return `/dashboard/orders/${n.orderId}`
-    if (n.type === 'NEW_PROPOSAL' && n.jobId) return `/dashboard/jobs/${n.jobId}`
+    if (n.type === 'NEW_PROPOSAL' && n.jobId)
+      return `/dashboard/jobs/${n.jobId}`
     if (n.jobId) return `/dashboard/jobs/${n.jobId}`
     if (n.chatId) return `/dashboard/messages/${n.chatId}`
     return '/dashboard/notifications'
@@ -264,8 +265,10 @@
     chatStore.unsubscribeAll()
     disconnectPusher()
     await signOut()
-    await invalidateAll()
-    goto('/')
+    // Повне перезавантаження документа замість SPA-переходу:
+    // скидає ВЕСЬ клієнтський стан (стори, чати, page.data) і не лишає
+    // "живих" сторінок дашборду, до яких можна повернутись кнопкою назад.
+    window.location.href = '/'
   }
 </script>
 
