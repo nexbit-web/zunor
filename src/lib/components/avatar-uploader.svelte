@@ -98,7 +98,7 @@
     type="button"
     onclick={() => fileInput?.click()}
     disabled={uploading}
-    class="relative group rounded-full cursor-pointer transition-transform hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed"
+    class="relative group rounded-xl cursor-pointer transition-transform hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed"
     aria-label="Завантажити аватар"
   >
     <Avatar.Root

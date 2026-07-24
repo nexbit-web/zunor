@@ -335,8 +335,7 @@
                         style:left={cursor1Pos.left}
                         style:top={cursor1Pos.top}
                         style:opacity={cursor1Pos === S1_EXIT ? 0 : 1}
-                        style:transition-timing-function="cubic-bezier(0.34,
-                        1.56, 0.64, 1)"
+                        style:transition-timing-function="cubic-bezier(0.34,1.56, 0.64, 1)"
                         aria-hidden="true"
                       >
                         {#if cursor1Pressed}
@@ -436,8 +435,7 @@
                           style:left={cursor2Pos.left}
                           style:top={cursor2Pos.top}
                           style:opacity={cursor2Pos === S2_EXIT ? 0 : 1}
-                          style:transition-timing-function="cubic-bezier(0.34,
-                          1.56, 0.64, 1)"
+                          style:transition-timing-function="cubic-bezier(0.34,1.56, 0.64, 1)"
                           aria-hidden="true"
                         >
                           {#if cursor2Pressed}

@@ -454,7 +454,7 @@
           Вже є акаунт?
           <a
             href="/user/login"
-            class="rounded-sm font-semibold text-primary underline-offset-[3px] hover:text-primary-hover hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            class="rounded-xl font-semibold text-primary underline-offset-[3px] hover:text-primary-hover hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             Увійти
           </a>
@@ -683,7 +683,7 @@
                 {/snippet}
               </Popover.Trigger>
               <Popover.Content
-                class="w-[--bits-popover-anchor-width] rounded-2xl p-0"
+                class="w-[--bits-popover-anchor-width] rounded-xl p-0"
                 align="start"
                 sideOffset={6}
               >
@@ -701,7 +701,7 @@
                         <Command.Item
                           value={c.name}
                           onSelect={() => selectCity(c.slug)}
-                          class="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm"
+                          class="flex cursor-pointer items-center gap-2 rounded-xl px-3 py-2 text-sm"
                         >
                           <div
                             class="flex w-4 shrink-0 items-center justify-center"
@@ -813,10 +813,10 @@
           <!-- Індикатор сили пароля -->
           {#if password.length > 0}
             <div class="-mt-1 flex items-center gap-2.5">
-              <div class="h-1.25 flex-1 overflow-hidden rounded-full bg-muted">
+              <div class="h-1.25 flex-1 overflow-hidden rounded-xl bg-muted">
                 <div
                   class={cn(
-                    'h-full rounded-full transition-all duration-300',
+                    'h-full rounded-xl transition-all duration-300',
                     pwStrength.score === 0
                       ? 'bg-destructive'
                       : pwStrength.score === 1
@@ -891,7 +891,7 @@
           <button
             type="button"
             onclick={backToRole}
-            class="w-full rounded-sm p-1 text-center text-[12.5px] text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            class="w-full rounded-xl p-1 text-center text-[12.5px] text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             ← Змінити роль
           </button>
@@ -971,7 +971,7 @@
                 type="button"
                 onclick={handleResend}
                 disabled={loading}
-                class="rounded-sm text-[12.5px] font-semibold text-primary hover:text-primary-hover hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50"
+                class="rounded-xl text-[12.5px] font-semibold text-primary hover:text-primary-hover hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50"
               >
                 Надіслати код повторно
               </button>
@@ -981,7 +981,7 @@
           <button
             type="button"
             onclick={backToForm}
-            class="w-full rounded-sm p-1 text-center text-[12.5px] text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            class="w-full rounded-xl p-1 text-center text-[12.5px] text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
             ← Змінити email
           </button>

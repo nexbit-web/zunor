@@ -1,41 +1,38 @@
-<!-- src/routes/+error.svelte
-     Корневой error boundary. Рендерится всегда, когда:
-       - роут не совпал (автоматический 404), либо
-       - error(status, ...) всплыл сюда из любого load/handler.
-     Отрисовывается внутри корневого +layout.svelte. -->
+<!-- src/routes/+error.svelte -->
 <script lang="ts">
   import { page } from '$app/state'
+  import Ant404 from '$lib/components/Ant404.svelte'
 
   const isNotFound = $derived(page.status === 404)
 
-  // Только generic-текст для пользователя. page.error — App.Error | null,
-  // его message для 5xx намеренно не показываем (может утечь деталь).
   const message = $derived(
     isNotFound
-      ? 'Такой страницы не существует или она была перемещена.'
-      : 'Что-то пошло не так. Обновите страницу или вернитесь позже.',
+      ? 'Такої сторінки не існує або її було переміщено.'
+      : 'Щось пішло не так. Оновіть сторінку або поверніться пізніше.',
   )
 </script>
 
 <svelte:head>
-  <title>{page.status} — {isNotFound ? 'Страница не найдена' : 'Ошибка'}</title>
+  <title
+    >{page.status} — {isNotFound ? 'Сторінку не знайдено' : 'Помилка'}</title
+  >
   <meta name="robots" content="noindex" />
 </svelte:head>
 
 <main
-  class="mx-auto flex min-h-svh max-w-md flex-col items-center justify-center gap-4 px-6 text-center"
+  class="mx-auto flex min-h-svh max-w-md flex-col items-center justify-center gap-4 px-6 py-8 text-center lg:max-w-lg"
 >
-  <p class="text-6xl font-bold tabular-nums text-gray-400" aria-hidden="true">
-    {page.status}
-  </p>
-  <h1 class="text-2xl font-semibold text-gray-900 dark:text-gray-100">
-    {isNotFound ? 'Страница не найдена' : 'Ошибка'}
+  <Ant404 class="w-51 sm:w-68 md:w-85" />
+
+  <h1 class="sr-only">
+    {page.status} — {isNotFound ? 'Сторінку не знайдено' : 'Помилка'}
   </h1>
-  <p class="text-gray-600 dark:text-gray-400">{message}</p>
+
+  <p class="text-(--color-text-500) dark:text-gray-400">{message}</p>
   <a
     href="/"
-    class="mt-2 rounded-md bg-gray-900 px-4 py-2 font-medium text-white transition-colors hover:bg-gray-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-900 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-300"
+    class="mt-2 rounded-xl bg-primary px-4 py-2 font-medium text-white transition-colors hover:bg-primary-hover"
   >
-    На главную
+    На головну
   </a>
 </main>

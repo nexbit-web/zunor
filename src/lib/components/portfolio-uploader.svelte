@@ -144,7 +144,7 @@
           type="button"
           onclick={() => remove(i)}
           disabled={removingIdx === i}
-          class="absolute top-2 right-2 flex size-7 cursor-pointer items-center justify-center rounded-full border border-white/20 bg-black/60 backdrop-blur-md transition-transform duration-200 hover:scale-110 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-60"
+          class="absolute top-2 right-2 flex size-7 cursor-pointer items-center justify-center rounded-xl border border-white/20 bg-black/60 backdrop-blur-md transition-transform duration-200 hover:scale-110 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-60"
           aria-label="Видалити фото {i + 1}"
         >
           {#if removingIdx === i}
@@ -165,7 +165,7 @@
 
         <!-- порядковий бейдж — завжди видимий -->
         <span
-          class="absolute bottom-2 left-2 rounded-md bg-black/55 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-white/90 backdrop-blur-sm"
+          class="absolute bottom-2 left-2 rounded-xl bg-black/55 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-white/90 backdrop-blur-sm"
         >
           {i + 1} / {maxItems}
         </span>
@@ -183,14 +183,14 @@
       >
         {#if uploading}
           <span
-            class="size-5.5 animate-spin rounded-full border-[2.5px] border-foreground/15 border-t-foreground"
+            class="size-5.5 animate-spin rounded-xl border-[2.5px] border-foreground/15 border-t-foreground"
           ></span>
           <span class="text-[11.5px] font-medium text-muted-foreground"
             >Завантаження...</span
           >
         {:else}
           <span
-            class="flex size-10.5 items-center justify-center rounded-full bg-card text-muted-foreground shadow-sm transition-transform duration-200 group-hover:scale-110"
+            class="flex size-10.5 items-center justify-center rounded-xl bg-card text-muted-foreground shadow-sm transition-transform duration-200 group-hover:scale-110"
           >
             <PlusIcon class="size-5" aria-hidden="true" />
           </span>
@@ -230,7 +230,7 @@
         {#each Array(maxItems) as _, i (i)}
           <div
             class={[
-              'h-1 rounded-full transition-all duration-300',
+              'h-1 rounded-xl transition-all duration-300',
               i < images.length ? 'bg-foreground' : 'bg-foreground/15',
             ]}
             style:width={i < images.length ? '16px' : '6px'}

@@ -58,7 +58,7 @@
   <Sidebar />
 
   <div
-    class="flex min-w-0 flex-1 flex-col rounded-2xl bg-background"
+    class="flex min-w-0 flex-1 flex-col rounded-xl bg-background"
     class:min-h-0={isChat}
     class:overflow-hidden={isChat}
   >

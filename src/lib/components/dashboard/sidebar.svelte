@@ -1,7 +1,6 @@
 <!-- src/lib/components/dashboard/sidebar.svelte -->
 <script lang="ts">
   import { page } from '$app/state'
-  import { goto } from '$app/navigation'
   import { browser } from '$app/environment'
   import { Tween } from 'svelte/motion'
   import { cubicInOut } from 'svelte/easing'
@@ -19,9 +18,7 @@
   } from 'lucide-svelte'
   import * as Tooltip from '$lib/components/ui/tooltip/index.js'
   import * as Avatar from '$lib/components/ui/avatar/index.js'
-  import Logo from '$lib/components/header/logo.svelte'
   import { signOut } from '$lib/auth-client'
-  import { invalidateAll } from '$app/navigation'
   import { onMount, onDestroy } from 'svelte'
   import { chatStore } from '$lib/stores/chat-store.svelte'
   import { getPusher, disconnectPusher } from '$lib/pusher-client'
@@ -229,10 +226,10 @@
           href={item.href}
           aria-current={active ? 'page' : undefined}
           aria-label={badge > 0 ? `${item.label} — ${badge}` : item.label}
-          class="row-item relative flex h-8 w-full shrink-0 items-center gap-2 rounded-lg pr-2 outline-none transition-colors"
+          class="row-item   relative flex h-8 w-full shrink-0 items-center gap-2 rounded-lg pr-2 outline-none transition-colors"
           style={active
             ? 'color: #ffff; background-color: var(--primary);'
-            : 'color: var(--sidebar-foreground);'}
+            : 'color: var(--color-text);'}
         >
           <span
             class="nav-icon relative flex size-8.5 shrink-0 items-center justify-center"
@@ -240,7 +237,7 @@
             <item.icon size={17} strokeWidth={1.75} aria-hidden="true" />
             {#if badge > 0 && collapsed}
               <span
-                class="absolute -top-0.5 -right-0.5 flex h-[15px] min-w-[15px] items-center justify-center rounded-full px-1 text-[9px] leading-none font-bold text-white ring-2"
+                class="absolute -top-0.5 -right-0.5 flex h-3.75 min-w-3.75 items-center justify-center rounded-full px-1 text-[9px] leading-none font-bold text-white ring-2"
                 style="background-color: {badgeColor}; --tw-ring-color: var(--sidebar-background, var(--background));"
                 aria-hidden="true"
               >

@@ -103,7 +103,7 @@
 
   {#if error}
     <p
-      class="text-xs mb-3 rounded-lg px-3 py-2"
+      class="text-xs mb-3 rounded-xl px-3 py-2"
       style="background-color: color-mix(in srgb, var(--destructive) 10%, transparent);
              color: var(--destructive)"
     >

@@ -31,14 +31,14 @@ export interface ServiceOption {
   icon: string
 }
 
-export const SERVICES: ServiceOption[] = [
+export const SERVICES = [
   { key: 'standard', label: 'Звичайне', icon: 'Sparkle' },
   { key: 'deep', label: 'Генеральне', icon: 'Sparkles' },
   { key: 'post-renovation', label: 'Після ремонту', icon: 'Hammer' },
   { key: 'windows', label: 'Миття вікон', icon: 'GlassWater' },
   { key: 'sofa', label: 'Хімчистка', icon: 'Sofa' },
   { key: 'regular', label: 'Регулярне', icon: 'Repeat' },
-]
+] as const satisfies readonly ServiceOption[]
 
 export function serviceLabel(key: string): string {
   return SERVICES.find((s) => s.key === key)?.label ?? key
@@ -87,7 +87,7 @@ export function elevatorLabel(key: string): string {
   return ELEVATOR_OPTIONS.find((o) => o.key === key)?.label ?? key
 }
 
-// Балкон (для вікон)
+// Балкон (вікна: тип скління; генеральне прибирання квартири: чи прибирати балкон)
 export const BALCONY_OPTIONS = [
   { key: 'none', label: 'Немає' },
   { key: 'standard', label: 'Звичайний' },
