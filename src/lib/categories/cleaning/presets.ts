@@ -87,7 +87,7 @@ export function elevatorLabel(key: string): string {
   return ELEVATOR_OPTIONS.find((o) => o.key === key)?.label ?? key
 }
 
-// Балкон (для вікон)
+// Балкон (вікна: тип скління; генеральне прибирання квартири: чи прибирати балкон)
 export const BALCONY_OPTIONS = [
   { key: 'none', label: 'Немає' },
   { key: 'standard', label: 'Звичайний' },

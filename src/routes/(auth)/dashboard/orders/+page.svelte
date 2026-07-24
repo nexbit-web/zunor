@@ -172,7 +172,7 @@
         <button
           type="button"
           onclick={() => goto('/dashboard/jobs/new')}
-          class="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold cursor-pointer transition-all hover:opacity-90 active:scale-95 shrink-0"
+          class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold cursor-pointer transition-all hover:opacity-90 active:scale-95 shrink-0"
           style="background-color: var(--primary); color: white"
         >
           <Plus class="size-4" strokeWidth={2.25} />
@@ -193,7 +193,7 @@
         Роль
       </span>
       <div
-        class="inline-flex rounded-full p-0.5 gap-0.5"
+        class="inline-flex rounded-xl p-0.5 gap-0.5"
         style="background-color: var(--muted); border: 1px solid var(--border)"
         role="radiogroup"
         aria-label="Фільтр за роллю"
@@ -205,7 +205,7 @@
             onclick={() => setRole(opt.value)}
             role="radio"
             aria-checked={isActive}
-            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium cursor-pointer transition-all"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium cursor-pointer transition-all"
             style="background-color: {isActive
               ? 'var(--background)'
               : 'transparent'};
@@ -269,7 +269,7 @@
           style="background-color: var(--card); border: 1px solid var(--border)"
         >
           <div
-            class="size-14 rounded-2xl mx-auto mb-4 flex items-center justify-center"
+            class="size-14 rounded-xl mx-auto mb-4 flex items-center justify-center"
             style="background-color: var(--muted)"
           >
             <Briefcase
@@ -310,8 +310,8 @@
               <button
                 type="button"
                 onclick={() => goto('/dashboard/jobs/new')}
-                class="inline-flex items-center gap-2 mt-5 px-5 py-2.5 rounded-full text-sm font-medium cursor-pointer transition-opacity hover:opacity-90"
-                style="background-color: var(--foreground); color: var(--background)"
+                class="inline-flex items-center gap-2 mt-5 px-5 py-2.5 rounded-xl text-sm font-medium   hover:bg-primary-hover"
+                style="background-color: var(--primary); color: white"
               >
                 <Plus class="size-4" strokeWidth={2.25} />
                 Створити заявку
@@ -320,8 +320,8 @@
               <button
                 type="button"
                 onclick={() => goto('/dashboard/jobs')}
-                class="inline-flex items-center gap-2 mt-5 px-5 py-2.5 rounded-full text-sm font-medium cursor-pointer transition-opacity hover:opacity-90"
-                style="background-color: var(--foreground); color: var(--background)"
+                class="inline-flex items-center gap-2 mt-5 px-5 py-2.5 rounded-xl text-sm font-medium   hover:bg-primary-hover"
+                style="background-color: var(--primary); color: white"
               >
                 <Briefcase class="size-4" strokeWidth={2.25} />
                 Знайти роботу

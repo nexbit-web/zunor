@@ -13,6 +13,22 @@ function norm(s: string): string {
   return s.toLowerCase().replace(/[’'`ʼ]/g, "'")
 }
 
+// Збіг лише на ПОЧАТКУ слова: needle не може стояти всередині іншого
+// слова ('вітрин' не спрацює у вигаданому '...повітрин...').
+// Випадок, коли needle — початок ДОВШОГО слова ('стіл' у 'стільки'),
+// цим не ловиться — такі синоніми прибрані з SERVICE_SYNONYMS.
+function findNeedle(text: string, needle: string): number {
+  let from = 0
+  while (from <= text.length - needle.length) {
+    const at = text.indexOf(needle, from)
+    if (at === -1) return -1
+    const prev = at === 0 ? '' : text[at - 1]!
+    if (at === 0 || !/[a-zа-яіїєґ']/.test(prev)) return at
+    from = at + 1
+  }
+  return -1
+}
+
 const TRIGGERS: ReadonlyArray<{ key: ServiceKey; needles: readonly string[] }> =
   SERVICES.map((s) => ({
     key: s.key,
@@ -33,7 +49,7 @@ export function detectActiveService(
     for (const t of TRIGGERS) {
       for (const needle of t.needles) {
         if (!needle) continue
-        const at = text.indexOf(needle)
+        const at = findNeedle(text, needle)
         if (at !== -1 && (best === null || at < best.at)) {
           best = { key: t.key, at }
         }

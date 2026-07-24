@@ -176,7 +176,7 @@
     </div>
     <Button
       onclick={() => goto('/dashboard/jobs/new')}
-      class="rounded-full gap-2 shrink-0"
+      class="rounded-xl gap-2 shrink-0"
     >
       <Plus class="size-4" strokeWidth={2.25} />
       Нова заявка
@@ -240,7 +240,7 @@
         : 'Спробуйте інший фільтр'}
     </p>
     {#if counts.all === 0}
-      <Button onclick={() => goto('/dashboard/jobs/new')} class="mt-5 rounded-full gap-2">
+      <Button onclick={() => goto('/dashboard/jobs/new')} class="mt-5 rounded-xl gap-2">
         <Plus class="size-4" />
         Створити заявку
       </Button>
@@ -371,3 +371,6 @@
     border-radius: 2px;
   }
 </style>
+
+
+

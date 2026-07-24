@@ -137,7 +137,7 @@
 
 {#if error}
   <div
-    class="flex items-center gap-2 mt-3 p-3 rounded-lg text-sm"
+    class="flex items-center gap-2 mt-3 p-3 rounded-xl text-sm"
     style="background-color: var(--destructive-foreground); color: var(--destructive)"
   >
     <AlertCircle class="size-4 shrink-0" />

@@ -53,12 +53,16 @@
   --bg-header: #ffffff;
 
   /* ─── Монохромна база: фон/текст/картки/бордери ─── */
-  --background: #fcfbf8; /* #FFFFFF */
+  --background: #f9f9f7; /* #FFFFFF */
   --foreground: oklch(0.145 0 0); /* #0A0A0A */
 
-  --card: oklch(1 0 0);
+  --card: #ffffff;
   --card-foreground: oklch(0.145 0 0);
-  --dashboard: #fafafa;
+  --dashboard: #ffffff;
+
+  /* Колір тексту */
+  --color-text: #131313;
+  --color-text-500: #7b7974;
 
   --popover: oklch(1 0 0);
   /* Було помилково #3390ec — увесь текст у попап-меню ставав синім. Фікс. */
@@ -79,7 +83,7 @@
   --secondary: oklch(0.97 0 0); /* #F4F4F5 */
   --secondary-foreground: oklch(0.145 0 0);
 
-  --muted: #fafafa;
+  --muted: #ececea;
   --muted-foreground: oklch(0.55 0 0); /* #71717A */
 
   --accent: oklch(0.96 0 0);
@@ -89,7 +93,7 @@
 
   /* Бордери в звичайному стані лишаються нейтральними — синім стає
      тільки фокус (через --ring), не дефолтний стан поля. */
-  --border: #e6e6e2; /* #E4E4E7 */
+  --border: #dfdfdd; /* #E4E4E7 */
   --input: oklch(0.92 0 0);
 
   --chart-1: oklch(0.145 0 0);
@@ -154,9 +158,13 @@
   --background: #1d1d1c;
   --foreground: oklch(100% 0 0);
 
-  --card: #272726;
+  --card: #2c2c2a;
   --card-foreground: oklch(100% 0 0);
-  --dashboard: #0d0d0c;
+  --dashboard: #2c2c2a;
+
+  /* Колір тексту */
+  --color-text: #f9f9f7;
+  --color-text-500: #7b7974;
 
   --bg-translucent: lab(49.8943% -0.875205 3.29613/0.16);
   --fg-primary: lab(100% 0 0);
@@ -167,12 +175,12 @@
   --primary: #d97757;
   --primary-foreground: oklch(1 0 0);
   --primary-hover: #d3704f;
-  --ring: #d97757;
+  --ring: #c6613f;
 
   --secondary: oklch(27.2% 0.002 107);
   --secondary-foreground: oklch(90.95% 0.002 107);
 
-  --muted: #212120;
+  --muted: #3f3f3d;
   --muted-foreground: oklch(72.34% 0.002 107);
 
   --accent: oklch(27.2% 0.002 107);
@@ -327,7 +335,6 @@ html #nprogress .bar {
 html #nprogress .peg {
   display: none;
 }
-
 
 @media (max-width: 1023px) {
   main {

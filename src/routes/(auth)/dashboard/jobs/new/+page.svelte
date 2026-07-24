@@ -4,7 +4,6 @@
   import ArrowDown from '@lucide/svelte/icons/arrow-down'
   import Check from '@lucide/svelte/icons/check'
   import Copy from '@lucide/svelte/icons/copy'
-  import Pencil from '@lucide/svelte/icons/pencil'
   import { fly, fade, scale } from 'svelte/transition'
   import { quintOut } from 'svelte/easing'
   import { page } from '$app/state'
@@ -34,6 +33,8 @@
     ZunorClientMessage,
   } from '$lib/types/zunor'
   import ThinkingLogo from '$lib/components/thinking-logo.svelte'
+  import toast from 'svelte-hot-french-toast'
+  import MessageBody from '$lib/components/zunor/MessageBody.svelte'
 
   // ─── AI-оформлення заявки ───
   // Діалог веде Zunor-агент через POST /api/zunor/chat (сервер → DeepSeek).
@@ -90,7 +91,7 @@
     photosUnlocked || messages.some((m) => m.role === 'summary'),
   )
   // Фото-стадія: Zunor саме зараз пропонує фото → пульсуємо кнопкою «+»
-  let photoStage = $derived(chips.includes('Додати фото'))
+  let photoStage = $derived(chips.some(isAddPhotoChip))
   // Іконки рядків summary — ті самі імена, що віддає describeJob
   const ROW_ICONS: Record<string, typeof ClipboardCheck> = {
     Home,
@@ -108,8 +109,16 @@
     return (name && ROW_ICONS[name]) || ClipboardCheck
   }
 
-  // Hero-інпут росте вище, ніж чатовий, і лише потім зʼявляється скрол
-  let inputMaxH = $derived(started ? 160 : 300)
+  // Чіпси приходять мовою клієнта («Додати фото» / «Добавить фото»),
+  // тому порівнюємо за змістом, а не за точним рядком.
+  // «без» відсікає «Продовжити без фото».
+  function isAddPhotoChip(label: string): boolean {
+    const s = label.toLowerCase()
+    return s.includes('фото') && !s.includes('без')
+  }
+
+  // Hero росте вище (більше місця на екрані), чатовий — до 260px, далі скрол
+  let inputMaxH = $derived(started ? 260 : 300)
 
   const PHOTOS_LOCKED_HINT =
     'Фото можна буде додати, коли Zunor сформує заявку — спочатку розкажи, що прибрати'
@@ -173,7 +182,7 @@
       try {
         const photo = await uploadOne(file)
         pendingPhotos = [...pendingPhotos, photo]
-        await pinIfAtBottom() // панель інпуту виросла на висоту превʼю
+        updateSpacer()
       } catch (err) {
         if (dev) console.error('[zunor:upload]', err)
         uploadError =
@@ -249,14 +258,6 @@
     }
   })
 
-  // ─── Скрол ───
-  async function scrollToBottom() {
-    await tick()
-    scrollEl?.scrollTo({ top: scrollEl.scrollHeight, behavior: 'smooth' })
-    setTimeout(handleScroll, 60)
-    setTimeout(handleScroll, 400)
-  }
-
   // bind:clientHeight оновлюється через ResizeObserver, НЕ синхронно з tick():
   // після зміни контенту панелі чекаємо подвійний rAF, і лише тоді скролимо —
   // і тільки якщо юзер і так був біля низу.
@@ -266,20 +267,93 @@
     )
   }
 
-  async function pinIfAtBottom() {
+  // Надіслане повідомлення стає під верх вьюпорта і ЛИШАЄТЬСЯ там: відповідь
+  // росте вниз, ми не женемося за низом. Спейсер під списком дає фізичне
+  // місце, щоб якір міг піднятися нагору.
+  const TOP_GAP = 24
+  let anchorId = $state<number | null>(null)
+  let spacerHeight = $state(0)
+  let spacerEl = $state<HTMLDivElement | undefined>(undefined)
+
+  function anchorEl(): HTMLElement | null {
+    if (!scrollEl || anchorId === null) return null
+    return scrollEl.querySelector<HTMLElement>(`[data-msg-id="${anchorId}"]`)
+  }
+
+  function updateSpacer() {
+    const anchor = anchorEl()
+    if (!scrollEl || !spacerEl || !anchor) {
+      spacerHeight = 0
+      return
+    }
+    // Контент від якоря до спейсера (сам спейсер не рахуємо)
+    const used =
+      spacerEl.getBoundingClientRect().top - anchor.getBoundingClientRect().top
+    const room = scrollEl.clientHeight - TOP_GAP - fadeZone
+    // Не ріжемо спейсер нижче поточної позиції скролу — інакше браузер
+    // підтягне вьюпорт угору і текст «стрибне» посеред стріму.
+    const contentH = scrollEl.scrollHeight - spacerHeight
+    const keepScroll = scrollEl.scrollTop + scrollEl.clientHeight - contentH
+    spacerHeight = Math.max(0, Math.round(Math.max(room - used, keepScroll)))
+  }
+
+  /** Ставить якір під верх вьюпорта. */
+  async function scrollAnchorToTop() {
+    await tick()
+    updateSpacer()
     await nextFrame()
-    if (!showScrollButton) await scrollToBottom()
+    const anchor = anchorEl()
+    if (!scrollEl || !anchor) return
+    const top =
+      scrollEl.scrollTop +
+      anchor.getBoundingClientRect().top -
+      scrollEl.getBoundingClientRect().top -
+      TOP_GAP
+    scrollEl.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
+    setTimeout(handleScroll, 60)
+    setTimeout(handleScroll, 400)
+  }
+
+  /** Показує КІНЕЦЬ реального контенту (спейсер не рахуємо) — фото-крок, Lottie. */
+  async function revealContentEnd(force = false) {
+    await tick()
+    updateSpacer()
+    await nextFrame()
+    if (!scrollEl || !spacerEl) return
+    const end =
+      scrollEl.scrollTop +
+      spacerEl.getBoundingClientRect().top -
+      scrollEl.getBoundingClientRect().top
+    const top = Math.max(0, end - scrollEl.clientHeight + fadeZone + TOP_GAP)
+    // Тільки вниз: не смикаємо юзера нагору, якщо він і так усе бачить
+    if (force || top > scrollEl.scrollTop) {
+      scrollEl.scrollTo({ top, behavior: 'smooth' })
+    }
+    setTimeout(handleScroll, 400)
   }
 
   function handleScroll() {
     if (!scrollEl) return
-    const distanceFromBottom =
-      scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight
-    showScrollButton = distanceFromBottom > 120
+    // Низ = кінець контенту БЕЗ спейсера, інакше стрілка «вниз» світиться
+    // весь час, хоча знизу лише порожнє місце.
+    const distance =
+      scrollEl.scrollHeight -
+      spacerHeight -
+      scrollEl.scrollTop -
+      scrollEl.clientHeight
+    showScrollButton = distance > 120
   }
 
   async function focusInput() {
     await tick()
+    textareaEl?.focus()
+  }
+
+  // Кліки по кнопках/прев'ю/самому textarea не перехоплюємо.
+  function focusFromShell(e: MouseEvent) {
+    const target = e.target as HTMLElement
+    if (target.closest('button, a, img, input, textarea')) return
+    e.preventDefault() // не збиваємо каретку/виділення
     textareaEl?.focus()
   }
 
@@ -291,7 +365,7 @@
       if (m.role === 'user') {
         // Маркер про фото — лише для моделі, в UI показуються превʼю
         const suffix = m.images?.length
-          ? `\n[Клієнт додав ${m.images.length} фото]`
+          ? `\n[attachment: ${m.images.length} photo]`
           : ''
         return [{ role: 'user', content: (m.text + suffix).trim() }]
       }
@@ -307,9 +381,8 @@
       ...messages,
       { id, role: 'zunor', text, shown: 0, typing: true, thinkSeconds },
     ]
-    await scrollToBottom()
+    await revealContentEnd()
 
-    // Короткі відповіді друкуємо вдумливо, довгі — швидше, щоб не нудити.
     const speed = text.length > 160 ? 6 : text.length > 80 ? 10 : 14
     for (let i = 1; i <= text.length; i++) {
       await sleep(speed)
@@ -317,46 +390,129 @@
         m.role === 'zunor' && m.id === id ? { ...m, shown: i } : m,
       )
       await tick()
-      // Жорсткий pin на кожен символ: смуз-скрол не встигає за текстом
-      if (!showScrollButton && scrollEl) {
-        scrollEl.scrollTop = scrollEl.scrollHeight
-      }
+      updateSpacer()
     }
     messages = messages.map((m) =>
       m.role === 'zunor' && m.id === id ? { ...m, typing: false } : m,
     )
-    if (!showScrollButton) await scrollToBottom()
+    await revealContentEnd()
+  }
+
+  // Читає NDJSON-потік: dispatch по подіях. onText — кожен шматок тексту.
+  // Повертає фінальний ZunorResponse (draft/suggestions/reply).
+  async function readStream(
+    res: Response,
+    onText: (delta: string) => void,
+  ): Promise<ZunorResponse | null> {
+    if (!res.body) return null
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let final: ZunorResponse | null = null
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? '' // неповний рядок лишаємо на наступний тік
+        for (const line of lines) {
+          const s = line.trim()
+          if (!s) continue
+          let evt: { t: string; d?: string; r?: ZunorResponse }
+          try {
+            evt = JSON.parse(s)
+          } catch {
+            continue
+          }
+          if (evt.t === 'text' && evt.d) onText(evt.d)
+          else if (evt.t === 'final' && evt.r) final = evt.r
+        }
+      }
+    } finally {
+      reader.releaseLock()
+    }
+    return final
+  }
+
+  /** Ховає рядок «>>> ...» під час стріму: чіпси показуються кнопками,
+      а не текстом. Хвіст-огризок ('>' або '>>') теж ріжемо, щоб не блимав. */
+  function visibleText(raw: string): string {
+    const idx = raw.indexOf('>>>')
+    if (idx !== -1) return raw.slice(0, idx).trimEnd()
+    const tail = raw.match(/>{1,2}$/)
+    return tail ? raw.slice(0, raw.length - tail[0].length) : raw
   }
 
   async function advance(userText: string) {
     const text = userText.trim()
-    // Можна надіслати самі фото без тексту
     if ((!text && pendingPhotos.length === 0) || waiting || submitting) return
-    if (uploading) return // не відправляємо, поки фото ще вантажаться
+    if (uploading) return
 
     const photos = pendingPhotos
     pendingPhotos = []
     sentPhotos = [...sentPhotos, ...photos]
 
+    const userId = msgId++
     messages = [
       ...messages,
       {
-        id: msgId++,
+        id: userId,
         role: 'user',
         text,
         images: photos.length ? photos.map((p) => p.url) : undefined,
       },
     ]
+    anchorId = userId
     chips = []
     input = ''
     resetTextareaHeight()
-    await scrollToBottom()
+    await scrollAnchorToTop()
 
     waiting = true
-    // Індикатор «Thinking» щойно вирендерився і збільшив висоту контенту —
-    // доскролюємо, інакше при довгому діалозі він опиняється під інпутом.
-    await scrollToBottom()
     const t0 = Date.now()
+
+    const zunorId = msgId++
+    let streamStarted = false
+    let spacerRaf = 0
+    let rawStream = ''
+
+    const ensureBubble = () => {
+      if (streamStarted) return
+      streamStarted = true
+      waiting = false
+      const thinkSeconds = Math.max(1, Math.round((Date.now() - t0) / 1000))
+      messages = [
+        ...messages,
+        {
+          id: zunorId,
+          role: 'zunor',
+          text: '',
+          shown: 0,
+          typing: true,
+          thinkSeconds,
+        },
+      ]
+    }
+
+    const appendText = (delta: string) => {
+      ensureBubble()
+      rawStream += delta
+      const shownText = visibleText(rawStream)
+      messages = messages.map((m) =>
+        m.role === 'zunor' && m.id === zunorId
+          ? { ...m, text: shownText, shown: shownText.length }
+          : m,
+      )
+      if (!spacerRaf) {
+        spacerRaf = requestAnimationFrame(() => {
+          spacerRaf = 0
+          updateSpacer()
+        })
+      }
+    }
+
     try {
       const res = await fetch('/api/zunor/chat', {
         method: 'POST',
@@ -366,50 +522,73 @@
         },
         body: JSON.stringify({ messages: apiHistory() }),
       })
-      const data = (await res.json().catch(() => null)) as
-        | ZunorResponse
-        | { message?: string }
-        | null
 
-      waiting = false
-      const thinkSeconds = Math.max(1, Math.round((Date.now() - t0) / 1000))
-      // Фокус повертаємо ОДРАЗУ, щойно textarea розблокувалась (disabled
-      // скидає фокус) — щоб можна було друкувати, поки триває typewriter.
-      await focusInput()
-
-      if (!res.ok || !data || !('kind' in data)) {
-        const msg =
-          (data && 'message' in data && data.message) ||
-          'Щось пішло не так. Спробуй, будь ласка, ще раз.'
-        await pushZunor(String(msg), thinkSeconds)
+      if (!res.ok) {
+        waiting = false
+        messages = messages.filter((m) => m.id !== zunorId)
+        const errData = (await res.json().catch(() => null)) as {
+          message?: string
+        } | null
+        await focusInput()
+        await pushZunor(
+          errData?.message ??
+            (res.status === 429
+              ? 'Забагато запитів. Спробуй трохи пізніше.'
+              : 'Щось пішло не так. Спробуй ще раз.'),
+          1,
+        )
         return
       }
 
-      await pushZunor(data.reply, thinkSeconds)
+      const final = await readStream(res, appendText)
+      await focusInput()
 
-      if (data.kind === 'message' && data.suggestions?.length) {
-        chips = data.suggestions
-        if (chips.includes('Додати фото')) photosUnlocked = true
-        // Панель виросла на висоту чіпсів — доскролюємо після layout
-        await pinIfAtBottom()
+      const cleanReply = final && 'reply' in final ? final.reply : undefined
+      messages = messages.map((m) => {
+        if (m.role !== 'zunor' || m.id !== zunorId) return m
+        const finalText = cleanReply ?? m.text
+        return { ...m, text: finalText, shown: finalText.length, typing: false }
+      })
+
+      if (!streamStarted) {
+        messages = messages.filter((m) => m.id !== zunorId)
+        waiting = false
       }
 
-      if (data.kind === 'draft') {
-        // Оновлений драфт ЗАМІНЮЄ попередню картку: це та сама заявка,
-        // дві однакові картки поспіль лише плутають, яку підтверджувати.
+      if (!final) {
+        if (!streamStarted)
+          await pushZunor('Щось пішло не так. Спробуй ще раз.', 1)
+        return
+      }
+
+      if (final.kind === 'message' && final.suggestions?.length) {
+        chips = final.suggestions
+        if (chips.some(isAddPhotoChip)) photosUnlocked = true
+        await revealContentEnd()
+      } else {
+        updateSpacer()
+      }
+
+      if (final.kind === 'draft') {
+        const summaryId = msgId++
+        if (!streamStarted && final.reply) await pushZunor(final.reply, 1)
         messages = [
           ...messages.filter((m) => m.role !== 'summary'),
-          { id: msgId++, role: 'summary', draft: data.draft },
+          { id: summaryId, role: 'summary', draft: final.draft },
         ]
-        await pinIfAtBottom()
+        anchorId = summaryId
+        await scrollAnchorToTop()
       }
     } catch {
       waiting = false
+      messages = messages.filter((m) => m.id !== zunorId)
       await focusInput()
       await pushZunor(
         "Помилка з'єднання. Перевір інтернет і спробуй ще раз.",
         1,
       )
+    } finally {
+      if (spacerRaf) cancelAnimationFrame(spacerRaf)
     }
     await focusInput()
   }
@@ -419,7 +598,7 @@
   }
 
   function pickChip(label: string) {
-    if (label === 'Додати фото') {
+    if (isAddPhotoChip(label)) {
       openFilePicker()
       return
     }
@@ -450,7 +629,7 @@
     messages = messages.map((m) =>
       m.role === 'zunor' && m.typing === false ? m : m,
     )
-    await pinIfAtBottom()
+    updateSpacer()
     await focusInput()
   }
 
@@ -556,13 +735,18 @@
   function autoResize() {
     if (!textareaEl) return
     textareaEl.style.height = 'auto'
-    textareaEl.style.height =
-      Math.min(textareaEl.scrollHeight, inputMaxH) + 'px'
+    const next = Math.min(textareaEl.scrollHeight, inputMaxH)
+    textareaEl.style.height = next + 'px'
+    // Скрол з'являється ЛИШЕ коли текст переріс стелю
+    textareaEl.style.overflowY =
+      textareaEl.scrollHeight > inputMaxH ? 'auto' : 'hidden'
   }
 
   function resetTextareaHeight() {
     requestAnimationFrame(() => {
-      if (textareaEl) textareaEl.style.height = 'auto'
+      if (!textareaEl) return
+      textareaEl.style.height = 'auto'
+      textareaEl.style.overflowY = 'hidden'
     })
   }
 
@@ -571,6 +755,7 @@
       await navigator.clipboard.writeText(text)
       copiedId = id
       setTimeout(() => (copiedId = null), 1500)
+      toast.success('Скопійовано', { duration: 1500 })
     } catch {
       /* clipboard недоступний — не критично */
     }
@@ -595,7 +780,11 @@
       })
     }
 
-    const ro = new ResizeObserver(() => handleScroll())
+    const ro = new ResizeObserver(() => {
+      handleScroll()
+      updateSpacer()
+    })
+
     if (scrollEl) {
       ro.observe(scrollEl)
       if (scrollEl.firstElementChild) ro.observe(scrollEl.firstElementChild)
@@ -635,14 +824,13 @@
           aria-disabled={!photosAllowed || uploading}
           aria-label="Додати фото"
           class={[
-            'flex size-8 items-center justify-center rounded-full border border-border bg-muted shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition-all duration-150 active:scale-[0.97]',
+            'flex size-8 shrink-0 items-center justify-center rounded-xl transition-[background-color,color,transform] duration-150 active:scale-[0.96]',
             photosAllowed && !uploading
-              ? 'cursor-pointer text-muted-foreground hover:text-foreground'
+              ? 'cursor-pointer text-muted-foreground hover:bg-muted hover:text-foreground'
               : 'cursor-not-allowed text-muted-foreground/40',
           ]}
-          style="background: var(--bg-translucent);"
         >
-          <Plus size={16} strokeWidth={2.1} aria-hidden="true" />
+          <Plus size={18} strokeWidth={2} aria-hidden="true" />
         </Tooltip.Trigger>
         {#if !photosAllowed}
           <Tooltip.Content side="top" class="max-w-56 text-center">
@@ -659,7 +847,9 @@
 
   {#snippet pendingPreview()}
     {#if pendingPhotos.length || uploading || uploadError}
-      <div class="flex flex-col gap-1.5 px-2 pb-1">
+      <!-- pt/px тут власні: хрестики зміщені на -6px і мусять мати запас,
+           інакше впираються в край оболонки -->
+      <div class="flex flex-col gap-1.5 px-3.5 pt-3.5">
         {#if pendingPhotos.length || uploading}
           <div class="flex flex-wrap items-center gap-2">
             {#each pendingPhotos as photo, i (photo.publicId)}
@@ -670,13 +860,13 @@
                 <img
                   src={photo.url}
                   alt="Фото {i + 1}"
-                  class="size-20 rounded-[16px] border border-border object-cover shadow-sm"
+                  class="size-16 rounded-xl object-cover"
                 />
                 <button
                   type="button"
                   onclick={() => removePending(i)}
                   aria-label="Прибрати фото {i + 1}"
-                  class="absolute -top-1.5 -right-1.5 flex size-5.5 cursor-pointer items-center justify-center rounded-full border border-white/20 bg-black/70 text-white shadow backdrop-blur-sm transition-transform hover:scale-110 active:scale-95"
+                  class="absolute -top-1.5 -right-1.5 flex size-5.5 cursor-pointer items-center justify-center rounded-lg border border-white/20 bg-black/70 text-white shadow backdrop-blur-sm transition-transform hover:scale-110 active:scale-95"
                 >
                   <X size={12} aria-hidden="true" />
                 </button>
@@ -684,7 +874,7 @@
             {/each}
             {#if uploading}
               <div
-                class="flex size-20 items-center justify-center rounded-[16px] border-[1.5px] border-dashed border-border bg-muted"
+                class="flex size-16 items-center justify-center rounded-xl border-[1.5px] border-dashed border-border bg-muted"
                 aria-label="Завантаження фото"
               >
                 <Spinner class="size-5 animate-spin text-muted-foreground" />
@@ -727,7 +917,7 @@
       aria-live="polite"
     >
       <span
-        class="mb-4 flex size-16 items-center justify-center rounded-full bg-primary text-primary-foreground"
+        class="mb-4 flex size-16 items-center justify-center rounded-lg bg-primary text-primary-foreground"
       >
         <Check size={28} aria-hidden="true" />
       </span>
@@ -762,28 +952,31 @@
         class="z-1 flex w-full max-w-2xl flex-col gap-3"
         in:fly={{ y: 10, duration: 400, delay: 80, easing: quintOut }}
       >
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
-          class="flex flex-col rounded-[28px] border border-border bg-card p-3 shadow-[0_2px_8px_rgba(0,0,0,0.06)]"
+          class="job-input-shell flex cursor-text flex-col rounded-[20px] bg-card"
+          onmousedown={focusFromShell}
         >
           {@render pendingPreview()}
-          <textarea
-            bind:this={textareaEl}
-            bind:value={input}
-            oninput={autoResize}
-            onkeydown={handleHeroKeydown}
-            rows="1"
-            placeholder={heroPlaceholder}
-            disabled={waiting}
-            style:max-height="{inputMaxH}px"
-            class="job-input-plain w-full flex-1 resize-none bg-transparent px-2 py-2 text-[16px] leading-snug"
-          ></textarea>
 
-          <div class="flex items-center justify-between pt-2">
-            {@render photoButton()}
+          <div class="flex flex-col gap-4 px-4 py-4">
+            <textarea
+              bind:this={textareaEl}
+              bind:value={input}
+              oninput={autoResize}
+              onkeydown={handleHeroKeydown}
+              rows="1"
+              placeholder={heroPlaceholder}
+              disabled={waiting}
+              style:max-height="{inputMaxH}px"
+              class="job-input-plain min-h-[2lh] w-full resize-none bg-transparent px-1.5 pt-1 text-[16px] leading-relaxed"
+            ></textarea>
+
             <div class="flex items-center gap-2">
+              {@render photoButton()}
+              <div class="grow"></div>
               <span
-                class="rounded-full border border-border bg-background px-3 py-1.5 text-[12.5px] font-medium text-muted-foreground"
-                style="background: var(--bg-translucent);"
+                class="job-chip-city rounded-lg px-3 py-1.5 text-[12.5px] font-medium text-muted-foreground"
               >
                 Прибирання · Одеса
               </span>
@@ -794,7 +987,7 @@
                   uploading ||
                   (!input.trim() && !pendingPhotos.length)}
                 aria-label="Надіслати"
-                class="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-primary text-white transition disabled:cursor-not-allowed disabled:opacity-30"
+                class="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-primary hover:primary-hover text-white transition-[transform,opacity] duration-150 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-30"
               >
                 <ArrowUp size={16} aria-hidden="true" />
               </button>
@@ -807,7 +1000,7 @@
             <button
               type="button"
               onclick={() => heroPick(c)}
-              class="cursor-pointer rounded-full border border-border bg-card px-4 py-2 text-[13.5px] font-medium text-foreground transition-all duration-300 hover:bg-muted active:scale-[0.98]"
+              class="cursor-pointer rounded-xl border border-border bg-card px-4 py-2 text-[13.5px] font-medium text-foreground transition-all duration-300 hover:bg-muted active:scale-[0.98]"
             >
               {c}
             </button>
@@ -838,6 +1031,7 @@
           {#each messages as m (m.id)}
             {#if m.role === 'user'}
               <div
+                data-msg-id={m.id}
                 class="flex justify-end"
                 in:fly={{ y: 6, duration: 280, easing: quintOut }}
               >
@@ -865,17 +1059,14 @@
                 </div>
               </div>
             {:else if m.role === 'zunor'}
-              <div in:fade={{ duration: 220 }}>
+              <div data-msg-id={m.id} in:fade={{ duration: 220 }}>
                 <p class="mb-2 text-[13px] text-muted-foreground">
                   Thought for {m.thinkSeconds}s
                 </p>
-                <p
-                  class="text-[15.5px] leading-[1.7] whitespace-pre-wrap wrap-break-word text-foreground"
-                >
-                  {m.text.slice(0, m.shown)}{#if m.typing}<span
-                      class="ml-0.5 -mb-0.5 inline-block h-3.75 w-0.5 animate-pulse bg-foreground/50"
-                    ></span>{/if}
-                </p>
+                <MessageBody
+                  text={m.text.slice(0, m.shown)}
+                  typing={m.typing}
+                />
                 {#if !m.typing}
                   <div
                     class="mt-3 -ml-1.5 flex items-center gap-0.5"
@@ -897,8 +1088,9 @@
                 {/if}
               </div>
             {:else}
-              <!-- ─── Summary-картка драфту від Zunor (Telegram/Apple minimal) ─── -->
+              <!-- ─── Summary-картка драфту від Zunor ─── -->
               <div
+                data-msg-id={m.id}
                 class="w-full"
                 in:fly={{ y: 8, duration: 380, easing: quintOut }}
               >
@@ -961,7 +1153,7 @@
                   onclick={() => confirmOrder(m.draft)}
                   disabled={submitting || uploading}
                   aria-busy={submitting}
-                  class="mt-1.5 inline-flex h-13.5 w-full items-center justify-center rounded-[16px] bg-primary text-[15.5px] font-semibold tracking-[-0.01em] text-primary-foreground transition hover:-translate-y-px hover:bg-primary-hover active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:translate-y-0 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+                  class="relative mt-1.5 inline-flex h-13.5 w-full items-center justify-center rounded-[16px] bg-primary text-[15.5px] font-semibold tracking-[-0.01em] text-primary-foreground transition hover:-translate-y-px hover:bg-primary-hover active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:translate-y-0 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
                 >
                   {#if submitting}
                     <Spinner
@@ -987,12 +1179,11 @@
             {/if}
           {/each}
 
-          {#if photoStage && !waiting}
-            <!-- Анімована підказка «додай фото» (файл: static/animations/photo-upload.json) -->
+          {#if photoStage && !waiting && !uploading && !pendingPhotos.length}
             <div
               class="-my-2 flex justify-center"
               in:scale={{ duration: 300, start: 0.9, easing: quintOut }}
-              out:fade={{ duration: 150 }}
+              out:scale={{ duration: 420, start: 0.94, easing: quintOut }}
             >
               <LottiePlayer src="/animations/photo-upload.json" size={250} />
             </div>
@@ -1009,6 +1200,12 @@
               <span class="thinking-text">Thinking</span>
             </div>
           {/if}
+          <!-- Місце під якір: дозволяє останньому повідомленню стати вгорі -->
+          <div
+            bind:this={spacerEl}
+            aria-hidden="true"
+            style:height="{spacerHeight}px"
+          ></div>
         </div>
       </div>
 
@@ -1016,8 +1213,8 @@
         <button
           type="button"
           aria-label="Прокрутити вниз"
-          onclick={() => scrollToBottom()}
-          class="absolute left-1/2 z-20 flex size-8 -translate-x-1/2 cursor-pointer items-center justify-center rounded-full border border-border/70 bg-background/90 text-foreground shadow-[0_4px_16px_-4px_rgba(0,0,0,0.35)] backdrop-blur-sm transition hover:bg-muted"
+          onclick={() => revealContentEnd(true)}
+          class="absolute left-1/2 z-20 flex size-8 -translate-x-1/2 cursor-pointer items-center justify-center rounded-lg border border-border/70 bg-background/90 text-foreground shadow-[0_4px_16px_-4px_rgba(0,0,0,0.35)] backdrop-blur-sm transition hover:bg-muted"
           style:bottom="{inputPanelHeight + 16}px"
           in:fade={{ duration: 150 }}
           out:fade={{ duration: 150 }}
@@ -1026,61 +1223,60 @@
         </button>
       {/if}
 
-      <!-- Прогресивне розмиття тексту, що заходить під інпут -->
-      <div
-        class="pointer-events-none absolute right-1.5 bottom-0 left-0 z-9"
-        style:height="{fadeZone}px"
-      >
-        <div class="blur-layer blur-layer-1"></div>
-        <div class="blur-layer blur-layer-2"></div>
-        <div class="blur-layer blur-layer-3"></div>
-        <div class="blur-layer blur-layer-4"></div>
-      </div>
-
       <!-- Інпут поверх повідомлень -->
-      <div
-        class="pointer-events-none absolute right-2 bottom-0 left-0 z-10 flex flex-col justify-end bg-linear-to-t from-background from-55% via-background/80 to-transparent"
-        style:height="{fadeZone}px"
-      >
+      <div class="pointer-events-none absolute right-0 bottom-0 left-0 z-10">
         <div
           bind:clientHeight={inputPanelHeight}
-          class="pointer-events-auto pb-3 pl-4 pr-5.5"
+          class="pointer-events-auto px-4 pb-3"
         >
-          <div class="mx-auto flex w-full max-w-3xl flex-col gap-2">
-            {#if chips.length}
-              <div class="flex flex-wrap gap-2" in:fade={{ duration: 250 }}>
-                {#each chips as c (c)}
-                  <button
-                    type="button"
-                    onclick={() => pickChip(c)}
-                    class="cursor-pointer rounded-full border border-border bg-card px-4 py-2 text-[13.5px] font-medium text-foreground transition-all duration-300 hover:border-primary active:scale-[0.98]"
-                  >
-                    {c}
-                  </button>
-                {/each}
+          <div class="mx-auto flex w-full max-w-3xl flex-col">
+            <!-- Обгортка завжди в DOM: висота анімується grid-рядком,
+                 інакше панель стрибає і чіпси залітають у текст. -->
+            <div class="chips-wrap" class:chips-open={chips.length > 0}>
+              <div class="min-h-0 overflow-hidden">
+                <div class="flex flex-wrap gap-2 pb-2">
+                  {#each chips as c, i (c)}
+                    <button
+                      type="button"
+                      onclick={() => pickChip(c)}
+                      in:fly={{
+                        y: 8,
+                        duration: 520,
+                        delay: 180 + i * 90,
+                        easing: quintOut,
+                      }}
+                      out:fade={{ duration: 180 }}
+                      class="chip-btn cursor-pointer rounded-xl border border-border bg-card px-4 py-2 text-[13.5px] font-medium text-foreground active:scale-[0.98]"
+                    >
+                      {c}
+                    </button>
+                  {/each}
+                </div>
               </div>
-            {/if}
+            </div>
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div
-              class="rounded-[28px] border border-border bg-card p-3 shadow-[0_2px_8px_rgba(0,0,0,0.06)]"
+              class="job-input-shell flex cursor-text flex-col rounded-[20px] bg-card"
+              onmousedown={focusFromShell}
             >
               {@render pendingPreview()}
-              <textarea
-                bind:this={textareaEl}
-                bind:value={input}
-                oninput={autoResize}
-                onkeydown={handleKeydown}
-                rows="1"
-                placeholder="Напиши Zunor..."
-                disabled={waiting || submitting}
-                style:max-height="{inputMaxH}px"
-                class="job-input-plain block w-full resize-none px-2 py-1.5 text-[15px] leading-snug"
-              ></textarea>
-              <div class="mt-1 flex items-center justify-between gap-2">
-                {@render photoButton()}
+              <div class="flex flex-col gap-3.5 px-4 py-3.5">
+                <textarea
+                  bind:this={textareaEl}
+                  bind:value={input}
+                  oninput={autoResize}
+                  onkeydown={handleKeydown}
+                  rows="1"
+                  placeholder="Напиши Zunor..."
+                  disabled={waiting || submitting}
+                  style:max-height="{inputMaxH}px"
+                  class="job-input-plain block w-full resize-none px-1.5 pt-1 text-[15px] leading-relaxed"
+                ></textarea>
                 <div class="flex items-center gap-2">
+                  {@render photoButton()}
+                  <div class="grow"></div>
                   <span
-                    class="rounded-full border border-border bg-background px-3 py-1.5 text-[12.5px] font-medium text-muted-foreground"
-                    style="background: var(--bg-translucent);"
+                    class="job-chip-city rounded-lg px-3 py-1.5 text-[12.5px] font-medium text-muted-foreground"
                   >
                     Прибирання · Одеса
                   </span>
@@ -1092,7 +1288,7 @@
                       uploading ||
                       (!input.trim() && !pendingPhotos.length)}
                     aria-label="Надіслати"
-                    class="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-primary text-white transition disabled:cursor-not-allowed disabled:opacity-30"
+                    class="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-primary hover:primary-hover text-white transition-[transform,opacity] duration-150 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-30"
                   >
                     <ArrowUp size={16} aria-hidden="true" />
                   </button>
@@ -1129,63 +1325,6 @@
     100% {
       background-position: -100% 0;
     }
-  }
-
-  .blur-layer {
-    position: absolute;
-    inset: 0;
-    -webkit-backdrop-filter: blur(var(--blur-amount));
-    backdrop-filter: blur(var(--blur-amount));
-  }
-  .blur-layer-1 {
-    --blur-amount: 0.5px;
-    mask-image: linear-gradient(
-      to bottom,
-      transparent 0%,
-      black 45%,
-      black 100%
-    );
-    -webkit-mask-image: linear-gradient(
-      to bottom,
-      transparent 0%,
-      black 45%,
-      black 100%
-    );
-  }
-  .blur-layer-2 {
-    --blur-amount: 2px;
-    mask-image: linear-gradient(
-      to bottom,
-      transparent 25%,
-      black 55%,
-      black 100%
-    );
-    -webkit-mask-image: linear-gradient(
-      to bottom,
-      transparent 25%,
-      black 55%,
-      black 100%
-    );
-  }
-  .blur-layer-3 {
-    --blur-amount: 6px;
-    mask-image: linear-gradient(
-      to bottom,
-      transparent 45%,
-      black 70%,
-      black 100%
-    );
-    -webkit-mask-image: linear-gradient(
-      to bottom,
-      transparent 45%,
-      black 70%,
-      black 100%
-    );
-  }
-  .blur-layer-4 {
-    --blur-amount: 14px;
-    mask-image: linear-gradient(to bottom, transparent 65%, black 90%);
-    -webkit-mask-image: linear-gradient(to bottom, transparent 65%, black 90%);
   }
 
   .scroll-area {
@@ -1235,8 +1374,7 @@
     background: transparent;
     color: var(--foreground);
     outline: none;
-    max-height: 160px;
-    overflow-y: auto;
+    overflow-y: hidden;
     font-family: inherit;
     scrollbar-width: thin;
     scrollbar-color: color-mix(
@@ -1246,6 +1384,7 @@
       )
       transparent;
   }
+
   .job-scope :global(.job-input-plain::placeholder) {
     color: var(--muted-foreground);
   }
@@ -1255,5 +1394,68 @@
       animation-duration: 0.01ms !important;
       transition-duration: 0.01ms !important;
     }
+  }
+
+  /* Оболонка інпута (Claude-style): рамки НЕМАЄ — волосяний ring 0.5px
+     через box-shadow + мʼяка ambient-тінь.
+     ⚠️ Тінь ЗАВЖДИ темна (--always-black), не через --foreground:
+     у .dark він білий і замість тіні виходило б світіння. */
+  .job-input-shell {
+    --always-black: 0 0 0;
+    --shell-ring: color-mix(in srgb, var(--border) 60%, transparent);
+    --shell-ambient: rgb(var(--always-black) / 0.035);
+    box-shadow:
+      0 4px 20px var(--shell-ambient),
+      0 0 0 0.5px var(--shell-ring);
+    transition: box-shadow 200ms ease;
+  }
+  .job-input-shell:hover {
+    --shell-ring: var(--border);
+  }
+  .job-input-shell:focus-within {
+    --shell-ring: color-mix(in srgb, var(--border) 100%, var(--foreground) 15%);
+    --shell-ambient: rgb(var(--always-black) / 0.075);
+  }
+
+  /* У темній темі ambient-тінь на темному тлі не читається — ring несе
+     всю роботу, тому робимо його контрастнішим, а тінь глибшою. */
+  :global(.dark) .job-input-shell {
+    --shell-ring: color-mix(in srgb, var(--border) 90%, transparent);
+    --shell-ambient: rgb(var(--always-black) / 0.25);
+  }
+  :global(.dark) .job-input-shell:hover {
+    --shell-ring: color-mix(in srgb, var(--border) 100%, white 8%);
+  }
+  :global(.dark) .job-input-shell:focus-within {
+    --shell-ambient: rgb(var(--always-black) / 0.4);
+  }
+
+  .job-chip-city {
+    border: 1px solid var(--border);
+    background: var(--bg-translucent, var(--background));
+  }
+
+  /* Тільки бордер на hover. Окремим правилом, а не transition-all:
+     інакше воно конфліктує з fly/scale і на вході чіпси смикає. */
+  .chip-btn {
+    transition:
+      border-color 400ms ease,
+      transform 150ms ease;
+  }
+  .chip-btn:hover {
+    border-color: var(--primary);
+  }
+
+  .chips-wrap {
+    display: grid;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transition:
+      grid-template-rows 420ms cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 280ms ease;
+  }
+  .chips-open {
+    grid-template-rows: 1fr;
+    opacity: 1;
   }
 </style>

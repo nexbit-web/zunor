@@ -85,7 +85,7 @@
 >
   <!-- glass card -->
   <div
-    class="rounded-[32px] border border-border bg-card px-9 pt-10 pb-8.5 shadow-[0_24px_60px_-12px_rgba(0,0,0,0.1),0_8px_20px_-8px_rgba(0,0,0,0.05)]"
+    class="rounded-[32px] border border-border bg-card px-9 pt-10 pb-8.5"
   >
     <div class="mb-6 text-center">
       <h1

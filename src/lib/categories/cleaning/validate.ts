@@ -29,12 +29,16 @@ export interface ValidationResult {
 /** Перевіряє, що when — це 'today'/'tomorrow' або валідна майбутня ISO-дата. */
 function validateWhen(when: string): boolean {
   if (QUICK_WHEN.some((w) => w.key === when)) return true
-  const d = new Date(when)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(when)) return false
+  const d = new Date(`${when}T00:00:00Z`)
   if (isNaN(d.getTime())) return false
-  // не раніше сьогодні (з допуском на час)
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  return d.getTime() >= today.getTime()
+  const now = new Date()
+  const todayUtc = Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+  )
+  return d.getTime() >= todayUtc
 }
 
 export function validateCleaningMetadata(raw: unknown): ValidationResult {
@@ -80,14 +84,24 @@ export function validateCleaningMetadata(raw: unknown): ValidationResult {
     if (ELEVATOR_OPTIONS.some((o) => o.key === elev)) {
       clean.hasElevator = elev
     }
+
+    // Балкон — лише генеральне прибирання квартири (бізнес-правило);
+    // для інших житлових комбінацій поле мовчки відкидається.
+    if (service === 'deep' && premise === 'apartment') {
+      const balcony = String(m.balcony ?? '')
+      if (BALCONY_OPTIONS.some((o) => o.key === balcony)) {
+        clean.balcony = balcony
+      }
+    }
   }
 
   // ─── Після ремонту: сміття ───
   if (needsTrash(service)) {
     const trash = String(m.trash ?? '')
-    if (TRASH_OPTIONS.some((o) => o.key === trash)) {
-      clean.trash = trash
+    if (!TRASH_OPTIONS.some((o) => o.key === trash)) {
+      return { ok: false, error: 'Уточніть, що зі сміттям після ремонту' }
     }
+    clean.trash = trash
   }
 
   // ─── Регулярне: частота ───
