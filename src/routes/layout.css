@@ -54,7 +54,7 @@
 
   /* ─── Монохромна база: фон/текст/картки/бордери ─── */
   --background: #f9f9f7; /* #FFFFFF */
-  --foreground: oklch(0.145 0 0); /* #0A0A0A */
+  --foreground: #131313; /* #0A0A0A */
 
   --card: #ffffff;
   --card-foreground: oklch(0.145 0 0);
@@ -76,20 +76,20 @@
      тож інпути підхоплюють це без правок компонентів). ─── */
   --primary: #d97757;
   --primary-foreground: oklch(1 0 0);
-  --primary-hover: #d3704f;
+  --primary-hover: #c6613f;
   --ring: #d97757;
 
   /* Secondary/muted/accent — нейтральні, без кольору. */
-  --secondary: oklch(0.97 0 0); /* #F4F4F5 */
+  --secondary: #f1f0ed; /* #F4F4F5 */
   --secondary-foreground: oklch(0.145 0 0);
 
   --muted: #ececea;
-  --muted-foreground: oklch(0.55 0 0); /* #71717A */
+  --muted-foreground: #7b7974; /* #71717A */
 
-  --accent: oklch(0.96 0 0);
+  --accent: #f1f0ed;
   --accent-foreground: oklch(0.145 0 0);
 
-  --destructive: oklch(0.577 0.245 27.325);
+  --destructive: #ef4444;
 
   /* Бордери в звичайному стані лишаються нейтральними — синім стає
      тільки фокус (через --ring), не дефолтний стан поля. */
@@ -156,7 +156,7 @@
   --bg-header: oklch(20.42% 0.002 107);
 
   --background: #1d1d1c;
-  --foreground: oklch(100% 0 0);
+  --foreground: #f9f9f7;
 
   --card: #2c2c2a;
   --card-foreground: oklch(100% 0 0);
@@ -174,19 +174,19 @@
 
   --primary: #d97757;
   --primary-foreground: oklch(1 0 0);
-  --primary-hover: #d3704f;
-  --ring: #c6613f;
+  --primary-hover: #c6613f;
+  --ring: #a44e33;
 
-  --secondary: oklch(27.2% 0.002 107);
+  --secondary: #3c3c3a;
   --secondary-foreground: oklch(90.95% 0.002 107);
 
   --muted: #3f3f3d;
-  --muted-foreground: oklch(72.34% 0.002 107);
+  --muted-foreground: #a8a6a0;
 
-  --accent: oklch(27.2% 0.002 107);
+  --accent: #3c3c3a;
   --accent-foreground: oklch(100% 0 0);
 
-  --destructive: oklch(58.53% 0.2203 26.56);
+  --destructive: #f87171;
 
   --border: #3c3c3a;
   --input: oklch(37.2% 0.004 107 / 40%);

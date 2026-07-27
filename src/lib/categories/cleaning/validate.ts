@@ -11,6 +11,7 @@ import {
   BALCONY_OPTIONS,
   TRASH_OPTIONS,
   FREQUENCY_OPTIONS,
+  WINDOW_SIDE_OPTIONS,
   SOFA_ITEMS,
   needsRooms,
   needsWindows,
@@ -121,16 +122,22 @@ export function validateCleaningMetadata(raw: unknown): ValidationResult {
     }
     clean.windowsCount = count
 
+    // Сторона миття — обовʼязкова: без неї майстер не може порахувати ціну.
+    // До цієї правки відповідь клієнта («ззовні») втрачалась у вільному
+    // тексті description і спотворювалась («доступ ззовні»).
+    const side = String(m.windowSide ?? '')
+    if (!WINDOW_SIDE_OPTIONS.some((o) => o.key === side)) {
+      return { ok: false, error: 'Уточніть, з якого боку мити вікна' }
+    }
+    clean.windowSide = side
+
     if (m.floor != null && m.floor !== '') {
       const floor = Number(m.floor)
       if (Number.isInteger(floor) && floor >= 0 && floor <= 200) {
         clean.floor = floor
       }
     }
-    const balcony = String(m.balcony ?? '')
-    if (BALCONY_OPTIONS.some((o) => o.key === balcony)) {
-      clean.balcony = balcony
-    }
+    // Балкон у вікон прибрано як хлам: тип скління вже задає сама послуга.
   }
 
   // ─── Хімчистка: предмети ───

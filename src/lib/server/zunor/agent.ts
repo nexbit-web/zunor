@@ -30,6 +30,7 @@ import {
   BALCONY_OPTIONS,
   TRASH_OPTIONS,
   FREQUENCY_OPTIONS,
+  WINDOW_SIDE_OPTIONS,
   SOFA_ITEMS,
 } from '$lib/categories/cleaning/presets'
 import { validateCleaningMetadata } from '$lib/categories/cleaning/validate'
@@ -45,6 +46,7 @@ import {
 } from './deepseek'
 import { buildSystemPrompt, TOOL_NAME } from './prompt'
 import { detectActiveService } from './detect-service'
+import { turnLog } from './turn-log'
 import type { ZunorClientMessage, ZunorResponse } from '$lib/types/zunor'
 
 // ─────────────────────────── Константи ───────────────────────────
@@ -107,6 +109,13 @@ function buildTool(): DsTool {
           trash: { type: 'string', enum: keys(TRASH_OPTIONS) },
           frequency: { type: 'string', enum: keys(FREQUENCY_OPTIONS) },
           windowsCount: { type: 'integer', minimum: 1, maximum: 200 },
+          windowSide: {
+            type: 'string',
+            enum: keys(WINDOW_SIDE_OPTIONS),
+            description:
+              'ОБОВʼЯЗКОВЕ для послуги windows: з якого боку мити. ' +
+              'Ніколи не вгадуй — це питання ставиться завжди.',
+          },
           balcony: { type: 'string', enum: keys(BALCONY_OPTIONS) },
           items: {
             type: 'array',
@@ -202,6 +211,31 @@ function needsThinking(history: ZunorClientMessage[]): boolean {
   )
 }
 
+// Слова-маркери: часті службові слова, унікальні для однієї мови.
+// Чіпси («Після ремонту», «Так, треба вивезти») містять українські
+// літери, тому детект по літерах їх плутав із мовою клієнта. Живі
+// російські репліки («привет», «нужно», «этаж») таких слів не мають —
+// рахуємо сигнали по обох мовах, перемагає більшість.
+const RU_MARKERS =
+  /\b(привет|нужно|надо|можно|этаж|есть|да|нет|спасибо|квартира|окна|убрать|уборка|сколько|который|очень|ещё|еще|хорошо|числа?)\b/gi
+const UK_MARKERS =
+  /\b(привіт|потрібно|треба|можна|поверх|є|так|ні|дякую|квартира|вікна|прибрати|прибирання|скільки|який|дуже|ще|добре|числа?)\b/gi
+const UK_LETTERS = /[іїєґ]/g
+const RU_LETTERS = /[ыэъё]/g
+
+function detectLang(history: ZunorClientMessage[]): 'ru' | 'uk' {
+  let ru = 0
+  let uk = 0
+  for (const m of history) {
+    if (m.role !== 'user') continue
+    ru += (m.content.match(RU_MARKERS)?.length ?? 0) * 2
+    uk += (m.content.match(UK_MARKERS)?.length ?? 0) * 2
+    ru += m.content.match(RU_LETTERS)?.length ?? 0
+    uk += m.content.match(UK_LETTERS)?.length ?? 0
+  }
+  return uk > ru ? 'uk' : 'ru'
+}
+
 function baseMessages(
   history: ZunorClientMessage[],
   city: string | null,
@@ -211,7 +245,10 @@ function baseMessages(
   // але ФОКУС-блок у промпті має лишатися стабільним до кінця воронки.
   const activeService = detectActiveService(history)
   const messages: DsMessage[] = [
-    { role: 'system', content: buildSystemPrompt(city, activeService) },
+    {
+      role: 'system',
+      content: buildSystemPrompt(city, activeService, detectLang(history)),
+    },
     ...trimHistory(history).map(
       (m): DsMessage => ({ role: m.role, content: m.content }),
     ),
@@ -244,6 +281,7 @@ async function resolveDraft(
 
       const { title: rawTitle, description: rawDescription, ...metadata } = args
       const validation = validateCleaningMetadata(metadata)
+      turnLog().validation(validation.ok, validation.error)
 
       if (validation.ok && validation.clean) {
         const clean = validation.clean
@@ -312,7 +350,9 @@ export async function runZunorTurnStream(
   const tool = buildTool()
   const { messages } = baseMessages(history, city)
 
-  const stream = chatCompletionStream(messages, [tool], needsThinking(history))
+  turnLog().setup({ service: detectActiveService(history), tool })
+
+  const stream = chatCompletionStream(messages, [tool], true)
   let streamedText = ''
   let toolStarted = false
 
@@ -372,6 +412,14 @@ export async function runZunorTurnStream(
     }
   }
   const { reply, suggestions } = extractSuggestions(raw)
+
+  // Модель інколи відповідає САМИМ рядком >>> без тексту. Після зрізання
+  // чіпсів лишається порожній рядок → клієнт малює порожню бульбашку, вона
+  // потрапляє в історію, і наступного ходу модель не розуміє, що вже казала.
+  // Порожній reply із чіпсами замінюємо на нейтральну підводку.
+  if (!reply && suggestions?.length) {
+    return { kind: 'message', reply: 'Оберіть варіант:', suggestions }
+  }
 
   // Страховка фото-чіпсів — ЛИШЕ для чистого фото-кроку: якщо в повідомленні
   // є інші питання (рядки «— »), чіпси фото туди підставляти не можна.

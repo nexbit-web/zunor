@@ -1,5 +1,6 @@
 // src/lib/server/zunor/deepseek.ts
 import { DEEPSEEK_API_KEY } from '$env/static/private'
+import { turnLog } from './turn-log'
 
 const BASE_URL = 'https://api.deepseek.com'
 export const ZUNOR_MODEL = 'deepseek-v4-flash'
@@ -75,6 +76,9 @@ export async function chatCompletion(
   tools: DsTool[],
   thinking = false,
 ): Promise<DsResponse> {
+  turnLog().request('sync', messages, thinking)
+  const t0 = Date.now()
+
   const res = await fetch(`${BASE_URL}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -94,11 +98,25 @@ export async function chatCompletion(
   if (!res.ok) {
     const detail = await res.text().catch(() => '')
     console.error('[zunor] deepseek error', res.status, detail.slice(0, 500))
+    turnLog().note(`DeepSeek ${res.status}: ${detail.slice(0, 300)}`)
     throw new Error(`DeepSeek ${res.status}`)
   }
 
   const data = (await res.json()) as DsResponse
   if (data.usage) console.log('[zunor] tokens:', data.usage.total_tokens)
+
+  const choice = data.choices[0]
+  const call = choice?.message.tool_calls?.[0]
+  turnLog().response({
+    text: choice?.message.content ?? '',
+    toolCall: call
+      ? { name: call.function.name, arguments: call.function.arguments }
+      : null,
+    finishReason: choice?.finish_reason ?? null,
+    tokens: data.usage?.total_tokens,
+    ms: Date.now() - t0,
+  })
+
   return data
 }
 
@@ -127,6 +145,9 @@ export async function* chatCompletionStream(
   tools: DsTool[],
   thinking = false,
 ): AsyncGenerator<StreamChunk, StreamResult, void> {
+  turnLog().request('stream', messages, thinking)
+  const t0 = Date.now()
+
   const ac = new AbortController()
   let idleTimer: ReturnType<typeof setTimeout> | null = null
   const armIdle = () => {
@@ -163,6 +184,7 @@ export async function* chatCompletionStream(
       res.status,
       detail.slice(0, 500),
     )
+    turnLog().note(`DeepSeek stream ${res.status}: ${detail.slice(0, 300)}`)
     throw new Error(`DeepSeek ${res.status}`)
   }
 
@@ -232,6 +254,19 @@ export async function* chatCompletionStream(
         }
       }
     }
+  } catch (err) {
+    // Обрив/таймаут посеред стріму: фіксуємо в лог те, що встигли зібрати,
+    // і кидаємо далі — обробка обриву лишається в agent.ts.
+    turnLog().note(`Стрім обірвався: ${String(err)}`)
+    turnLog().response({
+      text: content,
+      toolCall: toolName
+        ? { name: toolName, arguments: toolArgs }
+        : null,
+      finishReason,
+      ms: Date.now() - t0,
+    })
+    throw err
   } finally {
     if (idleTimer) clearTimeout(idleTimer)
     reader.releaseLock()
@@ -244,6 +279,15 @@ export async function* chatCompletionStream(
         function: { name: toolName, arguments: toolArgs },
       }
     : null
+
+  turnLog().response({
+    text: content,
+    toolCall: toolCall
+      ? { name: toolCall.function.name, arguments: toolCall.function.arguments }
+      : null,
+    finishReason,
+    ms: Date.now() - t0,
+  })
 
   return { content, toolCall, finishReason }
 }
