@@ -34,6 +34,7 @@ export interface CleaningMetadata {
   frequency?: string
   // вікна
   windowsCount?: number
+  windowSide?: string
   balcony?: string
   // хімчистка
   items?: CleaningItem[]

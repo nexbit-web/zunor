@@ -12,6 +12,7 @@
     ROOM_OPTIONS,
     ELEVATOR_OPTIONS,
     BALCONY_OPTIONS,
+    WINDOW_SIDE_OPTIONS,
     TRASH_OPTIONS,
     FREQUENCY_OPTIONS,
     SOFA_ITEMS,
@@ -81,6 +82,7 @@
   let trash = $state('')
   let frequency = $state('')
   let windowsCount = $state('')
+  let windowSide = $state('')
   let balcony = $state('')
   let items = $state<CleaningItem[]>([])
 
@@ -102,7 +104,9 @@
   const step3Valid = $derived.by(() => {
     if (needsItems(service)) return items.length > 0
     if (needsWindows(service))
-      return windowsCount !== '' && Number(windowsCount) > 0
+      return (
+        windowsCount !== '' && Number(windowsCount) > 0 && windowSide !== ''
+      )
     if (needsRooms(service)) {
       const base = rooms !== ''
       if (needsFrequency(service)) return base && frequency !== ''
@@ -121,6 +125,7 @@
     trash: trash || undefined,
     frequency: frequency || undefined,
     windowsCount: windowsCount ? Number(windowsCount) : undefined,
+    windowSide: windowSide || undefined,
     balcony: balcony || undefined,
     items: items.length ? items : undefined,
   })
@@ -174,6 +179,7 @@
     trash = ''
     frequency = ''
     windowsCount = ''
+    windowSide = ''
     balcony = ''
     items = []
     step = 3
@@ -254,6 +260,7 @@
     if (needsFrequency(service)) metadata.frequency = frequency
     if (needsWindows(service)) {
       metadata.windowsCount = Number(windowsCount)
+      metadata.windowSide = windowSide
       if (floor) metadata.floor = Number(floor)
       if (balcony) metadata.balcony = balcony
     }
@@ -560,6 +567,22 @@
                 />
               </div>
               <div class="mb-5.5">
+                <span
+                  class="mb-2.75 block text-[13.5px] font-semibold text-foreground"
+                  >З якого боку мити</span
+                >
+                <div class="grid grid-cols-3 gap-2.25">
+                  {#each WINDOW_SIDE_OPTIONS as o (o.key)}
+                    <button
+                      type="button"
+                      onclick={() => (windowSide = o.key)}
+                      aria-pressed={windowSide === o.key}
+                      class={optCls(windowSide === o.key)}>{o.label}</button
+                    >
+                  {/each}
+                </div>
+              </div>
+              <div class="mb-5.5">
                 <label
                   for="wfloor"
                   class="mb-2.75 block text-[13.5px] font-semibold text-foreground"
@@ -581,15 +604,15 @@
               <div class="mb-5.5">
                 <span
                   class="mb-2.75 block text-[13.5px] font-semibold text-foreground"
-                  >Балкон / лоджія</span
+                  >З якого боку мити</span
                 >
                 <div class="grid grid-cols-3 gap-2.25">
-                  {#each BALCONY_OPTIONS as o (o.key)}
+                  {#each WINDOW_SIDE_OPTIONS as o (o.key)}
                     <button
                       type="button"
-                      onclick={() => (balcony = o.key)}
-                      aria-pressed={balcony === o.key}
-                      class={optCls(balcony === o.key)}>{o.label}</button
+                      onclick={() => (windowSide = o.key)}
+                      aria-pressed={windowSide === o.key}
+                      class={optCls(windowSide === o.key)}>{o.label}</button
                     >
                   {/each}
                 </div>

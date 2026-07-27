@@ -9,6 +9,7 @@ import {
   roomLabel,
   elevatorLabel,
   balconyLabel,
+  windowSideLabel,
   trashLabel,
   frequencyLabel,
   whenLabel,
@@ -103,6 +104,13 @@ export function describeJob(metadata: unknown): JobDetail[] {
       label: 'Кількість вікон',
       value: `${count} ${pluralUk(count, 'вікно', 'вікна', 'вікон')}`,
       icon: 'AppWindow',
+    })
+  }
+  if (m.windowSide) {
+    details.push({
+      label: 'Сторона миття',
+      value: windowSideLabel(String(m.windowSide)),
+      icon: 'ArrowLeftRight',
     })
   }
   if (m.balcony) {

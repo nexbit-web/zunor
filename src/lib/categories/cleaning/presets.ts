@@ -97,6 +97,17 @@ export function balconyLabel(key: string): string {
   return BALCONY_OPTIONS.find((o) => o.key === key)?.label ?? key
 }
 
+// Сторона миття (для вікон) — найсильніше впливає на ціну:
+// зовні потрібні страховка/висотні роботи, зсередини — ні.
+export const WINDOW_SIDE_OPTIONS = [
+  { key: 'inside', label: 'Зсередини' },
+  { key: 'outside', label: 'Ззовні' },
+  { key: 'both', label: 'З двох боків' },
+]
+export function windowSideLabel(key: string): string {
+  return WINDOW_SIDE_OPTIONS.find((o) => o.key === key)?.label ?? key
+}
+
 // Сміття (для після ремонту)
 export const TRASH_OPTIONS = [
   { key: 'removed', label: 'Сміття вже винесене' },

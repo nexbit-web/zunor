@@ -19,6 +19,7 @@
   import Calendar from '@lucide/svelte/icons/calendar'
   import DoorOpen from '@lucide/svelte/icons/door-open'
   import ArrowUpDown from '@lucide/svelte/icons/arrow-up-down'
+  import ArrowLeftRight from '@lucide/svelte/icons/arrow-left-right'
   import Trash2 from '@lucide/svelte/icons/trash-2'
   import Repeat from '@lucide/svelte/icons/repeat'
   import AppWindow from '@lucide/svelte/icons/app-window'
@@ -84,12 +85,10 @@
   let uploading = $derived(uploadingCount > 0)
   let fileInputEl = $state<HTMLInputElement | undefined>(undefined)
 
-  // Кнопка «+» оживає, щойно Zunor дійшов до фото-кроку (чіпс «Додати фото»)
-  // або вже сформував заявку. Одного разу розблокована — лишається активною.
-  let photosUnlocked = $state(false)
-  let photosAllowed = $derived(
-    photosUnlocked || messages.some((m) => m.role === 'summary'),
-  )
+  // Фото дозволені ЗАВЖДИ. Раніше кнопка «+» відмикалась лише коли модель
+  // видала чіпс «Додати фото» — якщо вона просила фото текстом без рядка
+  // >>>, клієнт не міг нічого прикріпити, і діалог зациклювався на кроці 6.
+  const photosAllowed = true
   // Фото-стадія: Zunor саме зараз пропонує фото → пульсуємо кнопкою «+»
   let photoStage = $derived(chips.some(isAddPhotoChip))
   // Іконки рядків summary — ті самі імена, що віддає describeJob
@@ -100,6 +99,7 @@
     Calendar,
     DoorOpen,
     ArrowUpDown,
+    ArrowLeftRight,
     Trash2,
     Repeat,
     AppWindow,
@@ -369,7 +369,10 @@
           : ''
         return [{ role: 'user', content: (m.text + suffix).trim() }]
       }
-      if (m.role === 'zunor') return [{ role: 'assistant', content: m.text }]
+      if (m.role === 'zunor') {
+        const content = m.text.trim()
+        return content ? [{ role: 'assistant' as const, content }] : []
+      }
       return []
     })
   }
@@ -438,11 +441,23 @@
 
   /** Ховає рядок «>>> ...» під час стріму: чіпси показуються кнопками,
       а не текстом. Хвіст-огризок ('>' або '>>') теж ріжемо, щоб не блимав. */
+  /** Markdown-маркери → протокольне «— ». Дублює серверний
+      normalizeListMarkers: сервер чистить лише фінал, а під час стріму
+      клієнт малює сирий текст — інакше зірочки видно, поки друкується. */
+  function normalizeMarkers(text: string): string {
+    return text.replace(/^[ \t]*[*\-•][ \t]+/gm, '— ')
+  }
+
   function visibleText(raw: string): string {
     const idx = raw.indexOf('>>>')
-    if (idx !== -1) return raw.slice(0, idx).trimEnd()
-    const tail = raw.match(/>{1,2}$/)
-    return tail ? raw.slice(0, raw.length - tail[0].length) : raw
+    const body =
+      idx !== -1
+        ? raw.slice(0, idx).trimEnd()
+        : (() => {
+            const tail = raw.match(/>{1,2}$/)
+            return tail ? raw.slice(0, raw.length - tail[0].length) : raw
+          })()
+    return normalizeMarkers(body)
   }
 
   async function advance(userText: string) {
@@ -563,7 +578,6 @@
 
       if (final.kind === 'message' && final.suggestions?.length) {
         chips = final.suggestions
-        if (chips.some(isAddPhotoChip)) photosUnlocked = true
         await revealContentEnd()
       } else {
         updateSpacer()

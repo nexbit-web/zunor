@@ -1,19 +1,10 @@
 // src/routes/api/zunor/chat/+server.ts
-//
-// POST /api/zunor/chat — один хід діалогу з Zunor-агентом (СТРІМ).
-// Віддає NDJSON-потік:
-//   {"t":"text","d":"…"}   — шматок тексту (клієнт дописує одразу)
-//   {"t":"final","r":{…}}  — фінал: draft/suggestions/очищений reply
-// Endpoint НЕ створює заявку: драфт підтверджує людина → POST /api/jobs.
-//
-// Порядок: авторизація + rate-limit + валідація ДО відкриття потоку
-// (щоб помилки йшли чесним HTTP-кодом). Помилки ПІД ЧАС стріму йдуть
-// як final-подія — заголовки вже відправлені, код не змінити.
 import { json, error } from '@sveltejs/kit'
 import { auth } from '$lib/auth'
 import { prisma } from '$lib/prisma'
 import { limit } from '$lib/rate-limit'
 import { runZunorTurnStream } from '$lib/server/zunor/agent'
+import { turnLog, withTurnLog } from '$lib/server/zunor/turn-log'
 import type { ZunorClientMessage, ZunorResponse } from '$lib/types/zunor'
 import type { RequestHandler } from './$types'
 
@@ -74,24 +65,28 @@ export const POST: RequestHandler = async ({ request }) => {
         obj: { t: 'text'; d: string } | { t: 'final'; r: ZunorResponse },
       ) => controller.enqueue(encoder.encode(JSON.stringify(obj) + '\n'))
 
-      try {
-        const final = await runZunorTurnStream(history, city, (delta) => {
-          send({ t: 'text', d: delta })
-        })
-        send({ t: 'final', r: final })
-      } catch (err) {
-        console.error('[zunor] stream turn failed:', err)
-        // Потік уже відкрито → generic-помилка як final, без внутрішніх деталей
-        send({
-          t: 'final',
-          r: {
-            kind: 'message',
-            reply: 'Zunor тимчасово недоступний. Спробуйте ще раз.',
-          },
-        })
-      } finally {
-        controller.close()
-      }
+      await withTurnLog({ userId, city }, async () => {
+        try {
+          const final = await runZunorTurnStream(history, city, (delta) => {
+            send({ t: 'text', d: delta })
+          })
+          turnLog().final(final)
+          send({ t: 'final', r: final })
+        } catch (err) {
+          console.error('[zunor] stream turn failed:', err)
+          turnLog().note(`ХІД УПАВ: ${String(err)}`)
+          // Потік уже відкрито → generic-помилка як final, без внутрішніх деталей
+          send({
+            t: 'final',
+            r: {
+              kind: 'message',
+              reply: 'Zunor тимчасово недоступний. Спробуйте ще раз.',
+            },
+          })
+        }
+      })
+
+      controller.close()
     },
   })
 
