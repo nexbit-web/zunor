@@ -1,18 +1,26 @@
 <script lang="ts">
   import { cn } from '$lib/utils.js'
-  import type { HTMLAttributes } from 'svelte/elements'
+  import type { HTMLFormAttributes } from 'svelte/elements'
   import { signIn } from '$lib/auth-client'
   import { goto, invalidateAll } from '$app/navigation'
   import { dev } from '$app/environment'
-  import { AlertCircle, CheckCircle2, Eye, EyeOff } from 'lucide-svelte'
+  import { Eye, EyeOff } from 'lucide-svelte'
   import { Button } from './ui/button'
+  import { Input } from './ui/input'
   import { Spinner } from './ui/spinner'
+  import {
+    FieldGroup,
+    Field,
+    FieldLabel,
+    FieldError,
+    FieldDescription,
+    FieldSeparator,
+  } from './ui/field'
   import toast from 'svelte-hot-french-toast'
   import { page } from '$app/state'
   import { safeRedirectTarget } from '$lib/utils/redirect'
 
-  let { class: className, ...restProps }: HTMLAttributes<HTMLDivElement> =
-    $props()
+  let { class: className, ...restProps }: HTMLFormAttributes = $props()
   const id = $props.id()
 
   // ─── State ───
@@ -66,11 +74,8 @@
       goto(safeRedirectTarget(page.url.searchParams.get('redirectTo')))
 
       const name = data?.user?.name ?? ''
-      toast(name ? `Вітаємо, ${name}!` : 'Вітаємо!', {
-        icon: '😊',
-      })
+      toast(name ? `Вітаємо, ${name}!` : 'Вітаємо!', { icon: '😊' })
     } catch (err) {
-      // Лог лише в dev — у проді не світимо деталей у консоль користувача.
       if (dev) console.error('[login] failed:', err)
       serverError = "Помилка з'єднання. Перевірте інтернет."
     } finally {
@@ -79,227 +84,120 @@
   }
 </script>
 
-<div
-  class={cn('  flex w-full max-w-104 flex-col gap-4.5', className)}
+<form
+  class={cn('flex flex-col gap-6', className)}
+  onsubmit={handleSubmit}
+  novalidate
+  autocomplete="on"
   {...restProps}
 >
-  <!-- glass card -->
-  <div
-    class="rounded-[32px] border border-border bg-card px-9 pt-10 pb-8.5"
-  >
-    <div class="mb-6 text-center">
-      <h1
-        class="text-[26px] leading-tight font-bold tracking-[-0.01em] text-foreground"
-      >
-        Вхід до Zunor
-      </h1>
-      <p class="mt-2 text-[15px] leading-[1.45] text-muted-foreground">
-        Раді бачити вас знову
+  <FieldGroup>
+    <div class="flex flex-col items-center gap-1 text-center">
+      <h1 class="text-2xl font-bold">Вхід до акаунту</h1>
+      <p class="text-sm text-balance text-muted-foreground">
+        Введіть свою електронну адресу та пароль
       </p>
     </div>
 
-    <form
-      onsubmit={handleSubmit}
-      novalidate
-      autocomplete="on"
-      class="flex flex-col gap-4.5"
-    >
-      <!-- Email -->
-      <div class="flex flex-col gap-2">
-        <label
-          for="email-{id}"
-          class="text-sm font-semibold tracking-[-0.01em] text-foreground"
-        >
-          Email
-        </label>
-        <div class="relative">
-          <input
-            id="email-{id}"
-            type="email"
-            inputmode="email"
-            autocapitalize="none"
-            autocomplete="email"
-            spellcheck="false"
-            placeholder="name@example.com"
-            bind:value={email}
-            onblur={() => (touched.email = true)}
-            maxlength={254}
-            aria-invalid={!!emailError}
-            aria-describedby={emailError ? `email-err-${id}` : undefined}
-            class={cn(
-              'field-input pr-10',
-              touched.email && isValidEmail(email) && 'is-valid',
-            )}
-            required
-          />
-          {#if touched.email && isValidEmail(email)}
-            <CheckCircle2
-              class="pointer-events-none absolute top-1/2 right-3.5 size-4.5 -translate-y-1/2 text-emerald-500"
-              aria-hidden="true"
-            />
-          {:else if emailError}
-            <AlertCircle
-              class="pointer-events-none absolute top-1/2 right-3.5 size-4.5 -translate-y-1/2 text-destructive"
-              aria-hidden="true"
-            />
-          {/if}
-        </div>
-        {#if emailError}
-          <p id="email-err-{id}" class="text-[12.5px] text-destructive">
-            {emailError}
-          </p>
-        {/if}
-      </div>
-
-      <!-- Password -->
-      <div class="flex flex-col gap-2">
-        <div class="flex items-center justify-between">
-          <label
-            for="password-{id}"
-            class="text-sm font-semibold tracking-[-0.01em] text-foreground"
-          >
-            Пароль
-          </label>
-          <a
-            href="/user/forgot"
-            class="rounded-sm text-[12.5px] font-medium text-primary underline-offset-[3px] hover:text-primary-hover hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          >
-            Забули пароль?
-          </a>
-        </div>
-        <div class="relative">
-          <input
-            id="password-{id}"
-            type={showPassword ? 'text' : 'password'}
-            placeholder="••••••••••"
-            bind:value={password}
-            onblur={() => (touched.password = true)}
-            autocomplete="current-password"
-            aria-invalid={!!passwordError}
-            aria-describedby={passwordError ? `pw-err-${id}` : undefined}
-            class="field-input pr-11"
-            required
-          />
-          <button
-            type="button"
-            onclick={() => (showPassword = !showPassword)}
-            class="absolute cursor-pointer top-1/2 right-2 flex size-8.5 -translate-y-1/2 items-center justify-center rounded-[9px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-            aria-label={showPassword ? 'Сховати пароль' : 'Показати пароль'}
-            aria-pressed={showPassword}
-          >
-            {#if showPassword}
-              <EyeOff class="size-4.5" aria-hidden="true" />
-            {:else}
-              <Eye class="size-4.5" aria-hidden="true" />
-            {/if}
-          </button>
-        </div>
-        {#if passwordError}
-          <p id="pw-err-{id}" class="text-[12.5px] text-destructive">
-            {passwordError}
-          </p>
-        {/if}
-      </div>
-
-      <!-- Server error -->
-      {#if serverError}
-        <div
-          class="flex items-start gap-2.5 rounded-[13px] border border-destructive/20 bg-destructive/10 px-3.5 py-3 text-[13.5px] leading-snug text-destructive"
-          role="alert"
-        >
-          <AlertCircle class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-          <span>{serverError}</span>
-        </div>
+    <!-- Email -->
+    <Field>
+      <FieldLabel for="email-{id}">Email</FieldLabel>
+      <Input
+        id="email-{id}"
+        type="email"
+        class="py-5"
+        inputmode="email"
+        autocapitalize="none"
+        autocomplete="email"
+        spellcheck="false"
+        placeholder="name@example.com"
+        bind:value={email}
+        onblur={() => (touched.email = true)}
+        maxlength={254}
+        aria-invalid={!!emailError}
+        aria-describedby={emailError ? `email-err-${id}` : undefined}
+        required
+      />
+      {#if emailError}
+        <FieldError id="email-err-{id}">{emailError}</FieldError>
       {/if}
+    </Field>
 
-      <!-- Submit -->
-      <Button
+    <!-- Password -->
+    <Field>
+      <div class="flex items-center">
+        <FieldLabel for="password-{id}">Пароль</FieldLabel>
+        <a
+          href="/user/forgot"
+          class="ms-auto text-sm underline-offset-4 hover:underline"
+        >
+          Забули пароль?
+        </a>
+      </div>
+      <div class="relative">
+        <Input
+          id="password-{id}"
+          type={showPassword ? 'text' : 'password'}
+          placeholder="••••••••••"
+          bind:value={password}
+          onblur={() => (touched.password = true)}
+          autocomplete="current-password"
+          aria-invalid={!!passwordError}
+          aria-describedby={passwordError ? `pw-err-${id}` : undefined}
+          class="pr-10 py-5  "
+          required
+        />
+        <button
+          type="button"
+          onclick={() => (showPassword = !showPassword)}
+          class="absolute mr-0.5 top-1/2 right-0.5 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          aria-label={showPassword ? 'Сховати пароль' : 'Показати пароль'}
+          aria-pressed={showPassword}
+        >
+          {#if showPassword}
+            <EyeOff class="size-4" aria-hidden="true" />
+          {:else}
+            <Eye class="size-4" aria-hidden="true" />
+          {/if}
+        </button>
+      </div>
+      {#if passwordError}
+        <FieldError id="pw-err-{id}">{passwordError}</FieldError>
+      {/if}
+    </Field>
+
+    <!-- Server error -->
+    {#if serverError}
+      <Field>
+        <FieldError role="alert">{serverError}</FieldError>
+      </Field>
+    {/if}
+
+    <!-- Submit -->
+    <Field>
+   <Button
+        class="relative py-6  "
         type="submit"
         disabled={loading || !formValid}
         aria-busy={loading}
-        class="relative mt-1.5 inline-flex h-13.5 w-full items-center justify-center rounded-[16px] bg-primary text-[15.5px] font-semibold tracking-[-0.01em] text-primary-foreground transition hover:-translate-y-px hover:bg-primary-hover active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:translate-y-0 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
       >
-        <span class="pointer-events-none">
-          {#if loading}
-            Зачекайте...
-          {:else}
-            Увійти
-          {/if}
-        </span>
-
+        <span>{loading ? 'Зачекайте...' : 'Увійти'}</span>
         {#if loading}
           <Spinner class="absolute right-4 animate-spin" aria-hidden="true" />
         {/if}
       </Button>
+    </Field>
 
-      <p class="text-center text-[13.5px] text-muted-foreground">
-        Немає облікового запису?
-        <a
-          href="/user/register"
-          class="rounded-sm font-semibold text-primary underline-offset-[3px] hover:text-primary-hover hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-        >
-          Зареєструватися
-        </a>
-      </p>
-    </form>
-  </div>
+    <FieldSeparator />
 
-  <p class="px-3 text-center text-xs leading-relaxed text-muted-foreground">
-    Натискаючи «Увійти», ви погоджуєтеся з нашими
-    <a
-      href="/terms"
-      target="_blank"
-      rel="noopener"
-      class="rounded-sm text-primary underline-offset-2 hover:text-primary-hover hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-      >Умовами</a
-    >
-    та
-    <a
-      href="/privacy"
-      target="_blank"
-      rel="noopener"
-      class="rounded-sm text-primary underline-offset-2 hover:text-primary-hover hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-      >Політикою</a
-    >.
-  </p>
-</div>
-
-<style>
-  .field-input {
-    width: 100%;
-    height: 54px;
-    padding-left: 18px;
-    border-radius: 16px;
-    border: 1px solid var(--border);
-    background: var(--muted);
-    color: var(--foreground);
-    font-size: 15px;
-    font-weight: 500;
-    outline: none;
-    transition:
-      border-color 0.16s ease,
-      background 0.16s ease,
-      box-shadow 0.16s ease;
-  }
-  .field-input::placeholder {
-    color: var(--muted-foreground);
-    font-weight: 400;
-  }
-  .field-input:focus {
-    background: var(--background);
-    border-color: var(--ring);
-    box-shadow: 0 0 0 4px color-mix(in oklch, var(--ring) 22%, transparent);
-  }
-  /* Стан помилки керується через aria-invalid — без зайвого класу. */
-  .field-input[aria-invalid='true'] {
-    border-color: var(--destructive);
-  }
-  .field-input.is-valid {
-    border-color: color-mix(in oklch, var(--primary) 45%, transparent);
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .field-input {
-      transition: none;
-    }
-  }
-</style>
+    <FieldDescription class="text-center">
+      Немає облікового запису?
+      <a
+        href="/user/register"
+        class="ms-auto text-sm underline-offset-4 hover:underline"
+      >
+        Зареєструватися
+      </a>
+    </FieldDescription>
+  </FieldGroup>
+</form>

@@ -51,14 +51,14 @@
 <svelte:window onpageshow={onPageShow} />
 
 <div
-  class="flex bg-(--dashboard) pt-2 pr-2 pb-2"
+  class="flex bg-(--dashboard)"
   class:h-screen={isChat}
   class:min-h-screen={!isChat}
 >
   <Sidebar />
 
   <div
-    class="flex min-w-0 flex-1 flex-col rounded-xl bg-background"
+    class="flex min-w-0 flex-1 flex-col  bg-background "
     class:min-h-0={isChat}
     class:overflow-hidden={isChat}
   >

@@ -1,5 +1,5 @@
 -- CreateEnum
-CREATE TYPE "Role" AS ENUM ('CLIENT', 'MASTER', 'ADMIN');
+CREATE TYPE "Role" AS ENUM ('CLIENT', 'MASTER', 'ADMIN', 'MANAGER', 'MODERATOR');
 
 -- CreateEnum
 CREATE TYPE "VerificationStatus" AS ENUM ('NONE', 'PENDING', 'VERIFIED', 'REJECTED');
@@ -32,12 +32,18 @@ CREATE TABLE "User" (
     "bio" TEXT,
     "role" "Role" NOT NULL DEFAULT 'CLIENT',
     "city" TEXT,
-    "avgRating" DOUBLE PRECISION NOT NULL DEFAULT 0,
-    "reviewsCount" INTEGER NOT NULL DEFAULT 0,
+    "onboarded" BOOLEAN NOT NULL DEFAULT false,
+    "avgRatingAsMaster" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "reviewsCountAsMaster" INTEGER NOT NULL DEFAULT 0,
+    "avgRatingAsClient" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "reviewsCountAsClient" INTEGER NOT NULL DEFAULT 0,
     "isOnline" BOOLEAN NOT NULL DEFAULT false,
     "lastSeen" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
+    "banned" BOOLEAN NOT NULL DEFAULT false,
+    "banReason" TEXT,
+    "banExpires" TIMESTAMP(3),
 
     CONSTRAINT "User_pkey" PRIMARY KEY ("id")
 );
@@ -48,6 +54,9 @@ CREATE TABLE "MasterProfile" (
     "userId" TEXT NOT NULL,
     "categories" TEXT[] DEFAULT ARRAY[]::TEXT[],
     "description" TEXT,
+    "metadata" JSONB,
+    "portfolioImages" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "portfolioImagesPublicIds" TEXT[] DEFAULT ARRAY[]::TEXT[],
     "verificationStatus" "VerificationStatus" NOT NULL DEFAULT 'NONE',
     "verificationRejectReason" TEXT,
     "verifiedAt" TIMESTAMP(3),
@@ -67,7 +76,8 @@ CREATE TABLE "Job" (
     "category" TEXT NOT NULL,
     "city" TEXT NOT NULL,
     "title" TEXT NOT NULL,
-    "description" TEXT NOT NULL,
+    "description" TEXT,
+    "metadata" JSONB,
     "budgetMinCents" INTEGER,
     "budgetMaxCents" INTEGER,
     "currency" TEXT NOT NULL DEFAULT 'UAH',
@@ -108,6 +118,7 @@ CREATE TABLE "Order" (
     "masterId" TEXT NOT NULL,
     "title" TEXT NOT NULL,
     "description" TEXT NOT NULL,
+    "metadata" JSONB,
     "priceCents" INTEGER NOT NULL,
     "currency" TEXT NOT NULL DEFAULT 'UAH',
     "status" "OrderStatus" NOT NULL DEFAULT 'CREATED',
@@ -119,6 +130,9 @@ CREATE TABLE "Order" (
     "chatId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
+    "removedAt" TIMESTAMP(3),
+    "removedById" TEXT,
+    "removedReason" TEXT,
 
     CONSTRAINT "Order_pkey" PRIMARY KEY ("id")
 );
@@ -201,6 +215,7 @@ CREATE TABLE "Category" (
     "icon" TEXT,
     "sortOrder" INTEGER NOT NULL DEFAULT 0,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "metadataSchema" JSONB,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -252,6 +267,7 @@ CREATE TABLE "Session" (
     "userAgent" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
+    "impersonatedBy" TEXT,
 
     CONSTRAINT "Session_pkey" PRIMARY KEY ("id")
 );
@@ -294,6 +310,21 @@ CREATE TABLE "verification" (
     "updatedAt" TIMESTAMP(3),
 
     CONSTRAINT "verification_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "DispatchEvent" (
+    "id" TEXT NOT NULL,
+    "jobId" TEXT NOT NULL,
+    "masterId" TEXT NOT NULL,
+    "wave" INTEGER NOT NULL,
+    "score" DOUBLE PRECISION NOT NULL,
+    "notifiedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "openedAt" TIMESTAMP(3),
+    "respondedAt" TIMESTAMP(3),
+    "declined" BOOLEAN NOT NULL DEFAULT false,
+
+    CONSTRAINT "DispatchEvent_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex
@@ -354,6 +385,9 @@ CREATE INDEX "Order_masterId_status_idx" ON "Order"("masterId", "status");
 CREATE INDEX "Order_status_createdAt_idx" ON "Order"("status", "createdAt");
 
 -- CreateIndex
+CREATE INDEX "Order_removedAt_idx" ON "Order"("removedAt");
+
+-- CreateIndex
 CREATE INDEX "OrderEvent_orderId_createdAt_idx" ON "OrderEvent"("orderId", "createdAt");
 
 -- CreateIndex
@@ -407,6 +441,15 @@ CREATE INDEX "OtpCode_email_idx" ON "OtpCode"("email");
 -- CreateIndex
 CREATE INDEX "verification_identifier_idx" ON "verification"("identifier");
 
+-- CreateIndex
+CREATE INDEX "DispatchEvent_jobId_idx" ON "DispatchEvent"("jobId");
+
+-- CreateIndex
+CREATE INDEX "DispatchEvent_masterId_idx" ON "DispatchEvent"("masterId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "DispatchEvent_jobId_masterId_key" ON "DispatchEvent"("jobId", "masterId");
+
 -- AddForeignKey
 ALTER TABLE "MasterProfile" ADD CONSTRAINT "MasterProfile_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
@@ -423,19 +466,19 @@ ALTER TABLE "Proposal" ADD CONSTRAINT "Proposal_jobId_fkey" FOREIGN KEY ("jobId"
 ALTER TABLE "Proposal" ADD CONSTRAINT "Proposal_masterId_fkey" FOREIGN KEY ("masterId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "Order" ADD CONSTRAINT "Order_chatId_fkey" FOREIGN KEY ("chatId") REFERENCES "Chat"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "Order" ADD CONSTRAINT "Order_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Order" ADD CONSTRAINT "Order_masterId_fkey" FOREIGN KEY ("masterId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Order" ADD CONSTRAINT "Order_chatId_fkey" FOREIGN KEY ("chatId") REFERENCES "Chat"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "OrderEvent" ADD CONSTRAINT "OrderEvent_actorId_fkey" FOREIGN KEY ("actorId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "OrderEvent" ADD CONSTRAINT "OrderEvent_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "Order"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "OrderEvent" ADD CONSTRAINT "OrderEvent_actorId_fkey" FOREIGN KEY ("actorId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "ChatMember" ADD CONSTRAINT "ChatMember_chatId_fkey" FOREIGN KEY ("chatId") REFERENCES "Chat"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -447,16 +490,16 @@ ALTER TABLE "ChatMember" ADD CONSTRAINT "ChatMember_userId_fkey" FOREIGN KEY ("u
 ALTER TABLE "Message" ADD CONSTRAINT "Message_chatId_fkey" FOREIGN KEY ("chatId") REFERENCES "Chat"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Message" ADD CONSTRAINT "Message_senderId_fkey" FOREIGN KEY ("senderId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "Message" ADD CONSTRAINT "Message_replyToId_fkey" FOREIGN KEY ("replyToId") REFERENCES "Message"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Review" ADD CONSTRAINT "Review_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "Order"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Message" ADD CONSTRAINT "Message_senderId_fkey" FOREIGN KEY ("senderId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Review" ADD CONSTRAINT "Review_authorId_fkey" FOREIGN KEY ("authorId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Review" ADD CONSTRAINT "Review_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "Order"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Notification" ADD CONSTRAINT "Notification_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;

@@ -6,10 +6,15 @@ import { channels, events, safeTrigger } from '$lib/server/pusher'
 import { limit } from '$lib/rate-limit'
 import type { RequestHandler } from './$types'
 import type { ChatMessage } from '$lib/components/chat/types'
-import type { MessageType } from '../../../../../generated/prisma/client'
 
 const MESSAGE_PAGE_SIZE = 50
 const MAX_TEXT_LENGTH = 4000
+
+const ALLOWED_TYPES = ['TEXT', 'PHOTO', 'FILE'] as const
+type AllowedType = (typeof ALLOWED_TYPES)[number]
+
+const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
+const MAX_ATTACHMENT_NAME = 255
 
 export const GET: RequestHandler = async ({ params, url, request }) => {
   const session = await auth.api.getSession({ headers: request.headers })
@@ -25,7 +30,9 @@ export const GET: RequestHandler = async ({ params, url, request }) => {
   if (!membership) throw error(403, 'Not a member')
 
   const messages = await prisma.message.findMany({
-    where: { chatId },
+    // type != SYSTEM — legacy-рядки не показуємо навіть якщо міграцію
+    // ще не накотили.
+    where: { chatId, type: { not: 'SYSTEM' } },
     orderBy: { createdAt: 'desc' },
     take: MESSAGE_PAGE_SIZE + 1,
     ...(cursor && { cursor: { id: cursor }, skip: 1 }),
@@ -55,7 +62,7 @@ export const GET: RequestHandler = async ({ params, url, request }) => {
 
   const transformed: ChatMessage[] = items.map((m) => ({
     id: m.id,
-    type: m.type,
+    type: m.type as AllowedType,
     text: m.deletedAt ? '' : m.text,
     attachmentUrl: m.deletedAt ? null : m.attachmentUrl,
     attachmentMimeType: m.attachmentMimeType,
@@ -72,7 +79,7 @@ export const GET: RequestHandler = async ({ params, url, request }) => {
           id: m.replyTo.id,
           text: m.replyTo.text,
           senderId: m.replyTo.senderId,
-          type: m.replyTo.type,
+          type: m.replyTo.type as AllowedType,
         }
       : null,
   }))
@@ -91,16 +98,74 @@ export const POST: RequestHandler = async ({ params, request }) => {
   if (!rl.success) throw error(429, 'Too many messages')
 
   const body = await request.json().catch(() => null)
-  if (!body) throw error(400, 'Invalid JSON')
+  if (!body || typeof body !== 'object') throw error(400, 'Invalid JSON')
 
-  const type: MessageType = body.type ?? 'TEXT'
-  const text = String(body.text ?? '').trim()
-  const replyToId = body.replyToId ? String(body.replyToId) : null
+  // ─── Валідація типу ───
+  const rawType = (body as { type?: unknown }).type ?? 'TEXT'
+  if (!ALLOWED_TYPES.includes(rawType as AllowedType)) {
+    throw error(400, 'Невідомий тип повідомлення')
+  }
+  const type = rawType as AllowedType
+
+  const text = String((body as { text?: unknown }).text ?? '').trim()
+  const rawReplyToId = (body as { replyToId?: unknown }).replyToId
+  const replyToId =
+    typeof rawReplyToId === 'string' && rawReplyToId ? rawReplyToId : null
 
   if (type === 'TEXT' && !text) throw error(400, 'Text required')
   if (text.length > MAX_TEXT_LENGTH) throw error(400, 'Text too long')
-  if ((type === 'PHOTO' || type === 'FILE') && !body.attachment?.url) {
+
+  // ─── Валідація вкладення ───
+  const rawAttachment = (body as { attachment?: unknown }).attachment
+  const attachment =
+    rawAttachment && typeof rawAttachment === 'object'
+      ? (rawAttachment as {
+          url?: unknown
+          publicId?: unknown
+          mimeType?: unknown
+          size?: unknown
+          name?: unknown
+        })
+      : null
+
+  if ((type === 'PHOTO' || type === 'FILE') && !attachment?.url) {
     throw error(400, 'Attachment required')
+  }
+
+  let attachmentUrl: string | null = null
+  let attachmentPublicId: string | null = null
+  let attachmentMimeType: string | null = null
+  let attachmentSize: number | null = null
+  let attachmentName: string | null = null
+
+  if (attachment?.url) {
+    // Приймаємо тільки те, що реально завантажено через нашу підписану форму.
+    if (
+      typeof attachment.url !== 'string' ||
+      !attachment.url.startsWith('https://res.cloudinary.com/')
+    ) {
+      throw error(400, 'Недопустиме посилання на файл')
+    }
+    attachmentUrl = attachment.url
+    attachmentPublicId =
+      typeof attachment.publicId === 'string'
+        ? attachment.publicId.slice(0, 300)
+        : null
+    attachmentMimeType =
+      typeof attachment.mimeType === 'string'
+        ? attachment.mimeType.slice(0, 120)
+        : null
+    attachmentSize =
+      typeof attachment.size === 'number' &&
+      Number.isFinite(attachment.size) &&
+      attachment.size > 0 &&
+      attachment.size <= MAX_ATTACHMENT_BYTES
+        ? Math.trunc(attachment.size)
+        : null
+    attachmentName =
+      typeof attachment.name === 'string'
+        ? attachment.name.slice(0, MAX_ATTACHMENT_NAME)
+        : null
   }
 
   const chatId = params.id
@@ -120,6 +185,17 @@ export const POST: RequestHandler = async ({ params, request }) => {
   })
   if (!membership) throw error(403, 'Not a member')
 
+  // Відповідати можна лише на повідомлення цього ж чату.
+  // Без цієї перевірки reply на чужий messageId повертав би у відповіді
+  // текст повідомлення з чату, до якого юзер не має доступу.
+  if (replyToId) {
+    const parent = await prisma.message.findFirst({
+      where: { id: replyToId, chatId },
+      select: { id: true },
+    })
+    if (!parent) throw error(400, 'Невірне повідомлення для відповіді')
+  }
+
   const previewText =
     type === 'TEXT'
       ? text.slice(0, 200)
@@ -134,11 +210,11 @@ export const POST: RequestHandler = async ({ params, request }) => {
         senderId: session.user.id,
         type,
         text,
-        attachmentUrl: body.attachment?.url ?? null,
-        attachmentPublicId: body.attachment?.publicId ?? null,
-        attachmentMimeType: body.attachment?.mimeType ?? null,
-        attachmentSize: body.attachment?.size ?? null,
-        attachmentName: body.attachment?.name ?? null,
+        attachmentUrl,
+        attachmentPublicId,
+        attachmentMimeType,
+        attachmentSize,
+        attachmentName,
         replyToId,
       },
       select: {
@@ -175,7 +251,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
   const payload: ChatMessage = {
     id: message.id,
-    type: message.type,
+    type: message.type as AllowedType,
     text: message.text,
     attachmentUrl: message.attachmentUrl,
     attachmentMimeType: message.attachmentMimeType,
@@ -192,7 +268,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
           id: message.replyTo.id,
           text: message.replyTo.text,
           senderId: message.replyTo.senderId,
-          type: message.replyTo.type,
+          type: message.replyTo.type as AllowedType,
         }
       : null,
   }

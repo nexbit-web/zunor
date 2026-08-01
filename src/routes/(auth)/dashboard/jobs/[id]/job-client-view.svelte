@@ -102,12 +102,12 @@
   }
 
   const cardCls =
-    'rounded-[26px] border border-border bg-card shadow-[0_20px_50px_-16px_rgba(0,0,0,0.1),0_4px_12px_-6px_rgba(0,0,0,0.04)]'
+    'rounded-[26px] border border-border bg-card  '
   const badgeBase =
     'inline-flex h-[22px] items-center gap-1 rounded-full px-2.5 text-[10px] font-bold tracking-[0.06em] uppercase'
 </script>
 
-<div class="  min-h-svh px-5 py-12">
+<div class="  min-h-svh px-1 py-1">
   <div class="mx-auto w-full max-w-135">
     <!-- Back -->
     <button

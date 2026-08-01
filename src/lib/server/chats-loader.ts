@@ -49,12 +49,15 @@ export async function loadChatsForUser(userId: string): Promise<ChatPreview[]> {
   const chatIds = memberships.map((m) => m.chat.id)
   const unreadByChatId = new Map<string, number>()
 
-  // Один groupBy вместо N запросов
+  // Один groupBy вместо N запросов.
+  // type != SYSTEM — страховка для legacy-строк: системные события заказов
+  // больше не сообщения и не должны накручивать счётчик непрочитанных.
   const unread = await prisma.message.groupBy({
     by: ['chatId'],
     where: {
       chatId: { in: chatIds },
       senderId: { not: userId },
+      type: { not: 'SYSTEM' },
       deletedAt: null,
       isRead: false,
     },

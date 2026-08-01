@@ -1,4 +1,4 @@
-<!-- src/routes/(auth)/messages/[chatId]/+page.svelte -->
+<!-- src/routes/(auth)/dashboard/messages/[chatId]/+page.svelte -->
 <script lang="ts">
   import { onMount } from 'svelte'
   import * as Resizable from '$lib/components/ui/resizable'
@@ -43,7 +43,7 @@
 </svelte:head>
 
 <!-- На мобільному — лише вікно чату, на десктопі — resizable split -->
-<div class="md:hidden h-full">
+<div class="h-full md:hidden">
   <ChatWindow
     chatId={data.chat.id}
     chat={data.chat}
@@ -51,11 +51,10 @@
     initialNextCursor={data.initialNextCursor}
     currentUserId={data.currentUserId}
     currentUserRole={data.currentUserRole ?? undefined}
-    activeOrder={data.activeOrder}
   />
 </div>
 
-<div class="hidden md:block h-full">
+<div class="hidden h-full md:block">
   <Resizable.PaneGroup
     direction="horizontal"
     class="h-full"
@@ -67,13 +66,16 @@
       maxSize={MAX_SIZE}
       onResize={saveSize}
     >
-      <ChatListSidebar
-        activeChatId={data.chat.id}
-        currentUserId={data.currentUserId}
-      />
+      <!-- Відступи навколо панелі: градієнт сторінки лишається видимим -->
+      <div class="h-full py-3 pr-1.5 pl-3">
+        <ChatListSidebar
+          activeChatId={data.chat.id}
+          currentUserId={data.currentUserId}
+        />
+      </div>
     </Resizable.Pane>
 
-    <Resizable.Handle withHandle={false} />
+    <Resizable.Handle withHandle={false} class="bg-transparent" />
 
     <Resizable.Pane defaultSize={100 - initialSize}>
       <ChatWindow
@@ -83,7 +85,6 @@
         initialNextCursor={data.initialNextCursor}
         currentUserId={data.currentUserId}
         currentUserRole={data.currentUserRole ?? undefined}
-        activeOrder={data.activeOrder}
       />
     </Resizable.Pane>
   </Resizable.PaneGroup>

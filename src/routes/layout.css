@@ -58,7 +58,7 @@
 
   --card: #ffffff;
   --card-foreground: oklch(0.145 0 0);
-  --dashboard: #ffffff;
+  --dashboard: #f9f9f7;
 
   /* Колір тексту */
   --color-text: #131313;
@@ -74,9 +74,9 @@
      focus-ring і фокусною рамкою інпутів (shadcn Input вже прив'язаний
      до --ring через focus-visible:border-ring focus-visible:ring-ring/50,
      тож інпути підхоплюють це без правок компонентів). ─── */
-  --primary: #d97757;
+  --primary: #c6613f; 
   --primary-foreground: oklch(1 0 0);
-  --primary-hover: #c6613f;
+  --primary-hover: #d97757;
   --ring: #d97757;
 
   /* Secondary/muted/accent — нейтральні, без кольору. */
@@ -155,12 +155,12 @@
   --catalog-sidebar-hover: oklch(27.2% 0.002 107);
   --bg-header: oklch(20.42% 0.002 107);
 
-  --background: #1d1d1c;
+  --background: #20201f;
   --foreground: #f9f9f7;
 
   --card: #2c2c2a;
   --card-foreground: oklch(100% 0 0);
-  --dashboard: #2c2c2a;
+  --dashboard: #1f1f1e;
 
   /* Колір тексту */
   --color-text: #f9f9f7;
@@ -171,10 +171,10 @@
 
   --popover: oklch(23% 0.002 107);
   --popover-foreground: oklch(100% 0 0);
-
-  --primary: #d97757;
+ 
+  --primary: #c6613f; 
   --primary-foreground: oklch(1 0 0);
-  --primary-hover: #c6613f;
+ --primary-hover: #d97757;
   --ring: #a44e33;
 
   --secondary: #3c3c3a;
@@ -188,7 +188,7 @@
 
   --destructive: #f87171;
 
-  --border: #3c3c3a;
+  --border: #353533;
   --input: oklch(37.2% 0.004 107 / 40%);
 
   --chart-1: oklch(70.62% 0.1391 264.41);

@@ -16,6 +16,7 @@ interface UpdatePayload {
   name?: string
   phone?: string
   city?: string
+  onboarded?: boolean
   bio?: string
   avatar?: string | null
   avatarPublicId?: string | null
@@ -207,6 +208,7 @@ export const POST: RequestHandler = async ({ request }) => {
   if (body.avatar !== undefined) userData.avatar = body.avatar
   if (body.avatarPublicId !== undefined)
     userData.avatarPublicId = body.avatarPublicId
+  if (body.onboarded === true) userData.onboarded = true
 
   if (Object.keys(userData).length > 0) {
     try {

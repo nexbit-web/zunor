@@ -1,14 +1,14 @@
-﻿import { auth } from '$lib/auth'
-import { prisma } from '$lib/prisma'
-import { redirect } from '@sveltejs/kit'
+﻿import { prisma } from '$lib/prisma'
+import { requireRole } from '$lib/server/guard'
 import type { PageServerLoad } from './$types'
 
 export const load: PageServerLoad = async ({ request }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw redirect(302, '/user/login?next=/dashboard/proposals')
+  // Пропозиції — сторінка МАЙСТРА. Клієнта сюди не пускаємо (раніше він
+  // проходив перевірку й бачив порожній список — тепер редірект на дашборд).
+  const user = await requireRole(request, ['MASTER'], '/dashboard/proposals')
 
   const proposals = await prisma.proposal.findMany({
-    where: { masterId: session.user.id },
+    where: { masterId: user.id },
     orderBy: { createdAt: 'desc' },
     include: {
       job: {
