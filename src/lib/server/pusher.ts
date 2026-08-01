@@ -34,6 +34,12 @@ export const events = {
   messageDelete: 'message:delete',
   messageRead: 'message:read',
   chatUpdate: 'chat:update',
+  /**
+   * Зміна статусу замовлення.
+   * Замінює SYSTEM-повідомлення у стрічці: оновлює плашку в шапці чату,
+   * не створюючи запис у Message і не накручуючи лічильник непрочитаних.
+   */
+  orderStatus: 'order:status',
   typing: 'client-typing',
   moderationNew: 'moderation:new',
 } as const

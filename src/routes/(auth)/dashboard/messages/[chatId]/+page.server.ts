@@ -1,8 +1,13 @@
+// src/routes/(auth)/dashboard/messages/[chatId]/+page.server.ts
 import { auth } from '$lib/auth'
 import { prisma } from '$lib/prisma'
 import { error, redirect } from '@sveltejs/kit'
 import type { PageServerLoad } from './$types'
-import type { ChatDetails, ChatMessage } from '$lib/components/chat/types'
+import type {
+  ChatDetails,
+  ChatMessage,
+  MessageType,
+} from '$lib/components/chat/types'
 
 const PAGE_SIZE = 50
 
@@ -51,17 +56,12 @@ export const load: PageServerLoad = async ({ params, request }) => {
     select: { role: true },
   })
 
-  const activeOrder = await prisma.order.findFirst({
-    where: {
-      chatId,
-      status: { in: ['CREATED', 'IN_PROGRESS'] },
-    },
-    select: { id: true, title: true, status: true },
-    orderBy: { updatedAt: 'desc' },
-  })
+  // Замовлення тут навмисно НЕ вантажимо: чат — тільки для спілкування.
+  // Статус замовлення живе на /dashboard/orders, у сповіщеннях і в OrderEvent.
 
   const messages = await prisma.message.findMany({
-    where: { chatId },
+    // type != SYSTEM — legacy-рядки більше не частина стрічки
+    where: { chatId, type: { not: 'SYSTEM' } },
     orderBy: { createdAt: 'desc' },
     take: PAGE_SIZE + 1,
     select: {
@@ -90,7 +90,7 @@ export const load: PageServerLoad = async ({ params, request }) => {
 
   const initialMessages: ChatMessage[] = items.map((m) => ({
     id: m.id,
-    type: m.type,
+    type: m.type as MessageType,
     text: m.deletedAt ? '' : m.text,
     attachmentUrl: m.deletedAt ? null : m.attachmentUrl,
     attachmentMimeType: m.attachmentMimeType,
@@ -107,7 +107,7 @@ export const load: PageServerLoad = async ({ params, request }) => {
           id: m.replyTo.id,
           text: m.replyTo.text,
           senderId: m.replyTo.senderId,
-          type: m.replyTo.type,
+          type: m.replyTo.type as MessageType,
         }
       : null,
   }))
@@ -138,6 +138,5 @@ export const load: PageServerLoad = async ({ params, request }) => {
     initialNextCursor: nextCursor,
     currentUserId: userId,
     currentUserRole: me?.role ?? null,
-    activeOrder,
   }
 }

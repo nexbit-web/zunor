@@ -13,6 +13,7 @@
     '/dashboard',
     '/user/login',
     '/user/register',
+    '/user/otp',
   ]
   const hideHeader = $derived(
     hiddenLayoutRoutes.some((route) => page.url.pathname.startsWith(route)),

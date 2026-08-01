@@ -1,25 +1,26 @@
 <!-- src/lib/components/chat/message-bubble.svelte -->
 <script lang="ts">
   import {
+    AlertCircle,
     Check,
     CheckCheck,
-    FileText,
-    Download,
     Clock,
-    AlertCircle,
-    MoreVertical,
-    Reply,
-    Pencil,
-    Trash2,
     Copy,
-    Briefcase,
+    Download,
+    FileText,
+    MoreVertical,
+    Pencil,
+    Reply,
+    Trash2,
   } from 'lucide-svelte'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
   import type { ChatMessage } from './types'
+  import toast from 'svelte-hot-french-toast'
 
   interface Props {
     message: ChatMessage
     isMine: boolean
+    /** Останнє в групі → малюємо хвостик */
     isLastInGroup: boolean
     showReadStatus: boolean
     isRead: boolean
@@ -27,6 +28,8 @@
     isFailed?: boolean
     /** Підсвітити (для search highlight) */
     isHighlighted?: boolean
+    /** Імʼя автора цитованого повідомлення */
+    replyAuthorName?: string
     onReply?: (m: ChatMessage) => void
     onEdit?: (m: ChatMessage) => void
     onDelete?: (m: ChatMessage) => void
@@ -41,6 +44,7 @@
     isPending = false,
     isFailed = false,
     isHighlighted = false,
+    replyAuthorName = '',
     onReply,
     onEdit,
     onDelete,
@@ -53,6 +57,37 @@
     }),
   )
 
+  const isPhoto = $derived(
+    message.type === 'PHOTO' && !!message.attachmentUrl && !message.deletedAt,
+  )
+  const isFile = $derived(
+    message.type === 'FILE' && !!message.attachmentUrl && !message.deletedAt,
+  )
+
+  /** Меню недоступне для видалених і ще не надісланих */
+  const showMenu = $derived(!message.deletedAt && !isPending && !isFailed)
+
+  /** Редагувати можна тільки свій текст і тільки протягом доби */
+  const canEdit = $derived(
+    isMine &&
+      message.type === 'TEXT' &&
+      Date.now() - new Date(message.createdAt).getTime() < 24 * 60 * 60 * 1000,
+  )
+
+  // Варіанти кольору тримаємо тут, а не в розмітці:
+  // інакше кожен вкладений елемент обростає своїм тернарником
+  const bubbleTone = $derived(
+    isMine ? 'bg-primary text-primary-foreground' : 'bg-card text-card-foreground',
+  )
+  const metaTone = $derived(
+    isMine ? 'text-primary-foreground/75' : 'text-muted-foreground',
+  )
+  const quoteTone = $derived(
+    isMine ? 'border-white/80 bg-white/15' : 'border-primary bg-primary/10',
+  )
+  const quoteAuthorTone = $derived(isMine ? 'text-white' : 'text-primary')
+  const tintTone = $derived(isMine ? 'bg-white/15' : 'bg-primary/10')
+
   function formatSize(bytes: number | null): string {
     if (!bytes) return ''
     if (bytes < 1024) return `${bytes} B`
@@ -60,309 +95,286 @@
     return `${(bytes / 1024 / 1024).toFixed(1)} MB`
   }
 
-  const radiusClass = $derived(
-    isMine
-      ? isLastInGroup
-        ? 'rounded-2xl rounded-br-md'
-        : 'rounded-2xl'
-      : isLastInGroup
-        ? 'rounded-2xl rounded-bl-md'
-        : 'rounded-2xl',
-  )
-
-  // Показуємо меню тільки якщо це не pending/failed/deleted і є хоч 1 callback
-  const showMenu = $derived(!message.deletedAt && !isPending && !isFailed)
-
-  // Чи можна редагувати: тільки моє TEXT повідомлення в межах 24 годин
-  const canEdit = $derived(
-    isMine &&
-      message.type === 'TEXT' &&
-      Date.now() - new Date(message.createdAt).getTime() < 24 * 60 * 60 * 1000,
-  )
+  function replyPreview(): string {
+    if (!message.replyTo) return ''
+    if (message.replyTo.type === 'PHOTO') return 'Фото'
+    if (message.replyTo.type === 'FILE') return 'Файл'
+    return message.replyTo.text
+  }
 
   function copyText() {
     if (message.text) navigator.clipboard.writeText(message.text)
+    toast.success('Скопійовано', { duration: 2000 })
   }
-
-  // ─── SYSTEM message helpers ───
-  // Якщо повідомлення прив'язане до замовлення — Pusher event прокидує orderId.
-  // Можемо взяти його з message як додаткове поле (не у типі, але runtime).
-  const orderIdFromMessage = $derived(
-    (message as any).orderId as string | undefined,
-  )
-
-  // Формат: "📝 Створено замовлення" або "📝 Створено замовлення · причина"
-  // Виокремлюємо emoji якщо є на початку
-  const systemParts = $derived.by(() => {
-    if (message.type !== 'SYSTEM') return null
-    const text = message.text ?? ''
-    // Перші 1-2 символи можуть бути емоджі + пробіл
-    const match = text.match(/^(\p{Emoji}+)\s*(.+)$/u)
-    if (match) {
-      return { icon: match[1], body: match[2] }
-    }
-    return { icon: null, body: text }
-  })
 </script>
 
-{#if message.type === 'SYSTEM'}
-  <!-- ═══════ SYSTEM повідомлення — центральна плашка ═══════ -->
-  <div class="flex justify-center my-3" data-message-id={message.id}>
-    {#if orderIdFromMessage}
-      <a
-        href={`/dashboard/orders/${orderIdFromMessage}`}
-        class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[12px] font-medium transition-colors hover:opacity-80 cursor-pointer max-w-[90%]"
-        style="background-color: var(--muted); color: var(--foreground)"
-      >
-        {#if systemParts?.icon}
-          <span class="text-base leading-none">{systemParts.icon}</span>
-        {:else}
-          <Briefcase
-            class="size-3.5 shrink-0"
-            style="color: var(--muted-foreground)"
-          />
-        {/if}
-        <span class="truncate">{systemParts?.body ?? message.text}</span>
-      </a>
-    {:else}
-      <span
-        class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[12px] max-w-[90%]"
-        style="background-color: var(--muted); color: var(--muted-foreground)"
-      >
-        {#if systemParts?.icon}
-          <span class="text-base leading-none">{systemParts.icon}</span>
-        {/if}
-        <span class="truncate">{systemParts?.body ?? message.text}</span>
-      </span>
-    {/if}
-  </div>
-{:else}
-  <!-- ═══════ Звичайне повідомлення ═══════ -->
+<div
+  class="group flex {isMine ? 'justify-end' : 'justify-start'} {isLastInGroup
+    ? 'mb-2.5'
+    : 'mb-0.5'}"
+  data-message-id={message.id}
+>
   <div
-    class="flex {isMine ? 'justify-end' : 'justify-start'} group"
-    data-message-id={message.id}
+    class="flex max-w-[min(70%,480px)] items-end gap-1 {isMine
+      ? 'flex-row-reverse'
+      : ''}"
   >
-    <div class="max-w-[75%] sm:max-w-[55%] flex flex-col gap-0.5 relative">
+    <div
+      class="relative w-fit max-w-full rounded-xl px-2.5 py-1.5 text-[15px] leading-5 shadow-sm {bubbleTone}"
+      class:rounded-bl-none={isLastInGroup && !isMine}
+      class:rounded-br-none={isLastInGroup && isMine}
+      class:tail-in={isLastInGroup && !isMine}
+      class:tail-out={isLastInGroup && isMine}
+      class:opacity-70={isPending}
+      class:ring-2={isHighlighted}
+      class:ring-ring={isHighlighted}
+      class:overflow-hidden={isPhoto}
+      class:p-[3px]={isPhoto}
+    >
+      <!-- ─── Цитата ─── -->
       {#if message.replyTo}
         <div
-          class="px-3 py-1.5 rounded-lg mb-1 border-l-2 text-xs leading-tight"
-          style="background-color: var(--muted);
-                 border-left-color: var(--primary);
-                 color: var(--muted-foreground)"
+          class="mb-1 rounded border-l-[3px] px-2 py-0.5 text-[13px] leading-[17px] {quoteTone}"
         >
-          <p class="font-medium mb-0.5" style="color: var(--foreground)">
-            У відповідь на
-          </p>
-          <p class="line-clamp-2">
-            {message.replyTo.type === 'PHOTO'
-              ? '📷 Фото'
-              : message.replyTo.type === 'FILE'
-                ? '📎 Файл'
-                : message.replyTo.text || ''}
-          </p>
+          {#if replyAuthorName}
+            <span class="block font-semibold {quoteAuthorTone}">
+              {replyAuthorName}
+            </span>
+          {/if}
+          <span class="line-clamp-1 opacity-85">{replyPreview()}</span>
         </div>
       {/if}
 
-      <div class="flex items-end gap-1.5 {isMine ? 'flex-row-reverse' : ''}">
-        <!-- Bubble -->
-        <div
-          class="relative {radiusClass} px-3 py-2 transition-all"
-          style={isMine
-            ? `background-color: var(--primary); color: var(--primary-foreground); opacity: ${isPending ? 0.7 : 1}; ${isHighlighted ? 'box-shadow: 0 0 0 2px var(--ring);' : ''}`
-            : `background-color: var(--muted); color: var(--foreground); opacity: ${isPending ? 0.7 : 1}; ${isHighlighted ? 'box-shadow: 0 0 0 2px var(--ring);' : ''}`}
+      {#if message.deletedAt}
+        <p class="m-0 italic opacity-60">
+          Повідомлення видалено<span
+            class="meta float-right ml-2.5 inline-flex items-center gap-[3px] pt-1.5 text-[11px] leading-3 tabular-nums whitespace-nowrap select-none {metaTone}"
+          >
+            {time}
+          </span>
+        </p>
+      {:else if isPhoto}
+        <a
+          href={message.attachmentUrl}
+          target="_blank"
+          rel="noopener"
+          class="block overflow-hidden rounded-[10px]"
         >
-          {#if message.deletedAt}
-            <p
-              class="text-sm italic"
-              style={isMine ? 'opacity: 0.7' : 'color: var(--muted-foreground)'}
-            >
-              Повідомлення видалено
-            </p>
-          {:else if message.type === 'PHOTO' && message.attachmentUrl}
-            <a
-              href={message.attachmentUrl}
-              target="_blank"
-              rel="noopener"
-              class="block -mx-3 -my-2 mb-1 rounded-2xl overflow-hidden"
-            >
-              <img
-                src={message.attachmentUrl}
-                alt={message.text || 'Фото'}
-                class="block w-full max-w-sm h-auto object-cover cursor-zoom-in"
-                loading="lazy"
-              />
-            </a>
-            {#if message.text}
-              <p
-                class="text-[14px] leading-snug whitespace-pre-wrap break-words mt-1.5"
-                style="overflow-wrap: anywhere"
-              >
-                {message.text}
-              </p>
-            {/if}
-          {:else if message.type === 'FILE' && message.attachmentUrl}
-            <a
-              href={message.attachmentUrl}
-              target="_blank"
-              rel="noopener"
-              download={message.attachmentName ?? undefined}
-              class="flex items-center gap-3 py-1 group/file"
-            >
-              <div
-                class="size-9 rounded-lg flex items-center justify-center shrink-0"
-                style={isMine
-                  ? 'background-color: rgba(255,255,255,0.18)'
-                  : 'background-color: var(--accent)'}
-              >
-                <FileText
-                  class="size-4"
-                  style={isMine
-                    ? 'color: white'
-                    : 'color: var(--muted-foreground)'}
-                />
-              </div>
-              <div class="flex-1 min-w-0">
-                <p class="text-[13px] font-medium truncate">
-                  {message.attachmentName ?? 'Файл'}
-                </p>
-                <p
-                  class="text-[11px]"
-                  style={isMine
-                    ? 'color: rgba(255,255,255,0.7)'
-                    : 'color: var(--muted-foreground)'}
-                >
-                  {formatSize(message.attachmentSize)}
-                </p>
-              </div>
-              <Download
-                class="size-4 shrink-0 opacity-0 group-hover/file:opacity-100 transition-opacity"
-              />
-            </a>
-            {#if message.text}
-              <p
-                class="text-[14px] leading-snug whitespace-pre-wrap break-words mt-1"
-                style="overflow-wrap: anywhere"
-              >
-                {message.text}
-              </p>
-            {/if}
-          {:else}
-            <p
-              class="text-[14px] leading-snug whitespace-pre-wrap break-words"
-              style="overflow-wrap: anywhere"
-            >
-              {message.text}
-            </p>
-          {/if}
+          <img
+            src={message.attachmentUrl}
+            alt={message.text || 'Фото'}
+            loading="lazy"
+            class="block h-auto w-full max-w-80 cursor-zoom-in object-cover"
+          />
+        </a>
 
-          <div class="flex items-center gap-1 justify-end mt-0.5 -mb-0.5">
-            {#if message.editedAt}
-              <span
-                class="text-[10px] opacity-70"
-                style={isMine
-                  ? 'color: rgba(255,255,255,0.85)'
-                  : 'color: var(--muted-foreground)'}
-              >
-                ред.
-              </span>
-            {/if}
-            <span
-              class="text-[10px] tabular-nums"
-              style={isMine
-                ? 'color: rgba(255,255,255,0.8)'
-                : 'color: var(--muted-foreground)'}
+        {#if message.text}
+          <p class="m-0 px-1.5 pt-1 pb-px break-words whitespace-pre-wrap">
+            {message.text}<span
+              class="meta float-right ml-2.5 inline-flex items-center gap-[3px] pt-1.5 text-[11px] leading-3 whitespace-nowrap select-none {metaTone}"
             >
-              {time}
-            </span>
-
-            {#if isMine}
-              {#if isFailed}
-                <span title="Не вдалося надіслати" class="inline-flex">
-                  <AlertCircle class="size-3" style="color: #ef4444" />
-                </span>
-              {:else if isPending}
-                <span title="Надсилається..." class="inline-flex">
-                  <Clock class="size-3" style="color: rgba(255,255,255,0.85)" />
-                </span>
-              {:else if showReadStatus}
-                {#if isRead}
-                  <CheckCheck
-                    class="size-3"
-                    style="color: rgba(255,255,255,0.95)"
-                  />
-                {:else}
-                  <Check class="size-3" style="color: rgba(255,255,255,0.85)" />
+              {#if message.editedAt}<span class="italic">ред.</span>{/if}
+              <span class="tabular-nums">{time}</span>
+              {#if isMine}
+                {#if isFailed}
+                  <AlertCircle class="size-3.5 shrink-0 text-destructive" />
+                {:else if isPending}
+                  <Clock class="size-3.5 shrink-0" />
+                {:else if showReadStatus && isRead}
+                  <CheckCheck class="size-3.5 shrink-0" />
+                {:else if showReadStatus}
+                  <Check class="size-3.5 shrink-0" />
                 {/if}
               {/if}
+            </span>
+          </p>
+        {:else}
+          <!-- Без підпису час лягає плашкою поверх знімка -->
+          <span
+            class="absolute right-2.5 bottom-2.5 inline-flex items-center gap-[3px] rounded-full bg-black/45 px-2 py-0.5 text-[11px] leading-3 whitespace-nowrap text-white backdrop-blur-sm select-none"
+          >
+            <span class="tabular-nums">{time}</span>
+            {#if isMine}
+              {#if isFailed}
+                <AlertCircle class="size-3.5 shrink-0 text-destructive" />
+              {:else if isPending}
+                <Clock class="size-3.5 shrink-0" />
+              {:else if showReadStatus && isRead}
+                <CheckCheck class="size-3.5 shrink-0" />
+              {:else if showReadStatus}
+                <Check class="size-3.5 shrink-0" />
+              {/if}
             {/if}
-          </div>
-        </div>
-
-        <!-- Context menu trigger (поряд з bubble) -->
-        {#if showMenu}
-          <DropdownMenu.Root>
-            <DropdownMenu.Trigger>
-              <div
-                role="button"
-                tabindex="0"
-                class="size-7 rounded-full flex items-center justify-center cursor-pointer transition-all opacity-0 group-hover:opacity-100"
-                style="color: var(--muted-foreground); background-color: transparent"
-                onmouseenter={(e) =>
-                  ((e.currentTarget as HTMLElement).style.backgroundColor =
-                    'var(--muted)')}
-                onmouseleave={(e) =>
-                  ((e.currentTarget as HTMLElement).style.backgroundColor =
-                    'transparent')}
-                aria-label="Меню повідомлення"
-              >
-                <MoreVertical class="size-3.5" />
-              </div>
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Content align={isMine ? 'end' : 'start'} class="w-44">
-              {#if onReply}
-                <DropdownMenu.Item
-                  class="cursor-pointer gap-2"
-                  onclick={() => onReply?.(message)}
-                >
-                  <Reply class="size-3.5 text-muted-foreground" />
-                  <span>Відповісти</span>
-                </DropdownMenu.Item>
-              {/if}
-
-              {#if message.text}
-                <DropdownMenu.Item
-                  class="cursor-pointer gap-2"
-                  onclick={copyText}
-                >
-                  <Copy class="size-3.5 text-muted-foreground" />
-                  <span>Копіювати</span>
-                </DropdownMenu.Item>
-              {/if}
-
-              {#if canEdit && onEdit}
-                <DropdownMenu.Item
-                  class="cursor-pointer gap-2"
-                  onclick={() => onEdit?.(message)}
-                >
-                  <Pencil class="size-3.5 text-muted-foreground" />
-                  <span>Редагувати</span>
-                </DropdownMenu.Item>
-              {/if}
-
-              {#if isMine && onDelete}
-                <DropdownMenu.Separator />
-                <DropdownMenu.Item
-                  class="cursor-pointer gap-2 text-destructive focus:text-destructive"
-                  onclick={() => onDelete?.(message)}
-                >
-                  <Trash2 class="size-3.5" />
-                  <span>Видалити</span>
-                </DropdownMenu.Item>
-              {/if}
-            </DropdownMenu.Content>
-          </DropdownMenu.Root>
+          </span>
         {/if}
-      </div>
+      {:else if isFile}
+        <a
+          href={message.attachmentUrl}
+          target="_blank"
+          rel="noopener"
+          download={message.attachmentName ?? undefined}
+          class="group/file flex items-center gap-2.5 py-0.5"
+        >
+          <span
+            class="flex size-9 shrink-0 items-center justify-center rounded-[10px] {tintTone}"
+          >
+            <FileText class="size-4" />
+          </span>
+          <span class="flex min-w-0 flex-1 flex-col">
+            <span class="truncate text-[13px] font-medium">
+              {message.attachmentName ?? 'Файл'}
+            </span>
+            <span class="text-[11px] {metaTone}">
+              {formatSize(message.attachmentSize)}
+            </span>
+          </span>
+          <Download
+            class="size-4 shrink-0 opacity-0 transition-opacity group-hover/file:opacity-100"
+          />
+        </a>
+
+        <p class="m-0 pt-1 break-words whitespace-pre-wrap">
+          {message.text}<span
+            class="meta float-right ml-2.5 inline-flex items-center gap-[3px] pt-1.5 text-[11px] leading-3 whitespace-nowrap select-none {metaTone}"
+          >
+            {#if message.editedAt}<span class="italic">ред.</span>{/if}
+            <span class="tabular-nums">{time}</span>
+            {#if isMine}
+              {#if isFailed}
+                <AlertCircle class="size-3.5 shrink-0 text-destructive" />
+              {:else if isPending}
+                <Clock class="size-3.5 shrink-0" />
+              {:else if showReadStatus && isRead}
+                <CheckCheck class="size-3.5 shrink-0" />
+              {:else if showReadStatus}
+                <Check class="size-3.5 shrink-0" />
+              {/if}
+            {/if}
+          </span>
+        </p>
+      {:else}
+        <!-- float підбирає час у той самий рядок, де закінчився текст;
+             не влазить — браузер сам зносить його нижче -->
+        <p class="m-0 break-words whitespace-pre-wrap">
+          {message.text}<span
+            class="meta float-right ml-2.5 inline-flex items-center gap-[3px] pt-1.5 text-[11px] leading-3 whitespace-nowrap select-none {metaTone}"
+          >
+            {#if message.editedAt}<span class="italic">ред.</span>{/if}
+            <span class="tabular-nums">{time}</span>
+            {#if isMine}
+              {#if isFailed}
+                <AlertCircle class="size-3.5 shrink-0 text-destructive" />
+              {:else if isPending}
+                <Clock class="size-3.5 shrink-0" />
+              {:else if showReadStatus && isRead}
+                <CheckCheck class="size-3.5 shrink-0" />
+              {:else if showReadStatus}
+                <Check class="size-3.5 shrink-0" />
+              {/if}
+            {/if}
+          </span>
+        </p>
+      {/if}
     </div>
+
+    <!-- ─── Меню ─── -->
+    {#if showMenu}
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger>
+          <div
+            role="button"
+            tabindex="0"
+            aria-label="Меню повідомлення"
+            class="flex size-6.5 shrink-0 cursor-pointer items-center justify-center rounded-full bg-black/25 text-white opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+          >
+            <MoreVertical class="size-4" />
+          </div>
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content
+          align={isMine ? 'end' : 'start'}
+          class="z-50 w-48 rounded-2xl border border-border bg-card p-1.5 shadow-lg"
+        >
+          {#if onReply}
+            <DropdownMenu.Item
+              class="flex cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-colors outline-none hover:bg-accent data-highlighted:bg-accent"
+              onclick={() => onReply?.(message)}
+            >
+              <Reply class="size-4 text-muted-foreground" />
+              <span>Відповісти</span>
+            </DropdownMenu.Item>
+          {/if}
+
+          {#if message.text}
+            <DropdownMenu.Item
+              class="flex cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-colors outline-none hover:bg-accent data-highlighted:bg-accent"
+              onclick={copyText}
+            >
+              <Copy class="size-4 text-muted-foreground" />
+              <span>Копіювати</span>
+            </DropdownMenu.Item>
+          {/if}
+
+          {#if canEdit && onEdit}
+            <DropdownMenu.Item
+              class="flex cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-colors outline-none hover:bg-accent data-highlighted:bg-accent"
+              onclick={() => onEdit?.(message)}
+            >
+              <Pencil class="size-4 text-muted-foreground" />
+              <span>Редагувати</span>
+            </DropdownMenu.Item>
+          {/if}
+
+          {#if isMine && onDelete}
+            <DropdownMenu.Separator class="my-1 h-px bg-border" />
+            <DropdownMenu.Item
+              class="flex cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-destructive transition-colors outline-none hover:bg-destructive/10 data-highlighted:bg-destructive/10"
+              onclick={() => onDelete?.(message)}
+            >
+              <Trash2 class="size-4" />
+              <span>Видалити</span>
+            </DropdownMenu.Item>
+          {/if}
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
+    {/if}
   </div>
-{/if}
+</div>
+
+<style>
+  /*
+   * Хвостик. Єдине, що лишилось у CSS: маска з radial-gradient в Tailwind
+   * записується як [mask:radial-gradient(circle_20px_at_0_0,...)] — о третій
+   * ночі таке не читається.
+   *
+   * bg-inherit бере колір самого пузиря, тому варіант in/out не дублюється.
+   * right/left зсунуті так, щоб хвіст заходив на 3px ПІД пузир — інакше на
+   * стику лишається волосяна щілина.
+   */
+  .tail-in::after,
+  .tail-out::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    width: 14px;
+    height: 20px;
+    background-color: inherit;
+    pointer-events: none;
+  }
+
+  .tail-in::after {
+    left: -11px;
+    -webkit-mask: radial-gradient(circle 20px at 0 0, transparent 0 19.5px, #000 20px);
+    mask: radial-gradient(circle 20px at 0 0, transparent 0 19.5px, #000 20px);
+  }
+
+  .tail-out::after {
+    right: -11px;
+    -webkit-mask: radial-gradient(circle 20px at 100% 0, transparent 0 19.5px, #000 20px);
+    mask: radial-gradient(circle 20px at 100% 0, transparent 0 19.5px, #000 20px);
+  }
+
+  /* Час має сідати на базову лінію останнього рядка, а не над нею */
+  .meta {
+    margin-top: 6px;
+  }
+</style>

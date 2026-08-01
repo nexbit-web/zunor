@@ -175,7 +175,7 @@
 </svelte:head>
 
 <article
-  class=" min-h-svh px-5 pt-7 pb-20 md:pb-12"
+  class=" min-h-svh px-5  pt-4 pb-20 md:pb-12"
   itemscope
   itemtype="https://schema.org/Person"
 >
@@ -517,8 +517,5 @@
     border-radius: 28px;
     border: 1px solid var(--border);
     background-color: var(--card);
-    box-shadow:
-      0 20px 50px -16px rgba(0, 0, 0, 0.1),
-      0 4px 12px -6px rgba(0, 0, 0, 0.05);
   }
 </style>

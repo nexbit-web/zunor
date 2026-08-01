@@ -123,54 +123,90 @@
   const flyIn = { y: 14, duration: reduceMotion ? 0 : 460, easing: backOut }
   const flyOut = { y: -8, duration: reduceMotion ? 0 : 240, easing: cubicOut }
 
-  // ─── Крок 1 — демо-курсор сам обирає тип приміщення ───
-  const S1_START = { left: '108%', top: '120%' }
-  const S1_TARGET = { left: '75%', top: '23%' } // над карткою «Дім»
-  const S1_EXIT = { left: '132%', top: '-8%' } // виходить вгору-праворуч і зникає
+// ─── Крок 1 — живий чат із Zunor: репліки з'являються самі ───
+  // Сценарій демо. user — бульбашка клієнта, zunor — відповідь ІІ (друкується),
+  // chips — кнопки-варіанти під відповіддю (як у реальному чаті).
+  type ChatBeat =
+    | { role: 'user'; text: string }
+    | { role: 'zunor'; text: string; chips?: string[] }
 
-  let premiseSelected = $state(0)
-  let premisePulse = $state(false)
-  let cursor1Visible = $state(false)
-  let cursor1Pressed = $state(false)
-  let cursor1Pos = $state(S1_START)
+  const CHAT_SCRIPT: ChatBeat[] = [
+    { role: 'user', text: 'Треба прибрати квартиру після ремонту' },
+    {
+      role: 'zunor',
+      text: 'Зрозумів — прибирання після ремонту.\nСкільки кімнат?',
+      chips: ['1', '2', '3', '4+'],
+    },
+    { role: 'user', text: '3 кімнати' },
+    {
+      role: 'zunor',
+      text: 'Чудово. Будівельне сміття треба вивозити?',
+      chips: ['Так', 'Винесу сам'],
+    },
+  ]
+
+  // Показані репліки та стан друку останньої відповіді Zunor.
+  let chatShown = $state<ChatBeat[]>([])
+  let typedChars = $state(0) // скільки символів надруковано в поточній zunor-репліці
+  let chipsVisible = $state(false)
 
   $effect(() => {
     if (active !== 0) return
 
-    premiseSelected = 0
-    premisePulse = false
-    cursor1Visible = false
-    cursor1Pressed = false
-    cursor1Pos = S1_START
+    chatShown = []
+    typedChars = 0
+    chipsVisible = false
 
-    const timers = [
-      setTimeout(() => {
-        cursor1Visible = true
-      }, 500),
-      setTimeout(() => {
-        cursor1Pos = S1_TARGET
-      }, 620),
-      setTimeout(() => {
-        cursor1Pressed = true
-        premiseSelected = 1
-        premisePulse = true
-      }, 1350),
-      setTimeout(() => {
-        cursor1Pressed = false
-      }, 1620),
-      setTimeout(() => {
-        premisePulse = false
-      }, 1850),
-      setTimeout(() => {
-        cursor1Pos = S1_EXIT
-      }, 2050),
-      setTimeout(() => {
-        cursor1Visible = false
-      }, 2750),
-    ]
+    let cancelled = false
+    const timers: ReturnType<typeof setTimeout>[] = []
+    const wait = (ms: number) =>
+      new Promise<void>((r) => timers.push(setTimeout(r, ms)))
 
-    return () => timers.forEach(clearTimeout)
+    async function play() {
+      await wait(400)
+      for (const beat of CHAT_SCRIPT) {
+        if (cancelled) return
+
+        if (beat.role === 'user') {
+          chatShown = [...chatShown, beat]
+          await wait(650)
+        } else {
+          // Пауза «Zunor думає», далі друк по символах.
+          chatShown = [...chatShown, { ...beat, text: '' }]
+          typedChars = 0
+          await wait(reduceMotion ? 0 : 550)
+          const full = beat.text
+          for (let c = 1; c <= full.length; c++) {
+            if (cancelled) return
+            typedChars = c
+            await wait(reduceMotion ? 0 : 22)
+          }
+          if (beat.chips) {
+            await wait(250)
+            chipsVisible = true
+          }
+          await wait(700)
+        }
+      }
+    }
+
+    play()
+    return () => {
+      cancelled = true
+      timers.forEach(clearTimeout)
+    }
   })
+
+  // Останню zunor-репліку рендеримо з урахуванням друку.
+  const chatRender = $derived(
+    chatShown.map((b, i) => {
+      const isLast = i === chatShown.length - 1
+      if (b.role === 'zunor' && isLast) {
+        return { ...b, text: b.text.slice(0, typedChars), typing: typedChars < b.text.length }
+      }
+      return { ...b, typing: false }
+    }),
+  )
 
   // ─── Крок 2 — демо-курсор сам обирає пропозицію клінера ───
   const S2_START = { left: '104%', top: '112%' }
@@ -278,80 +314,56 @@
                 in:fly={flyIn}
                 out:fly={flyOut}
               >
-                {#if active === 0}
-                  <!-- Крок 1: обираємо тип приміщення -->
-                  <div class="mb-1.5 flex items-center justify-between">
+           {#if active === 0}
+                  <!-- Крок 1: живий чат із Zunor -->
+                  <div class="mb-3 flex items-center gap-2">
                     <span
-                      class="text-[11.5px] font-semibold text-muted-foreground"
-                      >Крок 1 із 5</span
+                      class="flex size-6 items-center justify-center rounded-lg bg-primary/12 text-primary"
                     >
+                      <Sparkles size={13} aria-hidden="true" />
+                    </span>
+                    <span class="text-[12.5px] font-semibold text-foreground">Zunor</span>
+                    <span class="text-[11px] text-muted-foreground">оформлює заявку</span>
                   </div>
-                  <div
-                    class="mb-4 h-1 w-full overflow-hidden rounded-full bg-muted"
-                  >
-                    <div class="h-full w-1/5 rounded-full bg-primary"></div>
-                  </div>
-                  <h4
-                    class="mb-3 text-[16px] font-bold tracking-[-0.03em] text-foreground"
-                  >
-                    Що прибираємо?
-                  </h4>
 
-                  <div class="relative">
-                    <div class="grid grid-cols-2 gap-3">
-                      {#each premises as p, pi (p.label)}
+                  <div class="flex flex-1 flex-col justify-end gap-2 overflow-hidden">
+                    {#each chatRender as m, i (i)}
+                      {#if m.role === 'user'}
                         <div
-                          class="group flex min-h-[88px] flex-col items-start gap-2.5 rounded-[18px] border border-border bg-card p-3.5 text-left shadow-sm transition-all duration-300 {pi ===
-                          premiseSelected
-                            ? '-translate-y-0.5 border-primary/30 shadow-md'
-                            : ''} {pi === premiseSelected && premisePulse
-                            ? 'rubber-pop'
-                            : ''}"
+                          class="max-w-[78%] self-end rounded-2xl rounded-br-md bg-primary px-3 py-2 text-[12.5px] leading-snug text-primary-foreground"
+                          in:fly={{ y: 8, duration: reduceMotion ? 0 : 300, easing: backOut }}
                         >
-                          <span
-                            class="flex size-9 items-center justify-center rounded-[11px] transition-colors duration-300 {pi ===
-                            premiseSelected
-                              ? 'bg-primary text-primary-foreground'
-                              : 'bg-muted text-muted-foreground'}"
-                          >
-                            <p.icon
-                              size={16}
-                              strokeWidth={1.75}
-                              aria-hidden="true"
-                            />
-                          </span>
-                          <span
-                            class="text-[13px] font-semibold tracking-[-0.01em] text-foreground"
-                            >{p.label}</span
-                          >
+                          {m.text}
                         </div>
-                      {/each}
-                    </div>
+                      {:else}
+                        <div
+                          class="max-w-[82%] self-start rounded-2xl rounded-bl-md border border-border bg-background px-3 py-2 text-[12.5px] leading-snug whitespace-pre-line text-foreground"
+                          in:fly={{ y: 8, duration: reduceMotion ? 0 : 300, easing: backOut }}
+                        >
+                          {m.text}<!--
+                          -->{#if m.typing}<span class="type-caret">▍</span>{/if}
+                        </div>
+                      {/if}
+                    {/each}
 
-                    <!-- Демо-курсор: наводиться, клікає й «іде» геть, зникаючи -->
-                    {#if cursor1Visible}
-                      <div
-                        class="pointer-events-none absolute z-10 transition-[left,top,opacity] duration-700 motion-reduce:transition-none"
-                        style:left={cursor1Pos.left}
-                        style:top={cursor1Pos.top}
-                        style:opacity={cursor1Pos === S1_EXIT ? 0 : 1}
-                        style:transition-timing-function="cubic-bezier(0.34,1.56, 0.64, 1)"
-                        aria-hidden="true"
-                      >
-                        {#if cursor1Pressed}
-                          <span
-                            class="cursor-ripple absolute -inset-2.5 rounded-full bg-primary/25"
-                          ></span>
-                        {/if}
-                        <MousePointer2
-                          size={19}
-                          class="text-foreground drop-shadow-md transition-transform duration-150 {cursor1Pressed
-                            ? 'scale-90'
-                            : 'scale-100'}"
-                          strokeWidth={2}
-                          fill="var(--card)"
-                        />
-                      </div>
+                    <!-- Чіпси під останньою відповіддю Zunor -->
+                    {#if chipsVisible}
+                      {@const last = CHAT_SCRIPT.filter((b) => b.role === 'zunor').at(-1)}
+                      {#if last && 'chips' in last && last.chips}
+                        <div
+                          class="mt-0.5 flex flex-wrap gap-1.5 self-start"
+                          in:fly={{ y: 6, duration: reduceMotion ? 0 : 260, easing: backOut }}
+                        >
+                          {#each last.chips as chip, ci (chip)}
+                            <span
+                              class="chip-in rounded-full border border-primary/30 bg-primary/[0.06] px-2.5 py-1 text-[11.5px] font-medium text-primary"
+                              style:animation-delay="{ci * 60}ms"
+                            >
+                              {chip}
+                            </span>
+                          {/each}
+                        </div>
+                      {/if}
                     {/if}
                   </div>
                 {:else if active === 1}
@@ -620,10 +632,33 @@
     animation: zunor-badge-pop 380ms cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 
+/* Курсор друку в останній репліці Zunor */
+  .type-caret {
+    display: inline-block;
+    margin-left: 1px;
+    color: var(--primary);
+    animation: zunor-caret 1s steps(1) infinite;
+  }
+  @keyframes zunor-caret {
+    0%, 50% { opacity: 1; }
+    50.01%, 100% { opacity: 0; }
+  }
+
+  /* Поява чіпсів «пружиною» з каскадом */
+  @keyframes zunor-chip-in {
+    0% { transform: translateY(6px) scale(0.9); opacity: 0; }
+    100% { transform: translateY(0) scale(1); opacity: 1; }
+  }
+  .chip-in {
+    animation: zunor-chip-in 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .cursor-ripple,
     .rubber-pop,
-    .badge-pop {
+    .badge-pop,
+    .type-caret,
+    .chip-in {
       animation: none;
     }
   }

@@ -211,7 +211,6 @@
   >
     <div
       class="size-14 rounded-4xl mx-auto mb-2 flex items-center justify-center"
-     
     >
       <Info class="size-10" style="color: var(--w-icon)" strokeWidth={1.75} />
     </div>
@@ -245,7 +244,7 @@
               <Clock class="size-3" />
               {formatRelative(job.createdAt)}
             </span>
-            <ChevronRight class="jchev size-[18px]" />
+            <ChevronRight class="jchev size-4.5" />
           </div>
 
           <!-- Заголовок (тип прибирання) -->
@@ -274,30 +273,33 @@
 
           <!-- Клієнт -->
           {#if job.client}
-          <div class="jcard__foot">
-            <Avatar class="size-9 shrink-0">
-              <AvatarImage
-                src={job.client.avatar ?? ''}
-                alt={job.client.name ?? ''}
-              />
-              <AvatarFallback class="javatar-fallback"
-                >{initials(job.client.name)}</AvatarFallback
-              >
-            </Avatar>
-            <div class="min-w-0 flex-1">
-              <p class="jclient-name">{job.client.name ?? 'Замовник'}</p>
-              {#if job.client.reviewsCount > 0}
-                <span class="jrating">
-                  <Star class="size-3" style="color: #f5a623; fill: #f5a623" />
-                  <strong>{job.client.avgRating.toFixed(1)}</strong>
-                  ({job.client.reviewsCount})
-                </span>
-              {:else}
-                <span class="jnewclient">Новий клієнт</span>
-              {/if}
+            <div class="jcard__foot">
+              <Avatar class="size-9 shrink-0">
+                <AvatarImage
+                  src={job.client.avatar ?? ''}
+                  alt={job.client.name ?? ''}
+                />
+                <AvatarFallback class="javatar-fallback"
+                  >{initials(job.client.name)}</AvatarFallback
+                >
+              </Avatar>
+              <div class="min-w-0 flex-1">
+                <p class="jclient-name">{job.client.name ?? 'Замовник'}</p>
+                {#if job.client.reviewsCount > 0}
+                  <span class="jrating">
+                    <Star
+                      class="size-3"
+                      style="color: #f5a623; fill: #f5a623"
+                    />
+                    <strong>{job.client.avgRating.toFixed(1)}</strong>
+                    ({job.client.reviewsCount})
+                  </span>
+                {:else}
+                  <span class="jnewclient">Новий клієнт</span>
+                {/if}
+              </div>
             </div>
-          </div>
-        {/if}
+          {/if}
         </a>
       {/each}
     </div>
@@ -409,13 +411,11 @@
     cursor: pointer;
     transition:
       transform 0.18s ease,
-      box-shadow 0.18s ease,
       border-color 0.18s ease;
   }
   .jcard:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 10px 28px -12px rgba(0, 0, 0, 0.2);
-    border-color: var(--primary);
+    transform: translateY(-1px);
+    border-color: var(--border);
   }
   .jcard__top {
     display: flex;
@@ -434,7 +434,7 @@
   }
   /* :global бо клас потрапляє на <svg>, який рендерить компонент ChevronRight */
   .jcard :global(.jchev) {
-    color: var(--primary);
+    color: var(--foreground);
     opacity: 0;
     transform: translateX(-4px);
     flex-shrink: 0;

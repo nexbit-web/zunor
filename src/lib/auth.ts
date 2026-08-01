@@ -1,6 +1,11 @@
 import { betterAuth } from 'better-auth'
 import { prismaAdapter } from 'better-auth/adapters/prisma'
-import { BETTER_AUTH_URL, BETTER_AUTH_SECRET } from '$env/static/private'
+import {
+  BETTER_AUTH_URL,
+  BETTER_AUTH_SECRET,
+  GOOGLE_CLIENT_ID,
+  GOOGLE_CLIENT_SECRET,
+} from '$env/static/private'
 import { dev } from '$app/environment'
 import { prisma } from './prisma'
 import { sendResetPasswordEmail } from './email'
@@ -15,6 +20,16 @@ export const auth = betterAuth({
   database: prismaAdapter(prisma, {
     provider: 'postgresql',
   }),
+
+  // ─── Google OAuth ───
+  // Google не віддає телефон/місто, тому після входу юзер усе одно
+  // проходить онбординг (замок у hooks тримає onboarded=false).
+  socialProviders: {
+    google: {
+      clientId: GOOGLE_CLIENT_ID,
+      clientSecret: GOOGLE_CLIENT_SECRET,
+    },
+  },
 
   // ─── Email + password ───
   emailAndPassword: {
@@ -91,6 +106,11 @@ export const auth = betterAuth({
 
   // ─── Custom user fields ───
   user: {
+    // Better Auth за замовчуванням пише аватар у поле `image`, а в схемі
+    // воно зветься `avatar`. Мапимо, щоб OAuth (Google) не падав на unknown `image`.
+    fields: {
+      image: 'avatar',
+    },
     additionalFields: {
       role: {
         type: 'string',

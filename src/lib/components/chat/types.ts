@@ -1,6 +1,14 @@
 // src/lib/components/chat/types.ts
 
-export type MessageType = 'TEXT' | 'PHOTO' | 'FILE' | 'SYSTEM'
+/**
+ * SYSTEM убран из клиентского контракта: чат — только общение.
+ * Заказы и их статусы в чате не показываются вообще:
+ * аудит — в OrderEvent, оповещения — в колокольчике, статус — на /orders.
+ *
+ * В Prisma-enum значение SYSTEM физически остаётся (drop value в Postgres
+ * дорогой и бессмысленный), но ни писаться, ни читаться оно больше не будет.
+ */
+export type MessageType = 'TEXT' | 'PHOTO' | 'FILE'
 
 export type UserRole = 'CLIENT' | 'FREELANCER' | 'ADMIN'
 
@@ -38,12 +46,6 @@ export interface ChatMessage {
     senderId: string
     type: MessageType
   } | null
-  /**
-   * ID замовлення — заповнюється для SYSTEM повідомлень про події
-   * замовлень (CREATED/ACCEPTED/DELIVERED/COMPLETED/CANCELLED).
-   * Використовується для побудови посилання на /orders/{id}.
-   */
-  orderId?: string
 }
 
 export interface ChatPreview {

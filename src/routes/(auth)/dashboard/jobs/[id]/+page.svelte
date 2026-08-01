@@ -13,7 +13,7 @@
   <title>{pageTitle}</title>
 </svelte:head>
 
-<div class="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
+<div class="max-w-3xl mx-auto px-1 sm:px-6 py-3 sm:py-7">
   <!-- Доступ уже перевірено в +page.server.ts: сюди потрапляє лише власник
        або релевантний майстер. Тож не-власник тут — завжди майстер. -->
   {#if data.isOwner}

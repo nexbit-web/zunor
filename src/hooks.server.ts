@@ -89,40 +89,35 @@ const guardHandle: Handle = async ({ event, resolve }) => {
     redirect(303, `/user/login?redirectTo=${target}`)
   }
 
-  // ─── Onboarding-гейти ───
-  // Самі onboarding-сторінки пропускаємо, інакше redirect-петля.
-  const isOnboardingPage =
-    pathname.startsWith('/dashboard/onboarding') ||
-    pathname.startsWith('/dashboard/welcome')
+  // ─── Onboarding-замок ───
+  // Новий флоу: роль обирається НА онбордингу (не при реєстрації), тож
+  // свіжий юзер завжди йде на /dashboard/onboarding, доки не завершить його.
+  // Саму сторінку онбордингу пропускаємо, інакше redirect-петля.
+  const ONBOARDING_PATH = '/dashboard/onboarding'
+  const isOnboardingPage = pathname.startsWith(ONBOARDING_PATH)
 
   if (!isOnboardingPage) {
-    // Один легкий SELECT лише на dashboard-сторінках (не на кожен запит сайту).
+    // Один легкий SELECT лише на dashboard-сторінках.
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: {
-        role: true,
-        city: true,
-        phone: true,
-        banned: true,
-        masterProfile: { select: { verificationStatus: true } },
-      },
+      select: { onboarded: true, banned: true },
     })
 
     // Сесія є, а юзера в БД нема (видалений) — сесія недійсна, на логін.
     if (!user) redirect(303, '/user/login')
 
-    // Майстер без оформленого профілю → онбординг майстра
-    if (
-      user.role === 'MASTER' &&
-      (!user.masterProfile || user.masterProfile.verificationStatus === 'NONE')
-    ) {
-      redirect(303, '/dashboard/onboarding')
+    // Профіль не завершено → замикаємо на онбордингу. Вийти не можна,
+    // доки не збереже роль + обовʼязкові поля (сервер виставить onboarded).
+    if (!user.onboarded) {
+      redirect(303, ONBOARDING_PATH)
     }
-
-    // Клієнт без обовʼязкових полів (місто, телефон) → welcome
-    if (user.role === 'CLIENT' && (!user.city || !user.phone)) {
-      redirect(303, '/dashboard/welcome')
-    }
+  } else if (session) {
+    // Уже завершив онбординг, але зайшов на /onboarding → на дашборд.
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { onboarded: true },
+    })
+    if (user?.onboarded) redirect(303, '/dashboard')
   }
 
   return resolve(event)

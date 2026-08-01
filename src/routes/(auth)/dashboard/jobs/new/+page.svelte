@@ -968,7 +968,7 @@
       >
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
-          class="job-input-shell flex cursor-text flex-col rounded-[20px] bg-card"
+          class="job-input-shell border border-border flex cursor-text flex-col rounded-[20px] bg-card"
           onmousedown={focusFromShell}
         >
           {@render pendingPreview()}

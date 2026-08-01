@@ -74,7 +74,13 @@
   // Session / nav data
   // ---------------------------------------------------------------------
   const session = $derived(page.data.session)
-  const role = $derived(session?.user?.role ?? 'CLIENT')
+  // Звужуємо роль до відомих значень: session.user.role типізований як
+  // string, а labelByRole/only очікують конкретний юніон. Невідомі ролі
+  // (ADMIN тощо) трактуємо як CLIENT для показу меню.
+  type NavRole = 'CLIENT' | 'MASTER'
+  const role = $derived<NavRole>(
+    session?.user?.role === 'MASTER' ? 'MASTER' : 'CLIENT',
+  )
 
   // ─── Повідомлення — реактивно з chatStore (Pusher оновлює в реальному часі) ───
   const messageCount = $derived(chatStore.totalUnread)
@@ -138,17 +144,23 @@
     label: string
     icon: typeof LayoutDashboard
     exact?: boolean
-    masterOnly?: boolean
+    only?: NavRole
+    labelByRole?: Partial<Record<NavRole, string>>
   }
-
   const navItems: NavItem[] = [
     {
       href: '/dashboard/jobs/new',
-      label: 'Головна',
+      label: 'Нове замовлення',
       icon: HouseHeart,
       exact: true,
+      only: 'CLIENT', // майстри заявки не створюють
     },
-    { href: '/dashboard/jobs', label: 'Мої заявки', icon: ClipboardList },
+    {
+      href: '/dashboard/jobs',
+      label: 'Мої заявки', // фолбек, якщо роль не збіглась
+      labelByRole: { MASTER: 'Заявки поруч', CLIENT: 'Мої заявки' },
+      icon: ClipboardList,
+    },
     { href: '/dashboard/orders', label: 'Замовлення', icon: ClipboardCheck },
     { href: '/dashboard/messages', label: 'Повідомлення', icon: MessageCircle },
     { href: '/dashboard/notifications', label: 'Сповіщення', icon: Bell },
@@ -156,12 +168,17 @@
       href: '/dashboard/proposals',
       label: 'Аналітика',
       icon: ChartColumn,
-      // masterOnly: true,
+      only: 'MASTER', // пропозиції — сторінка майстра
     },
   ]
 
   const visibleItems = $derived(
-    navItems.filter((item) => !item.masterOnly || role === 'MASTER'),
+    navItems
+      .filter((item) => !item.only || item.only === role)
+      .map((item) => ({
+        ...item,
+        label: item.labelByRole?.[role] ?? item.label,
+      })),
   )
 
   const pathname = $derived(page.url.pathname)
@@ -226,9 +243,9 @@
           href={item.href}
           aria-current={active ? 'page' : undefined}
           aria-label={badge > 0 ? `${item.label} — ${badge}` : item.label}
-          class="row-item   relative flex h-8 w-full shrink-0 items-center gap-2 rounded-lg pr-2 outline-none transition-colors"
+          class="row-item relative flex h-8 w-full shrink-0 items-center gap-2 rounded-lg pr-2 outline-none transition-colors"
           style={active
-            ? 'color: #ffff; background-color: var(--primary);'
+            ? 'color: var(--color-text); background-color: var(--border);'
             : 'color: var(--color-text);'}
         >
           <span

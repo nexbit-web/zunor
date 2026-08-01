@@ -8,7 +8,7 @@ import {
   nextStatus,
   type OrderTransition,
 } from '$lib/server/order-state-machine'
-import { postOrderSystemMessage } from '$lib/server/system-message'
+import { channels, events, safeTrigger } from '$lib/server/pusher'
 import { Notify } from '$lib/server/notifications'
 import { dispatchJob } from '$lib/server/dispatch'
 import type { RequestHandler } from './$types'
@@ -17,6 +17,12 @@ import type { RequestHandler } from './$types'
  * POST /api/orders/[id]/[action]
  *
  * action ∈ ['start', 'complete', 'cancel']
+ *
+ * Чат — тільки для спілкування: зміна статусу НЕ створює повідомлення
+ * у стрічці. Замість цього:
+ *   - broadcast 'order:status' → плашка в шапці чату оновлюється live;
+ *   - OrderEvent → аудит;
+ *   - Notify.* → сповіщення у дзвіночку.
  */
 
 const ACTION_TO_TRANSITION: Record<string, OrderTransition> = {
@@ -69,7 +75,10 @@ export const POST: RequestHandler = async ({ params, request }) => {
   const updated = await prisma.$transaction(
     async (tx) => {
       const now = new Date()
-      const data: any = { status: newStatus, updatedAt: now }
+      const data: Record<string, unknown> = {
+        status: newStatus,
+        updatedAt: now,
+      }
 
       switch (transition) {
         case 'START': {
@@ -160,8 +169,8 @@ export const POST: RequestHandler = async ({ params, request }) => {
           actorId: session.user.id,
           payload:
             transition === 'CANCEL' && data.cancelReason
-              ? ({ reason: data.cancelReason } as any)
-              : null,
+              ? { reason: String(data.cancelReason) }
+              : undefined,
         },
       })
 
@@ -173,24 +182,14 @@ export const POST: RequestHandler = async ({ params, request }) => {
     },
   )
 
-  // System message + notification (fail-soft)
-  const eventType = transitionToEventType(transition)
-
+  // ─── Статус → плашка в шапці чату (замість SYSTEM-повідомлення) ───
+  // Fail-soft: якщо Pusher недоступний, статус приїде при наступному
+  // завантаженні сторінки з load().
   if (updated.chatId) {
-    try {
-      await postOrderSystemMessage({
-        chatId: updated.chatId,
-        eventType,
-        orderId: updated.id,
-        actorId: session.user.id,
-        extra:
-          transition === 'CANCEL' && updated.cancelReason
-            ? updated.cancelReason
-            : undefined,
-      })
-    } catch (err) {
-      console.error('[order-action] system message error', err)
-    }
+    await safeTrigger(channels.chat(updated.chatId), events.orderStatus, {
+      orderId: updated.id,
+      status: updated.status,
+    })
   }
 
   // Майстер відмовився → перезапускаємо диспатч (мозок шукає заміну)

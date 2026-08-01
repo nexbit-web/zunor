@@ -91,7 +91,7 @@
   </a>
 {/snippet}
 
-<footer class="border-t border-white/5 bg-black text-white">
+<footer class="border-t border-border/5 bg-card text-color-text">
   <div class="mx-auto w-full max-w-6xl px-6 pt-14 pb-24 md:pb-12">
     <div class="flex flex-col gap-12 md:flex-row md:justify-between">
       <!-- Бренд -->
@@ -103,11 +103,11 @@
         >
           Zunor
         </a>
-        <p class="text-[13px] leading-relaxed text-white/55">
+        <p class="text-[13px] leading-relaxed text-color-text/55">
           Маркетплейс послуг: знаходьте перевірених майстрів або беріть
           замовлення поруч.
         </p>
-        <p class="flex items-center gap-1.5 text-[13px] text-white/45">
+        <p class="flex items-center gap-1.5 text-[13px] text-color-text/45">
           <MapPin class="size-3.5" aria-hidden="true" />
           Одеса, Україна
         </p>
@@ -121,7 +121,7 @@
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label={social.label}
-                  class="flex size-9 items-center justify-center rounded-full text-primary transition-colors hover:bg-primary/18 hover:text-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/50"
+                  class="flex size-9 items-center justify-center rounded-full text-primary transition-colors hover:bg-primary/18 hover:text-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:text-color-text/50"
                 >
                   <BrandIcon name={social.icon} class="size-4.5" />
                 </a>
@@ -137,7 +137,7 @@
           <nav class="flex flex-col gap-3" aria-labelledby={`footer-col-${i}`}>
             <span
               id={`footer-col-${i}`}
-              class="text-[13px] font-semibold text-white"
+              class="text-[13px] font-semibold text-color-text"
             >
               {column.title}
             </span>
@@ -153,9 +153,9 @@
 
     <!-- Нижняя полоса -->
     <div
-      class="mt-12 flex flex-col gap-4 border-t border-white/5 pt-6 sm:flex-row sm:items-center sm:justify-between"
+      class="mt-12 flex flex-col gap-4 border-t border-border/5 pt-6 sm:flex-row sm:items-center sm:justify-between"
     >
-      <p class="text-[12px] text-white/40">
+      <p class="text-[12px] text-color-text/40">
         © {year} Zunor. Усі права захищені.
       </p>
       <nav
@@ -165,7 +165,7 @@
         {#each legalLinks as link (link.href)}
           <a
             href={link.href}
-            class="w-fit rounded-sm text-[13px] text-primary transition-all hover:text-primary-hover hover:underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/50"
+            class="w-fit rounded-sm text-[13px] text-primary transition-all hover:text-primary-hover hover:underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:text-color-text/50"
           >
             {link.label}
           </a>

@@ -17,7 +17,9 @@ export const load: PageServerLoad = async ({ request, url }) => {
   })
 
   const userRole = dbUser?.role ?? 'CLIENT'
-  const role = url.searchParams.get('role') ?? 'all'
+  const roleParam = url.searchParams.get('role')
+  const role: 'all' | 'client' | 'master' =
+    roleParam === 'client' || roleParam === 'master' ? roleParam : 'all'
 
   const where = {
     AND: [

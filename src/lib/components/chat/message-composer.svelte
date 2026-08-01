@@ -1,17 +1,18 @@
 <!-- src/lib/components/chat/message-composer.svelte -->
 <script lang="ts">
   import {
-    Send,
-    Plus,
-    X,
+    ArrowUp,
+    FileText,
     Image as ImageIcon,
-    Reply,
-    Smile,
     Paperclip,
     Pencil,
+    Reply,
+    X,
   } from 'lucide-svelte'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
   import type { ChatMessage } from './types'
+
+  // ═══════════════════════ Типи ═══════════════════════
 
   interface PendingAttachment {
     file: File
@@ -56,54 +57,104 @@
     onTyping,
   }: Props = $props()
 
+  // ═══════════════════════ Константи ═══════════════════════
+
+  const MIN_HEIGHT = 40
+  const MAX_HEIGHT = 192
+  const MAX_FILE_SIZE = 10 * 1024 * 1024
+  const MAX_TEXT_LENGTH = 4000
+  const PHOTO_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+
+  // ═══════════════════════ Стан ═══════════════════════
+
   let text = $state('')
-  let textarea = $state<HTMLTextAreaElement | undefined>(undefined)
-  let pending: PendingAttachment | null = $state(null)
+  let pending = $state<PendingAttachment | null>(null)
   let dragActive = $state(false)
+
+  let textarea = $state<HTMLTextAreaElement | undefined>(undefined)
+  let mirror = $state<HTMLDivElement | undefined>(undefined)
   let photoInput = $state<HTMLInputElement | undefined>(undefined)
   let fileInput = $state<HTMLInputElement | undefined>(undefined)
 
-  const MAX_SIZE = 10 * 1024 * 1024
-  const PHOTO_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+  let height = $state(MIN_HEIGHT)
+  let isMultiline = $state(false)
 
-  // Коли entering edit mode — підвантажуємо текст редагованого
+  // ═══════════════════════ Похідні ═══════════════════════
+
+  /**
+   * Текст для дзеркала. Хвостовий \n у pre-wrap не створює нового рядка,
+   * тому дописуємо пробіл — інакше висота відстає на один рядок.
+   */
+  const mirrorText = $derived(text.endsWith('\n') ? `${text} ` : text)
+
+  const canSend = $derived(
+    editing
+      ? text.trim().length > 0
+      : text.trim().length > 0 || pending !== null,
+  )
+
+  const hasPreview = $derived(!!editing || !!replyTo || !!pending)
+
+  /** Кола ріжуть багаторядковий текст — розгортаємо пілюлю у прямокутник */
+  const isExpanded = $derived(hasPreview || isMultiline)
+
+  // ═══════════════════════ Ефекти ═══════════════════════
+
+  /**
+   * Вимірюємо приховане дзеркало, а не саму textarea.
+   *
+   * Класичний трюк (height='auto' → читаємо scrollHeight → ставимо px) ламає
+   * CSS-перехід: браузер встигає порахувати стиль з auto, і висота стрибає.
+   * Дзеркало має ту саму ширину й типографіку, тож дає те саме число,
+   * але без дотику до реального поля.
+   */
+  $effect(() => {
+    if (!mirror) return
+    mirrorText // тригер: перерахувати після оновлення DOM дзеркала
+
+    const measured = mirror.scrollHeight
+    height = Math.min(Math.max(measured, MIN_HEIGHT), MAX_HEIGHT)
+    isMultiline = measured > MIN_HEIGHT + 2
+  })
+
+  /** Вхід у режим редагування — підставляємо текст і ставимо курсор у кінець */
   let lastEditingId = ''
   $effect(() => {
     const id = editing?.id ?? ''
     if (id === lastEditingId) return
     lastEditingId = id
-    if (editing) {
-      text = editing.text
-      // pending attachments чищуть, бо не редагуємо файли
+    if (!editing) return
+
+    text = editing.text
+    clearAttachment() // файли в режимі редагування не підтримуються
+    textarea?.focus()
+    requestAnimationFrame(() => {
+      if (textarea) {
+        textarea.selectionStart = textarea.selectionEnd = textarea.value.length
+      }
+    })
+  })
+
+  /** Відкликаємо object URL при розмонтуванні — інакше витік пам'яті */
+  $effect(() => {
+    return () => {
       if (pending?.previewUrl) URL.revokeObjectURL(pending.previewUrl)
-      pending = null
-      textarea?.focus()
-      // ставимо курсор у кінець
-      requestAnimationFrame(() => {
-        if (textarea) {
-          textarea.selectionStart = textarea.selectionEnd = text.length
-        }
-      })
     }
   })
 
-  $effect(() => {
-    if (!textarea) return
-    text
-    textarea.style.height = 'auto'
-    textarea.style.height = Math.min(textarea.scrollHeight, 160) + 'px'
-  })
+  // ═══════════════════════ Вкладення ═══════════════════════
 
   function handleFile(file: File) {
-    if (editing) return // у edit mode файли не дозволені
-    if (file.size > MAX_SIZE) {
+    if (editing) return
+    if (file.size > MAX_FILE_SIZE) {
       onSendFailed?.('', 'Файл занадто великий. Максимум 10 МБ.')
       return
     }
+
     const isPhoto = PHOTO_MIME.includes(file.type)
     const previewUrl = isPhoto ? URL.createObjectURL(file) : null
-    if (pending?.previewUrl) URL.revokeObjectURL(pending.previewUrl)
 
+    if (pending?.previewUrl) URL.revokeObjectURL(pending.previewUrl)
     pending = { file, previewUrl, type: isPhoto ? 'PHOTO' : 'FILE' }
     textarea?.focus()
   }
@@ -114,10 +165,10 @@
   }
 
   function onFileInput(e: Event) {
-    const input = e.target as HTMLInputElement
+    const input = e.currentTarget as HTMLInputElement
     const file = input.files?.[0]
     if (file) handleFile(file)
-    input.value = ''
+    input.value = '' // щоб повторний вибір того самого файлу спрацював
   }
 
   function onDragEnter(e: DragEvent) {
@@ -126,8 +177,8 @@
   }
 
   function onDragLeave(e: DragEvent) {
-    const rt = e.relatedTarget as Node | null
-    if (!rt || !(e.currentTarget as HTMLElement).contains(rt)) {
+    const related = e.relatedTarget as Node | null
+    if (!related || !(e.currentTarget as HTMLElement).contains(related)) {
       dragActive = false
     }
   }
@@ -144,26 +195,29 @@
     const item = Array.from(e.clipboardData?.items ?? []).find((i) =>
       i.type.startsWith('image/'),
     )
-    if (item) {
-      const file = item.getAsFile()
-      if (file) {
-        e.preventDefault()
-        handleFile(file)
-      }
+    if (!item) return
+
+    const file = item.getAsFile()
+    if (file) {
+      e.preventDefault()
+      handleFile(file)
     }
   }
+
+  // ═══════════════════════ Завантаження ═══════════════════════
 
   async function uploadToCloudinary(
     file: File,
     type: 'PHOTO' | 'FILE',
   ): Promise<UploadedAttachment> {
+    const resourceType = type === 'PHOTO' ? 'image' : 'raw'
+
+    // kind, а не folder: папку endpoint будує сам із userId,
+    // щоб клієнт не міг писати в чужу директорію
     const sigRes = await fetch('/api/upload/signature', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        folder: 'zunor/chat',
-        resourceType: type === 'PHOTO' ? 'image' : 'raw',
-      }),
+      body: JSON.stringify({ kind: 'chat', resourceType }),
     })
     if (!sigRes.ok) {
       const err = await sigRes.json().catch(() => ({}))
@@ -171,15 +225,17 @@
     }
     const sig = await sigRes.json()
 
-    const fd = new FormData()
-    fd.append('file', file)
-    fd.append('api_key', sig.apiKey)
-    fd.append('timestamp', String(sig.timestamp))
-    fd.append('signature', sig.signature)
-    fd.append('folder', sig.folder)
+    const form = new FormData()
+    form.append('file', file)
+    form.append('api_key', sig.apiKey)
+    form.append('timestamp', String(sig.timestamp))
+    form.append('signature', sig.signature)
+    form.append('folder', sig.folder)
 
-    const uploadUrl = `https://api.cloudinary.com/v1_1/${sig.cloudName}/${type === 'PHOTO' ? 'image' : 'raw'}/upload`
-    const upRes = await fetch(uploadUrl, { method: 'POST', body: fd })
+    const upRes = await fetch(
+      `https://api.cloudinary.com/v1_1/${sig.cloudName}/${resourceType}/upload`,
+      { method: 'POST', body: form },
+    )
     if (!upRes.ok) throw new Error('Помилка завантаження файлу')
     const up = await upRes.json()
 
@@ -192,38 +248,34 @@
     }
   }
 
+  // ═══════════════════════ Надсилання ═══════════════════════
+
   function tmpId(): string {
-    return 'tmp-' + Math.random().toString(36).slice(2, 10) + Date.now()
+    return `tmp-${Math.random().toString(36).slice(2, 10)}${Date.now()}`
   }
 
-  /** Зберегти редагування */
   async function saveEdit() {
     if (!editing) return
+
     const trimmed = text.trim()
     if (!trimmed || trimmed === editing.text) {
       onCancelEdit?.()
       return
     }
+
     try {
-      const res = await fetch(
-        `/api/chats/${chatId}/messages/${editing.id}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: trimmed }),
-        },
-      )
+      const res = await fetch(`/api/chats/${chatId}/messages/${editing.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: trimmed }),
+      })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
         throw new Error(err.message ?? 'Не вдалося зберегти')
       }
+
       const json = await res.json()
-      const updated: ChatMessage = {
-        ...editing,
-        text: json.text,
-        editedAt: json.editedAt,
-      }
-      onEditDone?.(updated)
+      onEditDone?.({ ...editing, text: json.text, editedAt: json.editedAt })
       text = ''
     } catch (err) {
       onSendFailed?.(
@@ -267,19 +319,18 @@
     }
 
     onSendOptimistic?.(optimistic)
+
+    // Чистимо поле одразу. previewUrl НЕ відкликаємо — він ще показується
+    // в оптимістичному пузирі до підтвердження з сервера.
     text = ''
-    clearAttachment()
+    pending = null
     onCancelReply?.()
     textarea?.focus()
 
     try {
-      let attachment: UploadedAttachment | null = null
-      if (currentPending) {
-        attachment = await uploadToCloudinary(
-          currentPending.file,
-          currentPending.type,
-        )
-      }
+      const attachment = currentPending
+        ? await uploadToCloudinary(currentPending.file, currentPending.type)
+        : null
 
       const res = await fetch(`/api/chats/${chatId}/messages`, {
         method: 'POST',
@@ -291,10 +342,9 @@
           replyToId: currentReplyTo?.id ?? null,
         }),
       })
-
       if (!res.ok) {
-        const errData = await res.json().catch(() => ({}))
-        throw new Error(errData.error ?? 'Не вдалося надіслати')
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error ?? 'Не вдалося надіслати')
       }
 
       const json = await res.json()
@@ -323,16 +373,10 @@
     }
     onTyping?.()
   }
-
-  const canSend = $derived(
-    editing ? text.trim().length > 0 : text.trim().length > 0 || pending !== null,
-  )
 </script>
 
 <div
-  class="relative px-4 py-3"
-  style="background-color: var(--background);
-         border-top: 1px solid var(--border)"
+  class="relative flex items-end"
   ondragenter={onDragEnter}
   ondragover={(e) => e.preventDefault()}
   ondragleave={onDragLeave}
@@ -342,194 +386,241 @@
 >
   {#if dragActive}
     <div
-      class="absolute inset-0 z-10 flex items-center justify-center pointer-events-none"
-      style="background-color: color-mix(in srgb, var(--primary) 8%, transparent);
-             border: 2px dashed var(--primary)"
+      class="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-[24px] border-2 border-dashed border-primary bg-primary/10"
     >
       <div class="text-center">
-        <ImageIcon class="size-8 mx-auto mb-1.5" style="color: var(--primary)" />
-        <p class="text-sm font-medium" style="color: var(--primary)">
-          Відпустіть файл
-        </p>
+        <ImageIcon class="mx-auto mb-1.5 size-8 text-primary" />
+        <p class="text-sm font-medium text-primary">Відпустіть файл</p>
       </div>
     </div>
   {/if}
 
-  <!-- Edit / Reply preview -->
-  {#if editing}
-    <div
-      class="flex items-center gap-2 px-3 py-2 mb-2 rounded-xl border-l-2"
-      style="background-color: var(--muted); border-left-color: var(--primary)"
-    >
-      <Pencil class="size-3.5 shrink-0" style="color: var(--primary)" />
-      <div class="flex-1 min-w-0">
-        <p class="text-[11px] font-medium" style="color: var(--primary)">
-          Редагування повідомлення
-        </p>
-        <p class="text-xs truncate" style="color: var(--muted-foreground)">
-          {editing.text}
-        </p>
-      </div>
-      <button
-        type="button"
-        onclick={() => {
-          text = ''
-          onCancelEdit?.()
-        }}
-        class="size-6 rounded-full flex items-center justify-center cursor-pointer hover:opacity-70"
-        aria-label="Скасувати"
+  <!-- ═══ Пілюля: превʼю зверху, робочий рядок знизу ═══
+       p-1 + рядок 40px = 48px висоти.
+       Скріпка, поле й кнопка — сусіди в одному flex-рядку: тільки так
+       gap однаковий з обох боків, а items-end тримає їх на одній лінії. -->
+  <div
+    class="composer-pill bg-card text-foreground flex min-w-0 flex-1 flex-col p-1 shadow-sm"
+    class:rounded-[24px]={isExpanded}
+    class:rounded-full={!isExpanded}
+  >
+    <!-- ─── Превʼю: редагування / відповідь ─── -->
+    {#if editing}
+      <div
+        class="mx-1 mt-1 mb-1.5 flex items-center gap-2 rounded-xl border-l-2 border-l-primary bg-muted px-3 py-1.5"
       >
-        <X class="size-3.5" style="color: var(--muted-foreground)" />
-      </button>
-    </div>
-  {:else if replyTo}
-    <div
-      class="flex items-center gap-2 px-3 py-2 mb-2 rounded-xl border-l-2"
-      style="background-color: var(--muted); border-left-color: var(--primary)"
-    >
-      <Reply class="size-3.5 shrink-0" style="color: var(--primary)" />
-      <div class="flex-1 min-w-0">
-        <p class="text-[11px] font-medium" style="color: var(--primary)">
-          У відповідь
-        </p>
-        <p class="text-xs truncate" style="color: var(--muted-foreground)">
-          {replyTo.type === 'PHOTO'
-            ? '📷 Фото'
-            : replyTo.type === 'FILE'
-              ? '📎 Файл'
-              : replyTo.text}
-        </p>
-      </div>
-      <button
-        type="button"
-        onclick={onCancelReply}
-        class="size-6 rounded-full flex items-center justify-center cursor-pointer hover:opacity-70"
-        aria-label="Скасувати"
-      >
-        <X class="size-3.5" style="color: var(--muted-foreground)" />
-      </button>
-    </div>
-  {/if}
-
-  {#if pending && !editing}
-    <div
-      class="flex items-center gap-3 px-3 py-2 mb-2 rounded-xl"
-      style="background-color: var(--muted)"
-    >
-      {#if pending.previewUrl}
-        <img
-          src={pending.previewUrl}
-          alt=""
-          class="size-10 rounded-lg object-cover shrink-0"
-        />
-      {:else}
-        <div
-          class="size-10 rounded-lg flex items-center justify-center shrink-0"
-          style="background-color: var(--accent)"
-        >
-          <Paperclip class="size-4" style="color: var(--muted-foreground)" />
+        <Pencil class="size-3.5 shrink-0 text-primary" />
+        <div class="min-w-0 flex-1">
+          <p class="text-[11px] font-medium text-primary">
+            Редагування повідомлення
+          </p>
+          <p class="truncate text-xs text-muted-foreground">{editing.text}</p>
         </div>
-      {/if}
-      <div class="flex-1 min-w-0">
-        <p class="text-sm font-medium truncate" style="color: var(--foreground)">
-          {pending.file.name}
-        </p>
-        <p class="text-[11px]" style="color: var(--muted-foreground)">
-          {(pending.file.size / 1024 / 1024).toFixed(2)} МБ
-        </p>
+        <button
+          type="button"
+          onclick={() => {
+            text = ''
+            onCancelEdit?.()
+          }}
+          class="flex size-6 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent"
+          aria-label="Скасувати редагування"
+        >
+          <X class="size-3.5" />
+        </button>
       </div>
-      <button
-        type="button"
-        onclick={clearAttachment}
-        class="size-7 rounded-full flex items-center justify-center cursor-pointer hover:opacity-70"
-        aria-label="Видалити"
+    {:else if replyTo}
+      <div
+        class="mx-1 mt-1 mb-1.5 flex items-center gap-2 rounded-xl border-l-2 border-l-primary bg-muted px-3 py-1.5"
       >
-        <X class="size-3.5" style="color: var(--muted-foreground)" />
-      </button>
-    </div>
-  {/if}
-
-  <div class="flex items-end gap-2">
-    {#if !editing}
-      <DropdownMenu.Root>
-        <DropdownMenu.Trigger>
-          <div
-            class="size-9 rounded-full flex items-center justify-center cursor-pointer transition-colors"
-            style="background-color: var(--muted); color: var(--muted-foreground)"
-          >
-            <Plus class="size-4" />
-          </div>
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Content align="start" class="w-44">
-          <DropdownMenu.Item
-            class="cursor-pointer gap-2"
-            onclick={() => photoInput?.click()}
-          >
-            <ImageIcon class="size-3.5 text-muted-foreground" />
-            <span>Фото</span>
-          </DropdownMenu.Item>
-          <DropdownMenu.Item
-            class="cursor-pointer gap-2"
-            onclick={() => fileInput?.click()}
-          >
-            <Paperclip class="size-3.5 text-muted-foreground" />
-            <span>Файл</span>
-          </DropdownMenu.Item>
-        </DropdownMenu.Content>
-      </DropdownMenu.Root>
-
-      <input
-        bind:this={photoInput}
-        type="file"
-        accept="image/*"
-        onchange={onFileInput}
-        class="sr-only"
-      />
-      <input
-        bind:this={fileInput}
-        type="file"
-        accept="application/pdf,.doc,.docx,.zip,.txt,.xlsx"
-        onchange={onFileInput}
-        class="sr-only"
-      />
+        <Reply class="size-3.5 shrink-0 text-primary" />
+        <div class="min-w-0 flex-1">
+          <p class="text-[11px] font-medium text-primary">У відповідь</p>
+          <p class="truncate text-xs text-muted-foreground">
+            {replyTo.type === 'PHOTO'
+              ? 'Фото'
+              : replyTo.type === 'FILE'
+                ? 'Файл'
+                : replyTo.text}
+          </p>
+        </div>
+        <button
+          type="button"
+          onclick={onCancelReply}
+          class="flex size-6 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent"
+          aria-label="Скасувати відповідь"
+        >
+          <X class="size-3.5" />
+        </button>
+      </div>
     {/if}
 
-    <textarea
-      bind:this={textarea}
-      bind:value={text}
-      onkeydown={onKeyDown}
-      onpaste={onPaste}
-      placeholder={editing ? 'Редагувати повідомлення' : 'Написати повідомлення'}
-      rows="1"
-      class="flex-1 min-w-0 resize-none px-4 py-2 rounded-3xl outline-none text-[14px] leading-snug"
-      style="background-color: var(--muted); color: var(--foreground); max-height: 160px"
-      maxlength={4000}
-    ></textarea>
+    <!-- ─── Превʼю вкладення ─── -->
+    {#if pending && !editing}
+      <div
+        class="mx-1 mt-1 mb-1.5 flex items-center gap-3 rounded-xl bg-muted px-3 py-1.5"
+      >
+        {#if pending.previewUrl}
+          <img
+            src={pending.previewUrl}
+            alt=""
+            class="size-10 shrink-0 rounded-lg object-cover"
+          />
+        {:else}
+          <div
+            class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-accent"
+          >
+            <Paperclip class="size-4 text-muted-foreground" />
+          </div>
+        {/if}
+        <div class="min-w-0 flex-1">
+          <p class="truncate text-sm font-medium">{pending.file.name}</p>
+          <p class="text-[11px] text-muted-foreground">
+            {(pending.file.size / 1024 / 1024).toFixed(2)} МБ
+          </p>
+        </div>
+        <button
+          type="button"
+          onclick={clearAttachment}
+          class="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent"
+          aria-label="Видалити вкладення"
+        >
+          <X class="size-3.5" />
+        </button>
+      </div>
+    {/if}
 
-    {#if canSend}
+    <!-- ─── Робочий рядок: скріпка · поле · кнопка ─── -->
+    <div class="flex items-end gap-0.5">
+      {#if !editing}
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger>
+            <div
+              role="button"
+              tabindex="0"
+              aria-label="Додати вкладення"
+              class="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none"
+            >
+              <Paperclip class="size-5" />
+            </div>
+          </DropdownMenu.Trigger>
+
+          <DropdownMenu.Content
+            align="start"
+            sideOffset={12}
+            class="z-50 w-56 rounded-3xl border border-border bg-card p-1.5 shadow-lg"
+          >
+            <DropdownMenu.Item
+              class="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] font-medium transition-colors outline-none select-none hover:bg-accent hover:text-accent-foreground data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+              onclick={() => photoInput?.click()}
+            >
+              <ImageIcon
+                class="pointer-events-none size-5 shrink-0 text-muted-foreground"
+              />
+              <span class="pointer-events-none">Фото або Відео</span>
+            </DropdownMenu.Item>
+
+            <DropdownMenu.Item
+              class="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] font-medium transition-colors outline-none select-none hover:bg-accent hover:text-accent-foreground data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+              onclick={() => fileInput?.click()}
+            >
+              <FileText
+                class="pointer-events-none size-5 shrink-0 text-muted-foreground"
+              />
+              <span class="pointer-events-none">Файл</span>
+            </DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>
+
+        <input
+          bind:this={photoInput}
+          type="file"
+          accept="image/*"
+          onchange={onFileInput}
+          class="sr-only"
+        />
+        <input
+          bind:this={fileInput}
+          type="file"
+          accept="application/pdf,.doc,.docx,.zip,.txt,.xlsx"
+          onchange={onFileInput}
+          class="sr-only"
+        />
+      {/if}
+
+      <!-- Дзеркало лежить під textarea і має рівно ту саму ширину -->
+      <div class="relative min-w-0 flex-1">
+        <div
+          bind:this={mirror}
+          aria-hidden="true"
+          class="composer-metrics pointer-events-none invisible absolute inset-x-0 top-0 whitespace-pre-wrap [overflow-wrap:break-word]"
+        >
+          {mirrorText}
+        </div>
+
+        <textarea
+          bind:this={textarea}
+          bind:value={text}
+          onkeydown={onKeyDown}
+          onpaste={onPaste}
+          placeholder={editing ? 'Редагувати повідомлення' : 'Повідомлення'}
+          rows="1"
+          style:height={`${height}px`}
+          maxlength={MAX_TEXT_LENGTH}
+          class="composer-metrics composer-input block w-full resize-none bg-transparent text-foreground outline-none placeholder:text-muted-foreground"
+        ></textarea>
+      </div>
+
+      <!-- ─── Кнопка надсилання ─── -->
       <button
         type="button"
         onclick={send}
-        class="size-9 shrink-0 rounded-full flex items-center justify-center cursor-pointer transition-all"
-        style="background-color: var(--primary); color: var(--primary-foreground)"
+        disabled={!canSend}
+        class="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-primary text-primary-foreground transition-all hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
         aria-label={editing ? 'Зберегти' : 'Надіслати'}
       >
-        {#if editing}
-          <Pencil class="size-4" />
-        {:else}
-          <Send class="size-4" />
-        {/if}
+        <ArrowUp class="size-5" />
       </button>
-    {:else}
-      <button
-        type="button"
-        class="size-9 shrink-0 rounded-full flex items-center justify-center cursor-not-allowed transition-colors"
-        style="background-color: var(--muted); color: var(--muted-foreground)"
-        aria-label="Емодзі"
-        disabled
-      >
-        <Smile class="size-4" />
-      </button>
-    {/if}
+    </div>
   </div>
 </div>
+
+<style>
+  /*
+   * Спільна типографіка дзеркала й поля.
+   * Будь-яка розбіжність тут = невірний розрахунок висоти,
+   * тому обидва елементи беруть цей клас, а не окремі утиліти.
+   */
+  .composer-metrics {
+    display: block;
+    box-sizing: border-box;
+    padding: 9px 2px;
+    font: inherit;
+    font-size: 16px;
+    line-height: 22px;
+    letter-spacing: inherit;
+  }
+
+  .composer-input {
+    overflow-y: auto;
+    /* Анімувати можна тільки тому, що height приходить у px, а не auto */
+    transition: height 160ms cubic-bezier(0.4, 0, 0.2, 1);
+    /* Скрол працює, смуги не видно */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .composer-input::-webkit-scrollbar {
+    display: none;
+  }
+
+  .composer-pill {
+    transition: border-radius 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .composer-input,
+    .composer-pill {
+      transition: none;
+    }
+  }
+</style>

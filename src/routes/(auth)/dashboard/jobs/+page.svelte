@@ -17,7 +17,7 @@
 </svelte:head>
 
 <div
-  class="mx-auto px-4 py-6 sm:py-10 {data.view === 'mine'
+  class="mx-auto px-2.5 py-3 sm:py-7 {data.view === 'mine'
     ? 'max-w-3xl sm:px-6'
     : 'max-w-230 sm:px-8'}"
 >
