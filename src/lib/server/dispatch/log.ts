@@ -3,7 +3,7 @@
 // Пам'ять мозку. Записує кожне рішення про уведомлення.
 // Ці дані — фундамент для відзивчивості та майбутнього ML.
 
-import { prisma } from '$lib/prisma'
+import { prisma } from '../prisma'
 import type { ScoredCandidate } from './types'
 import type { Db } from './engine'
 

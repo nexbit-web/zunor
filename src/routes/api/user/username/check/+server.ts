@@ -1,7 +1,7 @@
 // src/routes/api/user/username/check/+server.ts
 import { json, error } from '@sveltejs/kit'
-import { auth } from '$lib/auth'
-import { prisma } from '$lib/prisma'
+import { auth } from '$lib/server/auth'
+import { prisma } from '$lib/server/prisma'
 import { validateUsername } from '$lib/username'
 import type { RequestHandler } from './$types'
 

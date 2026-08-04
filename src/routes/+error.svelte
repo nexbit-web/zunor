@@ -2,6 +2,7 @@
 <script lang="ts">
   import { page } from '$app/state'
   import Ant404 from '$lib/components/Ant404.svelte'
+  import { ArrowLeft } from 'lucide-svelte'
 
   const isNotFound = $derived(page.status === 404)
 
@@ -31,8 +32,9 @@
   <p class="text-(--color-text-500) dark:text-gray-400">{message}</p>
   <a
     href="/"
-    class="mt-2 rounded-xl bg-primary px-4 py-2 font-medium text-white transition-colors hover:bg-primary-hover"
+    class="flex items-center gap-1 mt-2 rounded-xl bg-primary px-4 py-2 font-medium text-white transition-colors hover:bg-primary-hover"
   >
+    <ArrowLeft size={15} />
     На головну
   </a>
 </main>

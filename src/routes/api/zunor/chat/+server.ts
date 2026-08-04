@@ -1,9 +1,9 @@
 // src/routes/api/zunor/chat/+server.ts
 import { json, error } from '@sveltejs/kit'
-import { auth } from '$lib/auth'
-import { prisma } from '$lib/prisma'
-import { limit } from '$lib/rate-limit'
-import { runZunorTurnStream } from '$lib/server/zunor/agent'
+import { auth } from '$lib/server/auth'
+import { prisma } from '$lib/server/prisma'
+import { limit } from '$lib/server/rate-limit'
+import { runZunorTurnStream, runZunorTurn } from '$lib/server/zunor/agent'
 import { turnLog, withTurnLog } from '$lib/server/zunor/turn-log'
 import type { ZunorClientMessage, ZunorResponse } from '$lib/types/zunor'
 import type { RequestHandler } from './$types'
@@ -51,11 +51,14 @@ export const POST: RequestHandler = async ({ request }) => {
     throw error(400, 'Останнє повідомлення має бути від користувача')
   }
 
+  // Анкету беремо з БД, а не з тіла запиту: інакше клієнт підставив би
+  // в промпт будь-що в обхід валідації й лімітів.
   const me = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { city: true },
+    where: { id: session.user.id },
+    select: { city: true, aiProfile: true },
   })
   const city = me?.city ?? null
+  const aiProfile = me?.aiProfile ?? null
 
   // ── Усе провалідовано → відкриваємо потік ──
   const encoder = new TextEncoder()
@@ -67,22 +70,34 @@ export const POST: RequestHandler = async ({ request }) => {
 
       await withTurnLog({ userId, city }, async () => {
         try {
-          const final = await runZunorTurnStream(history, city, (delta) => {
-            send({ t: 'text', d: delta })
-          })
+          const final = await runZunorTurnStream(
+            history,
+            city,
+            (delta) => {
+              send({ t: 'text', d: delta })
+            },
+            aiProfile,
+          )
           turnLog().final(final)
           send({ t: 'final', r: final })
         } catch (err) {
           console.error('[zunor] stream turn failed:', err)
           turnLog().note(`ХІД УПАВ: ${String(err)}`)
-          // Потік уже відкрито → generic-помилка як final, без внутрішніх деталей
-          send({
-            t: 'final',
-            r: {
-              kind: 'message',
-              reply: 'Zunor тимчасово недоступний. Спробуйте ще раз.',
-            },
-          })
+
+          try {
+            const final = await runZunorTurn(history, city, aiProfile)
+            turnLog().final(final)
+            send({ t: 'final', r: final })
+          } catch (fallbackErr) {
+            console.error('[zunor] fallback turn failed:', fallbackErr)
+            send({
+              t: 'final',
+              r: {
+                kind: 'message',
+                reply: 'Zunor тимчасово недоступний. Спробуйте ще раз.',
+              },
+            })
+          }
         }
       })
 

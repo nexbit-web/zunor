@@ -7,10 +7,11 @@
 // Роль читається з БД, а не із сесії: сесію клієнт теоретично впливає, БД — ні.
 // Хешів/токенів не чіпаємо — тягнемо лише role.
 
-import { auth } from '$lib/auth'
-import { prisma } from '$lib/prisma'
+
 import { redirect } from '@sveltejs/kit'
 import type { Role } from '../../generated/prisma/client'
+import { auth } from './auth'
+import { prisma } from './prisma'
 
 export interface GuardedUser {
   id: string

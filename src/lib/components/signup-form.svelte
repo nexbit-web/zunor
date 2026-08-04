@@ -71,21 +71,25 @@
     }
     loading = true
     serverError = ''
+
+    const normalizedEmail = email.trim().toLowerCase()
+
     try {
       const { error: err } = await signUp.email({
         name: name.trim(),
-        email: email.trim().toLowerCase(),
+        email: normalizedEmail,
         password,
       })
       if (err) {
         if (err.status === 422) serverError = 'Акаунт із таким email вже існує'
-        else serverError = err.message ?? 'Помилка реєстрації'
+        else if (err.status === 429)
+          serverError = 'Забагато спроб. Спробуйте пізніше.'
+        else serverError = 'Не вдалося створити акаунт'
         return
       }
-      await invalidateAll()
-      // onboarded=false → замок у hooks одразу поведе на /dashboard/onboarding.
-      goto('/dashboard')
-      toast('Акаунт створено!', { icon: '🎉' })
+      await goto(
+        `/user/verify-email?email=${encodeURIComponent(normalizedEmail)}`,
+      )
     } catch (err) {
       if (dev) console.error('[register] failed:', err)
       serverError = "Помилка з'єднання. Перевірте інтернет."
@@ -99,9 +103,12 @@
     googleLoading = true
     serverError = ''
     try {
-      // Після Google-входу better-auth редіректить на callbackURL.
-      // Ведемо на /dashboard — замок перекине на онбординг, якщо профіль пустий.
-      await signIn.social({ provider: 'google', callbackURL: '/dashboard' })
+      await signIn.social({
+        provider: 'google',
+        callbackURL: '/dashboard',
+        // Куди Google поверне при відмові юзера або помилці провайдера.
+        errorCallbackURL: '/user/login?error=oauth',
+      })
     } catch (err) {
       if (dev) console.error('[register] google failed:', err)
       serverError = 'Не вдалося увійти через Google'
@@ -193,7 +200,7 @@
         <button
           type="button"
           onclick={() => (showPassword = !showPassword)}
-          class="absolute top-1/2 right-1.5 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          class="absolute top-1/2 right-0.5 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           aria-label={showPassword ? 'Сховати пароль' : 'Показати пароль'}
           aria-pressed={showPassword}
         >
@@ -226,7 +233,6 @@
           class="pr-10"
           required
         />
-        
       </div>
       {#if confirmError}
         <Field.Error id="confirm-err-{id}">{confirmError}</Field.Error>
@@ -304,4 +310,27 @@
       </Field.Description>
     </Field.Field>
   </Field.Group>
+
+  <p
+    class="-mt-2 text-center text-xs leading-relaxed text-balance text-muted-foreground/80"
+  >
+    Створюючи акаунт, ви погоджуєтесь із
+    <a
+      href="/terms"
+      target="_blank"
+      rel="noopener noreferrer"
+      class="underline underline-offset-4 transition-colors hover:text-foreground"
+    >
+      Умовами використання
+    </a>
+    та
+    <a
+      href="/privacy"
+      target="_blank"
+      rel="noopener noreferrer"
+      class="underline underline-offset-4 transition-colors hover:text-foreground"
+    >
+      Політикою конфіденційності
+    </a>
+  </p>
 </form>

@@ -5,8 +5,8 @@ import {
   VerificationStatus,
   Role,
 } from '../../../../generated/prisma/client'
-import { prisma } from '$lib/prisma'
-import { auth } from '$lib/auth'
+import { prisma } from '$lib/server/prisma'
+import { auth } from '$lib/server/auth'
 import type { RequestHandler } from './$types'
 
 interface UpdatePayload {
@@ -86,9 +86,10 @@ export const POST: RequestHandler = async ({ request }) => {
 
   // ═══════════════════ Валідація ═══════════════════
 
-  if (body.role && !['CLIENT', 'MASTER'].includes(body.role)) {
-    return json({ error: 'Invalid role' }, { status: 400 })
-  }
+  // role та onboarded НЕ приймаються з тіла запиту. Раніше приймались,
+  // і це давало дві дірки: майстер міг понизити себе до клієнта,
+  // а будь-хто — виставити onboarded=true з порожнім профілем,
+  // повністю обійшовши онбординг. Тепер їх пише лише $lib/server/profile.ts.
 
   if (body.bio !== undefined) {
     if (!isString(body.bio))
@@ -199,7 +200,7 @@ export const POST: RequestHandler = async ({ request }) => {
   // ═══════════════════ Оновлення User ═══════════════════
 
   const userData: Prisma.UserUpdateInput = {}
-  if (body.role) userData.role = body.role as Role
+  if (body.onboarded === true) userData.onboarded = true
   if (body.name) userData.name = body.name
   if (body.phone !== undefined) userData.phone = body.phone
   if (body.city) userData.city = body.city

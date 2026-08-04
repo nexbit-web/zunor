@@ -92,57 +92,59 @@
     }
   }
 </script>
-
-<div class="inline-flex flex-col items-center gap-2">
+<div class="inline-flex flex-col items-start gap-2">
   <button
     type="button"
     onclick={() => fileInput?.click()}
     disabled={uploading}
-    class="relative group rounded-xl cursor-pointer transition-transform hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed"
-    aria-label="Завантажити аватар"
+    class="group relative cursor-pointer rounded-full transition-transform focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring active:scale-[0.98] disabled:cursor-not-allowed"
+    aria-label={value ? 'Змінити фото' : 'Завантажити фото'}
   >
-    <Avatar.Root
-      class="size-24 ring-4 shadow-md"
-      style="--tw-ring-color: var(--card)"
-    >
+    <Avatar.Root class="size-20">
       {#if value}
-        <Avatar.Image src={value} alt="avatar" />
+        <Avatar.Image src={value} alt="" class="object-cover" />
       {/if}
-      <Avatar.Fallback
-        class="text-2xl font-semibold"
-        style="background-color: color-mix(in oklch, var(--primary) 12%, var(--card));
-               color: var(--primary)"
-      >
+      <Avatar.Fallback class="bg-muted text-xl font-medium text-muted-foreground">
         {fallback}
       </Avatar.Fallback>
     </Avatar.Root>
 
-    <div
-      class="absolute inset-0 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
-      style="background-color: rgba(0,0,0,0.45)"
+    <!-- Значок камери завжди видимий, а не лише на ховері: без нього
+         незрозуміло, що аватар клікабельний, — люди просто не знають,
+         що сюди можна натиснути. На ховері він темнішає.
+         ring кольором фону відділяє значок від фото. -->
+    <span
+      class="absolute -right-0.5 -bottom-0.5 flex size-7 items-center justify-center rounded-full bg-foreground text-background ring-2 ring-background transition-colors group-hover:bg-foreground/85"
+      aria-hidden="true"
     >
       {#if uploading}
-        <Spinner />
+        <Spinner class="size-3.5 animate-spin" />
       {:else}
-        <Camera class="size-5 text-white" />
+        <Camera class="size-3.5" strokeWidth={2} />
       {/if}
-    </div>
+    </span>
 
+    <!-- Під час завантаження гасимо фото, щоб було видно, що йде процес -->
     {#if uploading}
-      <div
-        class="absolute inset-0 rounded-full flex items-center justify-center pointer-events-none"
-        style="background-color: rgba(0,0,0,0.45)"
-      >
-        <Spinner />
-      </div>
+      <span
+        class="pointer-events-none absolute inset-0 rounded-full bg-background/60"
+        aria-hidden="true"
+      ></span>
     {/if}
   </button>
 
+  <span class="text-[12px] text-muted-foreground">
+    {#if uploading}
+      Завантажуємо...
+    {:else if value}
+      Натисніть, щоб змінити
+    {:else}
+      Натисніть, щоб додати
+    {/if}
+  </span>
+
   {#if error}
-    <span
-      class="text-xs text-center max-w-[10rem]"
-      style="color: var(--destructive)"
-    >
+    <span class="max-w-[14rem] text-[12px] text-destructive" role="alert">
       {error}
     </span>
   {/if}

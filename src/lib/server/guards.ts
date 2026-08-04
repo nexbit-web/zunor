@@ -1,5 +1,5 @@
 import { error, redirect } from '@sveltejs/kit'
-import type { User, Session } from '$lib/auth'
+import type { User, Session } from './auth'
 
 /** Для сторінок: гість → редірект на логін. Повертає гарантованого юзера. */
 export function requireUser(locals: App.Locals, redirectTo?: string): User {

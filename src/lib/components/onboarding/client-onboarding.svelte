@@ -1,36 +1,64 @@
 <!--
-  Онбординг «Знайомство» — преміум glass на токенах теми.
-  Логіка (нормалізація телефону, валідація, submit, avatar uploader) — 1:1.
-  Безпека: вся валідація тут — UX; сервер /api/user/update має валідувати все повторно.
+  Профіль замовника. Згруповані картки — як у System Settings:
+  підпис ліворуч, контрол праворуч, роздільники з відступами.
+
+  Валідація тут — виключно UX. Авторитет за сервером:
+  saveClientProfile() у $lib/server/profile.ts перевіряє все повторно.
 -->
 <script lang="ts">
-  import { untrack } from 'svelte'
   import { goto, invalidateAll } from '$app/navigation'
-  import { cn } from '$lib/utils.js'
-  import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-  } from '$lib/components/ui/select'
-  import AvatarUploader from '$lib/components/avatar-uploader.svelte'
-  // import { toast } from '$lib/stores/toast-store.svelte'
-  import type { OnboardingData } from '$lib/components/onboarding/types'
-  import { LoaderCircle, CheckCircle2, AlertCircle } from 'lucide-svelte'
+  import { untrack, tick, type Snippet } from 'svelte'
   import { Button } from '$lib/components/ui/button'
   import { Spinner } from '$lib/components/ui/spinner'
-  
+  import { Input } from '$lib/components/ui/input'
+  import { Textarea } from '$lib/components/ui/textarea'
+  import { Label } from '$lib/components/ui/label'
+  import * as Popover from '$lib/components/ui/popover'
+  import * as Command from '$lib/components/ui/command'
+  import AvatarUploader from '$lib/components/avatar-uploader.svelte'
+  import { cn } from '$lib/utils'
   import toast from 'svelte-hot-french-toast'
+  import CheckIcon from '@lucide/svelte/icons/check'
+  import ChevronsUpDownIcon from '@lucide/svelte/icons/chevrons-up-down'
+  import type { OnboardingData } from '$lib/components/onboarding/types'
 
-  let {
-    data,
-    onBack,
-  }: { data: OnboardingData; onBack: () => void } = $props()
+  interface Props {
+    data: OnboardingData
+    /** onboarding — перше заповнення, edit — правка готового профілю. */
+    mode: 'onboarding' | 'edit'
+    onBack: () => void
+  }
 
+  let { data, mode, onBack }: Props = $props()
+
+  const NAME_MIN = 2
   const NAME_MAX = 80
   const BIO_MAX = 922
 
-  // Телефон: тримаємо лише 9 значущих цифр; +380 додаємо при сабміті.
+  // untrack: початкові значення беремо один раз, інакше оновлення data
+  // затирало б те, що людина щойно набрала.
+  const initial = untrack(() => data.user)
+
+  // ─── Поля ───
+  let avatarUrl = $state(initial.avatar ?? '')
+  let avatarPublicId = $state(initial.avatarPublicId ?? '')
+  let avatarUploading = $state(false)
+
+  let name = $state(initial.name ?? '')
+  let bio = $state(initial.bio ?? '')
+
+  let city = $state(initial.city ?? '')
+  let cityOpen = $state(false)
+  let cityTriggerRef = $state<HTMLButtonElement>(null!)
+
+  let submitting = $state(false)
+
+  // Помилку показуємо лише після виходу з поля: червоне під порожнім
+  // полем, якого ще не торкались, — це грубо.
+  let touched = $state({ name: false, phone: false, city: false })
+
+  // ─── Телефон ───
+  // Тримаємо лише 9 значущих цифр; +380 додаємо при сабміті.
   function normalizePhone(input: string): string {
     let d = input.replace(/\D/g, '')
     if (d.startsWith('380')) d = d.slice(3)
@@ -38,6 +66,7 @@
     else if (d.startsWith('0')) d = d.slice(1)
     return d.slice(0, 9)
   }
+
   function formatLocal(d: string): string {
     let out = d.slice(0, 2)
     if (d.length > 2) out += ' ' + d.slice(2, 5)
@@ -46,24 +75,14 @@
     return out
   }
 
-  const initial = untrack(() => data.user)
-
-  let name = $state(initial.name ?? '')
-  let city = $state(initial.city ?? '')
-  let bio = $state(initial.bio ?? '')
-  let avatarUrl = $state(initial.avatar ?? '')
-  let avatarPublicId = $state('')
-  let avatarUploading = $state(false)
   let phoneDigits = $state(normalizePhone(initial.phone ?? ''))
-  let phoneTouched = $state(false)
-  let submitting = $state(false)
+  const phoneDisplay = $derived(formatLocal(phoneDigits))
 
-  const phoneDisplayLocal = $derived(formatLocal(phoneDigits))
-
-  function onPhoneInput(e: Event) {
+  function onPhoneInput(e: Event): void {
     const el = e.currentTarget as HTMLInputElement
     phoneDigits = normalizePhone(el.value)
-    // Примусова синхронізація DOM: інакше обрізаний зайвий символ лишається в полі.
+    // Примусова синхронізація DOM: без неї обрізаний зайвий символ
+    // лишається в полі.
     el.value = formatLocal(phoneDigits)
   }
 
@@ -71,328 +90,299 @@
   const phoneValid = $derived(
     phoneDigits.length === 9 && /^[35679]/.test(phoneDigits),
   )
+
+  // ─── Похідні ───
+  const nameTrim = $derived(name.trim())
+  const nameValid = $derived(
+    nameTrim.length >= NAME_MIN && nameTrim.length <= NAME_MAX,
+  )
+  const bioTrim = $derived(bio.trim())
+  const cityName = $derived(data.cities.find((c) => c.slug === city)?.name ?? '')
+
+  const nameError = $derived(
+    touched.name && !nameValid
+      ? nameTrim.length === 0
+        ? "Введіть ім'я"
+        : `Ім'я: ${NAME_MIN}–${NAME_MAX} символів`
+      : '',
+  )
   const phoneError = $derived(
-    phoneTouched && !phoneValid
+    touched.phone && !phoneValid
       ? phoneDigits.length === 0
-        ? 'Введіть номер телефону'
+        ? 'Введіть номер'
         : 'Перевірте номер: +380 XX XXX XX XX'
       : '',
   )
+  const cityError = $derived(touched.city && !city ? 'Оберіть місто' : '')
 
-  const nameTrimmed = $derived(name.trim())
-  const avatarFallback = $derived(
-    nameTrimmed ? nameTrimmed[0].toUpperCase() : 'U',
-  )
+  const formValid = $derived(nameValid && phoneValid && !!city)
+  const busy = $derived(submitting || avatarUploading)
 
-  const canSubmit = $derived(
-    !submitting &&
-      !avatarUploading &&
-      nameTrimmed.length >= 1 &&
-      nameTrimmed.length <= NAME_MAX &&
-      !!city &&
-      phoneValid,
-  )
+  // ─── Дії ───
+  function closeAndFocusTrigger(): void {
+    cityOpen = false
+    // tick: поповер ще в DOM на момент виклику, фокус без нього не сяде.
+    tick().then(() => cityTriggerRef?.focus())
+  }
 
-  const cityLabel = $derived(
-    data.cities.find((c) => c.slug === city)?.name ?? 'Оберіть місто',
-  )
+  async function submit(e: SubmitEvent): Promise<void> {
+    e.preventDefault()
+    if (busy) return
 
-  async function submit() {
-    if (!canSubmit) return
+    touched = { name: true, phone: true, city: true }
+    if (!formValid) {
+      toast.error('Перевірте заповнені поля')
+      return
+    }
+
     submitting = true
     try {
-      const res = await fetch('/api/user/update', {
+      // role та onboarded не шлемо: сервер виставляє їх сам після
+      // валідації. Клієнт не має права на ці поля.
+      const res = await fetch('/api/profile/client', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: nameTrimmed,
-          city,
+          name: nameTrim,
           phone: '+380' + phoneDigits,
-          bio: bio.trim(),
-          role: 'CLIENT',
-          onboarded: true, // важливі поля заповнено → замок пропускає
+          city,
+          bio: bioTrim,
           avatar: avatarUrl || null,
-          // publicId: новий аватар → новий id; прибрали → null; просте редагування → не чіпаємо.
-          ...(avatarUrl
-            ? avatarPublicId
-              ? { avatarPublicId }
-              : {}
-            : { avatarPublicId: null }),
+          avatarPublicId: avatarUrl ? avatarPublicId || null : null,
         }),
       })
+
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
-        toast.error(json?.error ?? 'Не вдалось зберегти')
+        toast.error(json?.message ?? json?.error ?? 'Не вдалося зберегти')
         return
       }
+
       await invalidateAll()
-      await new Promise((r) => setTimeout(r, 800))
-      goto('/dashboard')
-      toast.success('Зміни збережено')
+      toast.success(mode === 'edit' ? 'Зміни збережено' : 'Профіль заповнено!')
+      await goto('/dashboard')
     } catch {
-      toast.error('Помилка зʼєднання')
+      toast.error("Помилка з'єднання. Перевірте інтернет.")
     } finally {
       submitting = false
     }
   }
 </script>
 
-<svelte:head>
-  <title>Знайомство · Zunor</title>
-</svelte:head>
-
-<div
-  class="welcome-scope flex min-h-svh items-start justify-center px-5 py-14 sm:py-16"
->
-  <div class="flex w-full max-w-115 flex-col gap-5.5">
-    <!-- intro -->
-    <div class="text-center">
-      <h1 class="text-3xl font-bold tracking-[-0.035em] text-foreground">
-        Знайомство
-      </h1>
-      <p class="mt-2 text-[15px] leading-snug text-muted-foreground">
-        Кілька слів про тебе — і можна замовляти.
-      </p>
+<!-- Рядок картки: підпис ліворуч, контрол праворуч.
+     mx-4 замість divide-y — роздільник відступає від країв,
+     як у системних налаштуваннях. -->
+{#snippet row(
+  label: string,
+  forId: string | undefined,
+  control: Snippet,
+  hint?: string,
+  error?: string,
+)}
+  <div
+    class="mx-4 flex flex-col gap-2 border-t border-border/60 py-3 first:border-t-0 sm:flex-row sm:items-start sm:justify-between sm:gap-6"
+  >
+    <div class="min-w-0 sm:pt-1.5">
+      {#if forId}
+        <Label for={forId} class="text-sm font-normal">{label}</Label>
+      {:else}
+        <p class="text-sm">{label}</p>
+      {/if}
+      {#if hint}
+        <p class="mt-0.5 max-w-[28ch] text-[12px] leading-relaxed text-muted-foreground">
+          {hint}
+        </p>
+      {/if}
     </div>
 
-    <!-- glass card -->
-    <div
-      class="rounded-[32px] border border-border bg-card px-7.5 pt-8.5 pb-7.5 shadow-[0_24px_60px_-12px_rgba(0,0,0,0.1),0_8px_20px_-8px_rgba(0,0,0,0.05)]"
-    >
-      <!-- avatar -->
-      <div class="mb-7 flex flex-col items-center gap-3">
+    <div class="w-full sm:w-[56%] sm:max-w-[300px] sm:shrink-0">
+      {@render control()}
+      {#if error}
+        <p class="mt-1.5 text-[12px] text-destructive" role="alert">{error}</p>
+      {/if}
+    </div>
+  </div>
+{/snippet}
+
+<div class="mx-auto w-full max-w-2xl  ">
+  <header class="mb-7">
+    <h1 class="text-xl font-semibold tracking-[-0.02em]">
+      {mode === 'edit' ? 'Профіль' : 'Знайомство'}
+    </h1>
+    <p class="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
+      {mode === 'edit'
+        ? 'Ці дані бачить виконавець після підтвердження замовлення.'
+        : 'Кілька полів — і можна оформлювати заявку.'}
+    </p>
+  </header>
+
+  <form onsubmit={submit} novalidate>
+    <!-- ═══ Основне ═══ -->
+    <h2 class="mb-2 px-1 text-sm font-semibold">Основне</h2>
+    <div class="rounded-xl bg-muted/40 py-1">
+      {#snippet avatarControl()}
         <AvatarUploader
           bind:value={avatarUrl}
           bind:publicId={avatarPublicId}
           bind:uploading={avatarUploading}
-          fallback={avatarFallback}
+          fallback={nameTrim.charAt(0).toUpperCase() || 'U'}
           onError={(msg) => toast.error(msg)}
         />
-        <span class="text-[13px] text-muted-foreground">Додай фото профілю</span
-        >
-      </div>
+      {/snippet}
+      {@render row('Фото', undefined, avatarControl, "Необов'язково")}
 
-      <div class="flex flex-col gap-5">
-        <!-- Імʼя -->
-        <div class="flex flex-col gap-2.5">
-          <label
-            for="name"
-            class="text-[13.5px] font-semibold tracking-[-0.01em] text-foreground"
+      {#snippet nameControl()}
+        <Input
+          id="name"
+          bind:value={name}
+          onblur={() => (touched.name = true)}
+          placeholder="Олена Коваленко"
+          maxlength={NAME_MAX}
+          autocomplete="name"
+          aria-invalid={!!nameError}
+          class="bg-background"
+          required
+        />
+      {/snippet}
+      {@render row("Ім'я", 'name', nameControl, undefined, nameError)}
+
+      {#snippet phoneControl()}
+        <div class="flex items-center gap-2">
+          <span
+            class="flex h-9 shrink-0 items-center rounded-md bg-background px-2.5 text-sm text-muted-foreground"
           >
-            Як тебе звати?
-          </label>
-          <input
-            id="name"
-            type="text"
-            bind:value={name}
-            placeholder="Іван Петренко"
-            maxlength={NAME_MAX}
-            autocomplete="name"
-            autocapitalize="words"
-            class="welcome-input"
+            +380
+          </span>
+          <Input
+            id="phone"
+            value={phoneDisplay}
+            oninput={onPhoneInput}
+            onblur={() => (touched.phone = true)}
+            placeholder="67 123 45 67"
+            inputmode="tel"
+            autocomplete="tel-national"
+            aria-invalid={!!phoneError}
+            class="bg-background"
+            required
           />
         </div>
+      {/snippet}
+      {@render row(
+        'Телефон',
+        'phone',
+        phoneControl,
+        'Видно виконавцю після підтвердження',
+        phoneError,
+      )}
 
-        <!-- Місто -->
-        <div class="flex flex-col gap-2.5">
-          <label
-            for="city"
-            class="text-[13.5px] font-semibold tracking-[-0.01em] text-foreground"
-          >
-            Твоє місто
-          </label>
-          <Select type="single" bind:value={city}>
-            <SelectTrigger id="city" class="welcome-input">
-              <span class={cn('truncate', !city && 'text-muted-foreground')}
-                >{cityLabel}</span
+      {#snippet cityControl()}
+        <!-- Combobox: Popover + Command, як у документації shadcn-svelte -->
+        <Popover.Root bind:open={cityOpen}>
+          <Popover.Trigger bind:ref={cityTriggerRef}>
+            {#snippet child({ props })}
+              <Button
+                {...props}
+                variant="outline"
+                role="combobox"
+                aria-expanded={cityOpen}
+                aria-invalid={!!cityError}
+                class="w-full justify-between bg-background font-normal"
               >
-            </SelectTrigger>
-            <SelectContent class="rounded-2xl">
-              {#each data.cities as c (c.slug)}
-                <SelectItem value={c.slug} class="rounded-lg py-2.5 text-[15px]"
-                  >{c.name}</SelectItem
-                >
-              {/each}
-            </SelectContent>
-          </Select>
-        </div>
+                <span class={cn(!cityName && 'text-muted-foreground')}>
+                  {cityName || 'Оберіть місто'}
+                </span>
+                <ChevronsUpDownIcon class="opacity-50" />
+              </Button>
+            {/snippet}
+          </Popover.Trigger>
+          <Popover.Content class="w-[--bits-popover-anchor-width] p-0">
+            <Command.Root>
+              <Command.Input placeholder="Пошук міста..." />
+              <Command.List>
+                <Command.Empty>Місто не знайдено</Command.Empty>
+                <Command.Group>
+                  {#each data.cities as c (c.slug)}
+                    <!-- value = назва, щоб пошук працював по тому,
+                         що людина бачить, а не по slug -->
+                    <Command.Item
+                      value={c.name}
+                      onSelect={() => {
+                        city = c.slug
+                        touched.city = true
+                        closeAndFocusTrigger()
+                      }}
+                    >
+                      <CheckIcon class={cn(city !== c.slug && 'text-transparent')} />
+                      {c.name}
+                    </Command.Item>
+                  {/each}
+                </Command.Group>
+              </Command.List>
+            </Command.Root>
+          </Popover.Content>
+        </Popover.Root>
+      {/snippet}
+      {@render row(
+        'Місто',
+        undefined,
+        cityControl,
+        'Заявки надходитимуть виконавцям звідси',
+        cityError,
+      )}
+    </div>
 
-        <!-- Телефон -->
-        <div class="flex flex-col gap-2.5">
-          <label
-            for="phone"
-            class="text-[13.5px] font-semibold tracking-[-0.01em] text-foreground"
-          >
-            Номер телефону
-          </label>
-          <div
-            class={cn(
-              'welcome-phone flex h-13 items-center overflow-hidden rounded-[14px]',
-              phoneError && 'has-error',
-            )}
-          >
-            <span
-              class="flex h-full shrink-0 items-center border-r border-border pr-3 pl-4 font-semibold text-muted-foreground tabular-nums select-none"
-            >
-              +380
-            </span>
-            <input
-              id="phone"
-              type="tel"
-              inputmode="numeric"
-              autocomplete="tel-national"
-              value={phoneDisplayLocal}
-              oninput={onPhoneInput}
-              onblur={() => (phoneTouched = true)}
-              placeholder="00 000 00 00"
-              aria-invalid={!!phoneError}
-              aria-describedby={phoneError ? 'phone-err' : 'phone-hint'}
-              class="h-full flex-1 bg-transparent px-4 text-[15px] font-medium text-foreground tabular-nums outline-none placeholder:font-normal placeholder:text-muted-foreground"
-            />
-            {#if phoneTouched && phoneValid}
-              <CheckCircle2
-                class="mr-3.5 size-4.5 shrink-0 text-emerald-500"
-                aria-hidden="true"
-              />
-            {:else if phoneError}
-              <AlertCircle
-                class="mr-3.5 size-4.5 shrink-0 text-destructive"
-                aria-hidden="true"
-              />
-            {/if}
-          </div>
-          {#if phoneError}
-            <p id="phone-err" class="text-[12.5px] text-destructive">
-              {phoneError}
-            </p>
-          {:else}
-            <p
-              id="phone-hint"
-              class="text-[12.5px] leading-snug text-muted-foreground"
-            >
-              Приватний. Майстер побачить його лише після того, як ти його
-              обереш.
-            </p>
-          {/if}
-        </div>
-
-        <!-- Про себе -->
-        <div class="flex flex-col gap-2.5">
-          <div class="flex items-center justify-between">
-            <label
-              for="bio"
-              class="text-[13.5px] font-semibold tracking-[-0.01em] text-foreground"
-            >
-              Про себе <span class="font-normal text-muted-foreground"
-                >— необовʼязково</span
-              >
-            </label>
-            <span class="text-[12px] tabular-nums text-muted-foreground"
-              >{bio.length}/{BIO_MAX}</span
-            >
-          </div>
-          <textarea
-            id="bio"
-            bind:value={bio}
-            rows={3}
-            maxlength={BIO_MAX}
-            placeholder="Кілька слів про себе — майстру буде приємно знати, з ким працює"
-            class="welcome-input min-h-23 resize-none py-3.5 leading-relaxed"
-          ></textarea>
+    <!-- ═══ Додатково ═══ -->
+    <h2 class="mt-7 mb-2 px-1 text-sm font-semibold">Додатково</h2>
+    <div class="rounded-xl bg-muted/40 py-1">
+      <div class="mx-4 py-3">
+        <Label for="bio" class="text-sm font-normal">Про себе</Label>
+        <p class="mt-0.5 text-[12px] text-muted-foreground">
+          Необов'язково. Наприклад: є кіт, під'їзд із кодом, зручніше зранку.
+        </p>
+        <Textarea
+          id="bio"
+          bind:value={bio}
+          placeholder="Що виконавцю варто знати заздалегідь."
+          rows={4}
+          maxlength={BIO_MAX}
+          class="mt-2 resize-none bg-background"
+        />
+        <div class="mt-1.5 flex justify-end">
+          <span class="text-[12px] tabular-nums text-muted-foreground">
+            {bioTrim.length}/{BIO_MAX}
+          </span>
         </div>
       </div>
+    </div>
 
-      <Button
-        onclick={submit}
-        disabled={!canSubmit}
-        aria-busy={submitting}
-        class="mt-7 relative inline-flex h-13.5 w-full items-center  justify-center rounded-[16px] text-[15.5px] font-semibold tracking-[-0.01em] text-white transition hover:-translate-y-px active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
-      >
-        <span class="pointer-events-none">
-          {#if submitting}
-            Зачекайте…
-          {:else}
-            Готово
-          {/if}
+    <!-- ═══ Дії ═══
+         У кінці форми, праворуч — як у діалогах macOS.
+         Підтверджувальна дія остання: погляд іде зліва направо
+         й закінчується на тому, що людина хоче натиснути. -->
+    <div class="mt-7 flex items-center justify-end gap-2">
+      {#if avatarUploading}
+        <span class="mr-auto text-[12px] text-muted-foreground">
+          Фото ще завантажується...
         </span>
+      {/if}
 
-        {#if submitting}
-          <Spinner
-            class="absolute right-4 animate-spin"
-            aria-hidden="true"
-          />
-        {/if}
+      <Button type="button" variant="ghost" onclick={onBack} disabled={busy}>
+        Скасувати
       </Button>
 
-      <button
-        type="button"
-        onclick={onBack}
-        class="mt-4 w-full text-center text-[13px] text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+      <Button
+        type="submit"
+        disabled={busy || !formValid}
+        aria-busy={submitting}
+        class="relative min-w-[130px]"
       >
-        ← Змінити роль
-      </button>
+        <span>
+          {submitting ? 'Зберігаємо...' : mode === 'edit' ? 'Зберегти' : 'Продовжити'}
+        </span>
+        {#if submitting}
+          <Spinner class="absolute right-3 animate-spin" aria-hidden="true" />
+        {/if}
+      </Button>
     </div>
-  </div>
+  </form>
 </div>
-
-<style>
-  
-  
-
-  /* Спільний вигляд input / select-trigger / textarea.
-     :global бо клас потрапляє і на елемент усередині Select-компонента;
-     обмежено .welcome-scope, щоб не текло на весь застосунок. */
-  .welcome-scope :global(.welcome-input) {
-    width: 100%;
-    min-height: 52px;
-    padding-left: 16px;
-    padding-right: 16px;
-    border-radius: 14px;
-    border: 1px solid var(--border);
-    background: var(--muted);
-    color: var(--foreground);
-    font-size: 15px;
-    font-weight: 500;
-    outline: none;
-    transition:
-      border-color 0.16s ease,
-      background 0.16s ease,
-      box-shadow 0.16s ease;
-  }
-  .welcome-scope :global(.welcome-input::placeholder) {
-    color: var(--muted-foreground);
-    font-weight: 400;
-  }
-  .welcome-scope :global(.welcome-input:focus),
-  .welcome-scope :global(.welcome-input:focus-within),
-  .welcome-scope :global(.welcome-input[data-state='open']) {
-    background: var(--background);
-    border-color: var(--ring);
-    box-shadow: 0 0 0 4px color-mix(in oklch, var(--ring) 22%, transparent);
-  }
-
-  /* Телефон — окрема рамка з префіксом. */
-  .welcome-phone {
-    border: 1px solid var(--border);
-    background: var(--muted);
-    transition:
-      border-color 0.16s ease,
-      background 0.16s ease,
-      box-shadow 0.16s ease;
-  }
-  .welcome-phone:focus-within {
-    border-color: var(--ring);
-    background: var(--background);
-    box-shadow: 0 0 0 4px color-mix(in oklch, var(--ring) 22%, transparent);
-  }
-  .welcome-phone.has-error {
-    border-color: var(--destructive);
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .welcome-scope :global(.welcome-input),
-    .welcome-phone {
-      transition: none;
-    }
-  }
-</style>

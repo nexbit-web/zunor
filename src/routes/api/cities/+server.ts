@@ -1,6 +1,6 @@
 // src/routes/api/cities/+server.ts
 import { json } from '@sveltejs/kit'
-import { prisma } from '$lib/prisma'
+import { prisma } from '$lib/server/prisma'
 import type { RequestHandler } from './$types'
 
 /**

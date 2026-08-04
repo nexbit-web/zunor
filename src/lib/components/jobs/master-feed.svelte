@@ -366,8 +366,8 @@
       opacity 0.15s ease;
   }
   .fpill--on {
-    background: var(--primary);
-    color: var(--primary-foreground);
+    background: var(--foreground);
+    color: var(--background);
   }
   .fpill--off {
     background: var(--card);
@@ -376,8 +376,9 @@
     transition: all 0.3s;
   }
   .fpill--off:hover {
-    /* opacity: 0.72; */
-    border: 1px solid var(--primary);
+    opacity: 0.72;
+   
+    background-color: var(--card);
   }
 
   /* ── count (як у прикладі) ── */

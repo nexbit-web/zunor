@@ -11,6 +11,7 @@
   const NAV_LINKS = [
     { href: '/how-it-works', label: 'Як це працює' },
     { href: '/about', label: 'Про нас' },
+    { href: '/master/about', label: 'Стати майстром ' },
   ]
 
   let mobileOpen = $state(false)
@@ -54,7 +55,7 @@
       class="mx-auto flex h-full w-full max-w-6xl items-center justify-between gap-6 px-6"
     >
       <!-- Лево -->
-      <div class="flex items-center gap-8">
+      <div class="flex w-full justify-between items-center gap-8">
         <Logo />
         <nav
           class="hidden items-center gap-0.5 md:flex"
@@ -63,7 +64,7 @@
           {#each NAV_LINKS as link (link.href)}
             <a
               href={link.href}
-              class="nav-link"
+              class="nav-link rounded-md"
               class:is-active={isActive(link.href)}
               aria-current={isActive(link.href) ? 'page' : undefined}
             >
@@ -159,7 +160,6 @@
     font-size: 15px;
     font-weight: 500;
     color: var(--foreground);
-    border-radius: 6px;
     position: relative;
     transition:
       color 0.15s,
@@ -167,16 +167,21 @@
     text-decoration: none;
     white-space: nowrap;
   }
-  .nav-link:hover {
-    color: var(--primary);
-    background: var(--muted);
+   .nav-link:hover::after {
+    content: '';
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: -1px;
+    height: 2px;
+    background: var(--color-text);
+    border-radius: 1px;
   }
   .nav-link:focus-visible {
     outline: 2px solid var(--ring);
     outline-offset: 2px;
   }
   .nav-link.is-active {
-    color: var(--primary);
     font-weight: 600;
   }
   .nav-link.is-active::after {
@@ -186,7 +191,7 @@
     right: 12px;
     bottom: -1px;
     height: 2px;
-    background: var(--primary);
+    background: var(--color-text);
     border-radius: 1px;
   }
 

@@ -1,8 +1,8 @@
 // src/routes/api/upload/signature/+server.ts
 import { json } from '@sveltejs/kit'
-import { auth } from '$lib/auth'
-import { signUploadParams } from '$lib/cloudinary'
-import { limit } from '$lib/rate-limit'
+import { auth } from '$lib/server/auth'
+import { signUploadParams } from '$lib/server/cloudinary'
+import { limit } from '$lib/server/rate-limit'
 import type { RequestHandler } from './$types'
 
 const ALLOWED_KINDS = ['avatar', 'job', 'chat'] as const

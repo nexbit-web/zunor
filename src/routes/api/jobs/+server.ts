@@ -1,8 +1,8 @@
 // src/routes/api/jobs/+server.ts
 import { json, error } from '@sveltejs/kit'
-import { auth } from '$lib/auth'
-import { prisma } from '$lib/prisma'
-import { limit } from '$lib/rate-limit'
+import { auth } from '$lib/server/auth'
+import { prisma } from '$lib/server/prisma'
+import { limit } from '$lib/server/rate-limit'
 import { dispatchJob } from '$lib/server/dispatch'
 import { CATEGORY_SLUG } from '$lib/categories/cleaning/presets'
 import { validateCleaningMetadata } from '$lib/categories/cleaning/validate'

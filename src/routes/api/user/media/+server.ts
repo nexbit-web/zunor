@@ -1,9 +1,9 @@
 // src/routes/api/user/media/+server.ts
 import { json } from '@sveltejs/kit'
-import { auth } from '$lib/auth'
-import { cloudinary } from '$lib/cloudinary'
-import { prisma } from '$lib/prisma'
-import { limit } from '$lib/rate-limit'
+import { auth } from '$lib/server/auth'
+import { cloudinary } from '$lib/server/cloudinary'
+import { prisma } from '$lib/server/prisma'
+import { limit } from '$lib/server/rate-limit'
 import type { RequestHandler } from './$types'
 
 export const POST: RequestHandler = async ({ request }) => {
