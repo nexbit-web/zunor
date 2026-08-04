@@ -1,5 +1,5 @@
 // src/lib/server/system-message.ts
-import { prisma } from '$lib/prisma'
+import { prisma } from './prisma'
 import { channels, events, safeTrigger } from './pusher'
 import type { PrismaTx } from './notifications'
 

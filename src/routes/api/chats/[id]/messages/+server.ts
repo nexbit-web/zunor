@@ -1,9 +1,9 @@
 // src/routes/api/chats/[id]/messages/+server.ts
 import { json, error } from '@sveltejs/kit'
-import { auth } from '$lib/auth'
-import { prisma } from '$lib/prisma'
+import { auth } from '$lib/server/auth'
+import { prisma } from '$lib/server/prisma'
 import { channels, events, safeTrigger } from '$lib/server/pusher'
-import { limit } from '$lib/rate-limit'
+import { limit } from '$lib/server/rate-limit'
 import type { RequestHandler } from './$types'
 import type { ChatMessage } from '$lib/components/chat/types'
 

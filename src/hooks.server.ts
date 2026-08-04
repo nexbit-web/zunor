@@ -1,40 +1,45 @@
-// src/hooks.server.ts
-//
 // Порядок middleware критичний:
 //   1. securityHeaders — CSP/HSTS на ВСІ відповіді (обгортає ланцюжок)
-//   2. authHandle       — better-auth обробляє /api/auth/* (login, logout, reset…)
-//   3. sessionHandle    — резолвить сесію ОДИН раз → event.locals.session/user
-//   4. guardHandle      — /dashboard тільки з сесією; onboarding; guest-only
+//   2. authHandle      — better-auth обробляє /api/auth/*
+//   3. sessionHandle   — резолвить сесію ОДИН раз → locals.session/user
+//   4. guardHandle     — banned → emailVerified → onboarded → маршрут
 //
-// Єдине джерело правди про сесію на запит — locals. Роути/loads НЕ повинні
-// самі викликати auth.api.getSession (зайвий roundtrip + ризик розсинхрону).
+// Єдине джерело правди про сесію на запит — locals.
 
-import { auth } from '$lib/auth'
-import { prisma } from '$lib/prisma'
+import { auth } from '$lib/server/auth'
+import { prisma } from '$lib/server/prisma'
 import { svelteKitHandler } from 'better-auth/svelte-kit'
 import { building, dev } from '$app/environment'
 import { sequence } from '@sveltejs/kit/hooks'
 import { redirect, type Handle } from '@sveltejs/kit'
 import { touchPresence } from '$lib/server/presence'
-// Валідація redirectTo живе в $lib/utils/redirect.ts (ізоморфний util),
-// нею користується login-form при поверненні користувача після входу.
+import { getAccountState, invalidateAccount } from '$lib/server/account-cache'
+// ═══════════════════ Маршрути ═══════════════════
+
+const LOGIN_PATH = '/user/login'
+const VERIFY_PATH = '/user/verify-email'
+const ONBOARDING_PATH = '/dashboard/onboarding'
+const HOME_PATH = '/dashboard'
+const PROTECTED_PREFIX = '/dashboard'
+
+/** Залогіненому тут нема чого робити — на дашборд. */
+const GUEST_ONLY = new Set([LOGIN_PATH, '/user/register'])
+// /user/forgot і /user/reset-password навмисно НЕ guest-only:
+// юзер може бути залогінений і скидати пароль за листом.
 
 // ═══════════════════ Better-auth handler ═══════════════════
 
-const authHandle: Handle = async ({ event, resolve }) => {
-  // Для /api/auth/* повертає власну відповідь (далі по ланцюжку не йде).
-  // Для решти — просто викликає resolve (тобто наступні handles).
-  return svelteKitHandler({ event, resolve, auth, building })
-}
+const authHandle: Handle = async ({ event, resolve }) =>
+  svelteKitHandler({ event, resolve, auth, building })
 
 // ═══════════════════ Сесія → locals ═══════════════════
 
 const sessionHandle: Handle = async ({ event, resolve }) => {
-  // route.id === null → запит не зматчився з жодним роутом (404, статика в dev).
-  // Сесія там не потрібна — не ходимо в better-auth даремно.
+  // route.id === null → запит не зматчився з роутом (404, статика в dev).
   if (event.route.id === null) {
     event.locals.session = null
     event.locals.user = null
+    event.locals.account = null
     return resolve(event)
   }
 
@@ -44,80 +49,102 @@ const sessionHandle: Handle = async ({ event, resolve }) => {
 
   event.locals.session = session
   event.locals.user = session?.user ?? null
+  event.locals.account = null
 
   if (session) touchPresence(session.user.id)
 
   return resolve(event)
 }
 
-// ═══════════════════ Route guards ═══════════════════
-
-/** Сторінки, що вимагають сесію. Все дерево /dashboard. */
-const PROTECTED_PREFIX = '/dashboard'
-
-/** Сторінки тільки для гостей: залогіненому тут нема чого робити. */
-const GUEST_ONLY = new Set(['/user/login', '/user/register'])
-// /user/forgot та /user/reset-password навмисно НЕ guest-only:
-// юзер може бути залогінений і при цьому скидати пароль за листом.
+// ═══════════════════ Замки ═══════════════════
 
 const guardHandle: Handle = async ({ event, resolve }) => {
   const { pathname, search } = event.url
   const session = event.locals.session
 
-  // API захищає себе сам (кожен endpoint перевіряє locals/session/Bearer) —
-  // hooks-редіректи для API безглузді: fetch-клієнту потрібен 401, не 302.
+  // API захищає себе сам: fetch-клієнту потрібен 401, а не 302 на HTML.
   if (pathname.startsWith('/api/')) return resolve(event)
 
-  // ─── Залогінений на публічній головній "/" → його домашня /dashboard ───
-  // Точна перевірка pathname === '/' (не startsWith!): інші публічні
-  // сторінки (/privacy, /terms, /@username, /master/about) лишаються
-  // доступними залогіненому — редіректимо ЛИШЕ з лендінга.
-  if (session && pathname === '/') {
-    redirect(303, '/dashboard')
-  }
+  const isProtected = pathname.startsWith(PROTECTED_PREFIX)
 
-  // ─── Guest-only: залогінений на /user/login|register → /dashboard ───
-  if (session && GUEST_ONLY.has(pathname)) {
-    redirect(303, '/dashboard')
-  }
-  // Далі — тільки захищене дерево
-  if (!pathname.startsWith(PROTECTED_PREFIX)) return resolve(event)
-
-  // ─── Немає сесії → на логін, із поверненням куди йшов ───
+  // ─── Гість ───
   if (!session) {
-    const target = encodeURIComponent(pathname + search)
-    redirect(303, `/user/login?redirectTo=${target}`)
+    if (isProtected) {
+      redirect(
+        303,
+        `${LOGIN_PATH}?redirectTo=${encodeURIComponent(pathname + search)}`,
+      )
+    }
+    return resolve(event)
   }
 
-  // ─── Onboarding-замок ───
-  // Новий флоу: роль обирається НА онбордингу (не при реєстрації), тож
-  // свіжий юзер завжди йде на /dashboard/onboarding, доки не завершить його.
-  // Саму сторінку онбордингу пропускаємо, інакше redirect-петля.
-  const ONBOARDING_PATH = '/dashboard/onboarding'
-  const isOnboardingPage = pathname.startsWith(ONBOARDING_PATH)
+  // ─── Залогінений ───
+  // Стан читаємо з БД, а не із сесії: cookieCache живе 5 хв, і за цей час
+  // бан або підтвердження пошти не встигли б подіяти.
+  const needsAccountState =
+    isProtected ||
+    pathname === VERIFY_PATH ||
+    pathname === '/' ||
+    GUEST_ONLY.has(pathname)
 
-  if (!isOnboardingPage) {
-    // Один легкий SELECT лише на dashboard-сторінках.
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { onboarded: true, banned: true },
-    })
+  if (!needsAccountState) return resolve(event)
 
-    // Сесія є, а юзера в БД нема (видалений) — сесія недійсна, на логін.
-    if (!user) redirect(303, '/user/login')
+  // Кешується на 30 секунд: ці поля майже не змінюються, а запит інакше
+  // йде на кожну навігацію дашборда. Зміни через застосунок скидають
+  // кеш явно (invalidateAccount), тож бан і онбординг діють миттєво.
+  const account = await getAccountState(session.user.id)
 
-    // Профіль не завершено → замикаємо на онбордингу. Вийти не можна,
-    // доки не збереже роль + обовʼязкові поля (сервер виставить onboarded).
-    if (!user.onboarded) {
-      redirect(303, ONBOARDING_PATH)
-    }
-  } else if (session) {
-    // Уже завершив онбординг, але зайшов на /onboarding → на дашборд.
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { onboarded: true },
-    })
-    if (user?.onboarded) redirect(303, '/dashboard')
+  // Сесія є, юзера в БД нема (видалений) — сесія недійсна.
+  if (!account) redirect(303, LOGIN_PATH)
+
+  // ─── Замок 1: бан ───
+  // Убиваємо сесії в БД, щоб доступ зник і після протухання cookie-кешу.
+  if (account.banned) {
+    await prisma.session
+      .deleteMany({ where: { userId: account.id } })
+      .catch(() => {})
+    invalidateAccount(account.id)
+    redirect(303, `${LOGIN_PATH}?error=banned`)
+  }
+
+  // ─── Замок 2: підтвердження пошти ───
+  // Google-юзери сюди не потрапляють: провайдер віддає email_verified,
+  // better-auth проставляє emailVerified при першому вході.
+  if (!account.emailVerified) {
+    if (pathname === VERIFY_PATH) return resolve(event)
+    redirect(303, VERIFY_PATH)
+  }
+
+  // Пошта вже підтверджена — на сторінці верифікації робити нічого.
+  if (pathname === VERIFY_PATH) redirect(303, HOME_PATH)
+
+  // ─── Guest-only і лендінг ───
+  // Точна перевірка pathname === '/': /privacy, /terms, /@username
+  // лишаються доступними залогіненому.
+  if (pathname === '/' || GUEST_ONLY.has(pathname)) redirect(303, HOME_PATH)
+
+  if (!isProtected) return resolve(event)
+
+  // ─── Замок 3: онбординг ───
+  // Не пройшов онбординг → замикаємо в /dashboard/onboarding/**.
+  if (!account.onboarded && !pathname.startsWith(ONBOARDING_PATH)) {
+    redirect(303, ONBOARDING_PATH)
+  }
+
+  // Пройшов онбординг → екран вибору ролі закритий назавжди.
+  // Точне порівняння, а не startsWith: дочірній /onboarding/master
+  // лишається доступним онбордженому КЛІЄНТУ — це апгрейд ролі,
+  // і його власний load сам розвертає мастера на /dashboard/profile.
+  if (account.onboarded && pathname === ONBOARDING_PATH) {
+    redirect(303, '/dashboard/profile')
+  }
+
+  // Віддаємо стан далі — load-функції не роблять той самий SELECT удруге.
+  event.locals.account = {
+    id: account.id,
+    role: account.role,
+    onboarded: account.onboarded,
+    emailVerified: account.emailVerified,
   }
 
   return resolve(event)
@@ -128,9 +155,7 @@ const guardHandle: Handle = async ({ event, resolve }) => {
 const securityHeaders: Handle = async ({ event, resolve }) => {
   const response = await resolve(event)
 
-  // Захищені сторінки не можна кешувати: після logout браузер не має
-  // права показати їх з дискового кешу. Бонус: no-store у більшості
-  // браузерів також виключає сторінку з bfcache.
+  // Після logout браузер не має права дістати сторінку з дискового кешу.
   if (event.url.pathname.startsWith('/dashboard')) {
     response.headers.set('Cache-Control', 'no-store, must-revalidate')
   }
@@ -143,21 +168,23 @@ const securityHeaders: Handle = async ({ event, resolve }) => {
 
   const csp = [
     `default-src 'self'`,
-    `script-src 'self' 'unsafe-inline' https://js.pusher.com https://cdn.jsdelivr.net`,
-    `style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net`,
+    `script-src 'self' 'unsafe-inline' https://js.pusher.com`,
+    `style-src 'self' 'unsafe-inline'`,
     `img-src 'self' data: blob: https://res.cloudinary.com https://*.googleusercontent.com`,
     `media-src 'self' blob: https://res.cloudinary.com`,
     `font-src 'self' data:`,
-    `connect-src 'self' https://api.cloudinary.com https://*.pusher.com wss://*.pusher.com https://sockjs-eu.pusher.com https://sockjs-mt1.pusher.com https://sockjs-ap1.pusher.com https://sockjs-ap2.pusher.com`,
+    `connect-src 'self' https://api.cloudinary.com https://*.pusher.com wss://*.pusher.com https://sockjs-eu.pusher.com`,
+    // Google OAuth редіректить top-level, не в iframe — 'none' коректно.
     `frame-src 'none'`,
     `frame-ancestors 'none'`,
     `base-uri 'self'`,
+    // 'self' достатньо: better-auth сам робить POST на /api/auth/*,
+    // редірект на accounts.google.com іде через 302, не через form.
     `form-action 'self'`,
   ].join('; ')
 
   response.headers.set('Content-Security-Policy', csp)
   response.headers.set('X-Content-Type-Options', 'nosniff')
-  // Узгоджено з CSP frame-ancestors 'none' (раніше стояв SAMEORIGIN — конфлікт)
   response.headers.set('X-Frame-Options', 'DENY')
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
   response.headers.set(
@@ -173,9 +200,6 @@ const securityHeaders: Handle = async ({ event, resolve }) => {
   return response
 }
 
-// securityHeaders — ПЕРШИМ: у sequence перший handle обгортає всі наступні,
-// тож заголовки отримують і відповіді svelteKitHandler для /api/auth/*
-// (він повертає їх сам, не викликаючи resolve — останній handle їх не бачив би).
 export const handle = sequence(
   securityHeaders,
   authHandle,

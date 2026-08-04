@@ -1,6 +1,7 @@
 // src/lib/server/chats-loader.ts
-import { prisma } from '$lib/prisma'
+ 
 import type { ChatPreview } from '$lib/components/chat/types'
+import { prisma } from './prisma'
 
 /**
  * Загружает превью чатов юзера одним эффективным запросом.

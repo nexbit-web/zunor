@@ -1,7 +1,7 @@
 // src/routes/api/chats/[id]/messages/[messageId]/+server.ts
 import { json, error } from '@sveltejs/kit'
-import { auth } from '$lib/auth'
-import { prisma } from '$lib/prisma'
+import { auth } from '$lib/server/auth'
+import { prisma } from '$lib/server/prisma'
 import { channels, events, safeTrigger } from '$lib/server/pusher'
 import type { RequestHandler } from './$types'
 

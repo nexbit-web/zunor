@@ -1,5 +1,5 @@
 // src/lib/server/dictionaries.ts
-import { prisma } from '$lib/prisma'
+import { prisma } from './prisma'
 
 let cache: {
   categories: Map<string, string>

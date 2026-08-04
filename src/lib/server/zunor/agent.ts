@@ -239,7 +239,8 @@ function detectLang(history: ZunorClientMessage[]): 'ru' | 'uk' {
 function baseMessages(
   history: ZunorClientMessage[],
   city: string | null,
-): { messages: DsMessage[] } {
+  aiProfile: unknown = null,
+) {
   // Детект послуги — по ПОВНІЙ історії: послуга могла бути названа на
   // початку, який уже випав з вікна MAX_HISTORY. LLM отримує хвіст,
   // але ФОКУС-блок у промпті має лишатися стабільним до кінця воронки.
@@ -247,7 +248,12 @@ function baseMessages(
   const messages: DsMessage[] = [
     {
       role: 'system',
-      content: buildSystemPrompt(city, activeService, detectLang(history)),
+      content: buildSystemPrompt(
+        city,
+        activeService,
+        detectLang(history),
+        aiProfile,
+      ),
     },
     ...trimHistory(history).map(
       (m): DsMessage => ({ role: m.role, content: m.content }),
@@ -346,9 +352,10 @@ export async function runZunorTurnStream(
   history: ZunorClientMessage[],
   city: string | null,
   onText: (delta: string) => void,
+  aiProfile: unknown = null,
 ): Promise<ZunorResponse> {
   const tool = buildTool()
-  const { messages } = baseMessages(history, city)
+  const { messages } = baseMessages(history, city, aiProfile)
 
   turnLog().setup({ service: detectActiveService(history), tool })
 
@@ -443,9 +450,10 @@ export async function runZunorTurnStream(
 export async function runZunorTurn(
   history: ZunorClientMessage[],
   city: string | null,
+  aiProfile: unknown = null,
 ): Promise<ZunorResponse> {
   const tool = buildTool()
-  const { messages } = baseMessages(history, city)
+  const { messages } = baseMessages(history, city, aiProfile)
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     const res = await chatCompletion(messages, [tool], false)

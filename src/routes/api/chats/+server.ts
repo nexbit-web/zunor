@@ -1,6 +1,6 @@
 // src/routes/api/chats/+server.ts
 import { json, error } from '@sveltejs/kit'
-import { auth } from '$lib/auth'
+import { auth } from '$lib/server/auth'
 import { loadChatsForUser } from '$lib/server/chats-loader'
 import type { RequestHandler } from './$types'
 

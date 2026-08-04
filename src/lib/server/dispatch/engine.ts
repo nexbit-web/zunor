@@ -7,7 +7,7 @@
 // Усі читання приймають клієнт `db`: глобальний prisma або tx у межах
 // advisory-лока (index.ts), щоб рішення й claim були в одній серіалізованій транзакції.
 
-import { prisma } from '$lib/prisma'
+import { prisma } from '../prisma'
 import { scoreAll, responseRate } from './scoring'
 import { DISPATCH_CONFIG } from './types'
 import type { Candidate, JobContext, DispatchDecision } from './types'

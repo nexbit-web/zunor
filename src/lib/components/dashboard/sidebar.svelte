@@ -1,45 +1,35 @@
-<!-- src/lib/components/dashboard/sidebar.svelte -->
+<!-- src/lib/components/dashboard/sidebar.svelte
+     Навігація дашборда. Стан «згорнуто» приходить згори з cookie,
+     тому компонент не знає, де саме він зберігається. -->
 <script lang="ts">
+  import type { Component } from 'svelte'
+  import { onMount } from 'svelte'
   import { page } from '$app/state'
-  import { browser } from '$app/environment'
   import { Tween } from 'svelte/motion'
   import { cubicInOut } from 'svelte/easing'
   import { fade } from 'svelte/transition'
-  import {
-    LayoutDashboard,
-    ClipboardList,
-    MessageCircle,
-    Bell,
-    ChartColumn,
-    Settings,
-    PanelLeft,
-    HouseHeart,
-    ClipboardCheck,
-  } from 'lucide-svelte'
+  import { PanelLeft } from 'lucide-svelte'
   import * as Tooltip from '$lib/components/ui/tooltip/index.js'
   import * as Avatar from '$lib/components/ui/avatar/index.js'
-  import { signOut } from '$lib/auth-client'
-  import { onMount, onDestroy } from 'svelte'
   import { chatStore } from '$lib/stores/chat-store.svelte'
-  import { getPusher, disconnectPusher } from '$lib/pusher-client'
+  import { notifications } from '$lib/notifications'
+  import { persistCollapsed } from './sidebar-state'
+  import {
+    JobsIcon,
+    OrdersIcon,
+    MessagesIcon,
+    NotificationsIcon,
+    AnalyticsIcon,
+    SettingsIcon,
+    NewJobIcon,
+  } from '$lib/components/icons'
 
-  // ---------------------------------------------------------------------
-  // Collapse state — persisted so the choice survives reloads/navigation
-  // ---------------------------------------------------------------------
-  const STORAGE_KEY = 'dashboard-sidebar-collapsed'
   const COLLAPSED_WIDTH = 50
   const EXPANDED_WIDTH = 232
 
-  function readStoredCollapsed(): boolean {
-    if (!browser) return true
-    const stored = localStorage.getItem(STORAGE_KEY)
-    return stored === null ? true : stored === 'true'
-  }
+  // Початкове значення приходить згори (cookie через layout).
+  let { collapsed = $bindable(true) }: { collapsed?: boolean } = $props()
 
-  let collapsed = $state(readStoredCollapsed())
-
-  // Наведення на будь-яке місце сайдбара (поки він згорнутий) показує
-  // іконку "розгорнути" на місці лого.
   let hovering = $state(false)
 
   const width = new Tween(collapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH, {
@@ -47,194 +37,145 @@
     easing: cubicInOut,
   })
 
-  // ВАЖЛИВО: `collapsed` має читатись безумовно, на кожному прогоні.
-  // Ефекти в Svelte 5 підписуються лише на те, що реально було
-  // прочитано під час виконання — ранній `return` до читання змінної
-  // (як було раніше) назавжди відписує ефект від її змін.
-  // Стрибка анімації на старті немає й без спецхаків: Tween вище вже
-  // ініціалізований правильним значенням, тож встановлення того ж
-  // самого target нічого не анімує.
   $effect(() => {
     width.target = collapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH
   })
 
-  function toggleSidebar() {
+  function toggleSidebar(): void {
     collapsed = !collapsed
-    // Скидаємо hovering при згортанні: інакше курсор, що вже стоїть
-    // всередині сайдбара після кліку по кнопці закриття, миттєво
-    // "вмикає" наведення — і іконка розгортання встигає блиснути на
-    // місці лого ще ДО того, як ширина закінчить анімуватись.
-    // Тепер іконка з'явиться лише після справжнього нового наведення
-    // (курсор пішов і повернувся).
+    // Ховер скидаємо явно: після згортання курсор лишається над панеллю,
+    // і без цього вона розкрилась би назад по hover.
     if (collapsed) hovering = false
-    if (browser) localStorage.setItem(STORAGE_KEY, String(collapsed))
+    // Записуємо в обробнику, а не в $effect: зберігаємо рівно тоді,
+    // коли людина сама перемкнула, без запису на першому рендері.
+    persistCollapsed(collapsed)
   }
 
-  // ---------------------------------------------------------------------
-  // Session / nav data
-  // ---------------------------------------------------------------------
-  const session = $derived(page.data.session)
-  // Звужуємо роль до відомих значень: session.user.role типізований як
-  // string, а labelByRole/only очікують конкретний юніон. Невідомі ролі
-  // (ADMIN тощо) трактуємо як CLIENT для показу меню.
+  // ─── Сесія та роль ───
+
   type NavRole = 'CLIENT' | 'MASTER'
+
+  const session = $derived(page.data.session)
+
+  // Роль із layout-load (читана з БД), а НЕ з session.user.role:
+  // сесія кешується в cookie на 5 хв, і свіжий майстер бачив би CLIENT.
   const role = $derived<NavRole>(
-    session?.user?.role === 'MASTER' ? 'MASTER' : 'CLIENT',
+    page.data.role === 'MASTER' ? 'MASTER' : 'CLIENT',
   )
-
-  // ─── Повідомлення — реактивно з chatStore (Pusher оновлює в реальному часі) ───
-  const messageCount = $derived(chatStore.totalUnread)
-
-  // ─── Сповіщення — власний Pusher-лістенер, як у user-menu.svelte ───
-  let notifUnreadCount = $state(page.data.badges?.notifications ?? 0)
-  let notifChannel: ReturnType<
-    ReturnType<typeof getPusher>['subscribe']
-  > | null = null
-
-  function initChats() {
-    if (!session?.user?.id) return
-    if (chatStore.initialized) return
-
-    const ssrChats = page.data.chats
-    if (ssrChats) chatStore.setChats(ssrChats)
-    chatStore.subscribeToUserEvents(session.user.id).catch(() => {})
-  }
-
-  function setupNotifListener() {
-    const userId = session?.user?.id
-    if (!userId) return
-    try {
-      const pusher = getPusher()
-      notifChannel = pusher.subscribe(`private-user-${userId}`)
-      notifChannel.bind('notification:new', () => {
-        notifUnreadCount++
-      })
-    } catch (err) {
-      console.error('[sidebar:notif:pusher]', err)
-    }
-  }
-
-  onMount(() => {
-    if (!session?.user?.id) return
-    initChats()
-    setupNotifListener()
-  })
-
-  onDestroy(() => {
-    if (notifChannel) {
-      try {
-        notifChannel.unbind('notification:new')
-      } catch {}
-    }
-  })
 
   const user = $derived(
     session?.user
       ? {
           name: session.user.name ?? 'Користувач',
-          email: session.user.email ?? '',
           avatar: session.user.image ?? '',
           initials: (session.user.name ?? 'U')[0].toUpperCase(),
         }
       : null,
   )
 
+  // ─── Лічильники ───
+  // Обидва — з єдиних сторів; власних Pusher-підписок сайдбар не тримає.
+  const messageCount = $derived(chatStore.totalUnread)
+  const notifCount = $derived(notifications.unreadCount)
+
+  onMount(() => {
+    if (!session?.user?.id || chatStore.initialized) return
+    const ssrChats = page.data.chats
+    if (ssrChats) chatStore.setChats(ssrChats)
+    chatStore.subscribeToUserEvents(session.user.id).catch(() => {})
+  })
+
+  // ─── Навігація ───
+
+  interface IconProps {
+    size?: number
+    strokeWidth?: number
+    class?: string
+  }
+
   type NavItem = {
     href: string
     label: string
-    icon: typeof LayoutDashboard
+    icon: Component<IconProps>
+    /** Точний збіг шляху замість префікса — для /jobs/new проти /jobs. */
     exact?: boolean
     only?: NavRole
     labelByRole?: Partial<Record<NavRole, string>>
+    badge?: 'messages' | 'notifications'
   }
-  const navItems: NavItem[] = [
+
+  const NAV_ITEMS: readonly NavItem[] = [
     {
       href: '/dashboard/jobs/new',
       label: 'Нове замовлення',
-      icon: HouseHeart,
+      icon: NewJobIcon,
       exact: true,
       only: 'CLIENT', // майстри заявки не створюють
     },
     {
       href: '/dashboard/jobs',
-      label: 'Мої заявки', // фолбек, якщо роль не збіглась
+      label: 'Мої заявки',
       labelByRole: { MASTER: 'Заявки поруч', CLIENT: 'Мої заявки' },
-      icon: ClipboardList,
+      icon: JobsIcon,
     },
-    { href: '/dashboard/orders', label: 'Замовлення', icon: ClipboardCheck },
-    { href: '/dashboard/messages', label: 'Повідомлення', icon: MessageCircle },
-    { href: '/dashboard/notifications', label: 'Сповіщення', icon: Bell },
+    { href: '/dashboard/orders', label: 'Замовлення', icon: OrdersIcon },
+    {
+      href: '/dashboard/messages',
+      label: 'Повідомлення',
+      icon: MessagesIcon,
+      badge: 'messages',
+    },
+    {
+      href: '/dashboard/notifications',
+      label: 'Сповіщення',
+      icon: NotificationsIcon,
+      badge: 'notifications',
+    },
     {
       href: '/dashboard/proposals',
       label: 'Аналітика',
-      icon: ChartColumn,
-      only: 'MASTER', // пропозиції — сторінка майстра
+      icon: AnalyticsIcon,
+      only: 'MASTER',
     },
   ]
 
   const visibleItems = $derived(
-    navItems
-      .filter((item) => !item.only || item.only === role)
-      .map((item) => ({
-        ...item,
-        label: item.labelByRole?.[role] ?? item.label,
-      })),
+    NAV_ITEMS.filter((item) => !item.only || item.only === role).map(
+      (item) => ({ ...item, label: item.labelByRole?.[role] ?? item.label }),
+    ),
   )
 
   const pathname = $derived(page.url.pathname)
   const settingsActive = $derived(pathname.startsWith('/dashboard/settings'))
 
-  // Один активный пункт — точное совпадение всегда в приоритете,
-  // иначе побеждает самый длинный префикс. '/' на конце защищает
-  // от ложного совпадения вида /dashboard/jobs vs /dashboard/jobsboard.
+  // Активний пункт рахуємо один раз: інакше /dashboard/jobs/new
+  // підсвічував би одночасно і «Нове замовлення», і «Мої заявки».
+  // Серед префіксних збігів виграє найдовший.
   const activeHref = $derived.by(() => {
-    const exactMatch = navItems.find(
-      (item) => item.exact && pathname === item.href,
+    const exact = NAV_ITEMS.find((i) => i.exact && pathname === i.href)
+    if (exact) return exact.href
+
+    return (
+      NAV_ITEMS.filter(
+        (i) =>
+          !i.exact &&
+          (pathname === i.href || pathname.startsWith(i.href + '/')),
+      ).sort((a, b) => b.href.length - a.href.length)[0]?.href ?? null
     )
-    if (exactMatch) return exactMatch.href
-
-    const prefixMatches = navItems
-      .filter(
-        (item) =>
-          !item.exact &&
-          (pathname === item.href || pathname.startsWith(item.href + '/')),
-      )
-      .sort((a, b) => b.href.length - a.href.length)
-
-    return prefixMatches[0]?.href ?? null
   })
 
-  function isActive(item: NavItem): boolean {
-    return item.href === activeHref
-  }
-
-  function badgeFor(href: string): number {
-    if (href === '/dashboard/messages') return messageCount
-    if (href === '/dashboard/notifications') return notifUnreadCount
+  function badgeCount(item: NavItem): number {
+    if (item.badge === 'messages') return messageCount
+    if (item.badge === 'notifications') return notifCount
     return 0
-  }
-
-  function badgeColorFor(href: string): string {
-    // Сповіщення — червоний (як у хедері), решта (Повідомлення) — primary
-    if (href === '/dashboard/notifications') return '#ef4444' // red-500
-    return 'var(--primary)'
-  }
-
-  async function handleSignOut() {
-    chatStore.unsubscribeAll()
-    disconnectPusher()
-    await signOut()
-    // Повне перезавантаження документа замість SPA-переходу:
-    // скидає ВЕСЬ клієнтський стан (стори, чати, page.data) і не лишає
-    // "живих" сторінок дашборду, до яких можна повернутись кнопкою назад.
-    window.location.href = '/'
   }
 </script>
 
 {#snippet navLink(item: NavItem)}
-  {@const active = isActive(item)}
-  {@const badge = badgeFor(item.href)}
-  {@const badgeColor = badgeColorFor(item.href)}
+  {@const active = item.href === activeHref}
+  {@const count = badgeCount(item)}
+  {@const isAlert = item.badge === 'notifications'}
+
   <Tooltip.Root>
     <Tooltip.Trigger>
       {#snippet child({ props })}
@@ -242,26 +183,29 @@
           {...props}
           href={item.href}
           aria-current={active ? 'page' : undefined}
-          aria-label={badge > 0 ? `${item.label} — ${badge}` : item.label}
-          class="row-item relative flex h-8 w-full shrink-0 items-center gap-2 rounded-lg pr-2 outline-none transition-colors"
-          style={active
-            ? 'color: var(--color-text); background-color: var(--border);'
-            : 'color: var(--color-text);'}
+          aria-label={count > 0 ? `${item.label} — ${count}` : item.label}
+          class="row-item relative flex h-8 w-full shrink-0 items-center gap-2 rounded-lg pr-2 text-sidebar-foreground outline-none transition-colors"
+          class:is-active={active}
         >
           <span
             class="nav-icon relative flex size-8.5 shrink-0 items-center justify-center"
           >
-            <item.icon size={17} strokeWidth={1.75} aria-hidden="true" />
-            {#if badge > 0 && collapsed}
+            <item.icon size={17} strokeWidth={1.75} />
+
+            <!-- У згорнутому стані лічильник — крапка на іконці:
+                 місця під число немає, а факт «є нове» показати треба. -->
+            {#if count > 0 && collapsed}
               <span
-                class="absolute -top-0.5 -right-0.5 flex h-3.75 min-w-3.75 items-center justify-center rounded-full px-1 text-[9px] leading-none font-bold text-white ring-2"
-                style="background-color: {badgeColor}; --tw-ring-color: var(--sidebar-background, var(--background));"
+                class="absolute -top-0.5 -right-0.5 flex h-3.75 min-w-3.75 items-center justify-center rounded-full px-1 text-[9px] leading-none font-bold text-white ring-2 ring-background"
+                class:bg-destructive={isAlert}
+                class:bg-primary={!isAlert}
                 aria-hidden="true"
               >
-                {badge > 9 ? '9+' : badge}
+                {count > 9 ? '9+' : count}
               </span>
             {/if}
           </span>
+
           {#if !collapsed}
             <span
               class="min-w-0 flex-1 truncate text-sm"
@@ -269,23 +213,28 @@
             >
               {item.label}
             </span>
-            {#if badge > 0}
+
+            {#if count > 0}
               <span
                 class="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] leading-none font-bold text-white"
-                style="background-color: {badgeColor}"
+                class:bg-destructive={isAlert}
+                class:bg-primary={!isAlert}
                 transition:fade={{ duration: 120 }}
+                aria-hidden="true"
               >
-                {badge > 9 ? '9+' : badge}
+                {count > 9 ? '9+' : count}
               </span>
             {/if}
           {/if}
         </a>
       {/snippet}
     </Tooltip.Trigger>
+
+    <!-- Тултип лише в згорнутому стані: розгорнутий підпис і так видно. -->
     {#if collapsed}
       <Tooltip.Content side="right">
         <p>
-          {item.label}{#if badge > 0}&nbsp;({badge}){/if}
+          {item.label}{#if count > 0}&nbsp;({count}){/if}
         </p>
       </Tooltip.Content>
     {/if}
@@ -294,21 +243,19 @@
 
 <Tooltip.Provider delayDuration={200}>
   <aside
-    aria-label="Sidebar"
+    aria-label="Бічне меню"
     data-collapsed={collapsed}
-    class="sidebar sticky top-3 hidden h-[calc(100vh-24px)] shrink-0 flex-col overflow-hidden px-2 md:flex"
-    style="width: {width.current}px"
+    class="sticky top-0 hidden h-screen shrink-0 flex-col overflow-hidden border-r border-border px-2 py-3 md:flex"
+    style:width="{width.current}px"
     onmouseenter={() => (hovering = true)}
     onmouseleave={() => (hovering = false)}
   >
-    <!-- Верхній рядок: лого + перемикач.
-         Лого завжди перше (крайнє ліве), кнопка перемикання — друга,
-         тому лого ніколи не "стрибає" в центр при зміні стану. -->
+    <!-- ─── Шапка: логотип / кнопка розгортання ─── -->
     <div class="flex h-8 w-full shrink-0 items-center justify-between">
       <div class="relative flex size-8 shrink-0 items-center justify-center">
         <a
           href="/dashboard"
-          aria-label="Головна"
+          aria-label="На головну"
           class="logo-link absolute inset-0 flex items-center justify-center overflow-hidden rounded-lg p-1"
           class:is-hidden={collapsed && hovering}
         >
@@ -349,18 +296,19 @@
               mask="url(#path-1-outside-1_27_2)"
             />
           </svg>
-
-          <!-- <Logo /> -->
         </a>
+
+        <!-- Кнопка проявляється поверх лого при ховері в згорнутому стані.
+             aria-hidden + tabindex=-1, поки невидима: інакше Tab ловив би
+             приховану кнопку, а скрінрідер зачитував би її поруч з лого. -->
         <button
           type="button"
           onclick={toggleSidebar}
           aria-label="Розгорнути меню"
           aria-hidden={!collapsed}
           tabindex={collapsed ? 0 : -1}
-          class="toggle-open absolute inset-0 flex items-center justify-center rounded-lg outline-none"
+          class="toggle-open absolute inset-0 flex items-center justify-center rounded-lg text-sidebar-foreground outline-none"
           class:is-visible={collapsed && hovering}
-          style="color: var(--sidebar-foreground)"
         >
           <PanelLeft size={17} strokeWidth={1.75} aria-hidden="true" />
         </button>
@@ -371,8 +319,7 @@
           type="button"
           onclick={toggleSidebar}
           aria-label="Згорнути меню"
-          class="row-item flex size-8 shrink-0 items-center justify-center rounded-lg outline-none transition-colors"
-          style="color: var(--sidebar-foreground)"
+          class="row-item flex size-8 shrink-0 items-center justify-center rounded-lg text-sidebar-foreground outline-none transition-colors"
           transition:fade={{ duration: 150 }}
         >
           <PanelLeft size={15} strokeWidth={1.75} aria-hidden="true" />
@@ -380,15 +327,15 @@
       {/if}
     </div>
 
-    <!-- Навігація -->
+    <!-- ─── Основна навігація ─── -->
     <nav aria-label="Основне меню" class="mt-3 flex flex-col gap-1">
       {#each visibleItems as item (item.href)}
         {@render navLink(item)}
       {/each}
     </nav>
 
+    <!-- ─── Низ: налаштування та профіль ─── -->
     <div class="mt-auto flex flex-col gap-1">
-      <!-- Налаштування -->
       <Tooltip.Root>
         <Tooltip.Trigger>
           {#snippet child({ props })}
@@ -396,16 +343,13 @@
               {...props}
               href="/dashboard/settings"
               aria-current={settingsActive ? 'page' : undefined}
-              aria-label="Налаштування"
-              class="row-item flex h-8 w-full shrink-0 items-center gap-2 overflow-hidden rounded-lg pr-2 outline-none transition-colors"
-              style={settingsActive
-                ? 'color: var(--accent-foreground); background-color: var(--accent);'
-                : 'color: var(--sidebar-foreground);'}
+              class="row-item flex h-8 w-full shrink-0 items-center gap-2 overflow-hidden rounded-lg pr-2 text-sidebar-foreground outline-none transition-colors"
+              class:is-active={settingsActive}
             >
               <span
-                class="nav-icon flex size-8 shrink-0 items-center justify-center"
+                class="nav-icon settings-icon-wrap flex size-8 shrink-0 items-center justify-center"
               >
-                <Settings size={17} strokeWidth={1.75} aria-hidden="true" />
+                <SettingsIcon size={17} strokeWidth={1.75} />
               </span>
               {#if !collapsed}
                 <span
@@ -423,26 +367,22 @@
         {/if}
       </Tooltip.Root>
 
-      <!-- Аватар -->
       <Tooltip.Root>
         <Tooltip.Trigger>
           {#snippet child({ props })}
             <a
               {...props}
               href="/dashboard"
-              aria-label="Профіль"
-              class={collapsed
-                ? 'row-item flex h-8 w-full items-center justify-center rounded-lg'
-                : 'row-item flex h-8 w-full items-center gap-2 pr-2 rounded-lg'}
+              aria-label="Мій профіль"
+              class="row-item flex h-8 w-full items-center rounded-lg outline-none transition-colors"
+              class:justify-center={collapsed}
+              class:gap-2={!collapsed}
+              class:pr-2={!collapsed}
             >
-              <Avatar.Root class="size-7 shrink-0 ">
-                <Avatar.Image
-                  src={user?.avatar ?? ''}
-                  alt={user?.name ?? 'Користувач'}
-                />
+              <Avatar.Root class="size-7 shrink-0">
+                <Avatar.Image src={user?.avatar ?? ''} alt="" />
                 <Avatar.Fallback
-                  class="text-xs font-semibold"
-                  style="background-color: var(--muted); color: var(--foreground)"
+                  class="bg-muted text-xs font-semibold text-foreground"
                 >
                   {user?.initials ?? 'U'}
                 </Avatar.Fallback>
@@ -459,9 +399,9 @@
           {/snippet}
         </Tooltip.Trigger>
         {#if collapsed}
-          <Tooltip.Content side="right"
-            ><p>{user?.name ?? 'Користувач'}</p></Tooltip.Content
-          >
+          <Tooltip.Content side="right">
+            <p>{user?.name ?? 'Користувач'}</p>
+          </Tooltip.Content>
         {/if}
       </Tooltip.Root>
     </div>
@@ -469,8 +409,7 @@
 </Tooltip.Provider>
 
 <style>
-  .logo-link :global(svg),
-  .logo-link :global(img) {
+  .logo-link :global(svg) {
     width: 100%;
     height: 100%;
     object-fit: contain;
@@ -487,12 +426,11 @@
   .row-item:hover {
     background-color: var(--accent);
   }
+  .row-item.is-active {
+    background-color: var(--accent);
+    color: var(--accent-foreground);
+  }
 
-  /* Кнопка "розгорнути" завжди змонтована (без {#if}), тому перехід
-     opacity завжди анімується коректно від реального попереднього
-     стану — нема "стрибків" при швидкому згортанні/розгортанні.
-     Іконка сама по собі без фону (біла/foreground) — фон з'являється
-     окремим кроком, тільки коли курсор саме над цією кнопкою. */
   .toggle-open {
     opacity: 0;
     pointer-events: none;
@@ -510,22 +448,157 @@
     background-color: var(--accent);
   }
 
-  /* Жорстко фіксуємо розмір іконок — !important перебиває будь-які
-     глобальні класи проєкту (наприклад ті, що ставлять svg на 100%
-     батьківського блоку чи інший розмір за замовчуванням). display:block
-     прибирає "щілину" під базовою лінією inline-елемента, через яку
-     іконка може здаватись не відцентрованою в квадраті 32×32. */
-  :global(.icon-fixed) {
-    width: 24px !important;
-    height: 24px !important;
-    display: block !important;
-    flex-shrink: 0 !important;
-  }
-
-  /* Inline SVG резервирует место под "хвостики" текста как обычный текст,
-   из-за чего внутри flex items-center justify-center иконка съезжает
-   на пару пикселей. display:block убирает этот резерв. */
+  /* Inline SVG резервує місце під «хвостики» тексту як звичайний текст,
+     через що всередині flex-центрування іконка з'їжджає на пару пікселів.
+     display:block прибирає цей резерв. */
   .nav-icon :global(svg) {
     display: block;
+  }
+
+  /* ─── Анімації іконок при наведенні на рядок ───
+     Тригер на .row-item, а не на самій іконці: у сайдбарі курсор іде
+     по рядку й у 17 пікселів іконки майже ніколи не влучає. */
+
+  .row-item:hover .nav-icon :global(.ring) {
+    transform: rotate(90deg) scale(1.06);
+  }
+  .row-item:hover .nav-icon :global(.plus) {
+    transform: scale(1.28);
+  }
+
+  .row-item:hover .nav-icon :global(.check) {
+    animation: draw-check 380ms ease-out;
+  }
+  @keyframes draw-check {
+    from {
+      stroke-dashoffset: 1;
+      opacity: 0;
+    }
+    to {
+      stroke-dashoffset: 0;
+      opacity: 1;
+    }
+  }
+
+  .row-item:hover .nav-icon :global(.line) {
+    animation: draw-line 400ms ease-out;
+  }
+  .row-item:hover .nav-icon :global(.line-2) {
+    animation-delay: 150ms;
+    animation-fill-mode: both;
+  }
+  @keyframes draw-line {
+    from {
+      stroke-dashoffset: 1;
+      opacity: 0;
+    }
+    to {
+      stroke-dashoffset: 0;
+      opacity: 1;
+    }
+  }
+
+  .row-item:hover .nav-icon :global(.dot) {
+    transform-origin: center;
+    animation: pulse-dot 600ms ease-in-out;
+  }
+  .row-item:hover .nav-icon :global(.dot-2) {
+    animation-delay: 120ms;
+    animation-fill-mode: both;
+  }
+  .row-item:hover .nav-icon :global(.dot-3) {
+    animation-delay: 240ms;
+    animation-fill-mode: both;
+  }
+  @keyframes pulse-dot {
+    0%,
+    100% {
+      transform: translateY(0) scale(1);
+      opacity: 0.55;
+    }
+    40% {
+      transform: translateY(-1.5px) scale(1.15);
+      opacity: 1;
+    }
+  }
+
+  .row-item:hover .nav-icon :global(.bell),
+  .row-item:hover .nav-icon :global(.clapper) {
+    transform-origin: 12px 4px;
+  }
+  .row-item:hover .nav-icon :global(.bell) {
+    animation: swing-bell 700ms ease-in-out;
+  }
+  .row-item:hover .nav-icon :global(.clapper) {
+    animation: swing-clapper 700ms ease-in-out;
+  }
+  @keyframes swing-bell {
+    0%,
+    100% {
+      transform: rotate(0deg);
+    }
+    15% {
+      transform: rotate(10deg);
+    }
+    35% {
+      transform: rotate(-8deg);
+    }
+    55% {
+      transform: rotate(5deg);
+    }
+    75% {
+      transform: rotate(-2deg);
+    }
+  }
+  @keyframes swing-clapper {
+    0%,
+    100% {
+      transform: rotate(0deg);
+    }
+    20% {
+      transform: rotate(14deg);
+    }
+    42% {
+      transform: rotate(-11deg);
+    }
+    62% {
+      transform: rotate(7deg);
+    }
+    80% {
+      transform: rotate(-3deg);
+    }
+  }
+
+  .row-item:hover .nav-icon :global(.bar) {
+    transform-origin: center 17px;
+    animation: grow-bar 380ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  .row-item:hover .nav-icon :global(.bar-2) {
+    animation-delay: 90ms;
+    animation-fill-mode: both;
+  }
+  .row-item:hover .nav-icon :global(.bar-3) {
+    animation-delay: 180ms;
+    animation-fill-mode: both;
+  }
+  @keyframes grow-bar {
+    from {
+      transform: scaleY(0);
+      opacity: 0;
+    }
+    to {
+      transform: scaleY(1);
+      opacity: 1;
+    }
+  }
+
+  .row-item:hover .settings-icon-wrap :global(svg) {
+    transform: rotate(180deg);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .row-item:hover .nav-icon :global(*) {
+      animation: none !important;
+    }
   }
 </style>

@@ -77,7 +77,7 @@
   --primary: #c6613f; 
   --primary-foreground: oklch(1 0 0);
   --primary-hover: #d97757;
-  --ring: #d97757;
+    --ring: #0071e3;
 
   /* Secondary/muted/accent — нейтральні, без кольору. */
   --secondary: #f1f0ed; /* #F4F4F5 */
@@ -155,10 +155,10 @@
   --catalog-sidebar-hover: oklch(27.2% 0.002 107);
   --bg-header: oklch(20.42% 0.002 107);
 
-  --background: #20201f;
+  --background: #1c1c1c;
   --foreground: #f9f9f7;
 
-  --card: #2c2c2a;
+  --card: #272725;
   --card-foreground: oklch(100% 0 0);
   --dashboard: #1f1f1e;
 
@@ -175,7 +175,7 @@
   --primary: #c6613f; 
   --primary-foreground: oklch(1 0 0);
  --primary-hover: #d97757;
-  --ring: #a44e33;
+  --ring: #0071e3;
 
   --secondary: #3c3c3a;
   --secondary-foreground: oklch(90.95% 0.002 107);
@@ -328,7 +328,7 @@
 
 html #nprogress .bar {
   background: var(--primary);
-  height: 2.5px;
+  height: 2px;
 }
 
 /* Светящийся «хвост» на переднем крае полосы — убираем */

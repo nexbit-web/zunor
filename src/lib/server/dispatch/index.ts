@@ -6,7 +6,7 @@
 // Потік: advisory-лок по заявці → decide() вирішує кого → claim (logDispatch)
 // → коміт лока → шлемо уведомлення вже застовбленим.
 
-import { prisma } from '$lib/prisma'
+import { prisma } from '../prisma'
 import { decide } from './engine'
 import { logDispatch, markOpened, markResponded } from './log'
 import { Notify } from '../notifications'

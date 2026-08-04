@@ -99,7 +99,7 @@
 </svelte:head>
 
 <article
-  class="min-h-svh p-2 pt-4 md:pb-12"
+  class="min-h-svh  p-2 pt-4 md:pb-12"
   itemscope
   itemtype="https://schema.org/Person"
 >
@@ -138,7 +138,7 @@
 
         {#if isOwner}
           <a
-            href="/dashboard/welcome"
+            href="dashboard/settings/profile"
             class="inline-flex h-10.5 items-center gap-1.75 rounded-full bg-primary hover:bg-primary-hover px-4.5 text-[13.5px] font-semibold text-white transition-transform hover:-translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground/40 motion-reduce:transition-none"
           >
             <Pencil class="size-3.75 text-white" aria-hidden="true" /> Редагувати
@@ -351,7 +351,7 @@
     <!-- ═══ BECOME MASTER (тільки owner) ═══ -->
     {#if isOwner}
       <a
-        href="/dashboard/onboarding"
+        href="/dashboard/onboarding/master"
         class="group flex w-full items-center justify-between gap-4 rounded-[28px] bg-primary p-5.5 text-left text-white shadow-[0_16px_40px_-16px_rgba(0,0,0,0.5)] transition hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground/40 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
       >
         <span class="flex min-w-0 items-center gap-3.75">

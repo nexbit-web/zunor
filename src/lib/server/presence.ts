@@ -6,7 +6,7 @@
 // isOnline визначається опосередковано: lastSeen свіжий = онлайн.
 // Тут просто оновлюємо lastSeen + ставимо isOnline=true.
 
-import { prisma } from '$lib/prisma'
+import { prisma } from './prisma'
 
 const ONLINE_TTL_MS = 2 * 60 * 1000 // оновлюємо не частіше разу на 2 хв
 const lastWrite = new Map<string, number>()

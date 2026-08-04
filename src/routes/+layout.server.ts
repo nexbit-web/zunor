@@ -1,6 +1,6 @@
 // src/routes/+layout.server.ts
-import { auth } from '$lib/auth'
-import { prisma } from '$lib/prisma'
+import { auth } from '$lib/server/auth'
+import { prisma } from '$lib/server/prisma'
 import { loadChatsForUser } from '$lib/server/chats-loader'
 import type { LayoutServerLoad } from './$types'
 

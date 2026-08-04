@@ -3,47 +3,58 @@
   import { page } from '$app/state'
   import { goto } from '$app/navigation'
   import Sidebar from '$lib/components/dashboard/sidebar.svelte'
+  let { data, children } = $props()
 
-  let { children } = $props()
+  let sidebarCollapsed = $state(data.sidebarCollapsed)
 
-  // Повноекранні чат-сторінки (без скролу сторінки): AI-оформлення заявки
-  // (точний збіг — /manual це звичайна форма зі скролом!) та месенджер.
   let isChat = $derived(
     page.url.pathname === '/dashboard/jobs/new' ||
       page.url.pathname.startsWith('/dashboard/messages'),
   )
 
-  // ─── Друга лінія оборони (перша — hooks.server.ts) ───
-  // SPA-навігація "назад" на роут БЕЗ серверного load не торкається сервера,
-  // тож серверний guard її не бачить. Якщо в page.data сесії немає —
-  // клієнт сам виводить на логін. replaceState: не засмічуємо історію.
+  // null означає «сервер сказав, що сесії немає».
+  // undefined — «дані ще не приїхали»: редиректити рано.
   $effect(() => {
-    if (!page.data.session) {
+    if (page.data.session === null) {
       goto('/user/login', { replaceState: true })
     }
   })
 
-  // ─── bfcache ───
-  // event.persisted означає відновлення сторінки зі снімка в памʼяті:
-  // кнопка «назад», АЛЕ ТАКОЖ повернення з системного вибору файлу на
-  // мобільних. Сліпий reload тут знищував би стан SPA (діалог із Zunor
-  // при додаванні фото). Тому: легка перевірка сесії, і перезавантаження
-  // ЛИШЕ якщо її немає — сценарій «logout → назад» досі вибиває на логін,
-  // а повернення з фото-пікера не чіпає нічого.
-  async function onPageShow(event: PageTransitionEvent) {
+  async function onPageShow(event: PageTransitionEvent): Promise<void> {
     if (!event.persisted) return
+
+    const url = '/api/auth/get-session?disableCookieCache=true'
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 3000)
+
     try {
-      const res = await fetch('/api/auth/get-session', {
+      const res = await fetch(url, {
         headers: { accept: 'application/json' },
+
+        cache: 'no-store',
+        signal: controller.signal,
       })
-      const session = res.ok ? await res.json().catch(() => null) : null
-      const empty =
-        !session ||
-        (typeof session === 'object' && Object.keys(session).length === 0)
-      if (empty) window.location.reload()
+
+      if (!res.ok) {
+        window.location.reload()
+        return
+      }
+
+      const body: unknown = await res.json().catch(() => null)
+
+      const hasSession =
+        !!body &&
+        typeof body === 'object' &&
+        'user' in body &&
+        !!(body as { user: unknown }).user
+
+      if (!hasSession) window.location.reload()
     } catch {
-      // мережа впала — нічого не робимо: серверний guard відпрацює
-      // на першому ж реальному запиті
+      // Обрив або таймаут: нічого не робимо. Серверний guard у hooks
+      // відпрацює на першому ж навігаційному запиті — краще лишити
+      // сторінку, ніж перезавантажувати наосліп при поганій мережі.
+    } finally {
+      clearTimeout(timeout)
     }
   }
 </script>
@@ -55,10 +66,10 @@
   class:h-screen={isChat}
   class:min-h-screen={!isChat}
 >
-  <Sidebar />
+  <Sidebar bind:collapsed={sidebarCollapsed} />
 
   <div
-    class="flex min-w-0 flex-1 flex-col  bg-background "
+    class="flex min-w-0 flex-1 flex-col bg-background"
     class:min-h-0={isChat}
     class:overflow-hidden={isChat}
   >

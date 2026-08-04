@@ -1,10 +1,12 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import HeroSection from '$lib/components/home/hero-section.svelte'
+  import HeroSection from '$lib/components/landing/hero-section.svelte'
   import JsonLd from '$lib/components/seo/JsonLd.svelte'
   import type { PageData } from './$types'
   import type { Component } from 'svelte'
-  import BecomeMaster from '$lib/components/home/become-master.svelte'
+  import BecomeMaster from '$lib/components/landing/become-master.svelte'
+  import Advantages from '$lib/components/landing/advantages.svelte'
+  import Faq from '$lib/components/landing/faq.svelte'
 
   // Svelte 5: Явна типізація контракту даних (Data Props Contract) згідно з SSR архитектурою
   let { data }: { data: PageData } = $props()
@@ -26,7 +28,7 @@
 
   onMount(async () => {
     // Відкладаємо завантаження чанку до повної інтерактивності Main Thread (Time to Interactive)
-    const module = await import('$lib/components/home/how-it-works.svelte')
+    const module = await import('$lib/components/landing/how-it-works.svelte')
     HowItWorksComponent = module.default
   })
 </script>
@@ -99,7 +101,9 @@
 	-->
   {#if HowItWorksComponent}
     <HowItWorksComponent />
-    <BecomeMaster />
+      <Advantages />
+      <BecomeMaster />
+      <Faq />
   {:else}
     <!-- 
 			Layout Placeholder: Жорстке резервування простору у вьюпорті.

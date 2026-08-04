@@ -1,13 +1,10 @@
-// import { BETTER_AUTH_URL } from '$env/static/private'
-// import { createAuthClient } from 'better-auth/svelte'
-
-// export const authClient = createAuthClient({
-//   baseURL: BETTER_AUTH_URL,
-// })
-
-// export const { signIn, signOut, signUp, useSession } = authClient
 import { createAuthClient } from 'better-auth/svelte'
+import { emailOTPClient } from 'better-auth/client/plugins'
 
-export const authClient = createAuthClient()
+// baseURL не задаємо: клієнт і сервер на одному origin, відносний шлях
+// сам потрапить на /api/auth/*. Явний URL тут ламає прев'ю-деплої.
+export const authClient = createAuthClient({
+  plugins: [emailOTPClient()],
+})
 
-export const { signIn, signOut, signUp, useSession } = authClient
+export const { signIn, signOut, signUp, useSession, emailOtp } = authClient

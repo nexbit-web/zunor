@@ -166,7 +166,7 @@
   const primaryCategory = $derived(user.categories[0] ?? null)
 
   function goEdit(): void {
-    goto('/dashboard/onboarding')
+    goto('dashboard/settings/profile')
   }
 </script>
 
@@ -175,7 +175,7 @@
 </svelte:head>
 
 <article
-  class=" min-h-svh px-5  pt-4 pb-20 md:pb-12"
+  class=" min-h-svh px-5 pt-4 pb-20 md:pb-12"
   itemscope
   itemtype="https://schema.org/Person"
 >
@@ -233,7 +233,7 @@
             <Button
               type="button"
               onclick={goEdit}
-              class="mb-1 inline-flex h-[42px] items-center gap-[7px] rounded-full bg-primary px-[18px] text-[13.5px] font-semibold text-white transition-transform hover:-translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground/40 motion-reduce:transition-none"
+              class="mb-1 inline-flex h-[42px] items-center gap-[7px] rounded-xl bg-primary px-[18px] text-[13.5px] font-semibold text-white transition-transform   focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground/40 motion-reduce:transition-none"
             >
               <Pencil class="size-[15px]" aria-hidden="true" /> Редагувати
             </Button>

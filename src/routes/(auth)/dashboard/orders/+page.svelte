@@ -2,10 +2,11 @@
 <script lang="ts">
   import { goto } from '$app/navigation'
   import { page } from '$app/state'
-  import { Briefcase, Plus, User, Hammer, Users } from 'lucide-svelte'
+  import { Briefcase, Plus } from 'lucide-svelte'
   import { fade } from 'svelte/transition'
   import OrderCard from '$lib/components/orders/order-card.svelte'
   import type { PageData } from './$types'
+  import { Button } from '$lib/components/ui/button'
 
   let { data }: { data: PageData } = $props()
 
@@ -14,7 +15,6 @@
   // ═══════════════════════════════════════════════════════════
 
   type StatusTab = 'ACTIVE' | 'COMPLETED' | 'CANCELLED' | 'ALL'
-  type RoleFilter = 'all' | 'client' | 'master'
 
   // ═══════════════════════════════════════════════════════════
   // State (синхронізується з URL)
@@ -56,20 +56,6 @@
   // Actions
   // ═══════════════════════════════════════════════════════════
 
-  function setRole(role: RoleFilter) {
-    if (role === data.roleFilter) return
-
-    const params = new URLSearchParams()
-    if (role !== 'all') params.set('role', role)
-    if (activeTab !== 'ACTIVE') params.set('status', activeTab)
-
-    const qs = params.toString()
-    goto(qs ? `/dashboard/orders?${qs}` : '/dashboard/orders', {
-      keepFocus: true,
-      noScroll: true,
-    })
-  }
-
   function setStatusTab(tab: StatusTab) {
     if (tab === activeTab) return
     activeTab = tab
@@ -105,15 +91,6 @@
       { value: 'ALL', label: 'Усі', count: totalCount },
     ])
 
-  const roleOptions: {
-    value: RoleFilter
-    label: string
-    icon: typeof Users
-  }[] = [
-    { value: 'all', label: 'Усі', icon: Users },
-    { value: 'client', label: 'Як клієнт', icon: User },
-    { value: 'master', label: 'Як майстер', icon: Hammer },
-  ]
 
   function getActiveLabel(n: number): string {
     if (n === 1) return 'активне'
@@ -130,7 +107,7 @@
   />
 </svelte:head>
 
-<div class="max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
+<div class="max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-5">
   <!-- ─── Заголовок ─── -->
   <header class="mb-8">
     <div class="flex items-start justify-between gap-4 flex-wrap">
@@ -182,46 +159,8 @@
     </div>
   </header>
 
-  <!-- ─── Контроли (Role + Status) ─── -->
+  <!-- ─── Контроли (Status) ─── -->
   <div class="mb-6 space-y-3">
-    <!-- Role filter -->
-    <div class="flex items-center gap-3 flex-wrap">
-      <span
-        class="text-[11px] font-medium uppercase tracking-wider hidden sm:inline"
-        style="color: var(--muted-foreground)"
-      >
-        Роль
-      </span>
-      <div
-        class="inline-flex rounded-xl p-0.5 gap-0.5"
-        style="background-color: var(--muted); border: 1px solid var(--border)"
-        role="radiogroup"
-        aria-label="Фільтр за роллю"
-      >
-        {#each roleOptions as opt (opt.value)}
-          {@const isActive = data.roleFilter === opt.value}
-          <button
-            type="button"
-            onclick={() => setRole(opt.value)}
-            role="radio"
-            aria-checked={isActive}
-            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium cursor-pointer transition-all"
-            style="background-color: {isActive
-              ? 'var(--background)'
-              : 'transparent'};
-                   color: {isActive
-              ? 'var(--foreground)'
-              : 'var(--muted-foreground)'};
-                   box-shadow: {isActive
-              ? '0 1px 2px rgba(0,0,0,0.06)'
-              : 'none'}"
-          >
-            <opt.icon class="size-3.5" strokeWidth={2} aria-hidden="true" />
-            {opt.label}
-          </button>
-        {/each}
-      </div>
-    </div>
 
     <!-- Status tabs -->
     <div
@@ -317,15 +256,15 @@
                 Створити заявку
               </button>
             {:else if isMaster}
-              <button
+              <Button
                 type="button"
                 onclick={() => goto('/dashboard/jobs')}
                 class="inline-flex items-center gap-2 mt-5 px-5 py-2.5 rounded-xl text-sm font-medium   hover:bg-primary-hover"
-                style="background-color: var(--primary); color: white"
+                
               >
                 <Briefcase class="size-4" strokeWidth={2.25} />
                 Знайти роботу
-              </button>
+              </Button>
             {/if}
           {/if}
         </div>

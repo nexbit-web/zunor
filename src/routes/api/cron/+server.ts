@@ -1,6 +1,6 @@
 // src/routes/api/cron/+server.ts
 import { json, error } from '@sveltejs/kit'
-import { prisma } from '$lib/prisma'
+import { prisma } from '$lib/server/prisma'
 import { CRON_SECRET } from '$env/static/private'
 import { dispatchJob } from '$lib/server/dispatch'
 import type { RequestHandler } from './$types'

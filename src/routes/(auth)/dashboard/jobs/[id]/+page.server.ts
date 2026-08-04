@@ -1,6 +1,6 @@
 // src/routes/(auth)/jobs/[id]/+page.server.ts
-import { auth } from '$lib/auth'
-import { prisma } from '$lib/prisma'
+import { auth } from '$lib/server/auth'
+import { prisma } from '$lib/server/prisma'
 import { error, redirect } from '@sveltejs/kit'
 import { markOpened } from '$lib/server/dispatch'
 import { getRecommendedIds } from '$lib/server/ranking'

@@ -1,6 +1,6 @@
 // src/routes/(auth)/orders/[id]/+page.server.ts
-import { auth } from '$lib/auth'
-import { prisma } from '$lib/prisma'
+import { auth } from '$lib/server/auth'
+import { prisma } from '$lib/server/prisma'
 import { redirect, error } from '@sveltejs/kit'
 import type { PageServerLoad } from './$types'
 
