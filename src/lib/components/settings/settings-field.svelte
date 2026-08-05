@@ -12,7 +12,12 @@
     label: string
     /** Підказка під підписом: обмеження, приклад, формат. */
     hint?: string
-    /** id контрола — щоб клік по підпису фокусував саме його. */
+    /**
+     * id контрола — щоб клік по підпису фокусував саме його.
+     * Без нього підпис рендериться звичайним текстом: <label>, який нікуди
+     * не веде, лише збиває скрінрідер. Так буває у полів без одного
+     * фокусованого елемента — завантажувач фото, комбобокс міста.
+     */
     for?: string
     /** Повідомлення про помилку під контролом. */
     error?: string
@@ -26,9 +31,20 @@
   class="mx-4 flex flex-col gap-2 border-t border-border/60 py-3 first:border-t-0 sm:flex-row sm:items-start sm:justify-between sm:gap-6"
 >
   <div class="min-w-0 sm:pt-1.5">
-    <label for={htmlFor} class="text-sm font-normal">{label}</label>
+    {#if htmlFor}
+      <label for={htmlFor} class="cursor-pointer text-sm font-normal">
+        {label}
+      </label>
+    {:else}
+      <p class="text-sm">{label}</p>
+    {/if}
+
     {#if hint}
-      <p class="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">
+      <!-- 28ch: підказка не має тягнутись на всю колонку — довгий рядок
+           у дві-три слова читається гірше за компактний абзац. -->
+      <p
+        class="mt-0.5 max-w-[28ch] text-[12px] leading-relaxed text-muted-foreground"
+      >
         {hint}
       </p>
     {/if}
