@@ -53,12 +53,12 @@
   --bg-header: #ffffff;
 
   /* ─── Монохромна база: фон/текст/картки/бордери ─── */
-  --background: #f9f9f7; /* #FFFFFF */
+  --background: #fcfcfb; /* #FFFFFF */
   --foreground: #131313; /* #0A0A0A */
 
   --card: #ffffff;
   --card-foreground: oklch(0.145 0 0);
-  --dashboard: #f9f9f7;
+  --dashboard: #fcfcfa;
 
   /* Колір тексту */
   --color-text: #131313;
@@ -155,12 +155,12 @@
   --catalog-sidebar-hover: oklch(27.2% 0.002 107);
   --bg-header: oklch(20.42% 0.002 107);
 
-  --background: #1c1c1c;
+  --background: #1a1a19;
   --foreground: #f9f9f7;
 
   --card: #272725;
   --card-foreground: oklch(100% 0 0);
-  --dashboard: #1f1f1e;
+  --dashboard: #161615;
 
   /* Колір тексту */
   --color-text: #f9f9f7;
@@ -177,7 +177,7 @@
  --primary-hover: #d97757;
   --ring: #0071e3;
 
-  --secondary: #3c3c3a;
+  --secondary: #313130;
   --secondary-foreground: oklch(90.95% 0.002 107);
 
   --muted: #3f3f3d;

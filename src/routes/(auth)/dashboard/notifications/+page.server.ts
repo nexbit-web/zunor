@@ -1,4 +1,4 @@
-// src/routes/(auth)/notifications/+page.server.ts
+// src/routes/(auth)/dashboard/notifications/+page.server.ts
 import { prisma } from '$lib/server/prisma'
 import { requireUser } from '$lib/server/guards'
 import type { PageServerLoad } from './$types'
@@ -34,8 +34,9 @@ export const load: PageServerLoad = async ({ locals }) => {
   const list = hasMore ? rows.slice(0, PAGE_SIZE) : rows
   const nextCursor = hasMore ? list[list.length - 1].id : null
 
+  // userId назовні не віддаємо: сторінка більше не заводить власної
+  // Pusher-підписки — події приходять зі спільного стору сповіщень.
   return {
-    userId,
     notifications: list.map((n) => ({
       ...n,
       createdAt: n.createdAt.toISOString(),
