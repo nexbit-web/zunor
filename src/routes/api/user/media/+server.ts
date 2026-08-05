@@ -34,12 +34,37 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
   const userId = user.id
 
+  // publicId нижче перевіряється на префікс, а url раніше писався в базу
+  // як є — тобто аватаром чи портфоліо можна було зробити будь-яке
+  // посилання (чужий трекер, картинка з чужого сайту). Рендер від цього
+  // рятує CSP (img-src дозволяє лише Cloudinary), але зберігати чуже
+  // посилання в профілі однаково не треба: воно потім поїде в JSON API,
+  // у листи й у JSON-LD, де CSP уже не діє.
+  const isOwnCloudinaryUrl = (url: string, publicId: string): boolean => {
+    let parsed: URL
+    try {
+      parsed = new URL(url)
+    } catch {
+      return false
+    }
+    return (
+      parsed.protocol === 'https:' &&
+      parsed.hostname === 'res.cloudinary.com' &&
+      // publicId вже прив'язаний до userId перевіркою префікса нижче,
+      // тож збіг із ним і робить посилання «своїм».
+      parsed.pathname.includes(publicId)
+    )
+  }
+
   // ── AVATAR ────────────────────────────────────────────────────────────
   if (body.kind === 'avatar') {
     if (!body.url || !body.publicId)
       return json({ error: 'Missing url or publicId' }, { status: 400 })
 
     if (!body.publicId.startsWith(`zunor/users/${userId}/avatar`))
+      return json({ error: 'Forbidden' }, { status: 403 })
+
+    if (!isOwnCloudinaryUrl(body.url, body.publicId))
       return json({ error: 'Forbidden' }, { status: 403 })
 
     const user = await prisma.user.findUnique({
@@ -69,6 +94,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
       return json({ error: 'Missing url or publicId' }, { status: 400 })
 
     if (!body.publicId.startsWith(`zunor/users/${userId}/`))
+      return json({ error: 'Forbidden' }, { status: 403 })
+
+    if (!isOwnCloudinaryUrl(body.url, body.publicId))
       return json({ error: 'Forbidden' }, { status: 403 })
 
     const existing = await prisma.masterProfile.findUnique({

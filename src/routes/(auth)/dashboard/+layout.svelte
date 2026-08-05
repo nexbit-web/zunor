@@ -1,11 +1,14 @@
 <!-- src/routes/(auth)/dashboard/+layout.svelte -->
 <script lang="ts">
+  import { untrack } from 'svelte'
   import { page } from '$app/state'
   import { goto } from '$app/navigation'
   import Sidebar from '$lib/components/dashboard/sidebar.svelte'
   let { data, children } = $props()
 
-  let sidebarCollapsed = $state(data.sidebarCollapsed)
+  // untrack: cookie дає лише ПОЧАТКОВУ ширину. Далі стан веде сам сайдбар
+  // через bind, і перезапис із data згортав би панель на кожній навігації.
+  let sidebarCollapsed = $state(untrack(() => data.sidebarCollapsed))
 
   let isChat = $derived(
     page.url.pathname === '/dashboard/jobs/new' ||

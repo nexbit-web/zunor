@@ -1,6 +1,7 @@
 // src/routes/(auth)/jobs/+page.server.ts
 import { prisma } from '$lib/server/prisma'
 import { requireUser } from '$lib/server/guards'
+import { getCities, getCategories } from '$lib/server/reference'
 import { redirect } from '@sveltejs/kit'
 import type { PageServerLoad } from './$types'
 
@@ -11,20 +12,28 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   // Гостя сюди не пускає guardHandle (hooks.server.ts) — цей виклик і
   // звужує тип, і лишається страховкою, якщо роут винесуть з /dashboard.
   const userId = requireUser(locals).id
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      role: true,
-      city: true,
-      masterProfile: {
-        select: {
-          isActive: true,
-          verificationStatus: true,
-          categories: true,
+
+  // Профіль і довідники не залежать одне від одного — беремо разом.
+  // Довідники йдуть з кешу в пам'яті (reference.ts), тож у штатному випадку
+  // це один запит до БД на всю сторінку, а не три.
+  const [user, categoryRows, cityRows] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        role: true,
+        city: true,
+        masterProfile: {
+          select: {
+            isActive: true,
+            verificationStatus: true,
+            categories: true,
+          },
         },
       },
-    },
-  })
+    }),
+    getCategories(),
+    getCities(),
+  ])
   if (!user) throw redirect(302, '/user/login')
 
   // ?view — параметр з URL, тож приймаємо лише відомі значення; інакше дефолт за роллю.
@@ -36,19 +45,18 @@ export const load: PageServerLoad = async ({ locals, url }) => {
         ? 'feed'
         : 'mine'
 
-  // Довідники для фільтрів стрічки
-  const [allCategories, allCities] = await Promise.all([
-    prisma.category.findMany({
-      where: { isActive: true },
-      orderBy: { sortOrder: 'asc' },
-      select: { slug: true, name: true },
-    }),
-    prisma.city.findMany({
-      where: { isActive: true },
-      orderBy: [{ isCapital: 'desc' }, { name: 'asc' }],
-      select: { slug: true, name: true, region: true, isCapital: true },
-    }),
-  ])
+  // Довідники для фільтрів стрічки. Урізаємо до полів, які реально читає
+  // UI: усе зайве поїхало б у payload сторінки на кожній навігації.
+  const allCategories = categoryRows.map((c) => ({
+    slug: c.slug,
+    name: c.name,
+  }))
+  const allCities = cityRows.map((c) => ({
+    slug: c.slug,
+    name: c.name,
+    region: c.region,
+    isCapital: c.isCapital,
+  }))
 
   // ─── MINE: власні заявки клієнта ───
   // Тут віддаємо лише першу сторінку (+1 елемент, щоб дізнатись про наявність

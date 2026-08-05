@@ -146,7 +146,7 @@
   ></button>
 {/if}
 
-<MobileNav onnavigate={navigate} hasNotifications={true} />
+<MobileNav onnavigate={navigate} />
 
 <style>
   /* За замовчуванням хедер повністю прозорий — фон hero-секції видно

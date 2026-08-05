@@ -4,53 +4,68 @@ import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
 import { clientRatingSelect, flattenClientRating } from '$lib/server/user-dto'
 import { cancelWaves } from '$lib/server/dispatch/scheduler'
+import { checkJobAccess, jobViewerSelect } from '$lib/server/job-access'
 import type { RequestHandler } from './$types'
 
 /**
- * GET /api/jobs/[id] — детали заявки.
+ * GET /api/jobs/[id] — деталі заявки.
  *
- * Доступ:
- *   - Владелец (client) — полный доступ
- *   - Мастер с подходящими категориями — полный доступ (для отправки proposal)
- *   - Остальные — только base info без attachments
+ * Доступ — за єдиним правилом з $lib/server/job-access: власник, релевантний
+ * майстер або майстер із власною пропозицією. Решта отримує 404.
+ *
+ * Раніше тут не було жодної перевірки, окрім «залогінений»: коментар обіцяв
+ * ховати attachments від сторонніх, а код віддавав усе — включно з фото
+ * помешкання клієнта — будь-якому акаунту.
  */
 export const GET: RequestHandler = async ({ params, locals }) => {
   const user = requireApiUser(locals)
 
-  const job = await prisma.job.findUnique({
-    where: { id: params.id },
-    select: {
-      id: true,
-      clientId: true,
-      category: true,
-      city: true,
-      title: true,
-      description: true,
-      budgetMinCents: true,
-      budgetMaxCents: true,
-      currency: true,
-      attachments: true,
-      status: true,
-      proposalsCount: true,
-      viewsCount: true,
-      expiresAt: true,
-      closedAt: true,
-      createdAt: true,
-      client: {
-        select: {
-          id: true,
-          name: true,
-          username: true,
-          avatar: true,
-          ...clientRatingSelect,
+  const [job, viewer] = await Promise.all([
+    prisma.job.findUnique({
+      where: { id: params.id },
+      select: {
+        id: true,
+        clientId: true,
+        category: true,
+        city: true,
+        title: true,
+        description: true,
+        budgetMinCents: true,
+        budgetMaxCents: true,
+        currency: true,
+        attachments: true,
+        status: true,
+        proposalsCount: true,
+        viewsCount: true,
+        expiresAt: true,
+        closedAt: true,
+        createdAt: true,
+        client: {
+          select: {
+            id: true,
+            name: true,
+            username: true,
+            avatar: true,
+            ...clientRatingSelect,
+          },
         },
       },
-    },
-  })
+    }),
+    prisma.user.findUnique({
+      where: { id: user.id },
+      select: jobViewerSelect,
+    }),
+  ])
 
   if (!job) throw error(404, 'Заявку не знайдено')
+  if (!viewer) throw error(404, 'Заявку не знайдено')
 
-  const isOwner = job.clientId === user.id
+  const { canView, isOwner } = await checkJobAccess(job, {
+    id: user.id,
+    ...viewer,
+  })
+  // 404, а не 403: інакше відповідь підтверджує існування чужої заявки.
+  if (!canView) throw error(404, 'Заявку не знайдено')
 
   // Перегляди тут НЕ рахуємо: лічильник веде сторінка заявки
   // (dashboard/jobs/[id]/+page.server.ts), яка робить це через JobView —

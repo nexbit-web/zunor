@@ -1,5 +1,6 @@
 <!-- src/lib/components/jobs/proposal-form.svelte -->
 <script lang="ts">
+  import { untrack } from 'svelte'
   import { invalidateAll } from '$app/navigation'
   import { Loader2, AlertTriangle, Wallet } from 'lucide-svelte'
   import { Input } from '$lib/components/ui/input'
@@ -25,8 +26,12 @@
   }: Props = $props()
 
   let coverLetter = $state('')
-  let priceUah = $state(suggestedPriceUah ? String(suggestedPriceUah) : '')
-  let days = $state(suggestedDays ? String(suggestedDays) : '')
+  // untrack: підказки лише ПРЕФІЛЯТЬ поля. Стежити за ними не можна —
+  // оновлення пропа затерло б цифри, які людина вже виправила руками.
+  let priceUah = $state(
+    untrack(() => (suggestedPriceUah ? String(suggestedPriceUah) : '')),
+  )
+  let days = $state(untrack(() => (suggestedDays ? String(suggestedDays) : '')))
   let submitting = $state(false)
   let error = $state('')
 

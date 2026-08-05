@@ -58,8 +58,13 @@
 
   // ═══════════════════════ Стан ═══════════════════════
 
-  let messages = $state<ChatMessage[]>([...initialMessages].reverse())
-  let nextCursor = $state(initialNextCursor)
+  // untrack: пропси беремо як ПОЧАТКОВИЙ знімок і далі живемо своїм станом
+  // (нові повідомлення приходять по Pusher). Перечитування при зміні чату
+  // робить окремий $effect нижче — див. «Зміна чату».
+  let messages = $state<ChatMessage[]>(
+    untrack(() => [...initialMessages].reverse()),
+  )
+  let nextCursor = $state(untrack(() => initialNextCursor))
   let loadingMore = $state(false)
   let peerLastReadAt = $state<Date | null>(null)
   let typingPeer = $state<string | null>(null)

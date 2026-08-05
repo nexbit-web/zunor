@@ -22,6 +22,20 @@ interface Bucket {
 
 const buckets = new Map<string, Bucket>()
 
+/**
+ * Стеля на кількість кошиків.
+ *
+ * Прибирання протухлих спрацьовує раз на хвилину — цього мало, якщо ключ
+ * лімітування залежить від чогось, що атакуючий контролює. Тоді за одну
+ * хвилину між чистками Map виростає безмежно й процес падає по пам'яті,
+ * а процес у нас один на весь застосунок (див. AGENTS.md, розділ 2.1).
+ *
+ * Зараз усі ключі — user-scoped, тобто ріст обмежений числом акаунтів, але
+ * покладатися на це не варто: варто комусь завести IP-ключ, і діра
+ * з'явиться мовчки. Стеля робить цей клас помилок нефатальним.
+ */
+const MAX_BUCKETS = 20_000
+
 // Періодично чистимо протухлі записи, щоб Map не ріс безкінечно
 let lastCleanup = 0
 function cleanup(now: number) {
@@ -29,6 +43,28 @@ function cleanup(now: number) {
   lastCleanup = now
   for (const [k, b] of buckets) {
     if (b.resetAt < now) buckets.delete(k)
+  }
+}
+
+/**
+ * Аварійне скидання при переповненні.
+ *
+ * Викидаємо найстаріші записи (Map тримає порядок вставки). Так, це
+ * послаблює ліміт для тих, кого викинули, — але вибір тут між «частина
+ * лімітів скинулась» і «процес помер», і перше очевидно краще.
+ */
+function evictIfNeeded(now: number): void {
+  if (buckets.size <= MAX_BUCKETS) return
+
+  for (const [k, b] of buckets) {
+    if (b.resetAt < now) buckets.delete(k)
+  }
+  // Протухлих не вистачило — ріжемо найстаріші живі.
+  let excess = buckets.size - MAX_BUCKETS
+  if (excess <= 0) return
+  for (const k of buckets.keys()) {
+    buckets.delete(k)
+    if (--excess <= 0) break
   }
 }
 
@@ -51,6 +87,7 @@ export function limit(
   if (!bucket || bucket.resetAt < now) {
     const resetAt = now + duration
     buckets.set(key, { count: 1, resetAt })
+    evictIfNeeded(now)
     return { success: true, remaining: points - 1, resetAt }
   }
 
@@ -66,14 +103,16 @@ export function limit(
   }
 }
 
-/**
- * Витягує ідентифікатор клієнта для rate-limit.
- * Пріоритет: X-Forwarded-For → X-Real-IP → remote address.
- */
-export function getClientKey(request: Request, prefix = 'default'): string {
-  const forwardedFor = request.headers.get('x-forwarded-for')
-  const ip = forwardedFor
-    ? forwardedFor.split(',')[0].trim()
-    : (request.headers.get('x-real-ip') ?? 'unknown')
-  return `${prefix}:${ip}`
-}
+// ─────────────────────────────────────────────────────────────────────────
+// Тут була getClientKey(request), яка брала ЛІВЕ значення X-Forwarded-For.
+// Її прибрано, і повертати в такому вигляді не можна: лівий елемент XFF
+// повністю під контролем клієнта. Заголовок `X-Forwarded-For: <випадкове>`
+// дає новий ключ на кожен запит — це і обхід самого ліміту, і накачування
+// Map чужими записами.
+//
+// Якщо колись знадобиться лімітувати за IP (для неавторизованих
+// ендпоінтів — зараз таких немає, вхід і реєстрацію лімітує сам
+// better-auth), бери IP з `event.getClientAddress()`. adapter-node рахує
+// його за змінними ADDRESS_HEADER і XFF_DEPTH, тобто відкидає рівно
+// стільки проксі, скільки їх насправді перед застосунком.
+// ─────────────────────────────────────────────────────────────────────────

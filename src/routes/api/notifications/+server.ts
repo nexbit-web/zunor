@@ -67,7 +67,14 @@ export const POST: RequestHandler = async ({ request, locals }) => {
   if (!body) throw error(400, 'Invalid JSON')
 
   const action = String(body.action ?? '')
-  const ids = Array.isArray(body.ids) ? body.ids.map(String) : []
+
+  // Стеля на розмір масиву: без неї один запит із мільйоном id перетворювався
+  // на IN-список тієї ж довжини, і база лягала від одного клієнта.
+  // 200 — з великим запасом над сторінкою стрічки (20).
+  const MAX_IDS = 200
+  const ids = Array.isArray(body.ids)
+    ? body.ids.slice(0, MAX_IDS).map(String)
+    : []
 
   if (action === 'mark-all-read') {
     const result = await prisma.notification.updateMany({

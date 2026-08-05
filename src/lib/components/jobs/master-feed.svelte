@@ -6,7 +6,7 @@
     AvatarFallback,
     AvatarImage,
   } from '$lib/components/ui/avatar'
-  import { onMount } from 'svelte'
+  import { onMount, untrack } from 'svelte'
   import { fly } from 'svelte/transition'
   import { quintOut } from 'svelte/easing'
   import {
@@ -35,8 +35,10 @@
     filters?: any
   } = $props()
 
-  let jobs = $state([...initialJobs])
-  let nextCursor = $state<string | null>(initialNextCursor)
+  // untrack: перша сторінка з SSR — це ПОЧАТКОВИЙ знімок. Далі стрічка
+  // росте догрузкою через /api/jobs/feed, і перезапис пропом стер би її.
+  let jobs = $state(untrack(() => [...initialJobs]))
+  let nextCursor = $state<string | null>(untrack(() => initialNextCursor))
   let loadingMore = $state(false)
   let sentinelEl = $state<HTMLDivElement | null>(null)
 

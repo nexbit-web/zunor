@@ -32,13 +32,13 @@
 
   let hovering = $state(false)
 
-  const width = new Tween(collapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH, {
+  // Tween.of, а не new Tween + $effect: ширина ЗАЛЕЖИТЬ від collapsed,
+  // тобто це похідне значення, а не побічний ефект. Документований спосіб
+  // у Svelte 5 — сам відстежує collapsed і не створює зайвого ефекту,
+  // який ганяв би планувальник на кожному рендері компонента.
+  const width = Tween.of(() => (collapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH), {
     duration: 380,
     easing: cubicInOut,
-  })
-
-  $effect(() => {
-    width.target = collapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH
   })
 
   function toggleSidebar(): void {

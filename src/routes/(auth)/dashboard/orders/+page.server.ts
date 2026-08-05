@@ -6,13 +6,11 @@ import type { PageServerLoad } from './$types'
 export const load: PageServerLoad = async ({ locals, url }) => {
   const userId = requireUser(locals).id
 
-  // Отримуємо актуальну роль із БД
-  const dbUser = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { role: true },
-  })
-
-  const userRole = dbUser?.role ?? 'CLIENT'
+  // Роль уже прочитана з БД у guardHandle і лежить у locals.account —
+  // окремий SELECT тут був другим запитом за ту саму колонку на кожен
+  // вхід на сторінку. Фолбек на CLIENT лишається на випадок, якщо роут
+  // колись винесуть з-під /dashboard, де account не заповнюється.
+  const userRole = locals.account?.role ?? 'CLIENT'
   const roleParam = url.searchParams.get('role')
   const role: 'all' | 'client' | 'master' =
     roleParam === 'client' || roleParam === 'master' ? roleParam : 'all'

@@ -19,11 +19,17 @@ import type {
  */
 
 class ChatStore {
-  /** Тотальний лічильник непрочитаних — для бейджа у хедері */
-  totalUnread = $state(0)
-
   /** Список превью чатів, синхронізується з /messages */
   chats = $state<ChatPreview[]>([])
+
+  /**
+   * Тотальний лічильник непрочитаних — для бейджа у хедері.
+   *
+   * Саме $derived, а не $state, який доводилось перераховувати руками
+   * після кожної мутації списку: похідне значення не може розійтися
+   * з джерелом, тож забути виклик перерахунку в новій гілці неможливо.
+   */
+  totalUnread = $derived(this.chats.reduce((sum, c) => sum + c.unreadCount, 0))
 
   /** Чи store ініціалізований (через subscribe) */
   initialized = $state(false)
@@ -34,25 +40,16 @@ class ChatStore {
   /** ID активно відкритого чату — щоб не звукувати на нього */
   activeChatId = $state<string | null>(null)
 
-  /** Підраховує totalUnread за список чатів */
-  recomputeUnread() {
-    this.totalUnread = this.chats.reduce((sum, c) => sum + c.unreadCount, 0)
-  }
-
   /** Викликається коли /messages вантажить початковий список */
   setChats(chats: ChatPreview[]) {
     this.chats = chats
-    this.recomputeUnread()
     this.initialized = true
   }
 
   /** Локально позначити чат як прочитаний (коли юзер його відкриває) */
   markChatRead(chatId: string) {
     const chat = this.chats.find((c) => c.id === chatId)
-    if (chat && chat.unreadCount > 0) {
-      chat.unreadCount = 0
-      this.recomputeUnread()
-    }
+    if (chat && chat.unreadCount > 0) chat.unreadCount = 0
   }
 
   /** Підписатися на персональний канал юзера для real-time оновлень */
@@ -83,8 +80,7 @@ class ChatStore {
     const pusher = getPusher()
     pusher.unsubscribe(`private-user-${this.boundUserId}`)
     this.boundUserId = null
-    this.chats = []
-    this.totalUnread = 0
+    this.chats = [] // totalUnread похідний — обнулиться сам
     this.initialized = false
   }
 
@@ -102,8 +98,7 @@ class ChatStore {
 
     // Інкрементуємо unread якщо повідомлення не від мене
     // і чат не відкритий зараз
-    const isFromOther =
-      data.lastSenderId && data.lastSenderId !== currentUserId
+    const isFromOther = data.lastSenderId && data.lastSenderId !== currentUserId
     const isActiveChat = this.activeChatId === data.chatId
 
     if (isFromOther && !isActiveChat) {
@@ -112,7 +107,6 @@ class ChatStore {
 
     // Переміщаємо чат на верх списку
     this.chats = [chat, ...this.chats.filter((c) => c.id !== data.chatId)]
-    this.recomputeUnread()
   }
 
   private handleIncomingMessage(

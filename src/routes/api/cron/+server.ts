@@ -1,4 +1,5 @@
 // src/routes/api/cron/+server.ts
+import { timingSafeEqual } from 'node:crypto'
 import { json, error } from '@sveltejs/kit'
 import { prisma } from '$lib/server/prisma'
 import { CRON_SECRET } from '$env/static/private'
@@ -46,10 +47,27 @@ interface CronResult {
   error?: string
 }
 
+/**
+ * Порівняння секрету за постійний час.
+ *
+ * Звичайний `!==` виходить на першому відмінному байті, тож час відповіді
+ * підказує, скільки символів уже вгадано. Через мережу шум великий і атака
+ * малореальна, але ціна захисту тут — три рядки.
+ */
+function secretMatches(header: string | null, secret: string): boolean {
+  if (!header) return false
+  const expected = `Bearer ${secret}`
+  const a = Buffer.from(header)
+  const b = Buffer.from(expected)
+  // timingSafeEqual вимагає однакової довжини, а сама довжина не таємниця.
+  if (a.length !== b.length) return false
+  return timingSafeEqual(a, b)
+}
+
 export const GET: RequestHandler = async ({ url, request }) => {
   const authHeader = request.headers.get('authorization')
   if (!CRON_SECRET) throw error(500, 'CRON_SECRET not configured')
-  if (authHeader !== `Bearer ${CRON_SECRET}`) throw error(401, 'Unauthorized')
+  if (!secretMatches(authHeader, CRON_SECRET)) throw error(401, 'Unauthorized')
 
   const task = url.searchParams.get('task') ?? 'all'
   const results: CronResult[] = []

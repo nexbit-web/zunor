@@ -1,6 +1,6 @@
 <!-- src/lib/components/notifications/notification-list.svelte -->
 <script lang="ts">
-  import { onMount } from 'svelte'
+  import { onMount, untrack } from 'svelte'
   import { goto } from '$app/navigation'
   import { getPusher } from '$lib/pusher-client'
   import { Button } from '$lib/components/ui/button'
@@ -45,9 +45,11 @@
     initialUnreadCount: number
   } = $props()
 
-  let items = $state<NotificationItem[]>([...initialItems])
-  let nextCursor = $state<string | null>(initialNextCursor)
-  let unreadCount = $state(initialUnreadCount)
+  // untrack: SSR дає лише ПОЧАТКОВИЙ знімок стрічки. Далі список живе сам —
+  // догрузка по курсору й позначки «прочитано» правлять його локально.
+  let items = $state<NotificationItem[]>(untrack(() => [...initialItems]))
+  let nextCursor = $state<string | null>(untrack(() => initialNextCursor))
+  let unreadCount = $state(untrack(() => initialUnreadCount))
   let filter = $state<'all' | 'unread'>('all')
   let loadingMore = $state(false)
   let reloading = $state(false)

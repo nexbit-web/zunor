@@ -11,7 +11,7 @@
     MessageSquare,
     ChevronRight,
   } from 'lucide-svelte'
-  import { onMount } from 'svelte'
+  import { onMount, untrack } from 'svelte'
   import { describeJob } from '$lib/categories/cleaning/describe'
   import { detailIcon } from '$lib/categories/cleaning/detail-icons'
   function jobDetails(job: any) {
@@ -46,8 +46,10 @@
     }
   } = $props()
 
-  let jobs = $state([...initialJobs])
-  let nextCursor = $state<string | null>(initialNextCursor)
+  // untrack: перша сторінка з SSR — це ПОЧАТКОВИЙ знімок. Далі список
+  // росте догрузкою через /api/jobs/feed, і перезапис пропом стер би її.
+  let jobs = $state(untrack(() => [...initialJobs]))
+  let nextCursor = $state<string | null>(untrack(() => initialNextCursor))
   let loadingMore = $state(false)
   let sentinelEl = $state<HTMLDivElement | null>(null)
 

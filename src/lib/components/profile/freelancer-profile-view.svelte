@@ -5,6 +5,7 @@
     AvatarImage,
   } from '$lib/components/ui/avatar'
   import { Skeleton } from '$lib/components/ui/skeleton'
+  import { safeJsonLd } from '$lib/utils/json-ld'
   import { goto } from '$app/navigation'
   import {
     BadgeCheck,
@@ -36,20 +37,10 @@
   // isAuthenticated поки не використовується у в'ю — не деструктуруємо, щоб не плодити m's warning.
   let { user, isOwner }: Props = $props()
 
-  // ── Безпечний JSON-LD: екрануємо символи, що можуть зламати <script> або HTML-контекст ──
-  function safeJsonLd(data: Record<string, unknown>): string {
-    const map: Record<string, string> = {
-      '<': '\\u003c',
-      '>': '\\u003e',
-      '&': '\\u0026',
-      '\u2028': '\\u2028',
-      '\u2029': '\\u2029',
-    }
-    return JSON.stringify(data).replace(
-      /[<>&\u2028\u2029]/g,
-      (c) => map[c] ?? c,
-    )
-  }
+  // Безпечний JSON-LD — спільна реалізація в $lib/utils/json-ld, вона ж
+  // покрита тестами. Локальна копія жила тільки тут, і другий компонент
+  // із JSON-LD (seo/JsonLd.svelte) про неї не знав — там стояв голий
+  // JSON.stringify.
 
   /** Дата у локалі uk-UA. Невалідне значення не роняє рендер. */
   function formatDate(

@@ -1,23 +1,16 @@
 // src/routes/api/cities/+server.ts
 import { json } from '@sveltejs/kit'
-import { prisma } from '$lib/server/prisma'
+import { getCities } from '$lib/server/reference'
 import type { RequestHandler } from './$types'
 
 /**
  * GET /api/cities — список активных городов.
+ *
+ * Читает из кеша в памяти процесса (см. $lib/server/reference), а не из БД:
+ * список меняется раз в месяцы, а запрос сюда идёт с каждой формы.
  */
 export const GET: RequestHandler = async ({ setHeaders }) => {
-  const cities = await prisma.city.findMany({
-    where: { isActive: true },
-    orderBy: [{ isCapital: 'desc' }, { sortOrder: 'asc' }, { name: 'asc' }],
-    select: {
-      id: true,
-      slug: true,
-      name: true,
-      region: true,
-      isCapital: true,
-    },
-  })
+  const cities = await getCities()
 
   setHeaders({
     'cache-control':
