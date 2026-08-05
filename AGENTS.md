@@ -44,12 +44,31 @@ npm run dev          # dev-сервер, за замовчуванням :5173
 npm run build        # продакшн-збірка
 npm run preview      # прев'ю продакшн-збірки
 npm run check        # svelte-kit sync + svelte-check (типи)
+npm run test         # vitest run — юніт-тести чистого ядра
+npm run test:watch   # те саме у watch-режимі
 ```
 
-Лінтера (ESLint) і тестів (Vitest/etc.) у проєкті наразі **немає** — не вигадуй
-`npm run lint` чи `npm run test`, їх не існує. Головна перевірка коректності —
-`npm run check` (типи) плюс ручна перевірка в діалогах (див.
-`docs/zunor-test-dialogs.md`).
+Лінтера (ESLint) у проєкті **немає** — не вигадуй `npm run lint`, його не
+існує. Перевірки коректності: `npm run test` (логіка), `npm run check`
+(типи) і ручна перевірка діалогів (див. `docs/zunor-test-dialogs.md`).
+
+### Тести
+
+Vitest, конфіг — `vitest.config.ts` (навмисно без плагіна `sveltekit()`,
+лише аліас `$lib`). Тести лежать поруч із кодом: `*.test.ts`.
+
+Покрите **чисте ядро** — модулі без БД, мережі й `$env`:
+`server/dispatch/scoring.ts`, `server/order-state-machine.ts`,
+`categories/cleaning/validate.ts`, `server/job-copy.ts`,
+`server/zunor/detect-service.ts`, `server/user-dto.ts`.
+
+Тестуй **поведінку, а не числа**: у scoring перевіряється «новачок обходить
+рівного ветерана», а не конкретний бал — константи в `DISPATCH_CONFIG`
+крутити можна, обіцянки з `MANIFESTO.md` ні.
+
+Важливо: `npm run check` НЕ ловить зайві поля у вкладеному relation-`select`
+Prisma 7 — такий запит проходить типізацію і падає лише в рантаймі. Якщо
+міняєш поля моделі, перевіряй усі `select` грепом, на типи не покладайся.
 
 ### Змінні середовища
 
