@@ -1,16 +1,12 @@
 // src/routes/(auth)/notifications/+page.server.ts
-import { auth } from '$lib/server/auth'
 import { prisma } from '$lib/server/prisma'
-import { redirect } from '@sveltejs/kit'
+import { requireUser } from '$lib/server/guards'
 import type { PageServerLoad } from './$types'
 
 const PAGE_SIZE = 20
 
-export const load: PageServerLoad = async ({ request }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw redirect(302, '/user/login?redirectTo=/notifications')
-
-  const userId = session.user.id
+export const load: PageServerLoad = async ({ locals }) => {
+  const userId = requireUser(locals).id
 
   // Перша сторінка + лічильник непрочитаних — паралельно.
   const [rows, unreadCount] = await Promise.all([

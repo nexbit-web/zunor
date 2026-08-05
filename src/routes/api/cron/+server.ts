@@ -3,7 +3,19 @@ import { json, error } from '@sveltejs/kit'
 import { prisma } from '$lib/server/prisma'
 import { CRON_SECRET } from '$env/static/private'
 import { dispatchJob } from '$lib/server/dispatch'
+import { DISPATCH_CONFIG } from '$lib/server/dispatch/types'
 import type { RequestHandler } from './$types'
+
+/**
+ * Скільки хвилин після створення заявку ще має сенс сканувати.
+ * Рахується з конфіга хвиль, а не задається окремим числом: інакше зсув
+ * розкладу хвиль тихо лишив би крон із застарілим вікном.
+ * Останній старт хвилі + запас на прогавлені тики крона / нових майстрів.
+ */
+const SCAN_GRACE_MIN = 20
+const SCAN_WINDOW_MIN =
+  DISPATCH_CONFIG.WAVES[DISPATCH_CONFIG.WAVES.length - 1].afterMinutes +
+  SCAN_GRACE_MIN
 
 /**
  * GET /api/cron?task=auto-expire|dispatch-waves|all
@@ -80,14 +92,16 @@ async function runAutoExpire(): Promise<CronResult> {
  */
 async function runDispatchWaves(): Promise<CronResult> {
   try {
-    // Заявки, створені за останні 30 хв, які ще активні й потребують хвилі.
-    const since = new Date(Date.now() - 30 * 60 * 1000)
+    // Заявки у вікні сканування, які ще активні й потребують хвилі.
+    const since = new Date(Date.now() - SCAN_WINDOW_MIN * 60 * 1000)
 
     const jobs = await prisma.job.findMany({
       where: {
         status: 'OPEN',
         createdAt: { gte: since },
-        proposalsCount: { lt: 5 },  
+        // Той самий поріг, за яким мозок зупиняє розсилку (stopReason:
+        // 'enough-proposals') — інакше крон дарма будив би диспетчер.
+        proposalsCount: { lt: DISPATCH_CONFIG.ENOUGH_PROPOSALS },
       },
       select: { id: true, title: true },
       take: 100,

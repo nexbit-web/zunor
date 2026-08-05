@@ -10,9 +10,17 @@ import { prisma } from './prisma'
  *   - src/routes/(auth)/messages/+layout.server.ts (для списка чатов)
  *   - src/routes/api/chats/+server.ts (для refresh из chat-store)
  */
+/**
+ * Стеля списку чатів. Список і так відсортований за свіжістю, тож зріз ріже
+ * лише «хвіст», який у сайдбарі ніхто не гортає. Без ліміту запит ріс би
+ * разом з історією юзера — а він виконується на кожній навігації дашборда.
+ */
+const MAX_CHATS = 100
+
 export async function loadChatsForUser(userId: string): Promise<ChatPreview[]> {
   const memberships = await prisma.chatMember.findMany({
     where: { userId },
+    take: MAX_CHATS,
     select: {
       lastReadAt: true,
       chat: {

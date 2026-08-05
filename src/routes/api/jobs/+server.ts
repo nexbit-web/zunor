@@ -1,6 +1,6 @@
 // src/routes/api/jobs/+server.ts
 import { json, error } from '@sveltejs/kit'
-import { auth } from '$lib/server/auth'
+import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
 import { limit } from '$lib/server/rate-limit'
 import { dispatchJob } from '$lib/server/dispatch'
@@ -8,6 +8,7 @@ import { CATEGORY_SLUG } from '$lib/categories/cleaning/presets'
 import { validateCleaningMetadata } from '$lib/categories/cleaning/validate'
 import { generateTitle } from '$lib/categories/cleaning/title-gen'
 import { sanitizeJobTitle, sanitizeJobDescription } from '$lib/server/job-copy'
+import { clientRatingSelect, flattenClientRating } from '$lib/server/user-dto'
 import type { RequestHandler } from './$types'
 
 const JOB_EXPIRES_DAYS = 7
@@ -17,15 +18,14 @@ const JOB_EXPIRES_DAYS = 7
  * client  — власні заявки користувача;
  * master  — відкриті заявки у місті майстра за його категоріями.
  */
-export const GET: RequestHandler = async ({ request, url }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw error(401, 'Unauthorized')
+export const GET: RequestHandler = async ({ locals, url }) => {
+  const user = requireApiUser(locals)
 
   const role = url.searchParams.get('role') ?? 'client'
 
   if (role === 'client') {
     const jobs = await prisma.job.findMany({
-      where: { clientId: session.user.id },
+      where: { clientId: user.id },
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
@@ -48,7 +48,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
 
   if (role === 'master') {
     const me = await prisma.user.findUnique({
-      where: { id: session.user.id },
+      where: { id: user.id },
       select: {
         city: true,
         role: true,
@@ -79,7 +79,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
         status: 'OPEN',
         city: me.city,
         category: { in: me.masterProfile.categories },
-        clientId: { not: session.user.id },
+        clientId: { not: user.id },
         expiresAt: { gt: new Date() },
       },
       orderBy: { createdAt: 'desc' },
@@ -102,15 +102,16 @@ export const GET: RequestHandler = async ({ request, url }) => {
             name: true,
             username: true,
             avatar: true,
-            avgRating: true,
-            reviewsCount: true,
+            ...clientRatingSelect,
           },
         },
       },
       take: 100,
     })
 
-    return json({ jobs })
+    return json({
+      jobs: jobs.map((j) => ({ ...j, client: flattenClientRating(j.client) })),
+    })
   }
 
   throw error(400, 'Невідомий role')
@@ -123,12 +124,11 @@ export const GET: RequestHandler = async ({ request, url }) => {
  * title генерується сервером із metadata (клієнтському title не довіряємо),
  * місто береться з профілю клієнта. Бюджет не питаємо.
  */
-export const POST: RequestHandler = async ({ request }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw error(401, 'Unauthorized')
+export const POST: RequestHandler = async ({ request, locals }) => {
+  const user = requireApiUser(locals)
 
   // 10 заявок на годину на користувача — захист від спаму стрічки майстрів.
-  const rl = limit(`job:create:${session.user.id}`, {
+  const rl = limit(`job:create:${user.id}`, {
     points: 10,
     duration: 60 * 60_000,
   })
@@ -168,7 +168,7 @@ export const POST: RequestHandler = async ({ request }) => {
   // Місто — з профілю клієнта. Без міста заявку не створюємо: інакше вона
   // потрапила б не до тих майстрів. Гард у hooks.server.ts це теж не пускає.
   const me = await prisma.user.findUnique({
-    where: { id: session.user.id },
+    where: { id: user.id },
     select: { city: true },
   })
   const city = me?.city
@@ -190,7 +190,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
   const job = await prisma.job.create({
     data: {
-      clientId: session.user.id,
+      clientId: user.id,
       category: CATEGORY_SLUG,
       city,
       title,

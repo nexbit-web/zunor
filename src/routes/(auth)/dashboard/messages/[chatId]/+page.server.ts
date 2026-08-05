@@ -1,7 +1,7 @@
 // src/routes/(auth)/dashboard/messages/[chatId]/+page.server.ts
-import { auth } from '$lib/server/auth'
 import { prisma } from '$lib/server/prisma'
-import { error, redirect } from '@sveltejs/kit'
+import { requireUser } from '$lib/server/guards'
+import { error } from '@sveltejs/kit'
 import type { PageServerLoad } from './$types'
 import type {
   ChatDetails,
@@ -11,12 +11,9 @@ import type {
 
 const PAGE_SIZE = 50
 
-export const load: PageServerLoad = async ({ params, request }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw redirect(302, '/user/login')
-
+export const load: PageServerLoad = async ({ params, locals }) => {
   const chatId = params.chatId
-  const userId = session.user.id
+  const userId = requireUser(locals).id
 
   const membership = await prisma.chatMember.findUnique({
     where: { chatId_userId: { chatId, userId } },

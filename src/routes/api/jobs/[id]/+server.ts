@@ -1,7 +1,8 @@
 // src/routes/api/jobs/[id]/+server.ts
 import { json, error } from '@sveltejs/kit'
-import { auth } from '$lib/server/auth'
+import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
+import { clientRatingSelect, flattenClientRating } from '$lib/server/user-dto'
 import type { RequestHandler } from './$types'
 
 /**
@@ -12,9 +13,8 @@ import type { RequestHandler } from './$types'
  *   - Мастер с подходящими категориями — полный доступ (для отправки proposal)
  *   - Остальные — только base info без attachments
  */
-export const GET: RequestHandler = async ({ params, request }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw error(401, 'Unauthorized')
+export const GET: RequestHandler = async ({ params, locals }) => {
+  const user = requireApiUser(locals)
 
   const job = await prisma.job.findUnique({
     where: { id: params.id },
@@ -41,8 +41,7 @@ export const GET: RequestHandler = async ({ params, request }) => {
           name: true,
           username: true,
           avatar: true,
-          avgRating: true,
-          reviewsCount: true,
+          ...clientRatingSelect,
         },
       },
     },
@@ -50,7 +49,7 @@ export const GET: RequestHandler = async ({ params, request }) => {
 
   if (!job) throw error(404, 'Заявку не знайдено')
 
-  const isOwner = job.clientId === session.user.id
+  const isOwner = job.clientId === user.id
 
   // Если не owner — инкрементим viewCount (один раз на сессию идеально, но MVP — на каждый GET)
   if (!isOwner) {
@@ -59,7 +58,7 @@ export const GET: RequestHandler = async ({ params, request }) => {
       .catch(() => {})
   }
 
-  return json({ job, isOwner })
+  return json({ job: { ...job, client: flattenClientRating(job.client) }, isOwner })
 }
 
 /**
@@ -67,9 +66,8 @@ export const GET: RequestHandler = async ({ params, request }) => {
  *
  * Только владелец, только если статус OPEN.
  */
-export const DELETE: RequestHandler = async ({ params, request }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw error(401, 'Unauthorized')
+export const DELETE: RequestHandler = async ({ params, locals }) => {
+  const user = requireApiUser(locals)
 
   const job = await prisma.job.findUnique({
     where: { id: params.id },
@@ -77,7 +75,7 @@ export const DELETE: RequestHandler = async ({ params, request }) => {
   })
 
   if (!job) throw error(404, 'Не знайдено')
-  if (job.clientId !== session.user.id) throw error(403, 'Forbidden')
+  if (job.clientId !== user.id) throw error(403, 'Forbidden')
   if (job.status !== 'OPEN')
     throw error(400, 'Можна скасувати тільки відкриту заявку')
 

@@ -1,6 +1,6 @@
 // src/routes/api/zunor/chat/+server.ts
-import { json, error } from '@sveltejs/kit'
-import { auth } from '$lib/server/auth'
+import { error } from '@sveltejs/kit'
+import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
 import { limit } from '$lib/server/rate-limit'
 import { runZunorTurnStream, runZunorTurn } from '$lib/server/zunor/agent'
@@ -11,10 +11,9 @@ import type { RequestHandler } from './$types'
 const MAX_MESSAGES = 24
 const MAX_MESSAGE_LEN = 1200
 
-export const POST: RequestHandler = async ({ request }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw error(401, 'Unauthorized')
-  const userId = session.user.id
+export const POST: RequestHandler = async ({ request, locals }) => {
+  const user = requireApiUser(locals)
+  const userId = user.id
 
   const burst = limit(`zunor:burst:${userId}`, { points: 20, duration: 60_000 })
   if (!burst.success) throw error(429, 'Занадто швидко. Хвилинку :)')
@@ -54,7 +53,7 @@ export const POST: RequestHandler = async ({ request }) => {
   // Анкету беремо з БД, а не з тіла запиту: інакше клієнт підставив би
   // в промпт будь-що в обхід валідації й лімітів.
   const me = await prisma.user.findUnique({
-    where: { id: session.user.id },
+    where: { id: userId },
     select: { city: true, aiProfile: true },
   })
   const city = me?.city ?? null

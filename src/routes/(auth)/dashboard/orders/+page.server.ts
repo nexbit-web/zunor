@@ -1,14 +1,10 @@
 // src/routes/(auth)/orders/+page.server.ts
-import { auth } from '$lib/server/auth'
 import { prisma } from '$lib/server/prisma'
-import { redirect } from '@sveltejs/kit'
+import { requireUser } from '$lib/server/guards'
 import type { PageServerLoad } from './$types'
 
-export const load: PageServerLoad = async ({ request, url }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw redirect(302, `/user/login?redirectTo=/orders`)
-
-  const userId = session.user.id
+export const load: PageServerLoad = async ({ locals, url }) => {
+  const userId = requireUser(locals).id
 
   // Отримуємо актуальну роль із БД
   const dbUser = await prisma.user.findUnique({

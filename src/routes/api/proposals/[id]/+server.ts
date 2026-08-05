@@ -1,16 +1,16 @@
 // src/routes/api/proposals/[id]/+server.ts
 import { json, error } from '@sveltejs/kit'
-import { auth } from '$lib/server/auth'
+import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
+import { masterRatingSelect, flattenMasterRating } from '$lib/server/user-dto'
 import type { RequestHandler } from './$types'
 
 /**
  * GET /api/proposals/[id]
  * Доступ — тільки майстер-автор або власник job.
  */
-export const GET: RequestHandler = async ({ params, request }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw error(401, 'Unauthorized')
+export const GET: RequestHandler = async ({ params, locals }) => {
+  const user = requireApiUser(locals)
 
   const proposal = await prisma.proposal.findUnique({
     where: { id: params.id },
@@ -22,8 +22,7 @@ export const GET: RequestHandler = async ({ params, request }) => {
           username: true,
           avatar: true,
           city: true,
-          avgRating: true,
-          reviewsCount: true,
+          ...masterRatingSelect,
           masterProfile: {
             select: {
               verificationStatus: true,
@@ -45,20 +44,21 @@ export const GET: RequestHandler = async ({ params, request }) => {
 
   if (!proposal) throw error(404, 'Не знайдено')
 
-  const userId = session.user.id
+  const userId = user.id
   if (userId !== proposal.masterId && userId !== proposal.job.clientId) {
     throw error(403, 'Доступ заборонено')
   }
 
-  return json({ proposal })
+  return json({
+    proposal: { ...proposal, master: flattenMasterRating(proposal.master) },
+  })
 }
 
 /**
  * DELETE /api/proposals/[id] — майстер відкликає свій відгук.
  */
-export const DELETE: RequestHandler = async ({ params, request }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw error(401, 'Unauthorized')
+export const DELETE: RequestHandler = async ({ params, locals }) => {
+  const user = requireApiUser(locals)
 
   const proposal = await prisma.proposal.findUnique({
     where: { id: params.id },
@@ -71,7 +71,7 @@ export const DELETE: RequestHandler = async ({ params, request }) => {
   })
 
   if (!proposal) throw error(404, 'Не знайдено')
-  if (proposal.masterId !== session.user.id) {
+  if (proposal.masterId !== user.id) {
     throw error(403, 'Не ваш відгук')
   }
   if (proposal.status !== 'SENT') {

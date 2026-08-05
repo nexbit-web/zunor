@@ -1,7 +1,8 @@
 // src/routes/api/orders/[id]/+server.ts
 import { json, error } from '@sveltejs/kit'
-import { auth } from '$lib/server/auth'
+import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
+import { masterRatingSelect, flattenMasterRating } from '$lib/server/user-dto'
 import type { RequestHandler } from './$types'
 
 /**
@@ -9,9 +10,8 @@ import type { RequestHandler } from './$types'
  *
  * Доступ только для client или master этого заказа.
  */
-export const GET: RequestHandler = async ({ params, request }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw error(401, 'Unauthorized')
+export const GET: RequestHandler = async ({ params, locals }) => {
+  const user = requireApiUser(locals)
 
   const order = await prisma.order.findUnique({
     where: { id: params.id },
@@ -48,8 +48,7 @@ export const GET: RequestHandler = async ({ params, request }) => {
           username: true,
           avatar: true,
           city: true,
-          avgRating: true,
-          reviewsCount: true,
+          ...masterRatingSelect,
         },
       },
       reviews: {
@@ -79,11 +78,11 @@ export const GET: RequestHandler = async ({ params, request }) => {
 
   // Доступ
   if (
-    order.clientId !== session.user.id &&
-    order.masterId !== session.user.id
+    order.clientId !== user.id &&
+    order.masterId !== user.id
   ) {
     throw error(403, 'Доступ заборонено')
   }
 
-  return json({ order })
+  return json({ order: { ...order, master: flattenMasterRating(order.master) } })
 }

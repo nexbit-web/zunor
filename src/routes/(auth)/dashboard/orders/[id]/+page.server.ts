@@ -1,17 +1,11 @@
 // src/routes/(auth)/orders/[id]/+page.server.ts
-import { auth } from '$lib/server/auth'
 import { prisma } from '$lib/server/prisma'
-import { redirect, error } from '@sveltejs/kit'
+import { requireUser } from '$lib/server/guards'
+import { error } from '@sveltejs/kit'
 import type { PageServerLoad } from './$types'
 
-export const load: PageServerLoad = async ({ params, request }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) {
-    throw redirect(
-      302,
-      `/user/login?next=${encodeURIComponent(`/dashboard/orders/${params.id}`)}`,
-    )
-  }
+export const load: PageServerLoad = async ({ params, locals }) => {
+  const sessionUser = requireUser(locals, `/dashboard/orders/${params.id}`)
 
   const order = await prisma.order.findUnique({
     where: { id: params.id },
@@ -71,7 +65,7 @@ export const load: PageServerLoad = async ({ params, request }) => {
 
   if (!order) throw error(404, 'Замовлення не знайдено')
 
-  const userId = session.user.id
+  const userId = sessionUser.id
   if (order.clientId !== userId && order.masterId !== userId) {
     throw error(403, 'Доступ заборонено')
   }

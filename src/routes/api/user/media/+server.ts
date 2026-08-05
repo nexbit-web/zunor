@@ -1,16 +1,16 @@
 // src/routes/api/user/media/+server.ts
 import { json } from '@sveltejs/kit'
-import { auth } from '$lib/server/auth'
 import { cloudinary } from '$lib/server/cloudinary'
 import { prisma } from '$lib/server/prisma'
 import { limit } from '$lib/server/rate-limit'
 import type { RequestHandler } from './$types'
 
-export const POST: RequestHandler = async ({ request }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) return json({ error: 'Unauthorized' }, { status: 401 })
+export const POST: RequestHandler = async ({ request, locals }) => {
+  // 401 у власному форматі { error } — див. коментар в upload/signature.
+  const user = locals.user
+  if (!user) return json({ error: 'Unauthorized' }, { status: 401 })
 
-  const rl = limit(`user-media:${session.user.id}`, {
+  const rl = limit(`user-media:${user.id}`, {
     points: 30,
     duration: 60_000,
   })
@@ -32,7 +32,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
   if (!body?.kind) return json({ error: 'Missing kind' }, { status: 400 })
 
-  const userId = session.user.id
+  const userId = user.id
 
   // ── AVATAR ────────────────────────────────────────────────────────────
   if (body.kind === 'avatar') {

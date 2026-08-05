@@ -1,6 +1,6 @@
 // src/routes/api/proposals/[id]/accept/+server.ts
 import { json, error } from '@sveltejs/kit'
-import { auth } from '$lib/server/auth'
+import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
 import { Notify } from '$lib/server/notifications'
 import type { RequestHandler } from './$types'
@@ -19,9 +19,8 @@ import type { RequestHandler } from './$types'
  * После (fail-soft):
  *   - Notification мастеру
  */
-export const POST: RequestHandler = async ({ params, request }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw error(401, 'Unauthorized')
+export const POST: RequestHandler = async ({ params, locals }) => {
+  const user = requireApiUser(locals)
 
   const proposal = await prisma.proposal.findUnique({
     where: { id: params.id },
@@ -49,7 +48,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
   if (!proposal) throw error(404, 'Proposal не знайдено')
 
   // Только владелец job может принимать
-  if (proposal.job.clientId !== session.user.id) {
+  if (proposal.job.clientId !== user.id) {
     throw error(403, 'Тільки замовник може обрати майстра')
   }
   if (proposal.job.status !== 'OPEN') {
@@ -65,7 +64,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
     const chat = await tx.chat.create({
       data: {
         members: {
-          create: [{ userId: session.user.id }, { userId: proposal.masterId }],
+          create: [{ userId: user.id }, { userId: proposal.masterId }],
         },
       },
       select: { id: true },
@@ -74,7 +73,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
     // 2. Создаём Order
     const order = await tx.order.create({
       data: {
-        clientId: session.user.id,
+        clientId: user.id,
         masterId: proposal.masterId,
         title: proposal.job.title,
         description: proposal.job.description ?? '',
@@ -127,7 +126,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
       data: {
         orderId: order.id,
         type: 'CREATED',
-        actorId: session.user.id,
+        actorId: user.id,
         payload: {
           jobId: proposal.jobId,
           proposalId: proposal.id,

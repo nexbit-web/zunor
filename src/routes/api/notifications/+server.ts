@@ -1,6 +1,6 @@
 // src/routes/api/notifications/+server.ts
 import { json, error } from '@sveltejs/kit'
-import { auth } from '$lib/server/auth'
+import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
 import type { RequestHandler } from './$types'
 
@@ -8,9 +8,8 @@ import type { RequestHandler } from './$types'
  * GET /api/notifications?cursor=<id>&limit=20&unreadOnly=true
  * Повертає мої повідомлення.
  */
-export const GET: RequestHandler = async ({ request, url }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw error(401, 'Unauthorized')
+export const GET: RequestHandler = async ({ locals, url }) => {
+  const user = requireApiUser(locals)
 
   const cursor = url.searchParams.get('cursor')
   const limit = Math.min(
@@ -21,7 +20,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
 
   const items = await prisma.notification.findMany({
     where: {
-      userId: session.user.id,
+      userId: user.id,
       ...(unreadOnly ? { isRead: false } : {}),
     },
     orderBy: { createdAt: 'desc' },
@@ -47,7 +46,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
 
   // Лічильник непрочитаних
   const unreadCount = await prisma.notification.count({
-    where: { userId: session.user.id, isRead: false },
+    where: { userId: user.id, isRead: false },
   })
 
   return json({
@@ -61,9 +60,8 @@ export const GET: RequestHandler = async ({ request, url }) => {
  * POST /api/notifications
  * Body: { ids?: string[], action: 'mark-read' | 'mark-all-read' | 'delete' }
  */
-export const POST: RequestHandler = async ({ request }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw error(401, 'Unauthorized')
+export const POST: RequestHandler = async ({ request, locals }) => {
+  const user = requireApiUser(locals)
 
   const body = await request.json().catch(() => null)
   if (!body) throw error(400, 'Invalid JSON')
@@ -73,7 +71,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
   if (action === 'mark-all-read') {
     const result = await prisma.notification.updateMany({
-      where: { userId: session.user.id, isRead: false },
+      where: { userId: user.id, isRead: false },
       data: { isRead: true, readAt: new Date() },
     })
     return json({ ok: true, affected: result.count })
@@ -81,7 +79,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
   if (action === 'mark-read' && ids.length > 0) {
     const result = await prisma.notification.updateMany({
-      where: { userId: session.user.id, id: { in: ids }, isRead: false },
+      where: { userId: user.id, id: { in: ids }, isRead: false },
       data: { isRead: true, readAt: new Date() },
     })
     return json({ ok: true, affected: result.count })
@@ -89,7 +87,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
   if (action === 'delete' && ids.length > 0) {
     const result = await prisma.notification.deleteMany({
-      where: { userId: session.user.id, id: { in: ids } },
+      where: { userId: user.id, id: { in: ids } },
     })
     return json({ ok: true, affected: result.count })
   }

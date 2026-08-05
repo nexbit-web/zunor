@@ -1,16 +1,13 @@
 // src/routes/(auth)/jobs/[id]/+page.server.ts
-import { auth } from '$lib/server/auth'
 import { prisma } from '$lib/server/prisma'
+import { requireUser } from '$lib/server/guards'
 import { error, redirect } from '@sveltejs/kit'
 import { markOpened } from '$lib/server/dispatch'
 import { getRecommendedIds } from '$lib/server/ranking'
 import type { PageServerLoad } from './$types'
 
-export const load: PageServerLoad = async ({ params, request }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw redirect(302, '/user/login')
-
-  const userId = session.user.id
+export const load: PageServerLoad = async ({ params, locals }) => {
+  const userId = requireUser(locals).id
 
   const user = await prisma.user.findUnique({
     where: { id: userId },

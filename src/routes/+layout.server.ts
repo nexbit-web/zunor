@@ -1,45 +1,42 @@
 // src/routes/+layout.server.ts
-import { auth } from '$lib/server/auth'
+//
+// Кореневий лейаут виконується на КОЖНІЙ навігації — включно з публічними
+// сторінками і з усім /dashboard. Тому тут лишається тільки те, що потрібно
+// публічній частині: сесія + лічильник сповіщень для дзвіночка в хедері.
+//
+// Список чатів і повний набір бейджів вантажить (auth)/+layout.server.ts.
+// Раніше те саме робилось і тут: на кожному переході дашборда обидва лейаути
+// тягнули чати, а дані кореневого все одно перекривались дочірніми — тобто
+// половина запитів була роботою в кошик.
+
 import { prisma } from '$lib/server/prisma'
-import { loadChatsForUser } from '$lib/server/chats-loader'
 import type { LayoutServerLoad } from './$types'
 
-export const load: LayoutServerLoad = async ({ request, depends }) => {
+export const load: LayoutServerLoad = async ({ locals, depends }) => {
   depends('app:badges')
-  depends('app:chats') // ← новый маркер для чатов
 
-  const session = await auth.api.getSession({ headers: request.headers })
+  // Сесію вже резолвнув sessionHandle у hooks.server.ts — другий
+  // auth.api.getSession() на той самий запит нічого не додає.
+  const session = locals.session
 
   if (!session?.user) {
-    return { session: null, badges: null, chats: null }
+    return { session: null, badges: null }
   }
 
-  const userId = session.user.id
-
-  // Все три запроса параллельно: notifications count, chats unread count, chats list
-  const [unreadNotifications, unreadChats, chats] = await Promise.all([
-    prisma.notification.count({
-      where: { userId, isRead: false },
-    }),
-    prisma.chatMember.count({
-      where: {
-        userId,
-        chat: {
-          messages: {
-            some: { senderId: { not: userId }, isRead: false },
-          },
-        },
-      },
-    }),
-    loadChatsForUser(userId), // ← полный список чатов
-  ])
+  const notifications = await prisma.notification.count({
+    where: { userId: session.user.id, isRead: false },
+  })
 
   return {
     session,
     badges: {
-      notifications: unreadNotifications,
-      messages: unreadChats,
+      notifications,
+      // Непрочитані повідомлення показує лише дашборд (сайдбар і bottom-nav),
+      // а там значення приходить з (auth)-лейауту, порахованим зі списку
+      // чатів без окремого запиту. Публічним сторінкам цей лічильник не
+      // потрібен — рахувати його тут означало б корельований підзапит на
+      // кожну навігацію заради невидимого числа.
+      messages: 0,
     },
-    chats,
   }
 }

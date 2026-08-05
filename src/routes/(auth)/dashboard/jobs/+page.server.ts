@@ -1,17 +1,16 @@
 // src/routes/(auth)/jobs/+page.server.ts
-import { auth } from '$lib/server/auth'
 import { prisma } from '$lib/server/prisma'
+import { requireUser } from '$lib/server/guards'
 import { redirect } from '@sveltejs/kit'
 import type { PageServerLoad } from './$types'
 
 const PAGE_SIZE = 20
 type ViewMode = 'mine' | 'feed'
 
-export const load: PageServerLoad = async ({ request, url }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw redirect(302, '/user/login?redirectTo=/jobs')
-
-  const userId = session.user.id
+export const load: PageServerLoad = async ({ locals, url }) => {
+  // Гостя сюди не пускає guardHandle (hooks.server.ts) — цей виклик і
+  // звужує тип, і лишається страховкою, якщо роут винесуть з /dashboard.
+  const userId = requireUser(locals).id
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {

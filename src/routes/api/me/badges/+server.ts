@@ -1,6 +1,6 @@
 // src/routes/api/me/badges/+server.ts
-import { json, error } from '@sveltejs/kit'
-import { auth } from '$lib/server/auth'
+import { json } from '@sveltejs/kit'
+import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
 import type { RequestHandler } from './$types'
 
@@ -9,11 +9,10 @@ import type { RequestHandler } from './$types'
  *
  * Бэйджи для шапки: непрочитанные уведомления и чаты.
  */
-export const GET: RequestHandler = async ({ request }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw error(401, 'Unauthorized')
+export const GET: RequestHandler = async ({ locals }) => {
+  const user = requireApiUser(locals)
 
-  const userId = session.user.id
+  const userId = user.id
 
   const [unreadNotifications, unreadChats] = await Promise.all([
     prisma.notification.count({

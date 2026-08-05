@@ -6,7 +6,6 @@ import {
   Role,
 } from '../../../../generated/prisma/client'
 import { prisma } from '$lib/server/prisma'
-import { auth } from '$lib/server/auth'
 import type { RequestHandler } from './$types'
 
 interface UpdatePayload {
@@ -71,9 +70,10 @@ const LIMITS = {
 // й падав уже в Prisma з 500 замість зрозумілого 400.
 const isString = (v: unknown): v is string => typeof v === 'string'
 
-export const POST: RequestHandler = async ({ request }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) return json({ error: 'Unauthorized' }, { status: 401 })
+export const POST: RequestHandler = async ({ request, locals }) => {
+  // 401 у власному форматі { error } — див. коментар в upload/signature.
+  const sessionUser = locals.user
+  if (!sessionUser) return json({ error: 'Unauthorized' }, { status: 401 })
 
   let body: UpdatePayload
   try {
@@ -82,7 +82,7 @@ export const POST: RequestHandler = async ({ request }) => {
     return json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
-  const userId = session.user.id
+  const userId = sessionUser.id
 
   // ═══════════════════ Валідація ═══════════════════
 

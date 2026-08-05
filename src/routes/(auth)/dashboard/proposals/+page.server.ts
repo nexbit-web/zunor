@@ -2,10 +2,10 @@ import { prisma } from '$lib/server/prisma'
 import { requireRole } from '$lib/server/guard'
 import type { PageServerLoad } from './$types'
 
-export const load: PageServerLoad = async ({ request }) => {
+export const load: PageServerLoad = async ({ locals }) => {
   // Пропозиції — сторінка МАЙСТРА. Клієнта сюди не пускаємо (раніше він
   // проходив перевірку й бачив порожній список — тепер редірект на дашборд).
-  const user = await requireRole(request, ['MASTER'], '/dashboard/proposals')
+  const user = await requireRole(locals, ['MASTER'], '/dashboard/proposals')
 
   const proposals = await prisma.proposal.findMany({
     where: { masterId: user.id },

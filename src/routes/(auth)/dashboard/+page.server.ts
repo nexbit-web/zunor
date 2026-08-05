@@ -1,5 +1,5 @@
-import { auth } from '$lib/server/auth'
 import { prisma } from '$lib/server/prisma'
+import { requireUser } from '$lib/server/guards'
 import { redirect } from '@sveltejs/kit'
 import type { PageServerLoad } from './$types'
 import type {
@@ -51,19 +51,43 @@ async function loadReviews(
 }
 
 export const load: PageServerLoad = async ({
-  request,
+  locals,
 }): Promise<DashboardData> => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw redirect(302, '/user/login')
+  // Сесія вже в locals після hooks.server.ts — повторний getSession зайвий.
+  const sessionUser = requireUser(locals)
 
+  // Явний select замість include: рядок User містить і aiProfile (JSON, росте
+  // разом з анкетою асистента), і банові поля — на сторінці профілю вони не
+  // потрібні, а тягнулись при кожному відкритті дашборда.
   const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    include: {
-      masterProfile: true,
+    where: { id: sessionUser.id },
+    select: {
+      id: true,
+      name: true,
+      username: true,
+      avatar: true,
+      bio: true,
+      phone: true,
+      role: true,
+      city: true,
+      createdAt: true,
+      avgRatingAsMaster: true,
+      reviewsCountAsMaster: true,
+      avgRatingAsClient: true,
+      reviewsCountAsClient: true,
+      masterProfile: {
+        select: {
+          categories: true,
+          portfolioImages: true,
+          verificationStatus: true,
+          verificationRejectReason: true,
+          completedOrders: true,
+        },
+      },
     },
   })
 
-  if (!user) throw redirect(302, '/user/login')
+  if (!user) redirect(302, '/user/login')
 
   if (user.role === 'CLIENT') {
     // Паралельно: відгуки + лічильники + назва міста

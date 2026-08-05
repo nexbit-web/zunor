@@ -1,4 +1,3 @@
-import { auth } from '$lib/server/auth'
 import { prisma } from '$lib/server/prisma'
 import { error, redirect } from '@sveltejs/kit'
 import type { PageServerLoad } from './$types'
@@ -27,16 +26,18 @@ async function loadClientReviews(clientId: string): Promise<ProfileReview[]> {
   })
 }
 
-export const load: PageServerLoad = async ({ params, request, setHeaders }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw error(404, 'Користувача не знайдено')
+export const load: PageServerLoad = async ({ params, locals, setHeaders }) => {
+  // Навмисно 404, а не редірект на логін: гість не має дізнатись навіть
+  // те, що такий профіль існує. Тому тут не requireUser.
+  const viewerUser = locals.user
+  if (!viewerUser) throw error(404, 'Користувача не знайдено')
 
   // Свій профіль → на дашборд
-  if (params.id === session.user.id) throw redirect(302, '/dashboard')
+  if (params.id === viewerUser.id) throw redirect(302, '/dashboard')
 
   // Дивитися профіль клієнта може лише майстер
   const viewer = await prisma.user.findUnique({
-    where: { id: session.user.id },
+    where: { id: viewerUser.id },
     select: { role: true },
   })
   if (viewer?.role !== 'MASTER') throw error(404, 'Користувача не знайдено')

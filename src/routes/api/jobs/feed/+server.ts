@@ -1,7 +1,8 @@
 // src/routes/api/jobs/feed/+server.ts
 import { json, error } from '@sveltejs/kit'
-import { auth } from '$lib/server/auth'
+import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
+import { clientRatingSelect, flattenClientRating } from '$lib/server/user-dto'
 import type { RequestHandler } from './$types'
 
 const PAGE_SIZE = 20
@@ -12,11 +13,10 @@ const PAGE_SIZE = 20
  * Універсальний endpoint для пагінованої видачі заявок.
  * Повертає { jobs, nextCursor }.
  */
-export const GET: RequestHandler = async ({ request, url }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw error(401, 'Unauthorized')
-
-  const userId = session.user.id
+export const GET: RequestHandler = async ({ locals, url }) => {
+  // Нижче в цьому ж хендлері `user` — це рядок із БД (роль, місто,
+  // masterProfile), тому сесійного юзера тримаємо під іншим імʼям.
+  const userId = requireApiUser(locals).id
   const view = url.searchParams.get('view') ?? 'mine'
   const cursor = url.searchParams.get('cursor')
 
@@ -180,8 +180,7 @@ export const GET: RequestHandler = async ({ request, url }) => {
           name: true,
           username: true,
           avatar: true,
-          avgRating: true,
-          reviewsCount: true,
+          ...clientRatingSelect,
         },
       },
     },
@@ -194,6 +193,8 @@ export const GET: RequestHandler = async ({ request, url }) => {
   return json({
     jobs: items.map((j) => ({
       ...j,
+      // Автор заявки — це замовник, тому показуємо його клієнтський рейтинг.
+      client: flattenClientRating(j.client),
       createdAt: j.createdAt.toISOString(),
       expiresAt: j.expiresAt.toISOString(),
     })),
