@@ -1,9 +1,13 @@
 <script lang="ts">
   import { authClient } from '$lib/auth-client'
   import { goto } from '$app/navigation'
+  import {
+    SettingsGroup,
+    SettingsRow,
+    SettingsField,
+  } from '$lib/components/settings'
   import { Button } from '$lib/components/ui/button'
   import { Input } from '$lib/components/ui/input'
-  import { Label } from '$lib/components/ui/label'
   import { Spinner } from '$lib/components/ui/spinner'
   import { Eye, EyeOff, Check } from 'lucide-svelte'
   import toast from 'svelte-hot-french-toast'
@@ -108,19 +112,14 @@
 </script>
 
 <div>
-  <h2 class="mb-2 px-1 text-sm font-semibold">Пароль</h2>
-
   {#if data.hasPassword}
     <form onsubmit={submit} novalidate>
-      <div class="rounded-xl bg-muted/40 py-1">
-        <!-- Поточний пароль -->
-        <div
-          class="mx-4 flex flex-col gap-2 py-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6"
-        >
-          <Label for="current-pw" class="text-sm font-normal sm:pt-1.5">
-            Поточний пароль
-          </Label>
-          <div class="w-full sm:w-[56%] sm:max-w-[300px] sm:shrink-0">
+      <SettingsGroup
+        title="Пароль"
+        footnote="Після зміни ви лишитесь у системі на цьому пристрої, а всі інші сеанси буде завершено."
+      >
+        <SettingsField label="Поточний пароль" for="current-pw">
+          {#snippet control()}
             <Input
               id="current-pw"
               type="password"
@@ -130,20 +129,16 @@
               class="bg-background"
               required
             />
-          </div>
-        </div>
+          {/snippet}
+        </SettingsField>
 
-        <!-- Новий пароль -->
-        <div
-          class="mx-4 flex flex-col gap-2 border-t border-border/60 py-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6"
+        <SettingsField
+          label="Новий пароль"
+          hint="Мінімум {MIN_LEN} символів"
+          for="new-pw"
+          error={nextError}
         >
-          <div class="sm:pt-1.5">
-            <Label for="new-pw" class="text-sm font-normal">Новий пароль</Label>
-            <p class="mt-0.5 text-[12px] text-muted-foreground">
-              Мінімум {MIN_LEN} символів
-            </p>
-          </div>
-          <div class="w-full sm:w-[56%] sm:max-w-[300px] sm:shrink-0">
+          {#snippet control()}
             <div class="relative">
               <Input
                 id="new-pw"
@@ -170,22 +165,11 @@
                 {/if}
               </button>
             </div>
-            {#if nextError}
-              <p class="mt-1.5 text-[12px] text-destructive" role="alert">
-                {nextError}
-              </p>
-            {/if}
-          </div>
-        </div>
+          {/snippet}
+        </SettingsField>
 
-        <!-- Підтвердження -->
-        <div
-          class="mx-4 flex flex-col gap-2 border-t border-border/60 py-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6"
-        >
-          <Label for="confirm-pw" class="text-sm font-normal sm:pt-1.5">
-            Ще раз
-          </Label>
-          <div class="w-full sm:w-[56%] sm:max-w-[300px] sm:shrink-0">
+        <SettingsField label="Ще раз" for="confirm-pw" error={confirmError}>
+          {#snippet control()}
             <div class="relative">
               <Input
                 id="confirm-pw"
@@ -205,27 +189,17 @@
                 />
               {/if}
             </div>
-            {#if confirmError}
-              <p class="mt-1.5 text-[12px] text-destructive" role="alert">
-                {confirmError}
-              </p>
-            {/if}
-          </div>
-        </div>
-      </div>
+          {/snippet}
+        </SettingsField>
+      </SettingsGroup>
 
       {#if serverError}
-        <p class="mt-3 px-1 text-[12.5px] text-destructive" role="alert">
+        <p class="-mt-4 mb-4 px-1 text-[12.5px] text-destructive" role="alert">
           {serverError}
         </p>
       {/if}
 
-      <p class="mt-3 px-1 text-[12px] leading-relaxed text-muted-foreground">
-        Після зміни ви лишитесь у системі на цьому пристрої, а всі інші сеанси
-        буде завершено.
-      </p>
-
-      <div class="mt-5 flex justify-end">
+      <div class="-mt-2 mb-7 flex justify-end">
         <Button
           type="submit"
           disabled={saving || !formValid}
@@ -234,7 +208,10 @@
         >
           <span>{saving ? 'Зберігаємо...' : 'Змінити пароль'}</span>
           {#if saving}
-            <Spinner class="absolute size-3 right-3 animate-spin" aria-hidden="true" />
+            <Spinner
+              class="absolute right-3 size-3 animate-spin"
+              aria-hidden="true"
+            />
           {/if}
         </Button>
       </div>
@@ -243,45 +220,41 @@
     <!-- Акаунт створено через Google — пароля не існує.
          changePassword тут не спрацює: він перевіряє поточний пароль,
          якого немає. Тому пропонуємо задати перший через лист. -->
-    <div class="rounded-xl bg-muted/40 py-1">
-      <div
-        class="mx-4 flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+    <SettingsGroup title="Пароль">
+      <SettingsRow
+        label="Пароль не встановлено"
+        description="Ви входите через Google. Щоб додати вхід поштою, задайте пароль — надішлемо посилання на {data.email}."
       >
-        <div class="min-w-0">
-          <p class="text-sm">Пароль не встановлено</p>
-          <p class="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">
-            Ви входите через Google. Щоб додати вхід поштою, задайте пароль —
-            надішлемо посилання на {data.email}.
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          onclick={sendSetPasswordLink}
-          disabled={sendingReset}
-          class="shrink-0 bg-background"
-        >
-          {sendingReset ? 'Надсилаємо...' : 'Задати пароль'}
-        </Button>
-      </div>
-    </div>
+        {#snippet control()}
+          <Button
+            variant="outline"
+            onclick={sendSetPasswordLink}
+            disabled={sendingReset}
+            aria-busy={sendingReset}
+            class="bg-background"
+          >
+            {sendingReset ? 'Надсилаємо...' : 'Задати пароль'}
+          </Button>
+        {/snippet}
+      </SettingsRow>
+    </SettingsGroup>
   {/if}
 
-  <!-- ═══ Способи входу ═══ -->
-  <h2 class="mt-7 mb-2 px-1 text-sm font-semibold">Способи входу</h2>
-  <div class="rounded-xl bg-muted/40 py-1">
-    <div class="mx-4 flex items-center justify-between gap-4 py-3">
-      <p class="text-sm">Пошта і пароль</p>
-      <span class="text-[13px] text-muted-foreground">
-        {data.hasPassword ? 'Увімкнено' : 'Не налаштовано'}
-      </span>
-    </div>
-    <div
-      class="mx-4 flex items-center justify-between gap-4 border-t border-border/60 py-3"
-    >
-      <p class="text-sm">Google</p>
-      <span class="text-[13px] text-muted-foreground">
-        {data.hasGoogle ? 'Прив’язано' : 'Не прив’язано'}
-      </span>
-    </div>
-  </div>
+  <SettingsGroup title="Способи входу">
+    <SettingsRow label="Пошта і пароль">
+      {#snippet control()}
+        <span class="text-[13px] text-muted-foreground">
+          {data.hasPassword ? 'Увімкнено' : 'Не налаштовано'}
+        </span>
+      {/snippet}
+    </SettingsRow>
+
+    <SettingsRow label="Google">
+      {#snippet control()}
+        <span class="text-[13px] text-muted-foreground">
+          {data.hasGoogle ? 'Прив’язано' : 'Не прив’язано'}
+        </span>
+      {/snippet}
+    </SettingsRow>
+  </SettingsGroup>
 </div>

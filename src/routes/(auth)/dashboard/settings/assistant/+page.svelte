@@ -1,4 +1,9 @@
 <script lang="ts">
+  import {
+    SettingsGroup,
+    SettingsField,
+    SettingsBlock,
+  } from '$lib/components/settings'
   import { Button } from '$lib/components/ui/button'
   import { Input } from '$lib/components/ui/input'
   import { Textarea } from '$lib/components/ui/textarea'
@@ -78,15 +83,9 @@
   </p>
 
   <!-- ═══ Звертання ═══ -->
-  <h2 class="mb-2 px-1 text-sm font-semibold">Про вас</h2>
-  <div class="rounded-xl bg-muted/40 py-1">
-    <div
-      class="mx-4 flex flex-col gap-2 py-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6"
-    >
-      <Label for="call-name" class="text-sm font-normal sm:pt-1.5">
-        Як звертатись
-      </Label>
-      <div class="w-full sm:w-[56%] sm:max-w-75 sm:shrink-0">
+  <SettingsGroup title="Про вас">
+    <SettingsField label="Як звертатись" for="call-name">
+      {#snippet control()}
         <Input
           id="call-name"
           bind:value={callName}
@@ -94,10 +93,10 @@
           placeholder={data.userName || 'Ваше імʼя'}
           class="bg-background"
         />
-      </div>
-    </div>
+      {/snippet}
+    </SettingsField>
 
-    <div class="mx-4 border-t border-border/60 py-3">
+    <SettingsBlock>
       <Label for="about" class="text-sm font-normal">Чим займаєтесь</Label>
       <p class="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">
         Наприклад: здаю квартири подобово, тому прибирання потрібне часто і
@@ -111,25 +110,30 @@
         placeholder="Кілька речень про вас і ваші потреби."
         class="mt-2 resize-none bg-background"
       />
-      <div class="mt-1.5 flex justify-end">
-        <span class="text-[12px] tabular-nums text-muted-foreground">
-          {about.length}/{data.limits.about}
-        </span>
-      </div>
-    </div>
-  </div>
+      <!-- Лічильник з'являється лише коли є що рахувати: під порожнім
+           полем «0/922» читається як помилка, а не як підказка. -->
+      {#if about.length > 0}
+        <div class="mt-1.5 flex justify-end">
+          <span class="text-[12px] tabular-nums text-muted-foreground">
+            {about.length}/{data.limits.about}
+          </span>
+        </div>
+      {/if}
+    </SettingsBlock>
+  </SettingsGroup>
 
   <!-- ═══ Об'єкти ═══ -->
-  <h2 class="mt-7 mb-2 px-1 text-sm font-semibold">Ваші обʼєкти</h2>
-  <div class="rounded-xl bg-muted/40 py-1">
+  <SettingsGroup title="Ваші обʼєкти">
     {#if objects.length === 0}
-      <p class="mx-4 py-3 text-[13px] text-muted-foreground">
-        Додайте те, що прибираєте регулярно — асистент не питатиме щоразу.
-      </p>
+      <SettingsBlock>
+        <p class="text-[13px] text-muted-foreground">
+          Додайте те, що прибираєте регулярно — асистент не питатиме щоразу.
+        </p>
+      </SettingsBlock>
     {/if}
 
     {#each objects as obj, i (i)}
-      <div class="mx-4 border-t border-border/60 py-3 first:border-t-0">
+      <SettingsBlock>
         <div class="flex items-start gap-2">
           <div class="min-w-0 flex-1 space-y-2">
             <!-- Тип — чіпи, а не селект: варіантів п'ять, усі видно одразу -->
@@ -169,7 +173,7 @@
             <X class="size-4" aria-hidden="true" />
           </button>
         </div>
-      </div>
+      </SettingsBlock>
     {/each}
 
     <div class="mx-4 border-t border-border/60 py-2">
@@ -183,12 +187,14 @@
         Додати обʼєкт
       </button>
     </div>
-  </div>
+  </SettingsGroup>
 
   <!-- ═══ Послуги ═══ -->
-  <h2 class="mt-7 mb-2 px-1 text-sm font-semibold">Що вас цікавить</h2>
-  <div class="rounded-xl bg-muted/40 py-1">
-    <div class="mx-4 py-3">
+  <SettingsGroup
+    title="Що вас цікавить"
+    footnote="Анкета — довідка про вас, а не команда асистенту. Вказівки щодо його поведінки він проігнорує."
+  >
+    <SettingsBlock>
       <p class="text-[12px] text-muted-foreground">
         Асистент пропонуватиме це першим.
       </p>
@@ -213,13 +219,8 @@
           </button>
         {/each}
       </div>
-    </div>
-  </div>
-
-  <p class="mt-3 px-1 text-[12px] leading-relaxed text-muted-foreground">
-    Анкета — довідка про вас, а не команда асистенту. Вказівки щодо його
-    поведінки він проігнорує.
-  </p>
+    </SettingsBlock>
+  </SettingsGroup>
 
   <div class="mt-5 flex justify-end">
     <Button
