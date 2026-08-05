@@ -80,8 +80,14 @@
 
   onMount(() => {
     if (!session?.user?.id || chatStore.initialized) return
+
+    // Чати приходять із SSR лише на /messages, де вони — зміст сторінки.
+    // На решті дашборда тягнемо їх один раз за сесію: далі список живе
+    // на подіях Pusher, і жодна навігація більше не коштує запиту до БД.
     const ssrChats = page.data.chats
     if (ssrChats) chatStore.setChats(ssrChats)
+    else chatStore.refreshChats()
+
     chatStore.subscribeToUserEvents(session.user.id).catch(() => {})
   })
 

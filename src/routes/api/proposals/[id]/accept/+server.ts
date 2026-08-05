@@ -3,6 +3,7 @@ import { json, error } from '@sveltejs/kit'
 import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
 import { Notify } from '$lib/server/notifications'
+import { cancelWaves } from '$lib/server/dispatch/scheduler'
 import type { RequestHandler } from './$types'
 
 /**
@@ -136,6 +137,10 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 
     return order
   })
+
+  // Майстра обрано, заявка більше не приймає відгуки — знімаємо заплановані
+  // хвилі, щоб таймер не будив базу заради закритої заявки.
+  cancelWaves(proposal.jobId)
 
   // Notification мастеру (fail-soft)
   try {

@@ -18,12 +18,7 @@
     Info,
   } from 'lucide-svelte'
 
-  import * as Icons from '@lucide/svelte'
-
-  function iconByName(name: string | undefined): any {
-    if (!name) return null
-    return (Icons as Record<string, unknown>)[name] ?? null
-  }
+  import { detailIcon } from '$lib/categories/cleaning/detail-icons'
 
   import { goto } from '$app/navigation'
   import { SERVICES } from '$lib/categories/cleaning/presets'
@@ -254,7 +249,7 @@
           {#if jobDetails(job).length > 0}
             <div class="jcard__chips">
               {#each jobDetails(job) as d (d.label)}
-                {@const Icon = iconByName(d.icon)}
+                {@const Icon = detailIcon(d.icon)}
                 {#if d.label === 'Коли'}
                   <!-- Дата — акцентний чип (важливо майстру) -->
                   <span class="jchip jchip--when">

@@ -3,6 +3,7 @@ import { json, error } from '@sveltejs/kit'
 import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
 import { clientRatingSelect, flattenClientRating } from '$lib/server/user-dto'
+import { cancelWaves } from '$lib/server/dispatch/scheduler'
 import type { RequestHandler } from './$types'
 
 /**
@@ -51,14 +52,14 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 
   const isOwner = job.clientId === user.id
 
-  // Если не owner — инкрементим viewCount (один раз на сессию идеально, но MVP — на каждый GET)
-  if (!isOwner) {
-    prisma.job
-      .update({ where: { id: job.id }, data: { viewsCount: { increment: 1 } } })
-      .catch(() => {})
-  }
-
-  return json({ job: { ...job, client: flattenClientRating(job.client) }, isOwner })
+  // Перегляди тут НЕ рахуємо: лічильник веде сторінка заявки
+  // (dashboard/jobs/[id]/+page.server.ts), яка робить це через JobView —
+  // один унікальний перегляд на глядача. Другий інкремент у цьому
+  // ендпоінті рахував би ту саму людину двічі й на кожен запит.
+  return json({
+    job: { ...job, client: flattenClientRating(job.client) },
+    isOwner,
+  })
 }
 
 /**
@@ -90,6 +91,10 @@ export const DELETE: RequestHandler = async ({ params, locals }) => {
       data: { status: 'REJECTED' },
     }),
   ])
+
+  // Заявки більше немає — знімаємо заплановані хвилі, щоб таймер не будив
+  // базу заради розсилки, яку диспетчер однаково відхилить.
+  cancelWaves(job.id)
 
   return json({ ok: true })
 }

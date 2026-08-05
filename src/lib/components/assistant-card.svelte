@@ -1,6 +1,9 @@
-<!-- src/lib/components/zuna.svelte -->
+<!-- src/lib/components/assistant-card.svelte -->
 <!--
-  Zuna — голос помічниці продукту: тепло, на «ти», від першої особи.
+  Картка асистента платформи. Говорить від імені Zunor, у третій особі
+  («Zunor шукає майстрів…»), без окремого персонажа — див. AGENTS.md,
+  розділ про AI-агента. Тон теплий і людяний, але це голос сервісу.
+
   Повідомлення передається пропом `text` або через children (слот).
   typewriter — ефект друкування (лише для `text`); поважає reduced-motion.
 -->
@@ -54,7 +57,7 @@
     typing = true
     displayed = ''
 
-    // Коротка пауза «Zuna друкує…», далі друк по буквах із живою швидкістю.
+    // Коротка пауза «Zunor друкує…», далі друк по буквах із живою швидкістю.
     const startDelay = setTimeout(() => {
       typing = false
       let i = 0
@@ -80,8 +83,8 @@
 >
   <div class="relative shrink-0" style="width: {size}px; height: {size}px">
     <img
-      src="/zuna-avatar.webp"
-      alt="Zuna"
+      src="/assistant-avatar.webp"
+      alt="Zunor"
       width={size}
       height={size}
       decoding="async"
@@ -99,16 +102,16 @@
   <div class="min-w-0 flex-1 pt-0.5">
     {#if showName}
       <p class="text-sm font-semibold mb-0.5" style="color: var(--foreground)">
-        Zuna · AI
+        Zunor · AI
       </p>
     {/if}
 
     {#if typing}
       <!-- Індикатор «друкує» -->
-      <div class="flex items-center gap-1 h-5" aria-label="Zuna друкує">
-        <span class="zuna-dot"></span>
-        <span class="zuna-dot"></span>
-        <span class="zuna-dot"></span>
+      <div class="flex items-center gap-1 h-5" aria-label="Zunor друкує">
+        <span class="assistant-dot"></span>
+        <span class="assistant-dot"></span>
+        <span class="assistant-dot"></span>
       </div>
     {:else}
       <div class="text-sm leading-relaxed" style="color: var(--foreground)">
@@ -116,7 +119,7 @@
           {@render children()}
         {:else if typewriter}
           {displayed}{#if !isTypingDone}<span
-              class="zuna-caret"
+              class="assistant-caret"
               aria-hidden="true">|</span
             >{/if}
         {:else}
@@ -128,20 +131,20 @@
 </div>
 
 <style>
-  .zuna-dot {
+  .assistant-dot {
     width: 6px;
     height: 6px;
     border-radius: 50%;
     background-color: var(--muted-foreground);
-    animation: zuna-bounce 1.2s infinite ease-in-out;
+    animation: assistant-bounce 1.2s infinite ease-in-out;
   }
-  .zuna-dot:nth-child(2) {
+  .assistant-dot:nth-child(2) {
     animation-delay: 0.15s;
   }
-  .zuna-dot:nth-child(3) {
+  .assistant-dot:nth-child(3) {
     animation-delay: 0.3s;
   }
-  @keyframes zuna-bounce {
+  @keyframes assistant-bounce {
     0%,
     60%,
     100% {
@@ -153,19 +156,19 @@
       opacity: 1;
     }
   }
-  .zuna-caret {
-    animation: zuna-blink 0.8s step-end infinite;
+  .assistant-caret {
+    animation: assistant-blink 0.8s step-end infinite;
     font-weight: 400;
     opacity: 0.7;
   }
-  @keyframes zuna-blink {
+  @keyframes assistant-blink {
     50% {
       opacity: 0;
     }
   }
   @media (prefers-reduced-motion: reduce) {
-    .zuna-dot,
-    .zuna-caret {
+    .assistant-dot,
+    .assistant-caret {
       animation: none;
     }
   }

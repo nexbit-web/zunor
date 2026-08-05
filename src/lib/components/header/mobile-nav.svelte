@@ -1,6 +1,10 @@
 <!-- src/lib/components/header/mobile-nav.svelte -->
 <script lang="ts">
-  import { Home, LayoutGrid, Bell, User, MessageCircle } from 'lucide-svelte'
+  import Home from '@lucide/svelte/icons/home'
+  import LayoutGrid from '@lucide/svelte/icons/layout-grid'
+  import Bell from '@lucide/svelte/icons/bell'
+  import User from '@lucide/svelte/icons/user'
+  import MessageCircle from '@lucide/svelte/icons/message-circle'
   import { page } from '$app/stores'
 
   let {

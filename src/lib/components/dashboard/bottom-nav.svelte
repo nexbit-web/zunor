@@ -14,8 +14,16 @@
     MessageCircle,
     Bell,
   } from 'lucide-svelte'
+  import { chatStore } from '$lib/stores/chat-store.svelte'
+  import { notifications } from '$lib/notifications/store.svelte'
 
-  const badges = $derived(page.data.badges ?? { notifications: 0, messages: 0 })
+  // Лічильники — з тих самих сторів, що й у сайдбарі. Дані живуть у
+  // браузері й оновлюються через Pusher, тому серверні бейджі в page.data
+  // більше не потрібні (і не коштують запиту до БД на кожну навігацію).
+  const badges = $derived({
+    notifications: notifications.unreadCount,
+    messages: chatStore.totalUnread,
+  })
 
   const items = [
     {

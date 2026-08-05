@@ -22,13 +22,19 @@ class NotificationStore {
   #channel: Channel | null = null
   #userId: string | null = null
 
-  /** Викликається один раз із <NotificationsListener /> у layout. */
-  connect(userId: string, initialUnread = 0): void {
+  /**
+   * Викликається один раз із <NotificationsListener /> у layout.
+   *
+   * Початковий лічильник тягнемо з сервера самі, а не отримуємо з даних
+   * лейауту: інакше кожна навігація коштувала б запиту до БД заради числа,
+   * яке далі однаково оновлює Pusher.
+   */
+  connect(userId: string): void {
     if (!browser || this.#userId === userId) return
 
     this.disconnect()
     this.#userId = userId
-    this.unreadCount = initialUnread
+    void this.#loadUnreadCount()
 
     try {
       const pusher = getPusher()
@@ -49,6 +55,20 @@ class NotificationStore {
     this.#userId = null
     this.items = []
     this.unreadCount = 0
+  }
+
+  /** Один запит за сесію: скільки непрочитаних на момент відкриття. */
+  async #loadUnreadCount(): Promise<void> {
+    try {
+      const res = await fetch('/api/me/badges')
+      if (!res.ok) return
+      const data = (await res.json()) as { notifications?: number }
+      // Поки запит летів, Pusher міг уже щось додати — беремо більше,
+      // щоб не загубити свіже сповіщення.
+      this.unreadCount = Math.max(this.unreadCount, data.notifications ?? 0)
+    } catch {
+      // Мовчки: лічильник лишиться на нулі й підніметься з першою подією.
+    }
   }
 
   // Стрілка, щоб зберегти this і мати ту саму посилання для unbind.

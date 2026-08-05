@@ -1,4 +1,12 @@
-import adapter from '@sveltejs/adapter-auto';
+// adapter-node, а не adapter-auto: деплой на Hostinger Business Web Hosting —
+// це звичайний довгоживучий Node-процес, а не serverless-платформа, яку
+// adapter-auto вміє розпізнати (на збірці він чесно писав
+// "Could not detect a supported production environment").
+//
+// Наслідок для коду: процес ОДИН і живе довго. Тому стан у пам'яті
+// (rate-limit, presence, account-cache, планувальник хвиль диспетчера)
+// працює як задумано — спільного сховища на кшталт Redis не потрібно.
+import adapter from '@sveltejs/adapter-node';
 
 /** @type {import('@sveltejs/kit').Config} */
 const config = {

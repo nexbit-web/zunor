@@ -13,12 +13,10 @@
   } from '$lib/components/ui/avatar'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
   import { Button } from '$lib/components/ui/button'
-  import {
-    LayoutDashboard,
-    CircleUserRound,
-    Settings,
-    LogOut,
-  } from 'lucide-svelte'
+  import LayoutDashboard from '@lucide/svelte/icons/layout-dashboard'
+  import CircleUserRound from '@lucide/svelte/icons/circle-user-round'
+  import Settings from '@lucide/svelte/icons/settings'
+  import LogOut from '@lucide/svelte/icons/log-out'
   import { signOut } from '$lib/auth-client'
   import { goto, invalidateAll } from '$app/navigation'
   import { page } from '$app/state'

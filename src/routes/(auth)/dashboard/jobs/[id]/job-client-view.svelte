@@ -2,7 +2,7 @@
 <!--
   Заявка очима клієнта + пропозиції майстрів — на токенах теми.
   Логіка 1:1: describeJob, cancelJob / acceptProposal (з модалками), showAll
-  (recommended vs others), статуси/бейджі, Zuna waiting, форматтери.
+  (recommended vs others), статуси/бейджі, картка асистента, форматтери.
   Усе клієнтське — UX; сервер валідує власність і права повторно.
 -->
 <script lang="ts">
@@ -26,7 +26,7 @@
   import { describeJob } from '$lib/categories/cleaning/describe'
   import PhotoGallery from '$lib/components/photo-gallery.svelte'
   import * as AlertDialog from '$lib/components/ui/alert-dialog'
-  import Zuna from '$lib/components/zuna.svelte'
+  import AssistantCard from '$lib/components/assistant-card.svelte'
   import toast from 'svelte-hot-french-toast'
   import {
     formatMoney,
@@ -386,13 +386,13 @@
       {/if}
     {:else if data.job.status === 'OPEN'}
       <div class="{cardCls} p-6">
-        <Zuna
+        <AssistantCard
           variant="card"
           size={48}
           showName
           online
           typewriter
-          text="Шукаю для тебе майстрів. Можеш спокійно займатися справами — я надішлю сповіщення, щойно хтось відгукнеться."
+          text="Zunor уже шукає майстрів. Можете спокійно займатися справами — сповіщення прийде, щойно хтось відгукнеться."
         />
       </div>
     {/if}

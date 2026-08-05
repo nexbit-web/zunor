@@ -11,14 +11,9 @@
     MessageSquare,
     ChevronRight,
   } from 'lucide-svelte'
-  import * as Icons from '@lucide/svelte'
   import { onMount } from 'svelte'
   import { describeJob } from '$lib/categories/cleaning/describe'
-
-  function iconByName(name: string | undefined): any {
-    if (!name) return null
-    return (Icons as Record<string, unknown>)[name] ?? null
-  }
+  import { detailIcon } from '$lib/categories/cleaning/detail-icons'
   function jobDetails(job: any) {
     return describeJob(job.metadata).filter(
       (d) => d.label !== 'Послуга' && !d.items,
@@ -295,7 +290,7 @@
         {#if jobDetails(job).length > 0}
           <div class="flex items-center gap-1.5 flex-wrap mb-3">
             {#each jobDetails(job) as d (d.label)}
-              {@const Icon = iconByName(d.icon)}
+              {@const Icon = detailIcon(d.icon)}
               {#if d.label === 'Коли'}
                 <span
                   class="inline-flex items-center gap-1.5 px-2.5 h-7 rounded-full text-xs font-semibold"

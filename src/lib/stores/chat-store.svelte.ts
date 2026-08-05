@@ -127,14 +127,23 @@ class ChatStore {
     }
   }
 
-  private async refreshChats() {
+  /**
+   * Тягне список чатів з сервера. Публічний, бо це ЄДИНЕ місце, де чати
+   * потрапляють у стор поза сторінкою /messages.
+   *
+   * Раніше список приходив із серверного лейауту на КОЖНІЙ навігації
+   * дашборда — два запити до БД за кожен перехід, хоча дані змінюються
+   * рідко й у реальному часі їх однаково оновлює Pusher. Тепер: один
+   * запит за сесію, далі стор живе сам.
+   */
+  async refreshChats(): Promise<void> {
     try {
       const res = await fetch('/api/chats')
       if (!res.ok) return
       const json = await res.json()
       this.setChats(json.chats ?? [])
     } catch {
-      // ignore
+      // ignore: без списку бейдж просто лишиться порожнім
     }
   }
 

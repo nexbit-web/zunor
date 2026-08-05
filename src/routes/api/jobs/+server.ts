@@ -4,118 +4,19 @@ import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
 import { limit } from '$lib/server/rate-limit'
 import { dispatchJob } from '$lib/server/dispatch'
+import { scheduleWaves } from '$lib/server/dispatch/scheduler'
 import { CATEGORY_SLUG } from '$lib/categories/cleaning/presets'
 import { validateCleaningMetadata } from '$lib/categories/cleaning/validate'
 import { generateTitle } from '$lib/categories/cleaning/title-gen'
 import { sanitizeJobTitle, sanitizeJobDescription } from '$lib/server/job-copy'
-import { clientRatingSelect, flattenClientRating } from '$lib/server/user-dto'
 import type { RequestHandler } from './$types'
 
 const JOB_EXPIRES_DAYS = 7
 
-/**
- * GET /api/jobs?role=client|master
- * client  — власні заявки користувача;
- * master  — відкриті заявки у місті майстра за його категоріями.
- */
-export const GET: RequestHandler = async ({ locals, url }) => {
-  const user = requireApiUser(locals)
-
-  const role = url.searchParams.get('role') ?? 'client'
-
-  if (role === 'client') {
-    const jobs = await prisma.job.findMany({
-      where: { clientId: user.id },
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        category: true,
-        city: true,
-        status: true,
-        budgetMinCents: true,
-        budgetMaxCents: true,
-        currency: true,
-        proposalsCount: true,
-        expiresAt: true,
-        createdAt: true,
-      },
-      take: 100,
-    })
-    return json({ jobs })
-  }
-
-  if (role === 'master') {
-    const me = await prisma.user.findUnique({
-      where: { id: user.id },
-      select: {
-        city: true,
-        role: true,
-        masterProfile: {
-          select: {
-            categories: true,
-            isActive: true,
-            verificationStatus: true,
-          },
-        },
-      },
-    })
-
-    if (!me || me.role !== 'MASTER') {
-      throw error(403, 'Доступ тільки для майстрів')
-    }
-    // Неактивний профіль або незаповнені місто/категорії — порожня стрічка,
-    // а не помилка: майстру нема що показувати, поки він не налаштований.
-    if (!me.masterProfile?.isActive) {
-      return json({ jobs: [] })
-    }
-    if (!me.city || me.masterProfile.categories.length === 0) {
-      return json({ jobs: [] })
-    }
-
-    const jobs = await prisma.job.findMany({
-      where: {
-        status: 'OPEN',
-        city: me.city,
-        category: { in: me.masterProfile.categories },
-        clientId: { not: user.id },
-        expiresAt: { gt: new Date() },
-      },
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        category: true,
-        city: true,
-        budgetMinCents: true,
-        budgetMaxCents: true,
-        currency: true,
-        attachments: true,
-        proposalsCount: true,
-        createdAt: true,
-        expiresAt: true,
-        client: {
-          select: {
-            id: true,
-            name: true,
-            username: true,
-            avatar: true,
-            ...clientRatingSelect,
-          },
-        },
-      },
-      take: 100,
-    })
-
-    return json({
-      jobs: jobs.map((j) => ({ ...j, client: flattenClientRating(j.client) })),
-    })
-  }
-
-  throw error(400, 'Невідомий role')
-}
+// GET тут навмисно немає: пагіновану видачу заявок (і «мої», і стрічку
+// майстра) віддає /api/jobs/feed — саме в нього ходять master-feed.svelte
+// і client-jobs.svelte. Тутешній GET?role=client|master дублював ту саму
+// логіку без пагінації, з фронту не викликався і тихо розходився з feed.
 
 /**
  * POST /api/jobs — створити заявку на прибирання і запустити dispatch.
@@ -212,12 +113,15 @@ export const POST: RequestHandler = async ({ request, locals }) => {
   })
 
   // Dispatch (хвиля 1) — мозок вирішує, кого сповістити. Чекаємо на завершення
-  // (await): на serverless функцію можуть «заморозити» одразу після відповіді,
-  // і незавершена розсилка не виконається. Помилку лише логуємо — заявка вже
-  // створена, відповідь клієнту не валимо. Хвилі 2-3 добиває cron.
+  // (await), щоб помилку було видно тут; саму помилку лише логуємо — заявка
+  // вже створена, відповідь клієнту не валимо.
   await dispatchJob(job.id, job.title).catch((err) =>
     console.error('[job:dispatch]', err),
   )
+
+  // Хвилі 2-3 плануємо в пам'яті процесу, а не кроном щохвилини: інакше
+  // база (Neon) не засинала б ніколи й вигоряла квоту навіть без трафіку.
+  scheduleWaves(job.id, job.title)
 
   return json({ job }, { status: 201 })
 }
