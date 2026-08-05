@@ -283,7 +283,6 @@
     {#if unreadCount > 0}
       <Button
         size="sm"
-        class="rounded-full"
         onclick={markAllRead}
         title="Позначити всі прочитаними"
       >
