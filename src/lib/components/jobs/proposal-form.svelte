@@ -2,6 +2,7 @@
 <script lang="ts">
   import { untrack } from 'svelte'
   import { invalidateAll } from '$app/navigation'
+  import toast from 'svelte-hot-french-toast'
   import { Loader2, AlertTriangle, Wallet } from 'lucide-svelte'
   import { Input } from '$lib/components/ui/input'
   import { Textarea } from '$lib/components/ui/textarea'
@@ -82,6 +83,9 @@
       // Успіх — invalidate щоб перезавантажилися proposal/data
       await invalidateAll()
       coverLetter = ''
+      // Відгук коштує ліда, тож мовчазне зникнення форми тут не годиться:
+      // людина має бути впевнена, що гроші пішли за справу.
+      toast.success('Відгук надіслано — очікуйте на відповідь')
     } catch (err) {
       error = err instanceof Error ? err.message : 'Помилка'
     } finally {

@@ -1,6 +1,7 @@
 <!-- src/lib/components/orders/order-actions.svelte -->
 <script lang="ts">
   import { invalidateAll, goto } from '$app/navigation'
+  import toast from 'svelte-hot-french-toast'
   import {
     Play,
     Check,
@@ -33,6 +34,19 @@
   let startOpen = $state(false)
   let completeOpen = $state(false)
 
+  /**
+   * Підтвердження успіху. Статус на сторінці й так оновиться, але це
+   * події, навколо яких крутяться гроші й домовленість — людина має
+   * почути, що саме щойно сталося, а не звіряти плашку очима.
+   * Помилки лишаються під кнопками: там на них дивляться, коли щось пішло
+   * не так, і вони не зникають за чотири секунди.
+   */
+  const DONE_MESSAGE: Record<'start' | 'complete' | 'cancel', string> = {
+    start: 'Роботу розпочато',
+    complete: 'Роботу завершено — залиште відгук про співпрацю',
+    cancel: 'Замовлення скасовано',
+  }
+
   async function callAction(
     action: 'start' | 'complete' | 'cancel',
     body: any = {},
@@ -50,6 +64,10 @@
         throw new Error(err.message ?? 'Помилка')
       }
       await invalidateAll()
+
+      // Скасування — не привід святкувати, тому нейтральний тост.
+      if (action === 'cancel') toast(DONE_MESSAGE.cancel)
+      else toast.success(DONE_MESSAGE[action])
     } catch (err) {
       error = err instanceof Error ? err.message : 'Помилка'
     } finally {

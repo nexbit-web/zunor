@@ -48,7 +48,7 @@
     duration: 4000,
     class: 'app-toast',
     style:
-      'background: var(--card); color: var(--foreground); border: 1px solid var(--border);  box-shadow: 0 4px 16px -4px rgba(0,0,0,0.25); padding: 10px 14px; font-size: 13.5px; border-radius: 1rem;',
+      'background: var(--card); color: var(--foreground); box-shadow: 0 4px 16px -4px rgba(0,0,0,0.25); padding: 10px 14px; font-size: 13.5px; border-radius: 1rem;',
     iconTheme: {
       primary: 'var(--primary)',
       secondary: 'var(--primary-foreground)',

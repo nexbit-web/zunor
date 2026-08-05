@@ -71,6 +71,9 @@
         toast.error(json?.message ?? 'Не вдалось скасувати')
         return
       }
+      // Тост, бо сторінка зникає: на /dashboard/jobs заявки вже немає,
+      // і без повідомлення незрозуміло, чи вона скасована, чи не збереглась.
+      toast('Заявку скасовано')
       goto('/dashboard/jobs', { invalidateAll: true })
     } catch {
       toast.error('Помилка зʼєднання')
@@ -92,7 +95,12 @@
         toast.error(json?.message ?? 'Не вдалось прийняти')
         return
       }
-      if (json.orderId) goto(`/dashboard/orders/${json.orderId}`, { invalidateAll: true })
+      // Ключовий момент усього маркетплейсу — тут заявка стає замовленням.
+      // Сторінка змінюється на іншу, тож підтвердити подію більше нічому:
+      // на екрані замовлення вже не написано, що майстра щойно обрано.
+      toast.success('Майстра обрано! Домовляйтесь у чаті про деталі')
+      if (json.orderId)
+        goto(`/dashboard/orders/${json.orderId}`, { invalidateAll: true })
       else location.reload()
     } catch {
       toast.error('Помилка зʼєднання')
@@ -101,8 +109,7 @@
     }
   }
 
-  const cardCls =
-    'rounded-[26px] border border-border bg-card  '
+  const cardCls = 'rounded-[26px] border border-border bg-card  '
   const badgeBase =
     'inline-flex h-[22px] items-center gap-1 rounded-full px-2.5 text-[10px] font-bold tracking-[0.06em] uppercase'
 </script>
@@ -422,8 +429,6 @@
   </AlertDialog.Content>
 </AlertDialog.Root>
 
- 
-
 <!-- Модалка прийняття пропозиції -->
 <AlertDialog.Root bind:open={acceptDialogOpen}>
   <AlertDialog.Content>
@@ -449,5 +454,3 @@
     </AlertDialog.Footer>
   </AlertDialog.Content>
 </AlertDialog.Root>
-
- 

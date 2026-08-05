@@ -1,6 +1,7 @@
 <!-- src/routes/(auth)/dashboard/proposals/+page.svelte -->
 <script lang="ts">
-  import { goto } from '$app/navigation'
+  import { goto, invalidateAll } from '$app/navigation'
+  import toast from 'svelte-hot-french-toast'
   import {
     Avatar,
     AvatarFallback,
@@ -57,12 +58,33 @@
     }
   }
 
+  let withdrawing = $state<string | null>(null)
+
   async function withdraw(id: string) {
+    if (withdrawing) return
     if (!confirm('Відкликати відгук?')) return
-    const res = await fetch(`/api/proposals/${id}`, { method: 'DELETE' })
-    if (res.ok) {
-      // Перезавантажити сторінку
-      window.location.reload()
+
+    withdrawing = id
+    try {
+      const res = await fetch(`/api/proposals/${id}`, { method: 'DELETE' })
+
+      // Раніше невдача проходила мовчки: людина тиснула кнопку, і
+      // не відбувалось РІВНО НІЧОГО — ні помилки, ні змін у списку.
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        toast.error(json?.message ?? 'Не вдалося відкликати відгук')
+        return
+      }
+
+      // invalidateAll, а не window.location.reload(): перезавантаження
+      // сторінки гасило екран у білий і тягнуло весь бандл заново заради
+      // одного зниклого рядка.
+      await invalidateAll()
+      toast.success('Відгук відкликано')
+    } catch {
+      toast.error('Помилка зʼєднання')
+    } finally {
+      withdrawing = null
     }
   }
 </script>
@@ -256,7 +278,9 @@
                     <button
                       type="button"
                       onclick={() => withdraw(proposal.id)}
-                      class="size-6 rounded-full flex items-center justify-center cursor-pointer hover:opacity-70"
+                      disabled={withdrawing === proposal.id}
+                      aria-label="Відкликати відгук"
+                      class="size-6 rounded-full flex items-center justify-center cursor-pointer hover:opacity-70 disabled:opacity-40"
                       style="color: var(--muted-foreground)"
                       title="Відкликати"
                     >

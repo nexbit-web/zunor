@@ -1,6 +1,7 @@
 <!-- src/lib/components/orders/review-form.svelte -->
 <script lang="ts">
   import { invalidateAll } from '$app/navigation'
+  import toast from 'svelte-hot-french-toast'
   import { Star, Loader2 } from 'lucide-svelte'
   import { Button } from '$lib/components/ui/button'
   import { Textarea } from '$lib/components/ui/textarea'
@@ -44,6 +45,9 @@
         throw new Error(err.message ?? 'Помилка')
       }
       await invalidateAll()
+      // Після invalidateAll форма зникає — сама по собі це двозначна
+      // подія: так виглядав би і збій, який стер написане.
+      toast.success('Дякуємо за відгук!')
     } catch (err) {
       error = err instanceof Error ? err.message : 'Помилка'
     } finally {

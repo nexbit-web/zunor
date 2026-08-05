@@ -5,6 +5,7 @@
 // на той самий Pusher-канал. Тепер підписка одна, читачів багато.
 
 import { browser } from '$app/environment'
+import toast from 'svelte-hot-french-toast'
 import { getPusher } from '$lib/pusher-client'
 import { notificationSound } from './sound.svelte'
 import { showNotificationToast } from './toast'
@@ -84,29 +85,55 @@ class NotificationStore {
     showNotificationToast(n)
   }
 
-  /** Оптимістична позначка: UI оновлюється миттєво, запит іде фоном. */
+  /**
+   * Оптимістична позначка: UI оновлюється миттєво, запит іде фоном.
+   *
+   * Якщо запит не пройшов — вертаємо як було. Раніше збій ковтався
+   * мовчки: бейдж гаснув, у базі непрочитане лишалось, і воно поверталось
+   * при наступному завантаженні сторінки нізвідки. Інтерфейс не має
+   * показувати те, чого на сервері не сталось.
+   */
   async markRead(id: string): Promise<void> {
+    const prevItems = this.items
+    const prevCount = this.unreadCount
+
     this.items = this.items.map((n) =>
       n.id === id ? { ...n, isRead: true } : n,
     )
     this.unreadCount = Math.max(0, this.unreadCount - 1)
 
-    await fetch('/api/notifications', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'mark-read', ids: [id] }),
-    }).catch(() => {})
+    if (!(await this.#post({ action: 'mark-read', ids: [id] }))) {
+      this.items = prevItems
+      this.unreadCount = prevCount
+    }
   }
 
   async markAllRead(): Promise<void> {
+    const prevItems = this.items
+    const prevCount = this.unreadCount
+
     this.items = this.items.map((n) => ({ ...n, isRead: true }))
     this.unreadCount = 0
 
-    await fetch('/api/notifications', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'mark-all-read' }),
-    }).catch(() => {})
+    if (!(await this.#post({ action: 'mark-all-read' }))) {
+      this.items = prevItems
+      this.unreadCount = prevCount
+      toast.error('Не вдалося позначити прочитаними')
+    }
+  }
+
+  /** true — сервер прийняв. Мережеві збої не кидають назовні. */
+  async #post(body: Record<string, unknown>): Promise<boolean> {
+    try {
+      const res = await fetch('/api/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      return res.ok
+    } catch {
+      return false
+    }
   }
 
   /** Підвантаження стрічки при відкритті випадайки. */
