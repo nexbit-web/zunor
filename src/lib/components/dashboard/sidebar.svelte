@@ -172,7 +172,7 @@
       badge: 'notifications',
     },
     {
-      href: '/dashboard/proposals',
+      href: '/dashboard/analytics',
       label: 'Аналітика',
       icon: AnalyticsIcon,
       only: 'MASTER',

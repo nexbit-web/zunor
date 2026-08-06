@@ -9,6 +9,7 @@
     Reply,
     X,
   } from 'lucide-svelte'
+  import { Button } from '$lib/components/ui/button'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
   import type { ChatMessage } from './types'
 
@@ -376,7 +377,7 @@
 </script>
 
 <div
-  class="relative flex items-end"
+  class="relative flex items-end gap-2"
   ondragenter={onDragEnter}
   ondragover={(e) => e.preventDefault()}
   ondragleave={onDragLeave}
@@ -386,7 +387,7 @@
 >
   {#if dragActive}
     <div
-      class="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-[24px] border-2 border-dashed border-primary bg-primary/10"
+      class="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-3xl border-2 border-dashed border-primary bg-primary/10 backdrop-blur-xl"
     >
       <div class="text-center">
         <ImageIcon class="mx-auto mb-1.5 size-8 text-primary" />
@@ -395,19 +396,82 @@
     </div>
   {/if}
 
-  <!-- ═══ Пілюля: превʼю зверху, робочий рядок знизу ═══
-       p-1 + рядок 40px = 48px висоти.
-       Скріпка, поле й кнопка — сусіди в одному flex-рядку: тільки так
-       gap однаковий з обох боків, а items-end тримає їх на одній лінії. -->
+  <!-- ═══ Скріпка ═══
+       Стоїть ЗЗОВНІ поля, окремою кнопкою. Раніше вона жила всередині
+       пілюлі й через це поле мусило мати внутрішні відступи під неї;
+       тепер пілюля містить лише текст, а обидві дії — по краях рядка. -->
+  {#if !editing}
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger>
+        {#snippet child({ props })}
+          <Button
+            {...props}
+            variant="ghost"
+            size="icon-lg"
+            aria-label="Додати вкладення"
+            class="size-10.5 shrink-0 rounded-full border-border/60 bg-card/85 text-muted-foreground shadow-sm backdrop-blur-xl"
+          >
+            <Paperclip class="size-5" />
+          </Button>
+        {/snippet}
+      </DropdownMenu.Trigger>
+
+      <DropdownMenu.Content
+        align="start"
+        sideOffset={12}
+        class="z-50 w-56 rounded-3xl border border-border bg-card p-1.5 shadow-lg"
+      >
+        <DropdownMenu.Item
+          class="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] font-medium transition-colors outline-none select-none hover:bg-accent hover:text-accent-foreground data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+          onclick={() => photoInput?.click()}
+        >
+          <ImageIcon
+            class="pointer-events-none size-5 shrink-0 text-muted-foreground"
+          />
+          <span class="pointer-events-none">Фото або Відео</span>
+        </DropdownMenu.Item>
+
+        <DropdownMenu.Item
+          class="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] font-medium transition-colors outline-none select-none hover:bg-accent hover:text-accent-foreground data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+          onclick={() => fileInput?.click()}
+        >
+          <FileText
+            class="pointer-events-none size-5 shrink-0 text-muted-foreground"
+          />
+          <span class="pointer-events-none">Файл</span>
+        </DropdownMenu.Item>
+      </DropdownMenu.Content>
+    </DropdownMenu.Root>
+
+    <input
+      bind:this={photoInput}
+      type="file"
+      accept="image/*"
+      onchange={onFileInput}
+      class="sr-only"
+    />
+    <input
+      bind:this={fileInput}
+      type="file"
+      accept="application/pdf,.doc,.docx,.zip,.txt,.xlsx"
+      onchange={onFileInput}
+      class="sr-only"
+    />
+  {/if}
+
+  <!-- ═══ Пілюля: превʼю зверху, поле знизу ═══
+       Без вертикальних відступів: висота пілюлі = висота поля (40px),
+       рівно як у кнопок по боках. Відступи всередині дає сама textarea
+       через .composer-metrics. -->
   <div
-    class="composer-pill bg-card text-foreground flex min-w-0 flex-1 flex-col p-1 shadow-sm"
-    class:rounded-[24px]={isExpanded}
+    class="composer-pill flex min-w-0 flex-1 flex-col border border-border/60 bg-card/85 px-3 text-foreground shadow-sm backdrop-blur-xl"
+    class:rounded-3xl={isExpanded}
     class:rounded-full={!isExpanded}
   >
     <!-- ─── Превʼю: редагування / відповідь ─── -->
     {#if editing}
       <div
-        class="mx-1 mt-1 mb-1.5 flex items-center gap-2 rounded-xl border-l-2 border-l-primary bg-muted px-3 py-1.5"
+        class="mt-2 mb-1.5 flex items-center gap-2 rounded-xl border-l-2 border-l-primary bg-muted px-3 py-1.5"
       >
         <Pencil class="size-3.5 shrink-0 text-primary" />
         <div class="min-w-0 flex-1">
@@ -430,7 +494,7 @@
       </div>
     {:else if replyTo}
       <div
-        class="mx-1 mt-1 mb-1.5 flex items-center gap-2 rounded-xl border-l-2 border-l-primary bg-muted px-3 py-1.5"
+        class="mt-2 mb-1.5 flex items-center gap-2 rounded-xl border-l-2 border-l-primary bg-muted px-3 py-1.5"
       >
         <Reply class="size-3.5 shrink-0 text-primary" />
         <div class="min-w-0 flex-1">
@@ -457,7 +521,7 @@
     <!-- ─── Превʼю вкладення ─── -->
     {#if pending && !editing}
       <div
-        class="mx-1 mt-1 mb-1.5 flex items-center gap-3 rounded-xl bg-muted px-3 py-1.5"
+        class="mt-2 mb-1.5 flex items-center gap-3 rounded-xl bg-muted px-3 py-1.5"
       >
         {#if pending.previewUrl}
           <img
@@ -489,99 +553,44 @@
       </div>
     {/if}
 
-    <!-- ─── Робочий рядок: скріпка · поле · кнопка ─── -->
-    <div class="flex items-end gap-0.5">
-      {#if !editing}
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger>
-            <div
-              role="button"
-              tabindex="0"
-              aria-label="Додати вкладення"
-              class="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none"
-            >
-              <Paperclip class="size-5" />
-            </div>
-          </DropdownMenu.Trigger>
-
-          <DropdownMenu.Content
-            align="start"
-            sideOffset={12}
-            class="z-50 w-56 rounded-3xl border border-border bg-card p-1.5 shadow-lg"
-          >
-            <DropdownMenu.Item
-              class="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] font-medium transition-colors outline-none select-none hover:bg-accent hover:text-accent-foreground data-highlighted:bg-accent data-highlighted:text-accent-foreground"
-              onclick={() => photoInput?.click()}
-            >
-              <ImageIcon
-                class="pointer-events-none size-5 shrink-0 text-muted-foreground"
-              />
-              <span class="pointer-events-none">Фото або Відео</span>
-            </DropdownMenu.Item>
-
-            <DropdownMenu.Item
-              class="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] font-medium transition-colors outline-none select-none hover:bg-accent hover:text-accent-foreground data-highlighted:bg-accent data-highlighted:text-accent-foreground"
-              onclick={() => fileInput?.click()}
-            >
-              <FileText
-                class="pointer-events-none size-5 shrink-0 text-muted-foreground"
-              />
-              <span class="pointer-events-none">Файл</span>
-            </DropdownMenu.Item>
-          </DropdownMenu.Content>
-        </DropdownMenu.Root>
-
-        <input
-          bind:this={photoInput}
-          type="file"
-          accept="image/*"
-          onchange={onFileInput}
-          class="sr-only"
-        />
-        <input
-          bind:this={fileInput}
-          type="file"
-          accept="application/pdf,.doc,.docx,.zip,.txt,.xlsx"
-          onchange={onFileInput}
-          class="sr-only"
-        />
-      {/if}
-
-      <!-- Дзеркало лежить під textarea і має рівно ту саму ширину -->
-      <div class="relative min-w-0 flex-1">
-        <div
-          bind:this={mirror}
-          aria-hidden="true"
-          class="composer-metrics pointer-events-none invisible absolute inset-x-0 top-0 whitespace-pre-wrap [overflow-wrap:break-word]"
-        >
-          {mirrorText}
-        </div>
-
-        <textarea
-          bind:this={textarea}
-          bind:value={text}
-          onkeydown={onKeyDown}
-          onpaste={onPaste}
-          placeholder={editing ? 'Редагувати повідомлення' : 'Повідомлення'}
-          rows="1"
-          style:height={`${height}px`}
-          maxlength={MAX_TEXT_LENGTH}
-          class="composer-metrics composer-input block w-full resize-none bg-transparent text-foreground outline-none placeholder:text-muted-foreground"
-        ></textarea>
+    <!-- Дзеркало лежить під textarea і має рівно ту саму ширину -->
+    <div class="relative min-w-0">
+      <div
+        bind:this={mirror}
+        aria-hidden="true"
+        class="composer-metrics pointer-events-none invisible absolute inset-x-0 top-0 wrap-break-word whitespace-pre-wrap"
+      >
+        {mirrorText}
       </div>
 
-      <!-- ─── Кнопка надсилання ─── -->
-      <button
-        type="button"
-        onclick={send}
-        disabled={!canSend}
-        class="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-primary text-primary-foreground transition-all hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
-        aria-label={editing ? 'Зберегти' : 'Надіслати'}
-      >
-        <ArrowUp class="size-5" />
-      </button>
+      <textarea
+        bind:this={textarea}
+        bind:value={text}
+        onkeydown={onKeyDown}
+        onpaste={onPaste}
+        placeholder={editing ? 'Редагувати повідомлення' : 'Повідомлення'}
+        rows="1"
+        style:height={`${height}px`}
+        maxlength={MAX_TEXT_LENGTH}
+        class="composer-metrics composer-input block w-full resize-none bg-transparent text-foreground outline-none placeholder:text-muted-foreground"
+      ></textarea>
     </div>
   </div>
+
+  <!-- ═══ Надіслати ═══
+       Звичайна кнопка з ui: variant default — це чорне на світлій темі
+       й біле на темній. Акцентний колір тут не потрібен: у рядку і так
+       одна головна дія, а теракота поруч із пузирями своїх повідомлень
+       (вони теж акцентні) читалась як другий такий самий пузир. -->
+  <Button
+    onclick={send}
+    disabled={!canSend}
+    size="icon-lg"
+    aria-label={editing ? 'Зберегти' : 'Надіслати'}
+    class="size-10.5 shrink-0 rounded-full shadow-sm"
+  >
+    <ArrowUp class="size-5" />
+  </Button>
 </div>
 
 <style>

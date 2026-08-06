@@ -95,8 +95,35 @@
     cancelReason = ''
   }
 
-  function openChat() {
-    if (chatId) goto(`/dashboard/messages/${chatId}`)
+  /**
+   * Чат заводиться на першому натисканні, а не разом із замовленням.
+   * Раніше кнопка була прихована, доки chatId порожній, — а він завжди
+   * був заповнений, бо чат створювався автоматично при виборі майстра.
+   */
+  let openingChat = $state(false)
+
+  async function openChat() {
+    if (openingChat) return
+
+    if (chatId) {
+      goto(`/dashboard/messages/${chatId}`)
+      return
+    }
+
+    openingChat = true
+    try {
+      const res = await fetch(`/api/orders/${orderId}/chat`, { method: 'POST' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || !json?.chatId) {
+        toast.error(json?.message ?? 'Не вдалося відкрити чат')
+        return
+      }
+      goto(`/dashboard/messages/${json.chatId}`)
+    } catch {
+      toast.error('Помилка зʼєднання')
+    } finally {
+      openingChat = false
+    }
   }
 
   // ─── Логіка кнопок ───
@@ -133,12 +160,14 @@
       </Button>
     {/if}
 
-    {#if chatId}
-      <Button variant="outline" onclick={openChat}>
+    <Button variant="outline" onclick={openChat} disabled={openingChat}>
+      {#if openingChat}
+        <Loader2 class="size-4 animate-spin" />
+      {:else}
         <MessageCircle class="size-4" />
-        Чат
-      </Button>
-    {/if}
+      {/if}
+      {chatId ? 'Чат' : 'Написати'}
+    </Button>
 
     {#if canCancel}
       <Button

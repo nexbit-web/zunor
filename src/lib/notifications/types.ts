@@ -38,10 +38,15 @@ export interface Notification {
 /**
  * Куди веде сповіщення. Одна функція на застосунок: коли правило жило
  * у двох компонентах, вони вже встигли розійтись у гілці `chatId`.
+ *
+ * Гілки по `proposalId` тут немає навмисно. Вона вела на
+ * /dashboard/proposals, і саме туди прилітав КЛІЄНТ зі сповіщення
+ * «майстер відгукнувся» — а та сторінка доступна лише майстрам, тож
+ * клієнта мовчки редіректило на дашборд. Відгуки клієнт бачить на
+ * сторінці своєї заявки, і `jobId` у цьому сповіщенні теж є.
  */
 export function linkFor(n: Notification): string {
   if (n.orderId) return `/dashboard/orders/${n.orderId}`
-  if (n.proposalId) return '/dashboard/proposals'
   if (n.jobId) return `/dashboard/jobs/${n.jobId}`
   if (n.chatId) return `/dashboard/messages/${n.chatId}`
   return '/dashboard/notifications'

@@ -10,12 +10,16 @@ import type { RequestHandler } from './$types'
  * POST /api/proposals/[id]/accept — клиент выбирает мастера.
  *
  * Атомарно:
- *   1. Создаёт Chat (client + master)
- *   2. Создаёт Order (status=CREATED, chatId)
- *   3. Этот proposal → ACCEPTED
- *   4. Остальные proposals → REJECTED
- *   5. Job → IN_PROGRESS + selectedOrderId
- *   6. OrderEvent(CREATED)
+ *   1. Создаёт Order (status=CREATED, БЕЗ чата)
+ *   2. Этот proposal → ACCEPTED
+ *   3. Остальные proposals → REJECTED
+ *   4. Job → IN_PROGRESS + selectedOrderId
+ *   5. OrderEvent(CREATED)
+ *
+ * Чат тут НЕ створюється. Раніше створювався — і кожен вибір майстра
+ * плодив порожній чат, який одразу з'являвся в обох списках повідомлень,
+ * хоча ніхто не написав жодного слова. Тепер він заводиться на першу
+ * спробу написати: POST /api/orders/[id]/chat.
  *
  * После (fail-soft):
  *   - Notification мастеру
@@ -61,17 +65,8 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 
   // Атомарная транзакция
   const result = await prisma.$transaction(async (tx) => {
-    // 1. Создаём Chat с двумя участниками
-    const chat = await tx.chat.create({
-      data: {
-        members: {
-          create: [{ userId: user.id }, { userId: proposal.masterId }],
-        },
-      },
-      select: { id: true },
-    })
-
-    // 2. Создаём Order
+    // 1. Создаём Order. chatId лишається null — чат заведе перший, хто
+    //    натисне «Написати» (POST /api/orders/[id]/chat).
     const order = await tx.order.create({
       data: {
         clientId: user.id,
@@ -82,7 +77,6 @@ export const POST: RequestHandler = async ({ params, locals }) => {
         priceCents: proposal.priceCents,
         currency: 'UAH',
         status: 'CREATED',
-        chatId: chat.id,
       },
       select: {
         id: true,

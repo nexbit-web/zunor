@@ -110,14 +110,42 @@
       copyConfirm = true
       if (copyTimeout) clearTimeout(copyTimeout)
       copyTimeout = setTimeout(() => (copyConfirm = false), 2000)
-    toast.success('Скопійовано', { duration: 2000 })
+      toast.success('Скопійовано', { duration: 2000 })
     } catch {
       /* ignore */
     }
   }
 
-  function openChat() {
-    if (order.chatId) goto(`/dashboard/messages/${order.chatId}`)
+  /**
+   * Чат заводиться на першому натисканні, а не разом із замовленням —
+   * інакше кожен вибір майстра плодив порожній чат в обох списках.
+   */
+  let openingChat = $state(false)
+
+  async function openChat() {
+    if (openingChat) return
+
+    if (order.chatId) {
+      goto(`/dashboard/messages/${order.chatId}`)
+      return
+    }
+
+    openingChat = true
+    try {
+      const res = await fetch(`/api/orders/${order.id}/chat`, {
+        method: 'POST',
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok || !j?.chatId) {
+        toast.error(j?.message ?? 'Не вдалося відкрити чат')
+        return
+      }
+      goto(`/dashboard/messages/${j.chatId}`)
+    } catch {
+      toast.error('Помилка зʼєднання')
+    } finally {
+      openingChat = false
+    }
   }
 
   onDestroy(() => {
@@ -471,9 +499,10 @@
             variant="outline"
             class="h-11 w-full cursor-pointer rounded-[13px] font-semibold"
             onclick={openChat}
-            disabled={!order.chatId}
+            disabled={openingChat}
           >
-            <MessageSquare class="mr-2 size-4" aria-hidden="true" /> Перейти в чат
+            <MessageSquare class="mr-2 size-4" aria-hidden="true" />
+            {order.chatId ? 'Перейти в чат' : 'Написати повідомлення'}
           </Button>
         </div>
 

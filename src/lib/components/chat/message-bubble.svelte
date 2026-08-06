@@ -77,7 +77,9 @@
   // Варіанти кольору тримаємо тут, а не в розмітці:
   // інакше кожен вкладений елемент обростає своїм тернарником
   const bubbleTone = $derived(
-    isMine ? 'bg-primary text-primary-foreground' : 'bg-card text-card-foreground',
+    isMine
+      ? 'bg-primary text-primary-foreground'
+      : 'bg-card text-card-foreground',
   )
   const metaTone = $derived(
     isMine ? 'text-primary-foreground/75' : 'text-muted-foreground',
@@ -363,14 +365,26 @@
 
   .tail-in::after {
     left: -11px;
-    -webkit-mask: radial-gradient(circle 20px at 0 0, transparent 0 19.5px, #000 20px);
+    -webkit-mask: radial-gradient(
+      circle 20px at 0 0,
+      transparent 0 19.5px,
+      #000 20px
+    );
     mask: radial-gradient(circle 20px at 0 0, transparent 0 19.5px, #000 20px);
   }
 
   .tail-out::after {
     right: -11px;
-    -webkit-mask: radial-gradient(circle 20px at 100% 0, transparent 0 19.5px, #000 20px);
-    mask: radial-gradient(circle 20px at 100% 0, transparent 0 19.5px, #000 20px);
+    -webkit-mask: radial-gradient(
+      circle 20px at 100% 0,
+      transparent 0 19.5px,
+      #000 20px
+    );
+    mask: radial-gradient(
+      circle 20px at 100% 0,
+      transparent 0 19.5px,
+      #000 20px
+    );
   }
 
   /* Час має сідати на базову лінію останнього рядка, а не над нею */

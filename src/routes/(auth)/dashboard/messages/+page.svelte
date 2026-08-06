@@ -54,7 +54,7 @@
 </svelte:head>
 
 <!-- Mobile: тільки список чатів full-screen -->
-<div class="h-full p-2 md:hidden">
+<div class="h-full md:hidden">
   <ChatListSidebar currentUserId={data.currentUserId} />
 </div>
 
@@ -71,13 +71,27 @@
       maxSize={MAX_SIZE}
       onResize={saveSize}
     >
-      <div class="h-full py-3 pr-1.5 pl-3">
+      <div class="h-full border-r border-border/60">
         <ChatListSidebar currentUserId={data.currentUserId} />
       </div>
     </Resizable.Pane>
 
-    <Resizable.Handle withHandle={false} class="bg-transparent" />
+    <Resizable.Handle withHandle={false} class="w-0 bg-transparent" />
 
-    <Resizable.Pane defaultSize={100 - initialSize}></Resizable.Pane>
+    <Resizable.Pane defaultSize={100 - initialSize}>
+      <!-- Порожній стан правої колонки: знак по центру, без підкладки. -->
+      <div
+        class="flex h-full flex-col items-center justify-center bg-background px-6 text-center"
+      >
+        <MessageSquare
+          class="size-14 text-muted-foreground/70"
+          strokeWidth={1}
+        />
+        <h2 class="mt-6 text-lg font-medium">Оберіть чат</h2>
+        <p class="mt-2 max-w-70 text-sm leading-relaxed text-muted-foreground">
+          Листування з клієнтами й майстрами — ліворуч.
+        </p>
+      </div>
+    </Resizable.Pane>
   </Resizable.PaneGroup>
 </div>

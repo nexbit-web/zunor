@@ -66,8 +66,9 @@
       maxSize={MAX_SIZE}
       onResize={saveSize}
     >
-      <!-- Відступи навколо панелі: градієнт сторінки лишається видимим -->
-      <div class="h-full py-3 pr-1.5 pl-3">
+      <!-- Без відступів: сайдбар і чат — одна поверхня, розділена лінією,
+           а не дві картки, що плавають над шпалерами. -->
+      <div class="h-full border-r border-border/60">
         <ChatListSidebar
           activeChatId={data.chat.id}
           currentUserId={data.currentUserId}
@@ -75,7 +76,7 @@
       </div>
     </Resizable.Pane>
 
-    <Resizable.Handle withHandle={false} class="bg-transparent" />
+    <Resizable.Handle withHandle={false} class="w-0 bg-transparent" />
 
     <Resizable.Pane defaultSize={100 - initialSize}>
       <ChatWindow
