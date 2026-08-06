@@ -164,7 +164,7 @@
   <!-- ─── СПИСОК ─── -->
   <!-- pb на мобільному враховує домашню смужку iPhone -->
   <div
-    class="chat-scroll flex-1 overflow-y-auto px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+    class="flex-1 overflow-y-auto px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
   >
     {#if !chatStore.initialized}
       <div class="space-y-1">
@@ -277,40 +277,3 @@
     {/if}
   </div>
 </div>
-
-<style>
-  /* Тонка смужка, як у стрічці повідомлень */
-  .chat-scroll {
-    scrollbar-width: thin;
-    scrollbar-color: rgb(0 0 0 / 0.18) transparent;
-  }
-
-  .chat-scroll::-webkit-scrollbar {
-    width: 6px;
-  }
-
-  .chat-scroll::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .chat-scroll::-webkit-scrollbar-thumb {
-    background-color: rgb(0 0 0 / 0.18);
-    border-radius: 9999px;
-  }
-
-  .chat-scroll::-webkit-scrollbar-thumb:hover {
-    background-color: rgb(0 0 0 / 0.3);
-  }
-
-  :global(.dark) .chat-scroll {
-    scrollbar-color: rgb(255 255 255 / 0.2) transparent;
-  }
-
-  :global(.dark) .chat-scroll::-webkit-scrollbar-thumb {
-    background-color: rgb(255 255 255 / 0.2);
-  }
-
-  :global(.dark) .chat-scroll::-webkit-scrollbar-thumb:hover {
-    background-color: rgb(255 255 255 / 0.35);
-  }
-</style>

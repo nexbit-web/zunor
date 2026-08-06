@@ -1,26 +1,23 @@
 <!-- src/lib/components/jobs/master-feed.svelte -->
 <script lang="ts">
-  import { Spinner } from '$lib/components/ui/spinner'
   import {
     Avatar,
     AvatarFallback,
     AvatarImage,
   } from '$lib/components/ui/avatar'
+  import { Badge } from '$lib/components/ui/badge'
+  import { Button } from '$lib/components/ui/button'
+  import { Card, CardContent, CardFooter } from '$lib/components/ui/card'
+  import * as Alert from '$lib/components/ui/alert'
+  import * as Tabs from '$lib/components/ui/tabs'
+  import JobCardSkeleton from './job-card-skeleton.svelte'
   import { onMount, untrack } from 'svelte'
   import { fly } from 'svelte/transition'
   import { quintOut } from 'svelte/easing'
-  import {
-    Briefcase,
-    Star,
-    ChevronRight,
-    AlertCircle,
-    Clock,
-    Info,
-  } from 'lucide-svelte'
+  import { Star, ChevronRight, AlertCircle, Clock, Search } from 'lucide-svelte'
 
   import { detailIcon } from '$lib/categories/cleaning/detail-icons'
 
-  import { goto } from '$app/navigation'
   import { SERVICES } from '$lib/categories/cleaning/presets'
   import { describeJob } from '$lib/categories/cleaning/describe'
 
@@ -43,7 +40,10 @@
   let sentinelEl = $state<HTMLDivElement | null>(null)
 
   // Фільтр по типу послуги
-  let activeService = $state<string>('')
+  // 'all', а не порожній рядок: для bits-ui Tabs "" означає «нічого не
+  // обрано», тож вкладка «Усі» ніколи не підсвічувалась би активною.
+  const ALL = 'all'
+  let activeService = $state<string>(ALL)
 
   function buildQuery(cursor: string | null) {
     const p = new URLSearchParams({ view: 'feed' })
@@ -51,20 +51,9 @@
     return p.toString()
   }
 
-  async function reload() {
-    loadingMore = true
-    try {
-      const res = await fetch(`/api/jobs/feed?${buildQuery(null)}`)
-      if (!res.ok) return
-      const json = await res.json()
-      jobs = json.jobs
-      nextCursor = json.nextCursor
-    } catch (e) {
-      console.error('[master-feed:reload]', e)
-    } finally {
-      loadingMore = false
-    }
-  }
+  // reload() тут колись була, але її ніхто не викликав: фільтр по типу
+  // послуги працює на клієнті (visibleJobs), запит до сервера для цього
+  // не потрібен. Прибрана, щоб не здавалось, що фільтр ходить у мережу.
 
   async function loadMore() {
     if (loadingMore || !nextCursor) return
@@ -96,7 +85,7 @@
 
   // Клієнтська фільтрація по типу послуги (metadata.service)
   const visibleJobs = $derived(
-    activeService
+    activeService !== ALL
       ? jobs.filter((j) => {
           const meta = j.metadata as Record<string, unknown> | null
           return meta?.service === activeService
@@ -128,392 +117,224 @@
   function initials(name: string | null | undefined) {
     return (name ?? '?')[0]?.toUpperCase() ?? '?'
   }
-  // Коректне укр. відмінювання (1 заявка, 2-4 заявки, 5+ заявок),
-  // з урахуванням винятків 11-14 → заявок та 21/22 → заявка/заявки.
-  function pluralizeJobs(n: number) {
-    const mod10 = n % 10
-    const mod100 = n % 100
-    if (mod10 === 1 && mod100 !== 11) return `${n} заявка`
-    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14))
-      return `${n} заявки`
-    return `${n} заявок`
-  }
+
+  // Сітка карток. Один рядок замість блока CSS: колонки самі
+  // підлаштовуються під ширину, мінімум 380px на картку.
+  const GRID = 'grid gap-4 sm:grid-cols-[repeat(auto-fill,minmax(380px,1fr))]'
 </script>
 
 <!-- Header -->
-<header class="mb-6">
-  <h1
-    class="text-2xl sm:text-3xl font-bold tracking-tight"
-    style="color: var(--foreground); letter-spacing: -0.02em"
-  >
-    Заявки поруч
-  </h1>
-  <p class="text-sm mt-1.5" style="color: var(--muted-foreground)">
-    Нові замовлення на прибирання у вашому місті
-  </p>
+<header class="mb-6 flex items-center justify-between gap-3 sm:mb-8">
+  <div class="flex min-w-0 items-center gap-2.5">
+    <h1 class="truncate text-2xl font-semibold tracking-tight sm:text-3xl">
+      Заявки поруч
+    </h1>
+    {#if !blockReason && visibleJobs.length > 0}
+      <!-- Лічильник переїхав із окремого рядка під фільтрами сюди:
+           одне число, один рядок, менше вертикального шуму. -->
+      <span
+        class="rounded-full bg-primary/12 px-2 py-0.5 text-xs font-semibold tabular-nums text-primary"
+      >
+        {visibleJobs.length}
+      </span>
+    {/if}
+  </div>
 </header>
 
 {#if blockReason}
-  <div
-    class="mb-6 p-4 rounded-2xl flex items-start gap-3"
-    style="background-color: color-mix(in oklch, #f59e0b 8%, transparent); border: 1px solid color-mix(in oklch, #f59e0b 25%, transparent)"
-  >
-    <AlertCircle class="size-5 shrink-0 mt-0.5" style="color: #b45309" />
-    <div>
-      <p class="text-sm font-semibold" style="color: #b45309">{blockReason}</p>
-      <p class="text-sm mt-1" style="color: var(--muted-foreground)">
-        Заповніть профіль майстра щоб бачити доступні заявки.
-      </p>
-      <button
-        type="button"
-        onclick={() => goto('/settings')}
-        class="text-sm font-medium mt-2 cursor-pointer hover:underline"
-        style="color: var(--primary)"
+  <!-- Alert із ui замість власного блока: там кольори були захардкожені
+       шістнадцятковими (#f59e0b, #b45309) повз тему, тож у темній вони не
+       мінялись. Посилання було <button onclick={goto('/settings')}> —
+       такого роуту не існує, воно вело в 404. -->
+  <Alert.Root variant="destructive" class="mb-6">
+    <AlertCircle />
+    <Alert.Title>{blockReason}</Alert.Title>
+    <Alert.Description>
+      Заповніть профіль майстра, щоб бачити доступні заявки.
+      <Button
+        variant="link"
+        size="sm"
+        href="/dashboard/settings/profile"
+        class="mt-1 h-auto p-0"
       >
         Перейти до налаштувань →
-      </button>
-    </div>
-  </div>
+      </Button>
+    </Alert.Description>
+  </Alert.Root>
 {:else}
-  <!-- Фільтр по типу послуги -->
-  <div class="filters">
-    <button
-      type="button"
-      onclick={() => (activeService = '')}
-      class="fpill {activeService === '' ? 'fpill--on' : 'fpill--off'}"
-    >
-      Усі
-    </button>
-    {#each SERVICES as s (s.key)}
-      <button
-        type="button"
-        onclick={() => (activeService = s.key)}
-        class="fpill {activeService === s.key ? 'fpill--on' : 'fpill--off'}"
-      >
-        {s.label}
-      </button>
-    {/each}
-  </div>
-{/if}
+  <!--
+    Фільтр по типу послуги — Tabs із ui. Раніше це були власні `.fpill`
+    із рукописним CSS на 40 рядків, який дублював те, що вже вміє List.
+    Обгортка зі скролом лишилась: пілюль сім, у рядок вони не влазять.
 
-{#if !blockReason && visibleJobs.length > 0}
-  <p class="count">{pluralizeJobs(visibleJobs.length)}</p>
-{/if}
-
-<!-- List -->
-{#if visibleJobs.length === 0 && !loadingMore}
-  <div
-    class="rounded-4xl px-6 py-16 text-center"
-    style="background-color: var(--card); border: 1px solid var(--border)"
-  >
+    Показуємо ЛИШЕ коли є що фільтрувати. Умова саме на `jobs`, а не на
+    `visibleJobs`: коли фільтр обрано і під нього нічого не підпало, меню
+    мусить лишитись — інакше з порожнього екрана не буде як повернутись.
+  -->
+  {#if jobs.length > 0}
     <div
-      class="size-14 rounded-4xl mx-auto mb-2 flex items-center justify-center"
+      class="mb-5 overflow-x-auto [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     >
-      <Info class="size-10" style="color: var(--w-icon)" strokeWidth={1.75} />
+      <Tabs.Root
+        value={activeService}
+        onValueChange={(v) => (activeService = v)}
+      >
+        <Tabs.List class="w-max">
+          <Tabs.Trigger value={ALL}>Усі</Tabs.Trigger>
+          {#each SERVICES as s (s.key)}
+            <Tabs.Trigger value={s.key}>{s.label}</Tabs.Trigger>
+          {/each}
+        </Tabs.List>
+      </Tabs.Root>
     </div>
-    <h2 class="text-base font-semibold mb-1" style="color: var(--foreground)">
-      {activeService ? 'Немає заявок цього типу' : 'Поки немає заявок'}
-    </h2>
-    <p class="text-sm" style="color: var(--muted-foreground)">
-      {activeService
-        ? 'Спробуйте інший фільтр'
-        : 'Зайдіть пізніше — нові заявки з’являються щодня'}
-    </p>
-  </div>
-{:else}
-  <!-- key-блок перемонтує сітку при зміні фільтра → повтор анімації появи (як у прикладі) -->
-  {#key activeService}
-    <div class="grid">
-      {#each visibleJobs as job, i (job.id)}
-        <a
-          href={`/dashboard/jobs/${job.id}`}
-          in:fly={{
-            y: 12,
-            duration: 260,
-            delay: Math.min(i, 6) * 40,
-            easing: quintOut,
-          }}
-          class="jcard group"
-        >
-          <!-- Час -->
-          <div class="jcard__top">
-            <span class="jmeta">
-              <Clock class="size-3" />
-              {formatRelative(job.createdAt)}
-            </span>
-            <ChevronRight class="jchev size-4.5" />
-          </div>
-
-          <!-- Заголовок (тип прибирання) -->
-          <h3 class="jcard__title">{job.title}</h3>
-
-          <!-- Ключові деталі (чипи) -->
-          {#if jobDetails(job).length > 0}
-            <div class="jcard__chips">
-              {#each jobDetails(job) as d (d.label)}
-                {@const Icon = detailIcon(d.icon)}
-                {#if d.label === 'Коли'}
-                  <!-- Дата — акцентний чип (важливо майстру) -->
-                  <span class="jchip jchip--when">
-                    {#if Icon}<Icon class="size-3.5" />{/if}
-                    {d.value}
-                  </span>
-                {:else}
-                  <span class="jchip">
-                    {#if Icon}<Icon class="size-3.5 opacity-60" />{/if}
-                    {d.value}
-                  </span>
-                {/if}
-              {/each}
-            </div>
-          {/if}
-
-          <!-- Клієнт -->
-          {#if job.client}
-            <div class="jcard__foot">
-              <Avatar class="size-9 shrink-0">
-                <AvatarImage
-                  src={job.client.avatar ?? ''}
-                  alt={job.client.name ?? ''}
-                />
-                <AvatarFallback class="javatar-fallback"
-                  >{initials(job.client.name)}</AvatarFallback
-                >
-              </Avatar>
-              <div class="min-w-0 flex-1">
-                <p class="jclient-name">{job.client.name ?? 'Замовник'}</p>
-                {#if job.client.reviewsCount > 0}
-                  <span class="jrating">
-                    <Star
-                      class="size-3"
-                      style="color: #f5a623; fill: #f5a623"
-                    />
-                    <strong>{job.client.avgRating.toFixed(1)}</strong>
-                    ({job.client.reviewsCount})
-                  </span>
-                {:else}
-                  <span class="jnewclient">Новий клієнт</span>
-                {/if}
-              </div>
-            </div>
-          {/if}
-        </a>
-      {/each}
-    </div>
-  {/key}
-
-  <div bind:this={sentinelEl} class="h-1"></div>
-  {#if loadingMore}
-    <div class="flex justify-center py-8"><Spinner /></div>
   {/if}
-  {#if !nextCursor && visibleJobs.length > 0 && !loadingMore}
-    <div class="text-center py-8">
-      <p class="text-xs" style="color: var(--muted-foreground)">
+
+  <!-- List -->
+  {#if visibleJobs.length === 0 && !loadingMore}
+    <!-- flex-1: знак стоїть по центру сторінки, без підкладки під іконкою.
+         Колір іконки був --w-icon — це бурштин зі шкали тостів-попереджень,
+         через що «поки немає заявок» виглядало як помилка. -->
+    <div
+      class="flex flex-1 flex-col items-center justify-center px-6 py-20 text-center"
+    >
+      <Search class="size-14 text-muted-foreground/70" strokeWidth={1} />
+      <h2 class="mt-6 text-lg font-medium">
+        {activeService !== ALL
+          ? 'Немає заявок цього типу'
+          : 'Поки немає заявок'}
+      </h2>
+      <p class="mt-2 max-w-90 text-sm leading-relaxed text-muted-foreground">
+        {activeService !== ALL
+          ? 'Спробуйте інший фільтр.'
+          : 'Зайдіть пізніше — нові заявки зʼявляються щодня.'}
+      </p>
+      {#if activeService !== ALL}
+        <Button
+          variant="secondary"
+          size="sm"
+          class="mt-6"
+          onclick={() => (activeService = ALL)}
+        >
+          Показати всі
+        </Button>
+      {/if}
+    </div>
+  {:else}
+    <!-- key-блок перемонтує сітку при зміні фільтра → повтор анімації появи -->
+    {#key activeService}
+      <div class={GRID}>
+        {#each visibleJobs as job, i (job.id)}
+          <a
+            href={`/dashboard/jobs/${job.id}`}
+            in:fly={{
+              y: 12,
+              duration: 260,
+              delay: Math.min(i, 6) * 40,
+              easing: quintOut,
+            }}
+            class="group block"
+          >
+            <Card
+              size="sm"
+              class="h-full gap-3 rounded-4xl transition-transform group-hover:-translate-y-0.5"
+            >
+              <CardContent class="space-y-3">
+                <div class="flex items-center justify-between gap-2">
+                  <span
+                    class="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
+                  >
+                    <Clock class="size-3" />
+                    {formatRelative(job.createdAt)}
+                  </span>
+                  <!-- Поява шеврона — group-утилітами Tailwind. Раніше для
+                     цього був :global(.jchev), бо клас потрапляв на <svg>
+                     всередині компонента іконки. -->
+                  <ChevronRight
+                    class="size-4.5 shrink-0 -translate-x-1 text-foreground opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100"
+                  />
+                </div>
+
+                <h3
+                  class="text-[17px] leading-snug font-semibold text-pretty text-foreground"
+                >
+                  {job.title}
+                </h3>
+
+                {#if jobDetails(job).length > 0}
+                  <div class="flex flex-wrap gap-1.5">
+                    {#each jobDetails(job) as d (d.label)}
+                      {@const Icon = detailIcon(d.icon)}
+                      {#if d.label === 'Коли'}
+                        <!-- Дата — акцентний чип: майстру це головне.
+                           Був var(--primary-hover) — а це #d97757, помаранчевий
+                           із попереднього бренду, на синьому фоні акценту. -->
+                        <Badge
+                          class="h-7 gap-1.5 bg-primary/12 px-2.5 font-semibold text-primary"
+                        >
+                          {#if Icon}<Icon />{/if}
+                          {d.value}
+                        </Badge>
+                      {:else}
+                        <Badge variant="secondary" class="h-7 gap-1.5 px-2.5">
+                          {#if Icon}<Icon class="opacity-60" />{/if}
+                          {d.value}
+                        </Badge>
+                      {/if}
+                    {/each}
+                  </div>
+                {/if}
+              </CardContent>
+
+              {#if job.client}
+                <CardFooter class="gap-2.5 border-t pt-4">
+                  <Avatar class="size-9 shrink-0">
+                    <AvatarImage src={job.client.avatar ?? ''} alt="" />
+                    <AvatarFallback
+                      class="bg-secondary text-[13px] font-semibold text-muted-foreground"
+                    >
+                      {initials(job.client.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div class="min-w-0 flex-1">
+                    <p class="truncate text-sm font-semibold text-foreground">
+                      {job.client.name ?? 'Замовник'}
+                    </p>
+                    {#if job.client.reviewsCount > 0}
+                      <span
+                        class="inline-flex items-center gap-1 text-xs whitespace-nowrap text-muted-foreground"
+                      >
+                        <Star class="size-3 fill-amber-400 text-amber-400" />
+                        <strong class="font-semibold text-foreground">
+                          {job.client.avgRating.toFixed(1)}
+                        </strong>
+                        ({job.client.reviewsCount})
+                      </span>
+                    {:else}
+                      <span
+                        class="text-[11.5px] font-medium text-muted-foreground"
+                      >
+                        Новий клієнт
+                      </span>
+                    {/if}
+                  </div>
+                </CardFooter>
+              {/if}
+            </Card>
+          </a>
+        {/each}
+      </div>
+    {/key}
+
+    <div bind:this={sentinelEl} class="h-1"></div>
+    {#if loadingMore}
+      <div class="{GRID} mt-4">
+        <JobCardSkeleton count={2} rounded="rounded-4xl" />
+      </div>
+    {/if}
+    {#if !nextCursor && visibleJobs.length > 0 && !loadingMore}
+      <p class="py-8 text-center text-xs text-muted-foreground">
         Це всі заявки
       </p>
-    </div>
+    {/if}
   {/if}
 {/if}
-
-<style>
-  /* ── filters (як у прикладі) ── */
-  .filters {
-    display: flex;
-    gap: 8px;
-    /* мобільний: один рядок з горизонтальним скролом */
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
-    /* витікання до країв екрана (компенсує px-4 контейнера) */
-    margin: 0 -5px 22px;
-    padding: 0 16px;
-    /* плавний скрол з прилипанням до пілюль */
-    scroll-snap-type: x proximity;
-    -webkit-overflow-scrolling: touch;
-  }
-  .filters::-webkit-scrollbar {
-    display: none;
-  }
-  .fpill {
-    scroll-snap-align: start;
-  }
-  /* десктоп: пілюлі переносяться на новий рядок, без скролу */
-  @media (min-width: 640px) {
-    .filters {
-      flex-wrap: wrap;
-      overflow-x: visible;
-      margin: 0 0 22px;
-      padding: 0;
-    }
-  }
-  .fpill {
-    height: 38px;
-    padding: 0 16px;
-    border-radius: 999px;
-    border: 1px solid transparent;
-    font-size: 13.5px;
-    font-weight: 500;
-    font-family: inherit;
-    cursor: pointer;
-    white-space: nowrap;
-    flex-shrink: 0;
-    transition:
-      background 0.15s ease,
-      color 0.15s ease,
-      opacity 0.15s ease;
-  }
-  .fpill--on {
-    background: var(--foreground);
-    color: var(--background);
-  }
-  .fpill--off {
-    background: var(--card);
-    color: var(--foreground);
-    border: 1px solid var(--border);
-    transition: all 0.3s;
-  }
-  .fpill--off:hover {
-    opacity: 0.72;
-   
-    background-color: var(--card);
-  }
-
-  /* ── count (як у прикладі) ── */
-  .count {
-    font-size: 12.5px;
-    font-weight: 500;
-    color: var(--muted-foreground);
-    margin: 0 0 16px;
-  }
-
-  /* ── grid (як у прикладі, але адаптивний) ── */
-  .grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 16px;
-  }
-  @media (min-width: 640px) {
-    .grid {
-      grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
-    }
-  }
-
-  /* ── card ── */
-  .jcard {
-    display: block;
-    text-decoration: none;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 2rem;
-    padding: 18px;
-    cursor: pointer;
-    transition:
-      transform 0.18s ease,
-      border-color 0.18s ease;
-  }
-  .jcard:hover {
-    transform: translateY(-1px);
-    border-color: var(--border);
-  }
-  .jcard__top {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    margin-bottom: 11px;
-  }
-  .jmeta {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 12px;
-    color: var(--muted-foreground);
-    font-weight: 500;
-  }
-  /* :global бо клас потрапляє на <svg>, який рендерить компонент ChevronRight */
-  .jcard :global(.jchev) {
-    color: var(--foreground);
-    opacity: 0;
-    transform: translateX(-4px);
-    flex-shrink: 0;
-    transition:
-      opacity 0.18s ease,
-      transform 0.18s ease;
-  }
-  .jcard:hover :global(.jchev) {
-    opacity: 1;
-    transform: translateX(0);
-  }
-  .jcard__title {
-    font-size: 17px;
-    line-height: 1.32;
-    font-weight: 600;
-    letter-spacing: -0.01em;
-    color: var(--foreground);
-    margin: 0 0 14px;
-    text-wrap: pretty;
-  }
-  .jcard__chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 7px;
-    margin-bottom: 16px;
-  }
-  .jchip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    height: 28px;
-    padding: 0 11px;
-    border-radius: 999px;
-    font-size: 12.5px;
-    font-weight: 500;
-    background: var(--secondary);
-    color: var(--foreground);
-  }
-  .jchip--when {
-    font-weight: 600;
-    background: color-mix(in srgb, var(--primary) 12%, transparent);
-    color: var(--primary-hover);
-  }
-  .jcard__foot {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding-top: 14px;
-    border-top: 1px solid var(--border);
-  }
-  .jclient-name {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--foreground);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    margin: 0;
-  }
-  .jrating {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 12px;
-    color: var(--muted-foreground);
-    white-space: nowrap;
-  }
-  .jrating strong {
-    font-weight: 600;
-    color: var(--foreground);
-  }
-  .jnewclient {
-    font-size: 11.5px;
-    font-weight: 500;
-    color: var(--muted-foreground);
-  }
-  /* аватар-заглушка під стиль прикладу (ініціали) */
-  .jcard :global(.javatar-fallback) {
-    background: var(--secondary);
-    color: var(--muted-foreground);
-    font-size: 13px;
-    font-weight: 600;
-  }
-</style>

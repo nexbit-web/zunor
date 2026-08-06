@@ -1,9 +1,10 @@
 <!-- src/lib/components/jobs/client-jobs.svelte -->
 <script lang="ts">
-  import { goto } from '$app/navigation'
   import { Button } from '$lib/components/ui/button'
   import { Badge } from '$lib/components/ui/badge'
-  import { Spinner } from '$lib/components/ui/spinner'
+  import { Card, CardContent, CardFooter } from '$lib/components/ui/card'
+  import * as Tabs from '$lib/components/ui/tabs'
+  import JobCardSkeleton from './job-card-skeleton.svelte'
   import {
     Plus,
     Briefcase,
@@ -63,26 +64,27 @@
     return jobs.filter((j) => j.status === statusFilter)
   })
 
-  function categoryLabel(slug: string) {
-    return filters.categories.find((c) => c.slug === slug)?.name ?? slug
-  }
-  function cityLabel(slug: string) {
-    return filters.cities.find((c) => c.slug === slug)?.name ?? slug
-  }
+  // $derived, а не const: лічильники приходять пропом і змінюються.
+  const STATUS_TABS = $derived([
+    { value: 'all' as const, label: 'Усі', count: counts.all },
+    { value: 'OPEN' as const, label: 'Відкриті', count: counts.open },
+    {
+      value: 'IN_PROGRESS' as const,
+      label: 'У роботі',
+      count: counts.inProgress,
+    },
+    {
+      value: 'COMPLETED' as const,
+      label: 'Завершені',
+      count: counts.completed,
+    },
+    { value: 'OTHER' as const, label: 'Інше', count: counts.other },
+  ])
 
-  function formatMoney(cents: number) {
-    return new Intl.NumberFormat('uk-UA', {
-      style: 'currency',
-      currency: 'UAH',
-      minimumFractionDigits: 0,
-    }).format(cents / 100)
-  }
-  function formatBudget(min: number | null, max: number | null) {
-    if (min && max) return `${formatMoney(min)} — ${formatMoney(max)}`
-    if (max) return `до ${formatMoney(max)}`
-    if (min) return `від ${formatMoney(min)}`
-    return 'Договірний'
-  }
+  // categoryLabel / cityLabel / formatMoney / formatBudget звідси прибрані:
+  // жодну з них розмітка не викликала. Бюджет на картці заявки клієнта не
+  // показуємо взагалі — ціну визначає відгук майстра, а не заявка.
+
   function formatRelative(iso: string) {
     const diff = Date.now() - new Date(iso).getTime()
     const min = Math.floor(diff / 60_000)
@@ -158,177 +160,171 @@
 </script>
 
 <!-- Header -->
-<header class="mb-6">
-  <div class="flex items-start justify-between gap-4 flex-wrap">
-    <div>
-      <h1
-        class="text-2xl sm:text-3xl font-bold tracking-tight"
-        style="color: var(--foreground); letter-spacing: -0.02em"
+<header class="mb-6 flex items-center justify-between gap-3 sm:mb-8">
+  <div class="flex min-w-0 items-center gap-2.5">
+    <h1 class="truncate text-2xl font-semibold tracking-tight sm:text-3xl">
+      Мої заявки
+    </h1>
+    {#if counts.open > 0}
+      <span
+        class="rounded-full bg-primary/12 px-2 py-0.5 text-xs font-semibold tabular-nums text-primary"
       >
-        Мої заявки
-      </h1>
-      <p class="text-sm mt-1.5" style="color: var(--muted-foreground)">
-        Ваші заявки на пошук майстра
-      </p>
-    </div>
-    <Button
-      onclick={() => goto('/dashboard/jobs/new')}
-      class="rounded-xl gap-2 shrink-0"
-    >
-      <Plus class="size-4" strokeWidth={2.25} />
-      Нова заявка
-    </Button>
+        {counts.open}
+      </span>
+    {/if}
   </div>
+
+  <Button size="sm" href="/dashboard/jobs/new" class="shrink-0">
+    <Plus />
+    <span class="hidden sm:inline">Нова заявка</span>
+  </Button>
 </header>
 
 <!-- Status tabs -->
 {#if counts.all > 0}
-  <div
-    class="flex items-center gap-0 border-b mb-6 overflow-x-auto"
-    style="border-color: var(--border)"
+  <!--
+    Tabs із ui замість власних кнопок: підкреслення активної вкладки
+    давав рукописний `.status-tab::after`, і точно такий самий блок стилів
+    лежав ще й на сторінці замовлень — два описи однієї вкладки.
+
+    flex-wrap замість overflow-x-auto: горизонтальний скрол ховав останні
+    вкладки за краєм екрана без жодного натяку, що вони є. h-auto —
+    бо стандартна висота List розрахована на один рядок.
+  -->
+  <Tabs.Root
+    value={statusFilter}
+    onValueChange={(v) => (statusFilter = v as StatusFilter)}
+    class="mb-6"
   >
-    {#each [{ value: 'all' as const, label: 'Усі', count: counts.all }, { value: 'OPEN' as const, label: 'Відкриті', count: counts.open }, { value: 'IN_PROGRESS' as const, label: 'У роботі', count: counts.inProgress }, { value: 'COMPLETED' as const, label: 'Завершені', count: counts.completed }, { value: 'OTHER' as const, label: 'Інше', count: counts.other }] as tab (tab.value)}
-      {@const isActive = statusFilter === tab.value}
-      <button
-        type="button"
-        onclick={() => (statusFilter = tab.value)}
-        class="status-tab inline-flex items-center gap-2 px-4 py-3 text-sm font-medium cursor-pointer whitespace-nowrap relative"
-        class:active={isActive}
-      >
-        {tab.label}
-        {#if tab.count > 0}
-          <span
-            class="text-[11px] tabular-nums px-1.5 py-0.5 rounded font-semibold"
-            style="background-color: {isActive
-              ? 'color-mix(in oklch, var(--foreground) 8%, transparent)'
-              : 'var(--muted)'};
-                   color: {isActive
-              ? 'var(--foreground)'
-              : 'var(--muted-foreground)'}">{tab.count}</span
-          >
-        {/if}
-      </button>
-    {/each}
-  </div>
+    <Tabs.List variant="line" class="h-auto w-full flex-wrap justify-start">
+      {#each STATUS_TABS as tab (tab.value)}
+        <Tabs.Trigger value={tab.value} class="flex-none gap-2 px-3 py-2">
+          {tab.label}
+          {#if tab.count > 0}
+            <Badge variant="secondary" class="tabular-nums">{tab.count}</Badge>
+          {/if}
+        </Tabs.Trigger>
+      {/each}
+    </Tabs.List>
+  </Tabs.Root>
 {/if}
 
 <!-- List -->
 {#if filtered.length === 0}
+  <!-- flex-1: порожній стан займає всю висоту, що лишилась під шапкою,
+       і знак стоїть по центру сторінки. Підкладки під іконкою немає —
+       вона й була тим блоком, через який стан виглядав як картка. -->
   <div
-    class="rounded-3xl px-6 py-16 text-center"
-    style="background-color: var(--card); border: 1px solid var(--border)"
+    class="flex flex-1 flex-col items-center justify-center px-6 py-20 text-center"
   >
-    <div
-      class="size-14 rounded-2xl mx-auto mb-4 flex items-center justify-center"
-      style="background-color: var(--muted)"
-    >
-      <Briefcase
-        class="size-6"
-        style="color: var(--muted-foreground)"
-        strokeWidth={1.75}
-      />
-    </div>
-    <h2 class="text-base font-semibold mb-1" style="color: var(--foreground)">
-      {counts.all === 0 ? 'Ще немає заявок' : 'Нічого не знайдено'}
+    <Briefcase class="size-14 text-muted-foreground/70" strokeWidth={1} />
+    <h2 class="mt-6 text-lg font-medium">
+      {counts.all === 0 ? 'Заявок поки немає' : 'Нічого не знайдено'}
     </h2>
-    <p class="text-sm max-w-sm mx-auto" style="color: var(--muted-foreground)">
+    <p class="mt-2 max-w-90 text-sm leading-relaxed text-muted-foreground">
       {counts.all === 0
-        ? 'Створіть першу заявку — і майстри почнуть надсилати пропозиції'
-        : 'Спробуйте інший фільтр'}
+        ? 'Створіть першу заявку — і майстри почнуть надсилати пропозиції.'
+        : 'Спробуйте інший фільтр.'}
     </p>
     {#if counts.all === 0}
-      <Button onclick={() => goto('/dashboard/jobs/new')} class="mt-5 rounded-xl gap-2">
-        <Plus class="size-4" />
+      <Button href="/dashboard/jobs/new" class="mt-6">
+        <Plus />
         Створити заявку
+      </Button>
+    {:else}
+      <Button
+        variant="secondary"
+        size="sm"
+        class="mt-6"
+        onclick={() => (statusFilter = 'all')}
+      >
+        Показати всі
       </Button>
     {/if}
   </div>
 {:else}
   <div class="space-y-3">
     {#each filtered as job (job.id)}
-      <a
-        href={`/dashboard/jobs/${job.id}`}
-        class="block rounded-3xl p-5 transition-all hover:-translate-y-0.5 group"
-        style="background-color: var(--card); border: 1px solid var(--border)"
-      >
-        <div class="flex items-center justify-between gap-2 mb-2.5">
-          <div class="flex items-center gap-2 flex-wrap min-w-0">
-            <Badge
-              variant={statusVariant(job.status)}
-              class="text-[10px] uppercase font-bold"
+      <a href={`/dashboard/jobs/${job.id}`} class="group block">
+        <Card
+          size="sm"
+          class="gap-3 rounded-3xl transition-transform group-hover:-translate-y-0.5"
+        >
+          <CardContent class="space-y-2.5">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex min-w-0 flex-wrap items-center gap-2">
+                <Badge
+                  variant={statusVariant(job.status)}
+                  class="text-[10px] font-bold uppercase"
+                >
+                  {statusLabel(job.status)}
+                </Badge>
+                <span class="text-xs text-muted-foreground">
+                  {formatRelative(job.createdAt)}
+                </span>
+                {#if job.status === 'OPEN'}
+                  <span class="text-xs text-muted-foreground">
+                    · Активна ще {expiresIn(job.expiresAt)}
+                  </span>
+                {/if}
+              </div>
+              <ChevronRight
+                class="size-5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
+              />
+            </div>
+
+            <h3
+              class="text-base leading-snug font-semibold text-foreground sm:text-lg"
             >
-              {statusLabel(job.status)}
-            </Badge>
-            <span class="text-xs" style="color: var(--muted-foreground)"
-              >{formatRelative(job.createdAt)}</span
-            >
-            {#if job.status === 'OPEN'}
-              <span class="text-xs" style="color: var(--muted-foreground)"
-                >· Активна ще {expiresIn(job.expiresAt)}</span
+              {job.title}
+            </h3>
+
+            {#if job.description}
+              <p
+                class="line-clamp-2 text-sm leading-relaxed text-muted-foreground"
               >
+                {job.description}
+              </p>
             {/if}
-          </div>
-          <ChevronRight
-            class="size-5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-            style="color: var(--muted-foreground)"
-          />
-        </div>
 
-        <h3
-          class="text-base sm:text-lg font-semibold leading-snug mb-2"
-          style="color: var(--foreground)"
-        >
-          {job.title}
-        </h3>
-        {#if job.description}
-          <p
-            class="text-sm leading-relaxed line-clamp-2 mb-3"
-            style="color: var(--muted-foreground)"
-          >
-            {job.description}
-          </p>
-        {/if}
+            {#if jobDetails(job).length > 0}
+              <div class="flex flex-wrap items-center gap-1.5 pt-0.5">
+                {#each jobDetails(job) as d (d.label)}
+                  {@const Icon = detailIcon(d.icon)}
+                  <!-- Чипи — Badge з ui. Раніше тут був `var(--brand)`:
+                       токен видалили з теми, і чип «Коли» малювався
+                       прозорим по прозорому — дати не було видно взагалі. -->
+                  {#if d.label === 'Коли'}
+                    <Badge
+                      class="h-7 gap-1.5 bg-primary/12 px-2.5 font-semibold text-primary"
+                    >
+                      {#if Icon}<Icon />{/if}
+                      {d.value}
+                    </Badge>
+                  {:else}
+                    <Badge variant="secondary" class="h-7 gap-1.5 px-2.5">
+                      {#if Icon}<Icon class="opacity-60" />{/if}
+                      {d.value}
+                    </Badge>
+                  {/if}
+                {/each}
+              </div>
+            {/if}
+          </CardContent>
 
-        {#if jobDetails(job).length > 0}
-          <div class="flex items-center gap-1.5 flex-wrap mb-3">
-            {#each jobDetails(job) as d (d.label)}
-              {@const Icon = detailIcon(d.icon)}
-              {#if d.label === 'Коли'}
-                <span
-                  class="inline-flex items-center gap-1.5 px-2.5 h-7 rounded-full text-xs font-semibold"
-                  style="background-color: color-mix(in srgb, var(--brand) 12%, transparent); color: var(--brand)"
-                >
-                  {#if Icon}<Icon class="size-3.5" />{/if}
-                  {d.value}
-                </span>
-              {:else}
-                <span
-                  class="inline-flex items-center gap-1.5 px-2.5 h-7 rounded-full text-xs font-medium"
-                  style="background-color: var(--secondary); color: var(--foreground)"
-                >
-                  {#if Icon}<Icon class="size-3.5 opacity-60" />{/if}
-                  {d.value}
-                </span>
-              {/if}
-            {/each}
-          </div>
-        {/if}
-
-        <div
-          class="flex items-center gap-3 pt-3 text-xs"
-          style="border-top: 1px solid var(--border); color: var(--muted-foreground)"
-        >
-          <span class="inline-flex items-center gap-1">
-            <MessageSquare class="size-3.5" />
-            {job.proposalsCount} пропозиц{job.proposalsCount === 1
-              ? 'ія'
-              : 'ій'}
-          </span>
-          <span class="inline-flex items-center gap-1">
-            <Eye class="size-3.5" />
-            {job.viewsCount}
-          </span>
-        </div>
+          <CardFooter class="gap-3 border-t pt-4 text-xs text-muted-foreground">
+            <span class="inline-flex items-center gap-1">
+              <MessageSquare class="size-3.5" />
+              {job.proposalsCount} пропозиц{job.proposalsCount === 1
+                ? 'ія'
+                : 'ій'}
+            </span>
+            <span class="inline-flex items-center gap-1">
+              <Eye class="size-3.5" />
+              {job.viewsCount}
+            </span>
+          </CardFooter>
+        </Card>
       </a>
     {/each}
   </div>
@@ -336,38 +332,11 @@
   <div bind:this={sentinelEl} class="h-1"></div>
 
   {#if loadingMore}
-    <div class="flex justify-center py-8"><Spinner /></div>
-  {/if}
-  {#if !nextCursor && jobs.length > 0 && !loadingMore}
-    <div class="text-center py-8">
-      <p class="text-xs" style="color: var(--muted-foreground)">
-        Кінець списку
-      </p>
+    <div class="mt-3 space-y-3">
+      <JobCardSkeleton count={2} />
     </div>
   {/if}
+  {#if !nextCursor && jobs.length > 0 && !loadingMore}
+    <p class="py-8 text-center text-xs text-muted-foreground">Кінець списку</p>
+  {/if}
 {/if}
-
-<style>
-  .status-tab {
-    color: color-mix(in oklch, var(--foreground) 60%, transparent);
-  }
-  .status-tab:hover {
-    color: var(--foreground);
-  }
-  .status-tab.active {
-    color: var(--foreground);
-  }
-  .status-tab.active::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: -1px;
-    height: 2px;
-    background-color: var(--foreground);
-    border-radius: 2px;
-  }
-</style>
-
-
-

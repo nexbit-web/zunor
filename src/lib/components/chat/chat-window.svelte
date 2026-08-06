@@ -306,12 +306,10 @@
     if (now - lastTypingSent < 2000) return
     lastTypingSent = now
     try {
-      getPusher()
-        .channel(`private-chat-${chatId}`)
-        ?.trigger('client-typing', {
-          userId: currentUserId,
-          userName: 'співрозмовник',
-        })
+      getPusher().channel(`private-chat-${chatId}`)?.trigger('client-typing', {
+        userId: currentUserId,
+        userName: 'співрозмовник',
+      })
     } catch {
       // Pusher може бути недоступний — індикатор друку не критичний
     }
@@ -587,7 +585,7 @@
     <div
       bind:this={scrollContainer}
       onscroll={onScroll}
-      class="chat-scroll absolute inset-0 overflow-y-auto"
+      class="absolute inset-0 overflow-y-auto"
     >
       <!-- Без max-w-контейнера: стрічка на всю ширину панелі.
            Вертикальні відступи між пузирями задає сам MessageBubble. -->
@@ -681,40 +679,3 @@
     />
   </div>
 </div>
-
-<style>
-  /* Тонка смужка, без стрілок і підкладки */
-  .chat-scroll {
-    scrollbar-width: thin;
-    scrollbar-color: rgb(0 0 0 / 0.18) transparent;
-  }
-
-  .chat-scroll::-webkit-scrollbar {
-    width: 6px;
-  }
-
-  .chat-scroll::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .chat-scroll::-webkit-scrollbar-thumb {
-    background-color: rgb(0 0 0 / 0.18);
-    border-radius: 9999px;
-  }
-
-  .chat-scroll::-webkit-scrollbar-thumb:hover {
-    background-color: rgb(0 0 0 / 0.3);
-  }
-
-  :global(.dark) .chat-scroll {
-    scrollbar-color: rgb(255 255 255 / 0.2) transparent;
-  }
-
-  :global(.dark) .chat-scroll::-webkit-scrollbar-thumb {
-    background-color: rgb(255 255 255 / 0.2);
-  }
-
-  :global(.dark) .chat-scroll::-webkit-scrollbar-thumb:hover {
-    background-color: rgb(255 255 255 / 0.35);
-  }
-</style>

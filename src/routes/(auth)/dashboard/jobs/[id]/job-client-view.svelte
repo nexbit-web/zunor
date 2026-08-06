@@ -325,9 +325,11 @@
                   >
                 {/if}
                 {#if p.isNew}
+                  <!-- Був var(--brand): токен прибрали з теми, і бейдж
+                       малювався прозорою рамкою по прозорому тексту —
+                       на місці «Новачка» була порожнеча. -->
                   <span
-                    class="{badgeBase} border bg-card"
-                    style="border-color: var(--brand); color: var(--brand)"
+                    class="{badgeBase} border border-primary bg-card text-primary"
                     >Новачок</span
                   >
                 {/if}
