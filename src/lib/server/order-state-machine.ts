@@ -1,5 +1,3 @@
-// src/lib/server/order-state-machine.ts
-
 import type { OrderStatus } from '../../generated/prisma/client'
 
 /**

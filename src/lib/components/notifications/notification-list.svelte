@@ -1,4 +1,3 @@
-<!-- src/lib/components/notifications/notification-list.svelte -->
 <script lang="ts">
   import { onMount, untrack } from 'svelte'
   import { browser } from '$app/environment'
@@ -281,11 +280,7 @@
     </DropdownMenu.Root>
 
     {#if unreadCount > 0}
-      <Button
-        size="sm"
-        onclick={markAllRead}
-        title="Позначити всі прочитаними"
-      >
+      <Button size="sm" onclick={markAllRead} title="Позначити всі прочитаними">
         <CheckCheck />
         <span class="hidden sm:inline">Прочитати всі</span>
       </Button>

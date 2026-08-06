@@ -1,4 +1,3 @@
-<!-- src/lib/components/username-input.svelte -->
 <script lang="ts">
   import { Input } from '$lib/components/ui/input'
   import * as Field from '$lib/components/ui/field'

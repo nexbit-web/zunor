@@ -1,4 +1,3 @@
-<!-- src/routes/(auth)/+layout.svelte -->
 <script lang="ts">
   import Sidebar from '$lib/components/dashboard/sidebar.svelte'
 

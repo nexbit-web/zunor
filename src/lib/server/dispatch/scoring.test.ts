@@ -121,9 +121,7 @@ describe('баланс навантаження', () => {
       masterSince: daysAgo(1),
       completedOrders: 0,
     })
-    expect(scoreCandidate(star, NOW)).toBeLessThan(
-      scoreCandidate(rookie, NOW),
-    )
+    expect(scoreCandidate(star, NOW)).toBeLessThan(scoreCandidate(rookie, NOW))
   })
 
   it('без недавніх розсилок штрафу немає', () => {

@@ -1,4 +1,3 @@
-// src/lib/stores/chat-store.svelte.ts
 import { browser } from '$app/environment'
 import { getPusher } from '$lib/pusher-client'
 import { playMessageSound } from '$lib/sound/notification'

@@ -1,4 +1,3 @@
-<!-- src/lib/components/chat/chat-background.svelte -->
 <script lang="ts">
   /**
    * Обои чата: узор из SVG, размноженный плиткой через createPattern.

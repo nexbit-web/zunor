@@ -1,4 +1,3 @@
-<!-- src/lib/components/footer/index.svelte -->
 <script lang="ts">
   import MapPin from '@lucide/svelte/icons/map-pin'
   import BrandIcon from '$lib/components/icons/brand-icon.svelte'

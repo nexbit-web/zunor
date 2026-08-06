@@ -1,4 +1,3 @@
-<!-- src/lib/components/chat/message-composer.svelte -->
 <script lang="ts">
   import {
     ArrowUp,

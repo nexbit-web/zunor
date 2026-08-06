@@ -1,4 +1,3 @@
-// src/routes/api/me/badges/+server.ts
 import { json } from '@sveltejs/kit'
 import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'

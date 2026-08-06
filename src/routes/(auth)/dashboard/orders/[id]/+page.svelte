@@ -1,4 +1,3 @@
-<!-- src/routes/(auth)/orders/[id]/+page.svelte -->
 <!--
   Сторінка замовлення — на токенах теми (десктоп: контент + sticky sidebar).
   Логіка 1:1: describeJob, derived (isClient/isMaster/peer/peerRating/peerHref),

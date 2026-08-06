@@ -1,4 +1,3 @@
-<!-- src/routes/+error.svelte -->
 <script lang="ts">
   import { page } from '$app/state'
   import Ant404 from '$lib/components/Ant404.svelte'

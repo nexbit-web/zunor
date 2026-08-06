@@ -1,4 +1,3 @@
-// src/lib/server/pusher.ts
 import Pusher from 'pusher'
 import { env } from '$env/dynamic/private'
 

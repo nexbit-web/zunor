@@ -101,9 +101,9 @@
 	-->
   {#if HowItWorksComponent}
     <HowItWorksComponent />
-      <Advantages />
-      <BecomeMaster />
-      <Faq />
+    <Advantages />
+    <BecomeMaster />
+    <Faq />
   {:else}
     <!-- 
 			Layout Placeholder: Жорстке резервування простору у вьюпорті.

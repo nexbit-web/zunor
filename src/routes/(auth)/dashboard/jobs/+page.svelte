@@ -1,4 +1,3 @@
-<!-- src/routes/(auth)/jobs/+page.svelte -->
 <script lang="ts">
   import ClientJobs from '$lib/components/jobs/client-jobs.svelte'
   import MasterFeed from '$lib/components/jobs/master-feed.svelte'

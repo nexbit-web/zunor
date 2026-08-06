@@ -1,4 +1,3 @@
-<!-- src/lib/components/header/mobile-nav.svelte -->
 <script lang="ts">
   import Home from '@lucide/svelte/icons/home'
   import LayoutGrid from '@lucide/svelte/icons/layout-grid'

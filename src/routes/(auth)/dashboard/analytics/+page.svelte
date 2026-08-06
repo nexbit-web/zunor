@@ -1,4 +1,3 @@
-<!-- src/routes/(auth)/dashboard/analytics/+page.svelte -->
 <script lang="ts">
   import { goto } from '$app/navigation'
   import { BarChart3, CalendarDays, Star } from 'lucide-svelte'

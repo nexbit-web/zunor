@@ -1,4 +1,3 @@
-<!-- src/lib/components/orders/review-form.svelte -->
 <script lang="ts">
   import { invalidateAll } from '$app/navigation'
   import toast from 'svelte-hot-french-toast'

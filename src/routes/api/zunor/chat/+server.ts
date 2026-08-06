@@ -1,4 +1,3 @@
-// src/routes/api/zunor/chat/+server.ts
 import { error } from '@sveltejs/kit'
 import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'

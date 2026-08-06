@@ -1,6 +1,5 @@
-<!-- src/lib/components/dashboard/sidebar.svelte
-     Навігація дашборда. Стан «згорнуто» приходить згори з cookie,
-     тому компонент не знає, де саме він зберігається. -->
+<!-- Навігація дашборда. Стан «згорнуто» приходить згори з cookie — компонент
+     не знає, де саме він зберігається. -->
 <script lang="ts">
   import type { Component } from 'svelte'
   import { onMount } from 'svelte'
@@ -314,7 +313,11 @@
           class="toggle-open absolute inset-0 flex items-center justify-center rounded-lg text-sidebar-foreground outline-none"
           class:is-visible={collapsed && hovering}
         >
-          <PanelLeft size={ICON_SIZE} strokeWidth={ICON_STROKE} aria-hidden="true" />
+          <PanelLeft
+            size={ICON_SIZE}
+            strokeWidth={ICON_STROKE}
+            aria-hidden="true"
+          />
         </button>
       </div>
 
@@ -326,7 +329,11 @@
           class="row-item flex size-8 shrink-0 items-center justify-center rounded-lg text-sidebar-foreground outline-none transition-colors"
           transition:fade={{ duration: motionMs }}
         >
-          <PanelLeft size={ICON_SIZE} strokeWidth={ICON_STROKE} aria-hidden="true" />
+          <PanelLeft
+            size={ICON_SIZE}
+            strokeWidth={ICON_STROKE}
+            aria-hidden="true"
+          />
         </button>
       {/if}
     </div>

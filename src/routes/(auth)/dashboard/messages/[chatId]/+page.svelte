@@ -1,4 +1,3 @@
-<!-- src/routes/(auth)/dashboard/messages/[chatId]/+page.svelte -->
 <script lang="ts">
   import { onMount } from 'svelte'
   import * as Resizable from '$lib/components/ui/resizable'

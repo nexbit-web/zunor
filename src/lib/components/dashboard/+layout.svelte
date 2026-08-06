@@ -1,4 +1,3 @@
-<!-- src/routes/dashboard/+layout.svelte -->
 <!--
   Shell всей защищённой зоны приложения (бывшая src/routes/(auth)).
   Больше НЕ рендерит глобальный Header/Footer — они скрыты для всех

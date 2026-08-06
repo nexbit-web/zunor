@@ -1,4 +1,3 @@
-<!-- src/lib/components/landing/hero.svelte -->
 <script lang="ts">
   import {
     ArrowUp,
@@ -132,8 +131,6 @@
   class="relative isolate w-full overflow-hidden bg-background px-4 py-14 sm:py-20"
   aria-label="Головний екран"
 >
-
-
   <div class="mx-auto flex w-full max-w-3xl flex-col items-center text-center">
     <h1
       class="text-[clamp(1.75rem,4vw,2.25rem)] leading-[1.1] font-semibold tracking-[-0.03em] text-balance text-foreground"
@@ -243,40 +240,3 @@
     </div>
   </div>
 </section>
-
-<style>
-  /* Маску винесено сюди, а не в [mask-image:...]: тут чотири шари
-     з комами й процентами — в arbitrary-значенні Tailwind це
-     перетворюється на нечитабельний рядок. */
-
-  /* Верхній шар: гасить крапки в перших 100px, щоб текстура
-     не з'являлась одразу під хедером. */
-  .dots-fade {
-    mask-image: linear-gradient(to bottom, transparent 0, black 100px);
-    -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 100px);
-  }
-
-  /* Сама сітка + нерівна щільність. Три великі плями об'єднуються
-     (default mask-composite: add), тож крапки є всюди, але місцями
-     майже розчиняються — саме це й читається як текстура, а не як
-     накладений патерн. */
-  .dots-grid {
-    background-image: radial-gradient(var(--border) 1px, transparent 1px);
-    background-size: 22px 22px;
-    opacity: 0.7;
-    mask-image:
-      radial-gradient(ellipse 55% 60% at 20% 25%, black, transparent 75%),
-      radial-gradient(ellipse 60% 55% at 80% 60%, black, transparent 75%),
-      radial-gradient(ellipse 70% 50% at 45% 95%, black, transparent 80%);
-    -webkit-mask-image:
-      radial-gradient(ellipse 55% 60% at 20% 25%, black, transparent 75%),
-      radial-gradient(ellipse 60% 55% at 80% 60%, black, transparent 75%),
-      radial-gradient(ellipse 70% 50% at 45% 95%, black, transparent 80%);
-  }
-
-  /* У темній темі --border світліший за фон, тому крапки лізуть в очі
-     сильніше, ніж у світлій. */
-  :global(.dark) .dots-grid {
-    opacity: 0.4;
-  }
-</style>

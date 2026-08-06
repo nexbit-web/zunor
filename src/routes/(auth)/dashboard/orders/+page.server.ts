@@ -1,4 +1,3 @@
-// src/routes/(auth)/orders/+page.server.ts
 import { prisma } from '$lib/server/prisma'
 import { requireUser } from '$lib/server/guards'
 import type { PageServerLoad } from './$types'

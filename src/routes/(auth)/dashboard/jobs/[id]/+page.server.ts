@@ -1,4 +1,3 @@
-// src/routes/(auth)/jobs/[id]/+page.server.ts
 import { prisma } from '$lib/server/prisma'
 import { requireUser } from '$lib/server/guards'
 import { error, redirect } from '@sveltejs/kit'

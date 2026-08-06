@@ -1,25 +1,13 @@
-// src/lib/server/zunor/agent.ts
-//
 // Мозок Zunor-агента: схема інструмента + один хід діалогу.
 //
-// Архітектура надійності — три рубежі:
-//   1. Промпт (prompt.ts): воронка + ФОКУС активної послуги (detectActiveService).
-//   2. Серверний enforcement (цей файл): LLM повертає НЕДОВІРЕНИЙ ввід —
-//      metadata → validateCleaningMetadata; title/description → sanitize + фолбек;
-//      маркери списків → normalizeListMarkers; передчасне фото → stripPrematurePhotoOffer.
-//   3. Людина: заявку створює POST /api/jobs лише після кнопки «Підтвердити».
-// Side-effect-інструментів немає. Максимальна шкода інʼєкції — дивний текст,
-// який людина побачить очима до підтвердження.
+// Відповідь моделі — НЕДОВІРЕНИЙ ввід, тому все, що вона повертає, проходить
+// через валідатори нижче (metadata, title/description, маркери списків).
+// Інструментів із side-effect у агента немає, а заявку створює POST /api/jobs
+// лише після кнопки «Підтвердити» — максимальна шкода інʼєкції — дивний текст,
+// який людина побачить очима.
 //
-// ДВА ШЛЯХИ:
-//   runZunorTurnStream — основний: стрімить текст клієнту одразу; на драфт
-//                        перемикається в синхронну валідацію.
-//   runZunorTurn       — синхронний фолбек (повний JSON).
-//
-// РЕЖИМ THINKING (deepseek.ts): вмикається лише коли в історії є «простиня»
-// (needsThinking) — non-thinking v4-flash губить факти з довгих входів.
-// Ретраї resolveDraft — ЗАВЖДИ без thinking: thinking-ланцюг із tool_call
-// вимагає повертати reasoning_content, інакше API віддає 400.
+// runZunorTurnStream — основний шлях, стрімить текст одразу; на драфті
+// перемикається в синхронну валідацію. runZunorTurn — синхронний фолбек.
 
 import { dev } from '$app/environment'
 import {
@@ -319,8 +307,8 @@ async function resolveDraft(
       })
     }
 
-    // Ретрай — ЗАВЖДИ без thinking (див. шапку файлу: інакше 400 через
-    // відсутній reasoning_content у tool-ланцюгу).
+    // Ретрай — ЗАВЖДИ без thinking: інакше 400 через відсутній
+    // reasoning_content у tool-ланцюгу (обмеження описане в deepseek.ts).
     const res = await chatCompletion(messages, [tool], false)
     const msg = res.choices[0]?.message
     if (!msg) break

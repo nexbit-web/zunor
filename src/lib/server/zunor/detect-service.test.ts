@@ -19,9 +19,7 @@ describe('базовий детект', () => {
   it('впізнає послугу за назвою кнопки', () => {
     expect(detectActiveService([user('Миття вікон')])).toBe('windows')
     expect(detectActiveService([user('Генеральне')])).toBe('deep')
-    expect(detectActiveService([user('Після ремонту')])).toBe(
-      'post-renovation',
-    )
+    expect(detectActiveService([user('Після ремонту')])).toBe('post-renovation')
   })
 
   it('порожня історія → null', () => {
@@ -44,11 +42,7 @@ describe('скан з кінця історії', () => {
   })
 
   it('коротка відповідь не збиває фокус, узятий раніше', () => {
-    const history = [
-      user('Миття вікон'),
-      bot('Скільки вікон?'),
-      user('П’ять'),
-    ]
+    const history = [user('Миття вікон'), bot('Скільки вікон?'), user('П’ять')]
     expect(detectActiveService(history)).toBe('windows')
   })
 })

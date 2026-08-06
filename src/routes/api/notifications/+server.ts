@@ -1,4 +1,3 @@
-// src/routes/api/notifications/+server.ts
 import { json, error } from '@sveltejs/kit'
 import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'

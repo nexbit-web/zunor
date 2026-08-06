@@ -1,4 +1,3 @@
-// src/routes/api/cron/+server.ts
 import { timingSafeEqual } from 'node:crypto'
 import { json, error } from '@sveltejs/kit'
 import { prisma } from '$lib/server/prisma'
@@ -8,23 +7,14 @@ import { DISPATCH_CONFIG } from '$lib/server/dispatch/types'
 import type { RequestHandler } from './$types'
 
 /**
- * Крон тут — СТРАХОВКА, а не основний механізм.
- *
- * Хвилі диспетчера планує сам процес (dispatch/scheduler.ts) одразу при
- * створенні заявки. Крон потрібен лише для випадку, коли процес
- * перезапустили між хвилями й таймери в пам'яті зникли.
- *
- * РЕКОМЕНДОВАНИЙ РОЗКЛАД:
- *   dispatch-waves — раз на 30 хвилин
- *   auto-expire    — раз на добу
- *
- * Не ставте щохвилини. Neon на безкоштовному тарифі тарифікує ЧАС РОБОТИ
- * вичислювача: база засинає в простої, а запит раз на хвилину не дає їй
- * заснути взагалі — місячна квота вигорає приблизно за тиждень навіть
- * при нульовому трафіку.
- *
  * GET /api/cron?task=auto-expire|dispatch-waves|all
- * Захищено через CRON_SECRET в Authorization: Bearer ...
+ * Авторизація: CRON_SECRET в Authorization: Bearer ...
+ *
+ * Це СТРАХОВКА на випадок рестарту процесу, а не основний механізм: хвилі
+ * планує dispatch/scheduler.ts таймерами в пам'яті.
+ *
+ * Розклад: dispatch-waves — раз на 30 хвилин, auto-expire — раз на добу.
+ * Частіше ставити не можна, причина — у scheduler.ts.
  */
 
 /** Інтервал страхувального крона — вікно сканування має його покривати. */

@@ -1,4 +1,3 @@
-<!-- src/lib/components/chat/chat-window.svelte -->
 <script lang="ts">
   import { tick, untrack } from 'svelte'
   import { goto } from '$app/navigation'

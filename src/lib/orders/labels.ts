@@ -1,4 +1,8 @@
-import type { OrderStatus, ProposalStatus, JobStatus } from '../../generated/prisma/client'
+import type {
+  OrderStatus,
+  ProposalStatus,
+  JobStatus,
+} from '../../generated/prisma/client'
 
 export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   CREATED: 'Створено',
@@ -14,7 +18,10 @@ export const ORDER_STATUS_COLOR: Record<OrderStatus, string> = {
   CANCELLED: 'gray',
 }
 
-export const ORDER_STATUS: Record<OrderStatus, { label: string; color: string }> = {
+export const ORDER_STATUS: Record<
+  OrderStatus,
+  { label: string; color: string }
+> = {
   CREATED: { label: 'Створено', color: 'amber' },
   IN_PROGRESS: { label: 'В роботі', color: 'blue' },
   COMPLETED: { label: 'Завершено', color: 'green' },

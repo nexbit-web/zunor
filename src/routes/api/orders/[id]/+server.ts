@@ -1,4 +1,3 @@
-// src/routes/api/orders/[id]/+server.ts
 import { json, error } from '@sveltejs/kit'
 import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
@@ -77,12 +76,11 @@ export const GET: RequestHandler = async ({ params, locals }) => {
   if (!order) throw error(404, 'Замовлення не знайдено')
 
   // Доступ
-  if (
-    order.clientId !== user.id &&
-    order.masterId !== user.id
-  ) {
+  if (order.clientId !== user.id && order.masterId !== user.id) {
     throw error(403, 'Доступ заборонено')
   }
 
-  return json({ order: { ...order, master: flattenMasterRating(order.master) } })
+  return json({
+    order: { ...order, master: flattenMasterRating(order.master) },
+  })
 }

@@ -1,4 +1,3 @@
-// src/routes/api/proposals/[id]/accept/+server.ts
 import { json, error } from '@sveltejs/kit'
 import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
@@ -16,10 +15,9 @@ import type { RequestHandler } from './$types'
  *   4. Job → IN_PROGRESS + selectedOrderId
  *   5. OrderEvent(CREATED)
  *
- * Чат тут НЕ створюється. Раніше створювався — і кожен вибір майстра
- * плодив порожній чат, який одразу з'являвся в обох списках повідомлень,
- * хоча ніхто не написав жодного слова. Тепер він заводиться на першу
- * спробу написати: POST /api/orders/[id]/chat.
+ * Чат тут НЕ створюється — інакше кожен вибір майстра плодив би порожній чат
+ * у обох списках повідомлень. Його заводить перша спроба написати:
+ * POST /api/orders/[id]/chat.
  *
  * После (fail-soft):
  *   - Notification мастеру

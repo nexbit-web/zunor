@@ -1,4 +1,3 @@
-// src/routes/api/user/update/+server.ts
 import { json } from '@sveltejs/kit'
 import {
   Prisma,

@@ -1,4 +1,3 @@
-<!-- src/routes/(auth)/dashboard/messages/+layout.svelte -->
 <script lang="ts">
   import { onMount } from 'svelte'
   import { chatStore } from '$lib/stores/chat-store.svelte'

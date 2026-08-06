@@ -1,4 +1,3 @@
-<!-- src/lib/components/orders/order-actions.svelte -->
 <script lang="ts">
   import { invalidateAll, goto } from '$app/navigation'
   import toast from 'svelte-hot-french-toast'

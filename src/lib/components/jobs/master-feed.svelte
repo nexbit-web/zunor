@@ -1,4 +1,3 @@
-<!-- src/lib/components/jobs/master-feed.svelte -->
 <script lang="ts">
   import {
     Avatar,

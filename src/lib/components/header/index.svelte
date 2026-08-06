@@ -170,7 +170,7 @@
     text-decoration: none;
     white-space: nowrap;
   }
-   .nav-link:hover::after {
+  .nav-link:hover::after {
     content: '';
     position: absolute;
     left: 12px;

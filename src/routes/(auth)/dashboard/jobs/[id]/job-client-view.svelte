@@ -1,4 +1,3 @@
-<!-- src/routes/(auth)/jobs/[id]/job-client-view.svelte -->
 <!--
   Заявка очима клієнта + пропозиції майстрів — на токенах теми.
   Логіка 1:1: describeJob, cancelJob / acceptProposal (з модалками), showAll

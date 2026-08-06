@@ -1,4 +1,3 @@
-// src/lib/pusher-client.ts
 import Pusher from 'pusher-js'
 import { env } from '$env/dynamic/public'
 import { browser } from '$app/environment'
@@ -42,8 +41,6 @@ export function getPusher(): Pusher {
 
   return instance
 }
-
-
 
 /**
  * Cleanup — викликати при logout.

@@ -1,4 +1,3 @@
-<!-- src/lib/components/chat/message-bubble.svelte -->
 <script lang="ts">
   import {
     AlertCircle,

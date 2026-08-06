@@ -1,4 +1,3 @@
-<!-- src/lib/components/dashboard/bottom-nav.svelte -->
 <!--
   Нижняя навигация /dashboard на мобильном — замена sidebar.svelte
   когда экран узкий (md:hidden). Показывает 5 ключевых пунктов;

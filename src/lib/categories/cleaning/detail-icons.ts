@@ -1,5 +1,3 @@
-// src/lib/categories/cleaning/detail-icons.ts
-//
 // Іконки для рядків, які повертає describeJob(). Це КОНТЕНТ категорії —
 // живе поруч із describe.ts, а не в компонентах стрічки.
 //

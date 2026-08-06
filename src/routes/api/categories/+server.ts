@@ -1,4 +1,3 @@
-// src/routes/api/categories/+server.ts
 import { json } from '@sveltejs/kit'
 import { getCategories } from '$lib/server/reference'
 import type { RequestHandler } from './$types'

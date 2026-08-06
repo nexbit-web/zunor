@@ -1,4 +1,3 @@
-<!-- src/routes/(auth)/dashboard/notifications/+page.svelte -->
 <script lang="ts">
   import NotificationList from '$lib/components/notifications/notification-list.svelte'
   import type { PageData } from './$types'

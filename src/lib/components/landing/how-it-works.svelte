@@ -16,7 +16,7 @@
       title: 'Опишіть завдання',
       text: 'Zunor ставить уточнювальні питання й сам складає заявку.',
     },
-   {
+    {
       index: '02',
       title: 'Виконавці відгукуються',
       text: 'Zunor надсилає заявку клінерам міста. Кожен називає власну ціну та час.',
@@ -229,7 +229,7 @@
       </p>
       <h2
         id="how-it-works-heading"
-        class="text-[clamp(1.7rem,3.2vw,2.4rem)]  leading-[1.08] font-semibold tracking-[-0.03em] text-balance"
+        class="text-[clamp(1.7rem,3.2vw,2.4rem)] leading-[1.08] font-semibold tracking-[-0.03em] text-balance"
       >
         Як це працює?
       </h2>

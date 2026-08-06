@@ -1,4 +1,3 @@
-<!-- src/lib/components/chat/chat-list-sidebar.svelte -->
 <script lang="ts">
   import { goto } from '$app/navigation'
   import {

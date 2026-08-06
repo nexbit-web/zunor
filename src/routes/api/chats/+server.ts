@@ -1,4 +1,3 @@
-// src/routes/api/chats/+server.ts
 import { json } from '@sveltejs/kit'
 import { requireApiUser } from '$lib/server/guards'
 import { loadChatsForUser } from '$lib/server/chats-loader'

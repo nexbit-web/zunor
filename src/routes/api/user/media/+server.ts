@@ -1,4 +1,3 @@
-// src/routes/api/user/media/+server.ts
 import { json } from '@sveltejs/kit'
 import { cloudinary } from '$lib/server/cloudinary'
 import { prisma } from '$lib/server/prisma'

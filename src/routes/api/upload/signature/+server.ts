@@ -1,4 +1,3 @@
-// src/routes/api/upload/signature/+server.ts
 import { json } from '@sveltejs/kit'
 import { signUploadParams } from '$lib/server/cloudinary'
 import { limit } from '$lib/server/rate-limit'
@@ -62,9 +61,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
   // Для аватара — фіксований public_id щоб нове фото перезаписувало старе
   const publicId =
-    kind === 'avatar'
-      ? `zunor/users/${user.id}/avatar/profile`
-      : undefined
+    kind === 'avatar' ? `zunor/users/${user.id}/avatar/profile` : undefined
 
   return json(signUploadParams({ folder, resourceType, publicId }))
 }

@@ -1,5 +1,3 @@
-// src/lib/components/icons/brand-icons.ts
-//
 // Inline-иконки брендов из Simple Icons (simpleicons.org, лицензия CC0).
 // viewBox 0 0 24 24, одиночный <path>, fill=currentColor.
 //

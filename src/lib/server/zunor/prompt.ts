@@ -1,5 +1,3 @@
-// src/lib/server/zunor/prompt.ts
-//
 // Збірка системного промпту — паттерн «воронка контексту»:
 // база (легка, завжди) + focus активної послуги (required + price) + безпека last.
 import { PREMISES, SERVICES } from '$lib/categories/cleaning/presets'

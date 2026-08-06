@@ -1,4 +1,3 @@
-// src/routes/(auth)/jobs/+page.server.ts
 import { prisma } from '$lib/server/prisma'
 import { requireUser } from '$lib/server/guards'
 import { getCities, getCategories } from '$lib/server/reference'

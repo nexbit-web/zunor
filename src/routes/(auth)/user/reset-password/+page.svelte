@@ -1,4 +1,3 @@
-<!-- src/routes/(auth)/user/reset-password/+page.svelte -->
 <script lang="ts">
   import { Button } from '$lib/components/ui/button'
   import * as Card from '$lib/components/ui/card'
@@ -36,7 +35,10 @@
   let touched = $state({ password: false, confirm: false })
 
   // ─── Password strength (як у register) ───
-  function passwordStrength(pw: string): { score: 0 | 1 | 2 | 3; label: string } {
+  function passwordStrength(pw: string): {
+    score: 0 | 1 | 2 | 3
+    label: string
+  } {
     if (pw.length < 8) return { score: 0, label: 'Закороткий' }
     let score = 0
     if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) score++
@@ -100,7 +102,7 @@
       setTimeout(() => goto('/user/login'), 2500)
     } catch (err) {
       console.error('[reset-password] failed:', err)
-      serverError = 'Помилка з\'єднання. Перевірте інтернет.'
+      serverError = "Помилка з'єднання. Перевірте інтернет."
     } finally {
       loading = false
     }
@@ -112,7 +114,10 @@
   <meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 
-<div class="min-h-screen flex items-center justify-center px-4 py-12" style="background-color: var(--background)">
+<div
+  class="min-h-screen flex items-center justify-center px-4 py-12"
+  style="background-color: var(--background)"
+>
   <div class="w-full max-w-md flex flex-col gap-6">
     <Card.Root class="overflow-hidden">
       {#if !tokenValid}
@@ -128,7 +133,8 @@
             Посилання недійсне
           </Card.Title>
           <Card.Description class="text-sm">
-            Це посилання не містить валідного токена. Запросіть нове у формі відновлення паролю.
+            Це посилання не містить валідного токена. Запросіть нове у формі
+            відновлення паролю.
           </Card.Description>
         </Card.Header>
 
@@ -159,7 +165,10 @@
 
         <Card.Content>
           <div class="flex justify-center py-2">
-            <LoaderCircle class="size-5 animate-spin" style="color: var(--primary)" />
+            <LoaderCircle
+              class="size-5 animate-spin"
+              style="color: var(--primary)"
+            />
           </div>
         </Card.Content>
       {:else}

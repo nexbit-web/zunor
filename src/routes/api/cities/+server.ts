@@ -1,4 +1,3 @@
-// src/routes/api/cities/+server.ts
 import { json } from '@sveltejs/kit'
 import { getCities } from '$lib/server/reference'
 import type { RequestHandler } from './$types'

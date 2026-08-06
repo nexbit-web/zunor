@@ -1,4 +1,3 @@
-// src/routes/api/orders/[id]/[action]/+server.ts
 import { json, error } from '@sveltejs/kit'
 import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
