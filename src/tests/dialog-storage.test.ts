@@ -29,7 +29,8 @@ beforeEach(async () => {
   vi.unstubAllEnvs()
 })
 
-const { saveDialog, loadDialog, clearDialog } = await import('./dialog-storage')
+const { saveDialog, loadDialog, clearDialog } =
+  await import('$lib/zunor/dialog-storage')
 
 function dialog(overrides = {}) {
   return {

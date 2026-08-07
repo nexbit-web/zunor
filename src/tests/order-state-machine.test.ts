@@ -4,7 +4,7 @@ import {
   nextStatus,
   getActor,
   isTerminal,
-} from './order-state-machine'
+} from '$lib/server/order-state-machine'
 
 // Стейт-машина — єдине місце, де вирішується, ХТО і КОЛИ може рухати
 // замовлення. Тести фіксують саме права, а не механіку переходів:

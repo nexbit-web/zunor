@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { validateCleaningMetadata } from './validate'
+import { validateCleaningMetadata } from '$lib/categories/cleaning/validate'
 
 // Це остання лінія перед БД: сюди приходить і вивід LLM, і тіло POST від
 // клієнта. Тести тримають дві обіцянки — обовʼязкові поля не проскакують,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sanitizeJobTitle, sanitizeJobDescription } from './job-copy'
+import { sanitizeJobTitle, sanitizeJobDescription } from '$lib/server/job-copy'
 
 // Вхід — недовірений: вивід LLM або тіло POST. Контракт простий: або
 // чистий рядок у межах лімітів, або null (викликач підставить шаблон).

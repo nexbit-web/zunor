@@ -1,7 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { scoreCandidate, isNewMaster, responseRate, scoreAll } from './scoring'
-import { DISPATCH_CONFIG } from './types'
-import type { Candidate } from './types'
+import {
+  scoreCandidate,
+  isNewMaster,
+  responseRate,
+  scoreAll,
+} from '$lib/server/dispatch/scoring'
+import { DISPATCH_CONFIG } from '$lib/server/dispatch/types'
+import type { Candidate } from '$lib/server/dispatch/types'
 
 // Scoring — це не технічна деталь, а продуктове УТП: справедливий розподіл
 // заявок (новачок має шанс, «зірку» не бомбимо). Тести перевіряють саме ці

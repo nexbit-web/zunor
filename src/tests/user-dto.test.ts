@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { flattenMasterRating, flattenClientRating } from './user-dto'
+import { flattenMasterRating, flattenClientRating } from '$lib/server/user-dto'
 
 // Регресійний тест на баг, через який шість API-роутів просили в Prisma
 // поле avgRating, якого в схемі вже не було. Типи такого не ловлять

@@ -3,7 +3,7 @@ import {
   isEligibleFromFeed,
   type JobAccessSubject,
   type JobAccessViewer,
-} from './job-access'
+} from '$lib/server/job-access'
 
 // Заявка-еталон: відкрита, Одеса, прибирання.
 const job: JobAccessSubject = {

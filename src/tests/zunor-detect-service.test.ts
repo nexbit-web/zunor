@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { detectActiveService } from './detect-service'
+import { detectActiveService } from '$lib/server/zunor/detect-service'
 import type { ZunorClientMessage } from '$lib/types/zunor'
 
 // Детект послуги задає ФОКУС промпту. Помилка тут не ламає заявку

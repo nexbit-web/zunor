@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { safeJsonLd } from './json-ld'
+import { safeJsonLd } from '$lib/utils/json-ld'
 
 describe('safeJsonLd', () => {
   // Головний сценарій: майстер ставить собі таке ім'я, і воно потрапляє
