@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit'
+import { env } from '$env/dynamic/private'
 import { cloudinary } from '$lib/server/cloudinary'
 import { prisma } from '$lib/server/prisma'
 import { limit } from '$lib/server/rate-limit'
@@ -46,13 +47,23 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     } catch {
       return false
     }
-    return (
-      parsed.protocol === 'https:' &&
-      parsed.hostname === 'res.cloudinary.com' &&
-      // publicId вже прив'язаний до userId перевіркою префікса нижче,
-      // тож збіг із ним і робить посилання «своїм».
-      parsed.pathname.includes(publicId)
-    )
+
+    if (parsed.protocol !== 'https:') return false
+    if (parsed.hostname !== 'res.cloudinary.com') return false
+
+    // Хмара мусить бути НАША. res.cloudinary.com обслуговує всі акаунти
+    // світу, і перший сегмент шляху — це cloud name. Без цієї перевірки
+    // достатньо було завести власний безкоштовний Cloudinary, покласти
+    // туди файл із чужим publicId у назві — і посилання проходило як своє.
+    //
+    // Практичний наслідок: картинку в профілі можна підмінити ПІСЛЯ
+    // модерації, бо вміст лежить на чужому акаунті й нам не підпорядкований.
+    const [, cloudName] = parsed.pathname.split('/')
+    if (!cloudName || cloudName !== env.CLOUDINARY_CLOUD_NAME) return false
+
+    // publicId вже прив'язаний до userId перевіркою префікса нижче,
+    // тож збіг із ним і робить посилання «своїм».
+    return parsed.pathname.includes(publicId)
   }
 
   // ── AVATAR ────────────────────────────────────────────────────────────

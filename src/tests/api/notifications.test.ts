@@ -93,29 +93,43 @@ describe('GET', () => {
     }
   })
 
-  // ── ЗНАЙДЕНА ДІРКА ────────────────────────────────────────────────────
+  // `Math.min(50, Math.max(1, Number('abc')))` дорівнює NaN: обидва Math не
+  // «виправляють» NaN, вони його ПРОПУСКАЮТЬ. Далі take: NaN їхав у Prisma,
+  // той кидав помилку валідації — і клієнт отримував 500 замість стрічки.
+  // Посилання /api/notifications?limit=abc клало ендпоінт будь-кому.
   //
-  // Math.min(50, Math.max(1, Number('abc'))) === NaN: обидва Math не
-  // «виправляють» NaN, вони його ПРОПУСКАЮТЬ. Далі take: NaN їде в Prisma,
-  // той кидає помилку валідації — і клієнт отримує 500 замість стрічки.
-  //
-  // Робоче посилання: /api/notifications?limit=abc
-  //
-  // Це не витік даних, але для проду болить: будь-який бот або кривий
-  // клієнтський код генерує потік 500-х, які виглядають як падіння сервісу.
-  // Лікується перевіркою Number.isFinite перед затисканням.
-  //
-  // Тест ЧЕРВОНИЙ навмисно.
-  it('ДІРКА: нечисловий limit перетворюється на NaN і їде в базу', async () => {
+  // Тепер розбір іде через intParam ($lib/server/query), який перевіряє
+  // Number.isFinite ДО затискання.
+  it('нечисловий limit не доїжджає до бази', async () => {
+    for (const raw of ['abc', '', '   ', 'NaN', '1e999', 'null']) {
+      resetPrisma()
+      prisma.notification.findMany.mockResolvedValue([])
+
+      await GET(
+        makeEvent({
+          url: `/api/notifications?limit=${raw}`,
+          locals: sessionUser(USER),
+        }),
+      )
+
+      const take = prisma.notification.findMany.mock.calls[0][0].take
+      expect(Number.isFinite(take), raw).toBe(true)
+      expect(take, raw).toBeGreaterThan(0)
+    }
+  })
+
+  // Затискання лишилось на місці — стеля важливіша за зручність.
+  it('надто великий limit ріжеться до стелі', async () => {
     await GET(
       makeEvent({
-        url: '/api/notifications?limit=abc',
+        url: '/api/notifications?limit=9999',
         locals: sessionUser(USER),
       }),
     )
 
-    const take = prisma.notification.findMany.mock.calls[0][0].take
-    expect(Number.isFinite(take)).toBe(true)
+    expect(
+      prisma.notification.findMany.mock.calls[0][0].take,
+    ).toBeLessThanOrEqual(51)
   })
 
   it('зайвий рядок ріжеться й перетворюється на курсор', async () => {

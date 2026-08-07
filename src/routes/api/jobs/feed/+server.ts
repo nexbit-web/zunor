@@ -2,6 +2,7 @@ import { json, error } from '@sveltejs/kit'
 import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
 import { clientRatingSelect, flattenClientRating } from '$lib/server/user-dto'
+import { moneyParam } from '$lib/server/query'
 import type { RequestHandler } from './$types'
 
 const PAGE_SIZE = 20
@@ -32,12 +33,9 @@ export const GET: RequestHandler = async ({ locals, url }) => {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean)
-  const minPriceCents = minPriceParam
-    ? Math.max(0, Math.round(Number(minPriceParam) * 100))
-    : null
-  const maxPriceCents = maxPriceParam
-    ? Math.max(0, Math.round(Number(maxPriceParam) * 100))
-    : null
+  // Сміття у фільтрі ціни — це «фільтра немає», а не NaN у запиті до бази.
+  const minPriceCents = moneyParam(minPriceParam)
+  const maxPriceCents = moneyParam(maxPriceParam)
 
   const user = await prisma.user.findUnique({
     where: { id: userId },

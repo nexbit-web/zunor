@@ -7,14 +7,16 @@ import {
 import { prisma } from '$lib/server/prisma'
 import type { RequestHandler } from './$types'
 
+// role та onboarded у цьому типі НЕМАЄ навмисно. Клієнт може їх прислати —
+// роут просто не дивиться в ці поля. Тримати їх у типі означало б натякати,
+// що вони працюють: саме так вони колись і повернулись у код після
+// «прибирання».
 interface UpdatePayload {
   // ─── Поля User ───
-  role?: 'CLIENT' | 'MASTER'
   username?: string
   name?: string
   phone?: string
   city?: string
-  onboarded?: boolean
   bio?: string
   avatar?: string | null
   avatarPublicId?: string | null
@@ -198,8 +200,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
   // ═══════════════════ Оновлення User ═══════════════════
 
+  // onboarded тут НЕ виставляється — навіть якщо його прислали в тілі.
+  // Це замок №3 з hooks.server.ts: із onboarded=true й порожнім профілем
+  // користувач проходить в дашборд повз онбординг. Прапорець ставить лише
+  // $lib/server/profile.ts, і лише разом із реально збереженим профілем.
   const userData: Prisma.UserUpdateInput = {}
-  if (body.onboarded === true) userData.onboarded = true
   if (body.name) userData.name = body.name
   if (body.phone !== undefined) userData.phone = body.phone
   if (body.city) userData.city = body.city
@@ -208,7 +213,6 @@ export const POST: RequestHandler = async ({ request, locals }) => {
   if (body.avatar !== undefined) userData.avatar = body.avatar
   if (body.avatarPublicId !== undefined)
     userData.avatarPublicId = body.avatarPublicId
-  if (body.onboarded === true) userData.onboarded = true
 
   if (Object.keys(userData).length > 0) {
     try {

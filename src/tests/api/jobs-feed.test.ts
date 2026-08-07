@@ -161,20 +161,15 @@ describe('фільтр не можна розширити з клієнта', ()
   })
 })
 
-// ── ЗНАЙДЕНА ДІРКА ────────────────────────────────────────────────────────
-//
-// minPrice/maxPrice приходять із query і проходять через
+// minPrice/maxPrice приходять із query і колись проходили через
 // Math.max(0, Math.round(Number(raw) * 100)). Number('abc') === NaN, а Math
-// його не «виправляє» — NaN проходить наскрізь. Далі умова
-// `minPriceCents !== null` вважає NaN заданим фільтром, і в Prisma їде
+// його не «виправляє» — NaN проходив наскрізь. Далі умова
+// `minPriceCents !== null` вважала NaN заданим фільтром, і в Prisma їхало
 // { gte: NaN } → помилка валідації → 500 замість стрічки.
 //
-// Робоче посилання: /api/jobs/feed?view=feed&minPrice=abc
-//
-// Той самий клас помилки, що й у /api/notifications?limit=abc: Math.min /
-// Math.max не є валідацією числа. Лікується Number.isFinite.
-//
-// Тести ЧЕРВОНІ навмисно.
+// Той самий клас помилки, що й у /api/notifications?limit=abc: Math.min і
+// Math.max не є валідацією числа. Тепер обидва — через moneyParam
+// ($lib/server/query), і сміття означає «фільтра немає».
 describe('нечислові фільтри ціни', () => {
   beforeEach(() => {
     prisma.user.findUnique.mockResolvedValue(activeMaster)
@@ -182,20 +177,36 @@ describe('нечислові фільтри ціни', () => {
     prisma.job.findMany.mockResolvedValue([])
   })
 
-  it('ДІРКА: minPrice=abc їде в базу як NaN', async () => {
-    await GET(feedEvent('m1', '&minPrice=abc'))
+  it('сміття в minPrice просто вимикає фільтр', async () => {
+    for (const raw of ['abc', 'NaN', '1e999', '   ']) {
+      prisma.job.findMany.mockClear()
+      await GET(feedEvent('m1', `&minPrice=${raw}`))
+
+      const where = prisma.job.findMany.mock.calls[0][0].where
+      const gte = where.AND?.[0]?.OR?.[0]?.budgetMaxCents?.gte
+      expect(gte, raw).toBeUndefined()
+    }
+  })
+
+  it('сміття в maxPrice — так само', async () => {
+    for (const raw of ['abc', 'NaN', '1e999', '   ']) {
+      prisma.job.findMany.mockClear()
+      await GET(feedEvent('m1', `&maxPrice=${raw}`))
+
+      const where = prisma.job.findMany.mock.calls[0][0].where
+      const lte = where.OR?.[0]?.budgetMinCents?.lte
+      expect(lte, raw).toBeUndefined()
+    }
+  })
+
+  // Відʼємна ціна — не помилка клієнта, а спроба зіграти на знак: нижня
+  // межа затискається до нуля.
+  it('відʼємна ціна затискається до нуля', async () => {
+    await GET(feedEvent('m1', '&minPrice=-500'))
 
     const where = prisma.job.findMany.mock.calls[0][0].where
     const gte = where.AND?.[0]?.OR?.[0]?.budgetMaxCents?.gte
-    expect(gte === undefined || Number.isFinite(gte)).toBe(true)
-  })
-
-  it('ДІРКА: maxPrice=abc їде в базу як NaN', async () => {
-    await GET(feedEvent('m1', '&maxPrice=abc'))
-
-    const where = prisma.job.findMany.mock.calls[0][0].where
-    const lte = where.OR?.[0]?.budgetMinCents?.lte
-    expect(lte === undefined || Number.isFinite(lte)).toBe(true)
+    expect(gte).toBe(0)
   })
 
   it('коректна ціна перетворюється на копійки', async () => {

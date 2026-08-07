@@ -1,6 +1,7 @@
 import { json, error } from '@sveltejs/kit'
 import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
+import { intParam } from '$lib/server/query'
 import type { RequestHandler } from './$types'
 
 /**
@@ -11,10 +12,11 @@ export const GET: RequestHandler = async ({ locals, url }) => {
   const user = requireApiUser(locals)
 
   const cursor = url.searchParams.get('cursor')
-  const limit = Math.min(
-    50,
-    Math.max(1, Number(url.searchParams.get('limit') ?? 20)),
-  )
+  const limit = intParam(url.searchParams.get('limit'), {
+    min: 1,
+    max: 50,
+    fallback: 20,
+  })
   const unreadOnly = url.searchParams.get('unreadOnly') === 'true'
 
   const items = await prisma.notification.findMany({

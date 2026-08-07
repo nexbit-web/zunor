@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { prisma, resetPrisma } from '../helpers/prisma-mock'
 import { cloudinary, resetInfra } from '../helpers/infra'
 import { makeEvent, sessionUser, anonymous } from '../helpers/event'
+import { env } from '../mocks/env-dynamic-private'
 
 vi.mock('$lib/server/prisma', async () => ({
   prisma: (await import('../helpers/prisma-mock')).prisma,
@@ -25,8 +26,14 @@ async function post(userId: string | null, body: unknown): Promise<Response> {
   )) as Response
 }
 
+// Ім'я хмари беремо з тієї самої заглушки $env, яку читає роут: перевірка
+// «хмара наша» має спиратись на конфіг, а не на рядок, вигаданий у тесті.
+const CLOUD = env.CLOUDINARY_CLOUD_NAME
+const at = (path: string) =>
+  `https://res.cloudinary.com/${CLOUD}/image/upload/v1/${path}.jpg`
+
 const ownAvatarId = `zunor/users/${USER}/avatar`
-const ownAvatarUrl = `https://res.cloudinary.com/zunor-cloud/image/upload/v1/${ownAvatarId}.jpg`
+const ownAvatarUrl = at(ownAvatarId)
 
 beforeEach(() => {
   resetPrisma()
@@ -57,7 +64,7 @@ describe('avatar: чужий publicId', () => {
     const res = await post(USER, {
       kind: 'avatar',
       publicId: 'zunor/users/other-user/avatar',
-      url: 'https://res.cloudinary.com/c/image/upload/zunor/users/other-user/avatar.jpg',
+      url: `https://res.cloudinary.com/${CLOUD}/image/upload/zunor/users/other-user/avatar.jpg`,
     })
 
     expect(res.status).toBe(403)
@@ -68,7 +75,7 @@ describe('avatar: чужий publicId', () => {
     const res = await post(USER, {
       kind: 'avatar',
       publicId: 'zunor/system/logo',
-      url: 'https://res.cloudinary.com/c/image/upload/zunor/system/logo.jpg',
+      url: `https://res.cloudinary.com/${CLOUD}/image/upload/zunor/system/logo.jpg`,
     })
     expect(res.status).toBe(403)
   })
@@ -79,7 +86,7 @@ describe('avatar: чужий publicId', () => {
     const res = await post(USER, {
       kind: 'avatar',
       publicId: `zunor/users/${USER}0/avatar`,
-      url: `https://res.cloudinary.com/c/image/upload/zunor/users/${USER}0/avatar.jpg`,
+      url: `https://res.cloudinary.com/${CLOUD}/image/upload/zunor/users/${USER}0/avatar.jpg`,
     })
     expect(res.status).toBe(403)
   })
@@ -90,14 +97,14 @@ describe('avatar: посилання', () => {
     ['чужий домен', `https://evil.com/image/upload/${ownAvatarId}.jpg`],
     [
       'http замість https',
-      `http://res.cloudinary.com/c/image/upload/${ownAvatarId}.jpg`,
+      `http://res.cloudinary.com/${CLOUD}/image/upload/${ownAvatarId}.jpg`,
     ],
     ['домен-двійник', `https://res.cloudinary.com.evil.com/${ownAvatarId}.jpg`],
     ['піддомен-двійник', `https://evil-res.cloudinary.com/${ownAvatarId}.jpg`],
     ['не URL узагалі', 'просто рядок'],
     [
       'посилання без свого publicId',
-      'https://res.cloudinary.com/c/image/upload/v1/other.jpg',
+      `https://res.cloudinary.com/${CLOUD}/image/upload/v1/other.jpg`,
     ],
   ]
 
@@ -158,28 +165,20 @@ describe('avatar: посилання', () => {
   })
 })
 
-// ── ЗНАЙДЕНА ДІРКА ──────────────────────────────────────────────────────
-//
-// Перевірка посилання дивиться на хост (res.cloudinary.com) і на те, що
-// шлях МІСТИТЬ власний publicId. Але ім'я хмари Cloudinary — це ПЕРШИЙ
-// сегмент шляху, і воно не перевіряється. Тобто підходить посилання на
-// ЧУЖИЙ Cloudinary-акаунт, аби в шляху десь трапився свій publicId:
+// Ім'я хмари Cloudinary — це ПЕРШИЙ сегмент шляху, і воно перевіряється
+// нарівні з хостом. Без цього підходило б посилання на ЧУЖИЙ акаунт, аби в
+// шляху десь трапився свій publicId:
 //
 //   https://res.cloudinary.com/АКАУНТ-ЗЛОВМИСНИКА/image/upload/v1/zunor/users/<свій-id>/avatar.jpg
 //
-// Наслідок не «чужий аватар» (publicId все ще свій), а обхід нашого
+// Наслідок був не «чужий аватар» (publicId усе ще свій), а обхід нашого
 // пайплайну завантаження: картинку віддає сервер, який ми не контролюємо.
 // Її можна підмінити ПІСЛЯ модерації (завантажив нейтральне — підмінив на
 // що завгодно) і рахувати, хто дивився профіль.
-//
-// Лікується одним рядком: звіряти перший сегмент шляху з власним
-// CLOUDINARY_CLOUD_NAME.
-//
-// Ці тести ЧЕРВОНІ навмисно: вони фіксують діру, а не поведінку.
 describe('чужий Cloudinary-акаунт', () => {
   const foreignCloudUrl = `https://res.cloudinary.com/attacker-cloud/image/upload/v1/${ownAvatarId}.jpg`
 
-  it('ДІРКА: аватар з чужої хмари приймається', async () => {
+  it('аватар з чужої хмари — 403', async () => {
     const res = await post(USER, {
       kind: 'avatar',
       publicId: ownAvatarId,
@@ -188,7 +187,7 @@ describe('чужий Cloudinary-акаунт', () => {
     expect(res.status).toBe(403)
   })
 
-  it('ДІРКА: портфоліо з чужої хмари приймається', async () => {
+  it('портфоліо з чужої хмари — 403', async () => {
     const publicId = `zunor/users/${USER}/portfolio-1`
     const res = await post(USER, {
       kind: 'portfolio-add',
@@ -201,13 +200,13 @@ describe('чужий Cloudinary-акаунт', () => {
 
 describe('portfolio', () => {
   const publicId = `zunor/users/${USER}/portfolio-1`
-  const url = `https://res.cloudinary.com/zunor-cloud/image/upload/v1/${publicId}.jpg`
+  const url = `https://res.cloudinary.com/${CLOUD}/image/upload/v1/${publicId}.jpg`
 
   it('чужий publicId — 403', async () => {
     const res = await post(USER, {
       kind: 'portfolio-add',
       publicId: 'zunor/users/other/portfolio-1',
-      url: 'https://res.cloudinary.com/c/zunor/users/other/portfolio-1.jpg',
+      url: `https://res.cloudinary.com/${CLOUD}/zunor/users/other/portfolio-1.jpg`,
     })
     expect(res.status).toBe(403)
   })
