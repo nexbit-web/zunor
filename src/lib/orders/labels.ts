@@ -69,15 +69,6 @@ export function formatBudget(
   return 'Бюджет договірний'
 }
 
-export function formatRelative(iso: string | Date): string {
-  const date = new Date(iso)
-  const diffMs = Date.now() - date.getTime()
-  const diffMin = Math.floor(diffMs / 60000)
-  const diffHr = Math.floor(diffMin / 60)
-  const diffDays = Math.floor(diffHr / 24)
-  if (diffMin < 1) return 'щойно'
-  if (diffMin < 60) return `${diffMin} хв тому`
-  if (diffHr < 24) return `${diffHr} год тому`
-  if (diffDays < 7) return `${diffDays} днів тому`
-  return date.toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' })
-}
+// formatRelative звідси прибраний: це була сьома копія одного форматера,
+// до того ж мертва (розмітка її не викликала). Живе він тепер один —
+// у $lib/utils/time.

@@ -16,6 +16,7 @@
   import { Star, ChevronRight, AlertCircle, Clock, Search } from 'lucide-svelte'
 
   import { detailIcon } from '$lib/categories/cleaning/detail-icons'
+  import { formatRelative } from '$lib/utils/time'
 
   import { SERVICES } from '$lib/categories/cleaning/presets'
   import { describeJob } from '$lib/categories/cleaning/describe'
@@ -93,20 +94,6 @@
   )
 
   // Helpers
-  function formatRelative(iso: string) {
-    const diff = Date.now() - new Date(iso).getTime()
-    const min = Math.floor(diff / 60_000)
-    const hr = Math.floor(min / 60)
-    const days = Math.floor(hr / 24)
-    if (min < 1) return 'щойно'
-    if (min < 60) return `${min} хв тому`
-    if (hr < 24) return `${hr} год тому`
-    if (days < 7) return `${days} дн`
-    return new Date(iso).toLocaleDateString('uk-UA', {
-      day: 'numeric',
-      month: 'short',
-    })
-  }
   function jobDetails(job: any) {
     // Беремо ключові деталі (без "Послуга" — вона вже в заголовку, і без предметів)
     return describeJob(job.metadata).filter(

@@ -267,13 +267,11 @@ describe('чистота функції', () => {
     }
   })
 
-  // ⚠️ Документує РОЗБІЖНІСТЬ із власним докстрінгом модуля: він обіцяє
-  // «якість майстра + швидкість відгуку», але p.createdAt у scoreProposal
-  // не використовується взагалі. При рівних майстрах виграє той, хто йде
-  // раніше у вибірці (вона відсортована за createdAt DESC), тобто той, хто
-  // відгукнувся ОСТАННІМ. Тест фіксує фактичну поведінку — якщо колись
-  // швидкість відгуку врахують, він і впаде.
-  it('швидкість відгуку на ранжування не впливає', () => {
+  // Швидкість відгуку — друге правило сортування. Вибірка з БД іде за
+  // createdAt DESC, тож без явного тайбрейку при рівних майстрах вигравав
+  // той, хто відгукнувся ОСТАННІМ, — рівно навпаки до обіцяного в описі
+  // модуля.
+  it('при рівних майстрах виграє той, хто відгукнувся першим', () => {
     const ordered = [
       proposal('last', {}, minsAgo(1)),
       proposal('third', {}, minsAgo(10)),
@@ -283,8 +281,21 @@ describe('чистота функції', () => {
 
     const { recommended } = rank(ordered)
 
-    expect(recommended.has('first')).toBe(false)
-    expect(recommended.has('last')).toBe(true)
+    expect(recommended.has('first')).toBe(true)
+    expect(recommended.has('last')).toBe(false)
+  })
+
+  // Тайбрейк саме ДРУГИЙ: швидкість не має підіймати слабкого майстра над
+  // сильним — інакше в топі опинялися б ті, хто просто швидше тисне кнопку.
+  it('швидкість не перебиває якість', () => {
+    const { recommended } = rank([
+      proposal('fast-but-stale', { lastSeen: daysAgo(7) }, minsAgo(60)),
+      proposal('slow-but-online-1', { lastSeen: minsAgo(1) }, minsAgo(1)),
+      proposal('slow-but-online-2', { lastSeen: minsAgo(1) }, minsAgo(1)),
+      proposal('slow-but-online-3', { lastSeen: minsAgo(1) }, minsAgo(1)),
+    ])
+
+    expect(recommended.has('fast-but-stale')).toBe(false)
   })
 
   it('без явного now береться поточний час і функція не падає', () => {

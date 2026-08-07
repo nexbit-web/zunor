@@ -17,6 +17,8 @@ import type {
  * Викликати subscribeToUserEvents(userId) один раз у root +layout.svelte.
  */
 
+type Channel = ReturnType<ReturnType<typeof getPusher>['subscribe']>
+
 class ChatStore {
   /** Список превью чатів, синхронізується з /messages */
   chats = $state<ChatPreview[]>([])
@@ -35,6 +37,13 @@ class ChatStore {
 
   /** ID юзера якого ми слухаємо (щоб не підписатися двічі) */
   private boundUserId: string | null = null
+
+  // Канал і посилання на обробники тримаємо, щоб було ЩО знімати.
+  // Інлайнові стрілки в bind не дають цієї можливості: unbind без тієї
+  // самої посилки не знімає нічого.
+  private channel: Channel | null = null
+  private onChatUpdate: ((data: ChatUpdatePayload) => void) | null = null
+  private onMessageNew: ((data: MessageNewPayload) => void) | null = null
 
   /** ID активно відкритого чату — щоб не звукувати на нього */
   activeChatId = $state<string | null>(null)
@@ -56,31 +65,57 @@ class ChatStore {
     if (!browser) return
     if (this.boundUserId === userId) return
 
+    // Зміна користувача: старі обробники треба зняти, інакше вони
+    // залишаться висіти на попередньому каналі назавжди.
+    this.unbindChannel()
+
     const pusher = getPusher()
     const channelName = `private-user-${userId}`
     const channel = pusher.subscribe(channelName)
 
     // Прийшло нове/інше оновлення в чаті — оновлюємо preview і unread
-    channel.bind('chat:update', (data: ChatUpdatePayload) => {
+    this.onChatUpdate = (data: ChatUpdatePayload) => {
       this.handleChatUpdate(data, userId)
-    })
-
+    }
     // Деталь повідомлення (для звуку коли чат закритий)
-    channel.bind('message:new', (data: MessageNewPayload) => {
+    this.onMessageNew = (data: MessageNewPayload) => {
       this.handleIncomingMessage(data, userId)
-    })
+    }
 
+    channel.bind('chat:update', this.onChatUpdate)
+    channel.bind('message:new', this.onMessageNew)
+
+    this.channel = channel
     this.boundUserId = userId
   }
 
   /** Cleanup при logout */
   unsubscribeAll() {
     if (!browser || !this.boundUserId) return
-    const pusher = getPusher()
-    pusher.unsubscribe(`private-user-${this.boundUserId}`)
+
+    this.unbindChannel()
     this.boundUserId = null
     this.chats = [] // totalUnread похідний — обнулиться сам
     this.initialized = false
+  }
+
+  /**
+   * Знімає ТІЛЬКИ свої обробники — unbind, а не unsubscribe.
+   *
+   * На цьому ж каналі private-user-* висить стор сповіщень. unsubscribe
+   * гасив би канал цілком, тобто разом із дзвіночком. Зараз це проходило
+   * непоміченим лише тому, що unsubscribeAll кличуть при виході з акаунта,
+   * коли сторінка однаково перезавантажується.
+   */
+  private unbindChannel() {
+    if (this.onChatUpdate)
+      this.channel?.unbind('chat:update', this.onChatUpdate)
+    if (this.onMessageNew)
+      this.channel?.unbind('message:new', this.onMessageNew)
+
+    this.channel = null
+    this.onChatUpdate = null
+    this.onMessageNew = null
   }
 
   private handleChatUpdate(data: ChatUpdatePayload, currentUserId: string) {

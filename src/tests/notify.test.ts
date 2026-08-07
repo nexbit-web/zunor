@@ -109,39 +109,33 @@ describe('notify(): запис і broadcast', () => {
   })
 })
 
-describe('notify(): робота всередині транзакції', () => {
-  it('за замовчуванням пише через звичайний клієнт', async () => {
+describe('notify(): транзакційного клієнта немає навмисно', () => {
+  it('пише завжди через звичайний клієнт', async () => {
     await notify({ userId: 'u-1', type: 'NEW_JOB', title: 'x' })
 
     expect(prisma.notification.create).toHaveBeenCalledTimes(1)
   })
 
-  it('переданий tx використовується замість глобального клієнта', async () => {
-    const tx = {
-      notification: { create: vi.fn(async () => CREATED) },
-    } as never
-
-    await notify({ userId: 'u-1', type: 'NEW_JOB', title: 'x' }, tx)
-
-    expect(prisma.notification.create).not.toHaveBeenCalled()
+  // Раніше функція приймала другим аргументом tx. Ним ніхто не
+  // користувався, зате це були заряджені граблі: подія Pusher летить
+  // одразу після create, тож усередині транзакції вона пішла б ДО коміту —
+  // відкотилась, а у вкладці вже спалахнуло сповіщення про замовлення,
+  // якого в базі немає. Тепер такого параметра просто немає, і сповіщати
+  // можна лише після коміту (див. accept/+server.ts).
+  it('другого аргументу в сигнатурі немає', () => {
+    expect(notify.length).toBe(1)
   })
 
-  // ⚠️ ПАСТКА НА МАЙБУТНЄ (сьогодні не спрацьовує: жоден роут tx сюди не
-  // передає — Notify.* кличуть ПІСЛЯ коміту).
-  //
-  // safeTrigger стоїть всередині notify і летить одразу після create. Якщо
-  // покликати notify(params, tx) в середині транзакції, а транзакція потім
-  // відкотиться — подія вже пішла: у вкладці спалахне сповіщення про
-  // замовлення, якого в базі немає. Правильний порядок — сповіщати після
-  // успішного коміту, як зроблено в accept/+server.ts.
-  it('подія летить одразу, не чекаючи коміту транзакції', async () => {
-    const tx = {
-      notification: { create: vi.fn(async () => CREATED) },
-    } as never
+  it('зайвий аргумент нічого не змінює — пишемо туди ж', async () => {
+    const tx = { notification: { create: vi.fn(async () => CREATED) } }
 
-    await notify({ userId: 'u-1', type: 'NEW_JOB', title: 'x' }, tx)
+    await (notify as (p: unknown, tx?: unknown) => Promise<void>)(
+      { userId: 'u-1', type: 'NEW_JOB', title: 'x' },
+      tx,
+    )
 
-    expect(safeTrigger).toHaveBeenCalledTimes(1)
+    expect(tx.notification.create).not.toHaveBeenCalled()
+    expect(prisma.notification.create).toHaveBeenCalledTimes(1)
   })
 })
 

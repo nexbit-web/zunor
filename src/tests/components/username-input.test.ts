@@ -196,21 +196,26 @@ describe('перевірка зайнятості', () => {
 })
 
 describe('життєвий цикл', () => {
-  // ⚠️ $effect дебаунса НЕ повертає прибирання: timer знімається лише при
-  // наступному введенні. Пішов з форми, не дочекавшись 400 мс, — запит усе
-  // одно полетить, уже для демонтованого компонента.
-  //
-  // Наслідок дрібний (один зайвий GET), але це саме той клас недогляду, про
-  // який AGENTS.md каже окремо: $effect із таймером мусить його ж і знімати.
-  // Лікується одним рядком — `return () => { if (timer) clearTimeout(timer) }`.
-  it('таймер переживає демонтування компонента', async () => {
+  // $effect із таймером мусить його ж і знімати. Без прибирання піти з
+  // форми, не дочекавшись 400 мс, означало запит для компонента, якого
+  // вже немає.
+  it('демонтування знімає відкладений запит', async () => {
     const { container, unmount } = field()
 
     await fireEvent.input(input(container), { target: { value: 'someone' } })
     unmount()
     await settle()
 
-    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('після демонтування не лишається жодного живого таймера', async () => {
+    const { container, unmount } = field()
+
+    await fireEvent.input(input(container), { target: { value: 'someone' } })
+    unmount()
+
+    expect(vi.getTimerCount()).toBe(0)
   })
 })
 

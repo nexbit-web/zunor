@@ -191,22 +191,39 @@ describe('підписка', () => {
     expect(pusher.unsubscribe).not.toHaveBeenCalled()
   })
 
-  // ⚠️ ЗАРЯДЖЕНІ ГРАБЛІ, а не баг сьогодні.
-  //
-  // Канал private-user-* спільний зі стором сповіщень, і той навмисно
-  // робить unbind, а не unsubscribe — щоб не вимкнути сусіда. Тут же
-  // виклик unsubscribe, тобто канал гасне цілком разом зі сповіщеннями.
-  //
-  // Зараз це безпечно: unsubscribeAll кличуть лише при виході з акаунта
-  // (user-menu, settings/account), а там сторінка однаково перезавантажується.
-  // Але щойно хтось покличе його деінде — дзвіночок мовчки перестане
-  // працювати, і зв'язок буде неочевидний. Тест фіксує поточну поведінку.
-  it('вихід гасить весь канал, включно з чужими підписками', async () => {
+  // Канал private-user-* спільний зі стором сповіщень. unsubscribe гасив би
+  // його цілком — разом із дзвіночком, — тому тут теж unbind.
+  it('вихід знімає лише свої обробники, канал лишає живим', async () => {
     await chatStore.subscribeToUserEvents(USER)
 
     chatStore.unsubscribeAll()
 
-    expect(pusher.unsubscribe).toHaveBeenCalledWith(CHANNEL)
+    expect(pusher.unsubscribe).not.toHaveBeenCalled()
+    expect(handlerCount(CHANNEL, 'chat:update')).toBe(0)
+    expect(handlerCount(CHANNEL, 'message:new')).toBe(0)
+  })
+
+  it('після виходу події вже не долітають', async () => {
+    chatStore.setChats([preview({ id: 'chat-1', unreadCount: 0 })])
+    await chatStore.subscribeToUserEvents(USER)
+
+    chatStore.unsubscribeAll()
+    chatStore.setChats([preview({ id: 'chat-1', unreadCount: 0 })])
+    emit(CHANNEL, 'chat:update', update({ chatId: 'chat-1' }))
+
+    expect(chatStore.totalUnread).toBe(0)
+  })
+
+  // Зміна користувача без явного виходу: старі обробники теж треба зняти,
+  // інакше вони висять на попередньому каналі назавжди.
+  it('зміна користувача не лишає обробників на старому каналі', async () => {
+    await chatStore.subscribeToUserEvents(USER)
+    await chatStore.subscribeToUserEvents('user-2')
+
+    expect(handlerCount(CHANNEL, 'chat:update')).toBe(0)
+    expect(handlerCount('private-user-user-2', 'chat:update')).toBe(1)
+
+    chatStore.unsubscribeAll()
   })
 })
 

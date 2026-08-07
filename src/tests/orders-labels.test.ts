@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import {
   ORDER_STATUS,
   ORDER_STATUS_LABEL,
@@ -8,7 +8,6 @@ import {
   formatPrice,
   formatMoney,
   formatBudget,
-  formatRelative,
 } from '$lib/orders/labels'
 import { nextStatus } from '$lib/server/order-state-machine'
 
@@ -115,47 +114,5 @@ describe('бюджет', () => {
 
   it('нуль — це межа, а не «немає»', () => {
     expect(formatBudget(0, null)).toMatch(/^від /)
-  })
-})
-
-describe('відносний час', () => {
-  afterEach(() => {
-    vi.useRealTimers()
-  })
-
-  const at = (iso: string) => {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date('2026-03-15T12:00:00Z'))
-    return formatRelative(iso)
-  }
-
-  it('щойно, хвилини, години', () => {
-    expect(at('2026-03-15T11:59:40Z')).toBe('щойно')
-    expect(at('2026-03-15T11:30:00Z')).toBe('30 хв тому')
-    expect(at('2026-03-15T09:00:00Z')).toBe('3 год тому')
-  })
-
-  it('дні', () => {
-    expect(at('2026-03-12T12:00:00Z')).toBe('3 днів тому')
-  })
-
-  it('старше тижня — дата', () => {
-    expect(at('2026-01-05T12:00:00Z')).toMatch(/січ/)
-  })
-
-  it('приймає і Date, і рядок', () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date('2026-03-15T12:00:00Z'))
-
-    expect(formatRelative(new Date('2026-03-15T11:30:00Z'))).toBe('30 хв тому')
-  })
-
-  // ⚠️ Дві реалізації одного форматера вже розійшлись: тут «1 днів тому»,
-  // а в notification-list.svelte для того самого проміжку — «учора».
-  // Обидві живі, обидві показуються користувачу на сусідніх екранах.
-  // Тест фіксує поточну поведінку — щоб зведення їх в одну було свідомим
-  // кроком, а не випадковим.
-  it('доба назад — «1 днів тому» (у стрічці сповіщень тут «учора»)', () => {
-    expect(at('2026-03-14T12:00:00Z')).toBe('1 днів тому')
   })
 })

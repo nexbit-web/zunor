@@ -13,6 +13,8 @@
     AvatarImage,
   } from '$lib/components/ui/avatar'
   import { ORDER_STATUS_LABEL, formatMoney } from '$lib/orders/labels'
+  // Дата відповідає на питання «коли це востаннє рухалось».
+  import { formatRelative, formatFull } from '$lib/utils/time'
   import type { OrderStatus } from '../../../generated/prisma/client'
 
   interface Props {
@@ -75,30 +77,6 @@
   }
 
   const status = $derived(STATUS_STYLE[order.status])
-
-  // Дата відповідає на питання «коли це востаннє рухалось».
-  function formatDate(iso: string): string {
-    const date = new Date(iso)
-    const min = Math.floor((Date.now() - date.getTime()) / 60_000)
-    const hr = Math.floor(min / 60)
-    const days = Math.floor(hr / 24)
-    if (min < 1) return 'щойно'
-    if (min < 60) return `${min} хв тому`
-    if (hr < 24) return `${hr} год тому`
-    if (days === 1) return 'учора'
-    if (days < 7) return `${days} дн тому`
-    return date.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' })
-  }
-
-  function formatFull(iso: string): string {
-    return new Date(iso).toLocaleString('uk-UA', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-  }
 </script>
 
 <a
@@ -150,7 +128,7 @@
       title={formatFull(order.updatedAt)}
       class="text-xs text-muted-foreground"
     >
-      {formatDate(order.updatedAt)}
+      {formatRelative(order.updatedAt)}
     </time>
     <span
       class="text-[15px] font-semibold tabular-nums text-foreground {isCancelled

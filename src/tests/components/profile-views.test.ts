@@ -145,25 +145,29 @@ describe('профіль майстра — вітрина', () => {
     expect(owner.container.textContent).toContain('Ти ще не додав опис')
   })
 
-  // ⚠️ Видима лише ПЕРША категорія (`primaryCategory = categories[0]`), хоч
-  // у профілі їх масив. Сьогодні це не помітно — категорія одна на весь
-  // продукт. Але додавання другої категорії має бути додаванням КОНТЕНТУ
-  // (розділ «движок vs контент»), а тут воно вимагатиме правки розмітки:
-  // майстер із двома напрямками мовчки показуватиме один.
-  //
-  // У schema.org-розмітку (knowsAbout) при цьому їдуть УСІ — тобто пошуковик
-  // бачить більше, ніж людина на сторінці.
-  it('у видимій частині показується лише перша категорія', () => {
+  // Показуються ВСІ категорії, а не лише перша: додавання другої має бути
+  // додаванням контенту, а не правкою розмітки («движок vs контент»).
+  // Раніше в schema.org (knowsAbout) їхали всі, а людина бачила одну.
+  it('показуються всі категорії майстра', () => {
     const { container } = masterView({ categories: ['Прибирання', 'Вікна'] })
 
     expect(container.textContent).toContain('Прибирання')
-    expect(container.textContent).not.toContain('Вікна')
+    expect(container.textContent).toContain('Вікна')
+  })
+
+  it('підпис узгоджений з кількістю', () => {
+    const one = masterView({ categories: ['Прибирання'] })
+    const many = masterView({ categories: ['Прибирання', 'Вікна'] })
+
+    expect(one.container.textContent).toContain('Категорія')
+    expect(many.container.textContent).toContain('Категорії')
   })
 
   it('майстер без категорій рендериться без порожнього блоку', () => {
     const { container } = masterView({ categories: [] })
 
     expect(container.textContent).toContain('Оля Клінер')
+    expect(container.textContent).not.toContain('Категорія')
   })
 
   // Ім'я приходить від користувача — розмітка в ньому лишається текстом.

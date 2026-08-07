@@ -16,6 +16,7 @@
   } from 'lucide-svelte'
   import { notifications } from '$lib/notifications'
   import { linkFor, type Notification } from '$lib/notifications/types'
+  import { formatRelative, formatFull } from '$lib/utils/time'
 
   let {
     initialItems,
@@ -57,31 +58,6 @@
   const unreadCount = $derived(
     browser ? notifications.unreadCount : initialUnreadCount,
   )
-
-  // ─── Час ───
-
-  function formatRelative(iso: string): string {
-    const date = new Date(iso)
-    const min = Math.floor((Date.now() - date.getTime()) / 60_000)
-    const hr = Math.floor(min / 60)
-    const days = Math.floor(hr / 24)
-    if (min < 1) return 'щойно'
-    if (min < 60) return `${min} хв тому`
-    if (hr < 24) return `${hr} год тому`
-    if (days === 1) return 'учора'
-    if (days < 7) return `${days} дн тому`
-    return date.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' })
-  }
-
-  function formatFull(iso: string): string {
-    return new Date(iso).toLocaleString('uk-UA', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-  }
 
   // ─── Завантаження ───
 

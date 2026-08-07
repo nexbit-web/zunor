@@ -153,8 +153,13 @@
       : null,
   )
 
-  // Категорія, до якої належить майстер (на MVP — одна: «Прибирання»).
-  const primaryCategory = $derived(user.categories[0] ?? null)
+  // Показуємо ВСІ категорії, а не лише першу. На сьогодні вона одна
+  // («Прибирання»), але додавання другої має бути додаванням контенту, а
+  // не правкою розмітки. Тим паче що в schema.org (knowsAbout) уже їдуть
+  // усі — тобто пошуковик бачив більше, ніж людина на сторінці.
+  const categoryLabel = $derived(
+    user.categories.length > 1 ? 'Категорії' : 'Категорія',
+  )
 
   function goEdit(): void {
     goto('dashboard/settings/profile')
@@ -336,14 +341,18 @@
         </p>
       {/if}
 
-      {#if primaryCategory}
-        <div class="mt-5 flex items-center gap-2.5">
-          <span class="text-[13px] text-muted-foreground">Категорія</span>
-          <span
-            class="inline-flex h-8 items-center rounded-full bg-secondary px-3.5 text-[13px] font-medium text-secondary-foreground"
-          >
-            {primaryCategory}
-          </span>
+      {#if user.categories.length > 0}
+        <!-- flex-wrap: із кількома категоріями рядок не має виїжджати
+             за картку на вузькому екрані. -->
+        <div class="mt-5 flex flex-wrap items-center gap-2.5">
+          <span class="text-[13px] text-muted-foreground">{categoryLabel}</span>
+          {#each user.categories as category (category)}
+            <span
+              class="inline-flex h-8 items-center rounded-full bg-secondary px-3.5 text-[13px] font-medium text-secondary-foreground"
+            >
+              {category}
+            </span>
+          {/each}
         </div>
       {/if}
     </section>

@@ -14,6 +14,7 @@
   import { onMount, untrack } from 'svelte'
   import { describeJob } from '$lib/categories/cleaning/describe'
   import { detailIcon } from '$lib/categories/cleaning/detail-icons'
+  import { formatRelative } from '$lib/utils/time'
   function jobDetails(job: any) {
     return describeJob(job.metadata).filter(
       (d) => d.label !== 'Послуга' && !d.items,
@@ -84,20 +85,6 @@
   // жодну з них розмітка не викликала. Бюджет на картці заявки клієнта не
   // показуємо взагалі — ціну визначає відгук майстра, а не заявка.
 
-  function formatRelative(iso: string) {
-    const diff = Date.now() - new Date(iso).getTime()
-    const min = Math.floor(diff / 60_000)
-    const hr = Math.floor(min / 60)
-    const days = Math.floor(hr / 24)
-    if (min < 1) return 'щойно'
-    if (min < 60) return `${min} хв тому`
-    if (hr < 24) return `${hr} год тому`
-    if (days < 7) return `${days} дн`
-    return new Date(iso).toLocaleDateString('uk-UA', {
-      day: 'numeric',
-      month: 'short',
-    })
-  }
   function expiresIn(iso: string) {
     const diff = new Date(iso).getTime() - Date.now()
     if (diff <= 0) return 'Прострочено'

@@ -11,21 +11,9 @@ export function formatMoney(cents: number, currency = 'UAH'): string {
   }).format(cents / 100)
 }
 
-/** Відносний час: «щойно», «5 хв тому», «3 дн», або дата. */
-export function formatRelative(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime()
-  const min = Math.floor(diff / 60_000)
-  const hr = Math.floor(min / 60)
-  const days = Math.floor(hr / 24)
-  if (min < 1) return 'щойно'
-  if (min < 60) return `${min} хв тому`
-  if (hr < 24) return `${hr} год тому`
-  if (days < 7) return `${days} дн`
-  return new Date(iso).toLocaleDateString('uk-UA', {
-    day: 'numeric',
-    month: 'short',
-  })
-}
+// Відносний час — спільний для всього застосунку, не свій. Реекспорт, щоб
+// сторінки заявок не міняли імпорти: сама реалізація в $lib/utils/time.
+export { formatRelative } from '$lib/utils/time'
 
 /** Скільки лишилось до закінчення заявки. */
 export function expiresIn(iso: string): string {
