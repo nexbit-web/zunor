@@ -54,8 +54,18 @@ npm run test:watch   # те саме у watch-режимі
 
 ### Тести
 
-Vitest, конфіг — `vitest.config.ts` (навмисно без плагіна `sveltekit()`,
-лише аліас `$lib`).
+Vitest, конфіг — `vitest.config.ts`. Два проєкти в одному файлі, і плутати
+їх не можна:
+
+| Проєкт       | Оточення | `browser` | Що ганяє                           |
+| ------------ | -------- | --------- | ---------------------------------- |
+| `server`     | node     | `false`   | `src/tests/**`, крім `components/` |
+| `components` | jsdom    | `true`    | `src/tests/components/**`          |
+
+Обидва — **без плагіна `sveltekit()`**: повний пайплайн додав би залежність
+від `.svelte-kit` і підняття dev-сервера на кожен прогін. Замість нього
+віртуальні модулі (`$env/*`, `$app/*`) підмінені заглушками з
+`src/tests/mocks`. Ганяти окремо — `npx vitest run --project server`.
 
 **Усі тести лежать в одній теці — `src/tests/`**, поруч із кодом їх більше
 немає. Ім'я файлу відповідає модулю, який він покриває, з префіксом теки,
@@ -70,7 +80,8 @@ Vitest, конфіг — `vitest.config.ts` (навмисно без плагі�
 `server/dispatch/scoring.ts`, `server/order-state-machine.ts`,
 `categories/cleaning/validate.ts`, `server/job-copy.ts`,
 `server/zunor/detect-service.ts`, `server/user-dto.ts`,
-`server/job-access.ts`, `zunor/dialog-storage.ts`.
+`server/job-access.ts`, `server/ranking.ts`, `orders/labels.ts`,
+`zunor/dialog-storage.ts`.
 
 Окремо — **безпекові** тести на тому ж чистому ядрі: `utils/redirect.ts`
 (open redirect), `username.ts` + `params/handle.ts` (підміна імені,
@@ -84,22 +95,22 @@ Vitest, конфіг — `vitest.config.ts` (навмисно без плагі�
 `(event) => data`, тож і те, й інше тестується прямим викликом, без підняття
 сервера й без БД.
 
-| Тека              | Що покриває                                            |
-| ----------------- | ------------------------------------------------------ |
-| `api/`            | усі 29 власних ендпоінтів (`api/auth/[...all]` — це сам better-auth) |
-| `loaders/access`  | сторінки з перевіркою доступу: заявка, замовлення, чат, профілі |
-| `loaders/guards`  | лейаути, онбординг, налаштування, гарди за роллю        |
-| `loaders/lists`   | списки: дашборд, заявки, замовлення, сповіщення         |
-| `hooks.test.ts`   | порядок замків і заголовки безпеки                      |
+| Тека             | Що покриває                                                          |
+| ---------------- | -------------------------------------------------------------------- |
+| `api/`           | усі 29 власних ендпоінтів (`api/auth/[...all]` — це сам better-auth) |
+| `loaders/access` | сторінки з перевіркою доступу: заявка, замовлення, чат, профілі      |
+| `loaders/guards` | лейаути, онбординг, налаштування, гарди за роллю                     |
+| `loaders/lists`  | списки: дашборд, заявки, замовлення, сповіщення                      |
+| `hooks.test.ts`  | порядок замків і заголовки безпеки                                   |
 
 Харнес:
 
-| Файл                        | Що дає                                            |
-| --------------------------- | ------------------------------------------------- |
-| `helpers/event.ts`          | `makeEvent` (RequestEvent), `sessionUser`, `anonymous`, `failure`, `okJson` |
-| `helpers/prisma-mock.ts`    | лінивий мок Prisma: `prisma.<model>.<method>` створюється на льоту |
-| `helpers/infra.ts`          | Pusher, Cloudinary, `Notify`, диспетчер, планувальник |
-| `mocks/*.ts`                | заглушки `$env/*` і `$app/environment` (підключені аліасами у `vitest.config.ts`) |
+| Файл                     | Що дає                                                                            |
+| ------------------------ | --------------------------------------------------------------------------------- |
+| `helpers/event.ts`       | `makeEvent` (RequestEvent), `sessionUser`, `anonymous`, `failure`, `okJson`       |
+| `helpers/prisma-mock.ts` | лінивий мок Prisma: `prisma.<model>.<method>` створюється на льоту                |
+| `helpers/infra.ts`       | Pusher, Cloudinary, `Notify`, диспетчер, планувальник                             |
+| `mocks/*.ts`             | заглушки `$env/*` і `$app/environment` (підключені аліасами у `vitest.config.ts`) |
 
 Правила:
 
@@ -138,11 +149,51 @@ Vitest, конфіг — `vitest.config.ts` (навмисно без плагі�
   драфта, детект мови (видно через системний промпт у `mock.calls`).
   Стрім мокається асинхронним генератором, який повертає `StreamResult`.
 
-**Що НЕ покрито** (щоб не шукати вдруге): `ranking.ts`, `chats-loader.ts`,
-`notifications.ts`, `turn-log.ts` і всі `.svelte`-компоненти. Обгортки
-інтеграцій (`prisma.ts`, `pusher.ts`, `mailer.ts`, `cloudinary.ts`,
-`auth.ts`, `deepseek.ts`) юніт-тестів не потребують — вони лише конструюють
-клієнтів.
+#### Компонентні тести: `src/tests/components/`
+
+Оточення jsdom, `@testing-library/svelte`, `browser: true`. Свій харнес:
+
+| Файл                                 | Що дає                                                                                                             |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `components/setup.ts`                | полифіли jsdom (`matchMedia`, спостерігачі, скрол, Web Animations, аудіо), гасіння переходів за `<a>`, `cleanup()` |
+| `components/helpers/client-infra.ts` | фальшивий Pusher із `emit()` і `handlerCount()`, керований `fetch` (`respondWith`/`respondFail`/`respondOffline`)  |
+| `mocks/app-state.svelte.ts`          | рунний `page` + `setPage('/dashboard/orders')`                                                                     |
+| `mocks/app-navigation.ts`            | `goto`, `invalidateAll`, хуки навігації як `vi.fn()`                                                               |
+| `mocks/icon-stub.svelte`             | заглушка іконки (див. нижче)                                                                                       |
+
+Правила:
+
+- **`lucide-svelte` підмінений заглушкою** (плагін `lucideStub` у
+  `vitest.config.ts`). Бочка реекспортує ~1700 `.svelte`-іконок, а SSR-трансформ
+  vite не робить tree-shaking: КОЖЕН файл тестів з однією іконкою компілював усі
+  1700 і йшов понад хвилину. Ціна: перевірити, ЯКА саме іконка намальована,
+  компонентний тест не може — перевіряй підпис поруч. Пер-іконні шляхи
+  (`@lucide/svelte/icons/check`) плагін не чіпає.
+- **Стори — модульні синглтони**, спільні на весь файл тестів. `beforeEach`
+  зобов'язаний їх скидати (`notifications.disconnect()`, `chatStore.setChats([])`),
+  інакше число з попереднього тесту їде в наступний.
+- **Імена подій Pusher звіряй із рядком-літералом**, як і в серверних тестах:
+  `handlerCount(CHANNEL, 'notification:new')`, а не константа з мока.
+- **Компонент зі снипетами** приймає їх через `createRawSnippet`, окремі
+  фікстур-`.svelte` для цього не потрібні.
+- **Компонент із `setTimeout` тестуй на фейкових таймерах.** Не через
+  швидкість: якщо компонент не знімає таймер при демонтуванні (як
+  `username-input`), запит із попереднього тесту прилітає в наступний.
+
+Покриті: обидва рунні стори (`notifications/store.svelte.ts`,
+`stores/chat-store.svelte.ts`), `settings/*` (чотири картки + `nav.ts` +
+`theme-picker`), `notification-list`, `zunor/MessageBody`, `chat/message-bubble`,
+`orders/order-card`, `dashboard/bottom-nav`, `profile/*`, `seo/JsonLd`,
+`username-input`.
+
+**Що НЕ покрито** (щоб не шукати вдруге): `turn-log`-споживачі поза
+`withTurnLog`, форми входу/реєстрації (`login-form`, `signup-form`,
+`otp-form`), онбординг, чат цілком (`chat-window`, `message-composer`,
+`chat-list-sidebar`), стрічки заявок (`master-feed`, `client-jobs`),
+`sidebar`, лендинг, завантажувачі фото і весь `components/ui/**` (це
+вендорений shadcn-svelte, не наш код). Обгортки інтеграцій (`prisma.ts`,
+`pusher.ts`, `mailer.ts`, `cloudinary.ts`, `auth.ts`, `deepseek.ts`)
+юніт-тестів не потребують — вони лише конструюють клієнтів.
 
 #### ⚠️ `\b` і `\w` у регексах — ASCII-only
 
