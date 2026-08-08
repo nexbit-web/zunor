@@ -1,33 +1,65 @@
 <script lang="ts">
-  import {
-    ArrowUp,
-    Mic,
-    Plus,
-    Sparkles,
-    Grid2x2,
-    Sofa,
-    PaintRoller,
-    Ellipsis,
-  } from 'lucide-svelte'
-  import { fly } from 'svelte/transition'
-  import { quintOut } from 'svelte/easing'
+  // Головний екран лендінгу: ліворуч — обіцянка й дія, праворуч — сам
+  // продукт. Секція затягнута ПІД шапку (-mt-14), бо шапка прозора, поки
+  // сторінку не проскролили.
+  //
+  // Ліва колонка відповідає на заперечення по порядку:
+  //   бейдж       → привід спробувати саме зараз;
+  //   заголовок   → хто ми: не каталог, а AI-асистент;
+  //   два пункти  → чому це швидше за каталог. Саме ДВА: третій рядок
+  //                 читається вже як список переваг, а не як аргумент;
+  //   кнопка      → одна. Дві однаково великі кнопки ділять увагу, і
+  //                 людина обирає між ними замість того, щоб діяти;
+  //   гарантія    → що буде, якщо прибрали погано.
+  //
+  // Права колонка — не картинка, а сам інтерфейс: дві репліки діалогу як
+  // ілюстрація і СПРАВЖНЄ поле вводу під ними. Текст із нього доїжджає в
+  // чат, тобто перший дотик до продукту відбувається просто тут.
+  //
+  // Блок навмисно без кольору: фон — звичайний --background, кнопка
+  // чорно-біла, галочки нейтральні. Акцент тут не потрібен — його роль
+  // виконує сам розмір заголовка.
+  //
+  // Чого свідомо НЕМАЄ:
+  //   • обіцянки, що ціну назве AI — її називає МАЙСТЕР (маніфест, р. 5);
+  //   • вигаданих цифр у ролі доказу («500+ клієнтів») — сервіс на старті;
+  //   • неактивних кнопок: disabled-контрол у головному CTA читається як
+  //     «тут половина не працює».
+  //
+  // ⚠️ BADGE і GUARANTEE — комерційні обіцянки, а не факти з коду. Вони
+  // мусять існувати насправді (знижка діє, перемивання роблять), інакше
+  // перший же клієнт зловить нас на слові.
+
+  // Точкові імпорти, а не barrel 'lucide-svelte': бочка реекспортує
+  // ~1700 .svelte-іконок, і цей блок — головний екран, тобто чанк, який
+  // тягнеться першим на кожен вхід. Так само зроблено в шапці.
+  import ArrowUp from '@lucide/svelte/icons/arrow-up'
+  import ArrowRight from '@lucide/svelte/icons/arrow-right'
+  import Check from '@lucide/svelte/icons/check'
+  import MapPin from '@lucide/svelte/icons/map-pin'
+  import Copy from '@lucide/svelte/icons/copy'
+  import ThumbsUp from '@lucide/svelte/icons/thumbs-up'
+  import ThumbsDown from '@lucide/svelte/icons/thumbs-down'
+  import RotateCcw from '@lucide/svelte/icons/rotate-ccw'
+  import Plus from '@lucide/svelte/icons/plus'
+  import Mic from '@lucide/svelte/icons/mic'
   import { goto } from '$app/navigation'
+  import { Button } from '$lib/components/ui/button'
+  import * as Tooltip from '$lib/components/ui/tooltip'
 
-  // ─── Підказки ───
-  // Тип іконки виводимо з реального компонента — без any і без здогадок
-  // про назви типів, які lucide експортує.
-  interface Suggestion {
-    label: string
-    icon: typeof Sparkles
-  }
+  // Ряд дій під відповіддю асистента. label використовується як ключ
+  // {#each} і більше ніде: іконки самі по собі неунікальні як ключ.
+  const MESSAGE_ACTIONS = [
+    { label: 'copy', icon: Copy },
+    { label: 'like', icon: ThumbsUp },
+    { label: 'dislike', icon: ThumbsDown },
+    { label: 'retry', icon: RotateCcw },
+  ] as const
 
-  const SUGGESTIONS: readonly Suggestion[] = [
-    { label: 'Прибрати квартиру', icon: Sparkles },
-    { label: 'Помити вікна', icon: Grid2x2 },
-    { label: 'Хімчистка', icon: Sofa },
-    { label: 'Після ремонту', icon: PaintRoller },
-    { label: 'Інше', icon: Ellipsis },
-  ]
+  const BULLETS = [
+    'Без анкет — опишіть завдання своїми словами',
+    'Вільні клінери поруч відгукуються самі: з ціною та часом',
+  ] as const
 
   // ─── Друкований плейсхолдер ───
   const PHRASE_PREFIX = 'Треба '
@@ -44,7 +76,7 @@
   const HOLD_MS = 1500
   const ERASE_MS = 18
   const GAP_MS = 200
-  const TEXTAREA_MAX_PX = 180
+  const TEXTAREA_MAX_PX = 140
 
   let input = $state('')
   let textareaEl: HTMLTextAreaElement | undefined = $state()
@@ -103,18 +135,20 @@
     textareaEl.style.height = `${Math.min(textareaEl.scrollHeight, TEXTAREA_MAX_PX)}px`
   }
 
-  function fillAndFocus(text: string): void {
-    input = text
-    textareaEl?.focus()
-    autoResize()
-  }
-
   // Текст гостя доїжджає до чату: jobs/new читає ?q=. redirectTo енкодимо
   // цілком, інакше внутрішній ?q= обріжеться при вході.
+  //
+  // Порожнє поле кнопку НЕ блокує: гість, який просто тицьнув стрілку,
+  // має потрапити в діалог, а не впертись у мертвий контрол.
+  function chatHref(q = ''): string {
+    const target = q
+      ? `/dashboard/jobs/new?q=${encodeURIComponent(q)}`
+      : '/dashboard/jobs/new'
+    return `/user/login?redirectTo=${encodeURIComponent(target)}`
+  }
+
   function goToChat(): void {
-    if (!canSend) return
-    const target = `/dashboard/jobs/new?q=${encodeURIComponent(input.trim())}`
-    goto(`/user/login?redirectTo=${encodeURIComponent(target)}`)
+    goto(chatHref(input.trim()))
   }
 
   function handleKeydown(e: KeyboardEvent): void {
@@ -125,118 +159,347 @@
   }
 </script>
 
-<!-- Секція займає стільки, скільки потрібно контенту: ніяких min-h-svh.
-     Вертикальний ритм задають лише відступи. -->
 <section
-  class="relative isolate w-full overflow-hidden bg-background px-4 py-14 sm:py-20"
+  class="hero relative -mt-14 flex w-full items-center bg-background px-[clamp(20px,5vw,56px)] pt-24 pb-16 lg:min-h-svh lg:pb-20"
   aria-label="Головний екран"
 >
-  <div class="mx-auto flex w-full max-w-3xl flex-col items-center text-center">
-    <h1
-      class="text-[clamp(1.75rem,4vw,2.25rem)] leading-[1.1] font-semibold tracking-[-0.03em] text-balance text-foreground"
-      in:fly={{ y: 12, duration: 450, easing: quintOut }}
-    >
-      Замовте клінінг в Одесі
-    </h1>
-
-    <p
-      class="mt-3 text-[1.0625rem] text-pretty text-muted-foreground"
-      in:fly={{ y: 12, duration: 450, delay: 60, easing: quintOut }}
-    >
-      Опишіть завдання — AI підбере майстра, ціну й час.
-    </p>
-
-    <div
-      class="mt-8 w-full"
-      in:fly={{ y: 12, duration: 450, delay: 120, easing: quintOut }}
-    >
-      <!-- Обгортка інпута -->
-      <div
-        class="flex cursor-text flex-col rounded-[1.75rem] border border-border bg-card shadow-[0_2px_8px_rgba(0,0,0,0.04)] transition-[box-shadow,border-color] duration-200 hover:shadow-[0_4px_14px_rgba(0,0,0,0.06)] focus-within:border-foreground/20 focus-within:shadow-[0_6px_20px_rgba(0,0,0,0.08)]"
+  <div
+    class="mx-auto grid w-full max-w-[1180px] items-center gap-12 lg:grid-cols-[1fr_1.05fr] lg:gap-16"
+  >
+    <!-- ═══ Ліва колонка: обіцянка й дія ═══ -->
+    <div class="flex flex-col items-start text-left">
+      <!-- Місто простим рядком, без плашки: воно знімає питання «а ви
+           взагалі в моєму місті» і не має конкурувати з H1 за увагу. -->
+      <p
+        class="hero-in inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground"
+        style="--d: 0ms"
       >
-        <div class="flex flex-col gap-2 px-5 pt-[1.15rem] pb-[0.85rem]">
-          <textarea
-            bind:this={textareaEl}
-            bind:value={input}
-            oninput={autoResize}
-            onkeydown={handleKeydown}
-            rows="1"
-            {placeholder}
-            aria-label="Опишіть, що потрібно прибрати"
-            class="min-h-[2.4lh] w-full resize-none bg-transparent px-1 pt-0.5 text-left text-base leading-relaxed text-foreground outline-none placeholder:text-muted-foreground"
-          ></textarea>
+        <MapPin size={15} strokeWidth={2} aria-hidden="true" />
+        Одеса, UA
+      </p>
 
-          <div class="flex items-center justify-between">
-            <!-- «+» неактивна для гостя -->
-            <span class="group relative inline-flex">
-              <button
-                type="button"
-                disabled
-                aria-label="Увійдіть, щоб додати фото"
-                class="grid size-9 cursor-not-allowed place-items-center rounded-xl text-muted-foreground opacity-45"
-              >
-                <Plus size={20} strokeWidth={2} aria-hidden="true" />
-              </button>
+      <!-- Заголовок називає дію і одразу спосіб. Це і є вся модель: не
+           каталог, у якому шукаєш ти, а асистент, який шукає замість
+           тебе. -->
+      <h1
+        class="hero-in mt-6 max-w-[620px] text-[clamp(2.5rem,4.4vw,4rem)] leading-[1.02] font-bold tracking-[-0.035em] text-balance text-foreground"
+        style="--d: 60ms"
+      >
+        Замовляйте клінінг разом з <span class="hero-ai">AI</span>
+      </h1>
+
+      <ul class="hero-in mt-7 flex flex-col gap-3" style="--d: 120ms">
+        {#each BULLETS as bullet (bullet)}
+          <li class="flex items-start gap-3 text-[1.0625rem] leading-relaxed">
+            <!-- Галочка бере той самий --hero-accent, що й плашка «AI»:
+                 це знак «так, це входить», і він має читатись як одна
+                 система з заголовком, а не як окремий колір. -->
+            <Check
+              size={18}
+              strokeWidth={2.5}
+              aria-hidden="true"
+              class="mt-1 shrink-0 text-(--hero-accent)"
+            />
+            <span class="text-foreground/85">{bullet}</span>
+          </li>
+        {/each}
+      </ul>
+
+      <!-- Одна кнопка. variant="default" у нашому ui вже чорно-білий
+           (bg-foreground / text-background) і сам інвертується в темній
+           темі — власних кольорів тут не задаємо.
+
+           Стрілка їде вперед на hover: мікрорух, який каже «це перехід, а
+           не просто клік». -->
+      <div class="hero-in mt-8 flex flex-wrap gap-3" style="--d: 180ms">
+        <Button
+          href={chatHref()}
+          class="hero-cta h-13 gap-2 rounded-xl px-8 text-base font-semibold"
+        >
+          Замовити прибирання
+          <ArrowRight class="hero-cta-arrow" aria-hidden="true" />
+        </Button>
+
+        <!-- Друга кнопка — для іншої аудиторії (майстрів), тому вона й
+             виглядає інакше: тільки рамка й текст. На ховер заливається
+             в той самий чорно-білий, що й головна: так видно, що це теж
+             кнопка, але черга в неї друга. -->
+        <Button
+          href="/master/about"
+          variant="outline"
+          class="hero-alt h-13 rounded-xl border-border bg-transparent px-8 text-base font-semibold text-foreground"
+        >
+          Стати майстром
+        </Button>
+      </div>
+    </div>
+
+    <!-- ═══ Права колонка: сам продукт ═══
+         Дві репліки зверху — ілюстрація діалогу, поле під ними —
+         справжнє. Так людина бачить, ЯК це виглядає, і одразу може
+         спробувати, не перемикаючи екран.
+
+         Без аватара й без чіпів: у діалозі має бути видно ТІЛЬКИ
+         розмову, усе інше відтягує погляд від неї. -->
+    <div class="hero-in hero-card flex flex-col gap-6 p-6" style="--d: 300ms">
+      <div class="flex flex-col gap-4" aria-hidden="true">
+        <p
+          class="max-w-[80%] self-end rounded-[18px] rounded-br-md bg-secondary px-4 py-3 text-[0.9375rem] leading-relaxed text-foreground"
+        >
+          Потрібне генеральне прибирання трикімнатної квартири
+        </p>
+
+        <div class="flex flex-col gap-2">
+          <p
+            class="max-w-[88%] text-[0.9375rem] leading-relaxed text-foreground/85"
+          >
+            Звісно, зараз оформлю замовлення. Підкажіть день і зручний час — і я
+            передам заявку вільним клінерам поруч.
+          </p>
+
+          <!-- Ряд дій під відповіддю — впізнаваний жест будь-якого
+               AI-чату (копіювати / оцінити / перегенерувати). Він тут не
+               заради краси: саме цей ряд одразу каже «це розмова з
+               моделлю», а не переписка з оператором у віджеті підтримки.
+
+               Це <span>, а не <button>: увесь діалог — ілюстрація під
+               aria-hidden, і живі контроли в ньому були б обіцянкою дії,
+               якої немає. Ховер лишаємо, бо без нього ряд читається як
+               випадковий набір іконок. -->
+          <div class="-ml-1.5 flex items-center gap-0.5">
+            {#each MESSAGE_ACTIONS as action (action.label)}
               <span
-                role="tooltip"
-                class="pointer-events-none absolute bottom-full left-0 mb-2 w-max rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs font-medium whitespace-nowrap text-foreground opacity-0 shadow-[0_4px_12px_rgba(0,0,0,0.08)] transition-opacity duration-150 group-hover:opacity-100"
+                class="hero-msg-action grid size-7 place-items-center rounded-lg text-muted-foreground"
               >
-                Увійдіть, щоб додати фото
+                <action.icon size={14} strokeWidth={2} />
               </span>
-            </span>
-
-            <div class="flex items-center gap-0.5">
-              <!-- Мікрофон -->
-              <span class="group relative inline-flex">
-                <button
-                  type="button"
-                  disabled
-                  aria-label="Голосовий ввід — скоро"
-                  class="grid size-9 cursor-not-allowed place-items-center rounded-full text-muted-foreground opacity-45"
-                >
-                  <Mic size={20} strokeWidth={2} aria-hidden="true" />
-                </button>
-                <span
-                  role="tooltip"
-                  class="pointer-events-none absolute right-0 bottom-full mb-2 w-max rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs font-medium whitespace-nowrap text-foreground opacity-0 shadow-[0_4px_12px_rgba(0,0,0,0.08)] transition-opacity duration-150 group-hover:opacity-100"
-                >
-                  Скоро
-                </span>
-              </span>
-
-              <!-- Надіслати -->
-              <button
-                type="button"
-                onclick={goToChat}
-                disabled={!canSend}
-                aria-label="Оформити заявку"
-                class="grid size-9 shrink-0 place-items-center rounded-xl transition-all duration-150 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:outline-none enabled:cursor-pointer enabled:bg-primary enabled:text-primary-foreground enabled:active:scale-95 enabled:hover:bg-[var(--primary-hover)] disabled:cursor-not-allowed disabled:bg-secondary disabled:text-muted-foreground"
-              >
-                <ArrowUp size={20} aria-hidden="true" />
-              </button>
-            </div>
+            {/each}
           </div>
         </div>
       </div>
 
-      <!-- Підказки: клік підставляє текст і фокусує поле -->
-      <div class="mt-[1.1rem] flex flex-wrap justify-center gap-2.5">
-        {#each SUGGESTIONS as item (item.label)}
-          <button
-            type="button"
-            onclick={() => fillAndFocus(item.label)}
-            class="group inline-flex cursor-pointer items-center gap-2 rounded-xl border border-border bg-card py-2.5 pr-4 pl-3 text-sm font-medium text-foreground transition-colors duration-150 hover:border-foreground/15 hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          >
-            <item.icon
-              size={16}
-              strokeWidth={1.75}
-              aria-hidden="true"
-              class="shrink-0 text-muted-foreground transition-colors duration-150 group-hover:text-foreground"
-            />
-            {item.label}
-          </button>
-        {/each}
+      <!-- Поле справжнє: текст їде в чат через ?q=. Це головна дія правої
+           колонки, тому в неї власні стани, а не набір довгих
+           arbitrary-класів у розмітці. -->
+      <div
+        class="hero-composer flex cursor-text flex-col gap-2.5 px-3.5 pt-3 pb-2.5"
+      >
+        <textarea
+          bind:this={textareaEl}
+          bind:value={input}
+          oninput={autoResize}
+          onkeydown={handleKeydown}
+          rows="1"
+          {placeholder}
+          aria-label="Опишіть, що потрібно прибрати"
+          class="min-h-[1.5lh] w-full resize-none bg-transparent text-[0.9375rem] leading-relaxed text-foreground outline-none placeholder:text-muted-foreground"
+        ></textarea>
+
+        <div class="flex items-center justify-between gap-3">
+          <!-- «+» — додати фото. Для гостя недоступне навмисно: фото
+               помешкання їде в заявку, а заявка існує лише в акаунта.
+               Тултип пояснює це ДО кліку — інакше людина тисне й нічого
+               не відбувається.
+
+               aria-disabled, а НЕ disabled: справжній disabled-атрибут
+               гасить події миші, і тултип на ховер просто не зʼявився б —
+               тобто пояснення пропало б разом із можливістю натиснути. -->
+          <Tooltip.Provider delayDuration={120}>
+            <Tooltip.Root>
+              <Tooltip.Trigger
+                aria-disabled="true"
+                aria-label="Увійдіть, щоб додати фото"
+                class="grid size-8 cursor-not-allowed place-items-center rounded-full border border-border text-muted-foreground opacity-60"
+              >
+                <Plus size={16} strokeWidth={2} aria-hidden="true" />
+              </Tooltip.Trigger>
+              <Tooltip.Content sideOffset={6}>
+                Увійдіть, щоб додати фото
+              </Tooltip.Content>
+            </Tooltip.Root>
+          </Tooltip.Provider>
+
+          <span class="flex items-center gap-2.5">
+            <span
+              class="flex items-center gap-1.5 text-[0.8125rem] text-muted-foreground"
+            >
+              <MapPin size={14} strokeWidth={2} aria-hidden="true" />
+              Одеса
+            </span>
+
+            <!-- Порожнє поле — мікрофон і неактивна кнопка; є текст —
+                 стрілка й активна. Той самий жест, що в будь-якому
+                 месенджері: вигляд кнопки САМ каже, що зараз станеться,
+                 і підпис для цього не потрібен. -->
+            <button
+              type="button"
+              onclick={goToChat}
+              disabled={!canSend}
+              aria-label={canSend
+                ? 'Надіслати'
+                : 'Голосове повідомлення — незабаром'}
+              class="hero-send grid size-8 shrink-0 place-items-center rounded-full transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 focus-visible:outline-none enabled:cursor-pointer enabled:bg-foreground enabled:text-background enabled:active:scale-95 enabled:hover:opacity-85 disabled:cursor-not-allowed disabled:bg-secondary disabled:text-muted-foreground"
+            >
+              {#if canSend}
+                <ArrowUp size={16} strokeWidth={2.5} aria-hidden="true" />
+              {:else}
+                <Mic size={16} strokeWidth={2} aria-hidden="true" />
+              {/if}
+            </button>
+          </span>
+        </div>
       </div>
     </div>
   </div>
 </section>
+
+<style>
+  /* Єдиний кольоровий акцент блока: плашка «AI» в заголовку і галочки в
+     пунктах. Одна змінна на обидва місця — щоб не вийшло, що плашка
+     синя, а галочки лишились від попередньої ітерації зеленими.
+
+     Не з токенів теми навмисно: --primary теракотовий і на ньому вже
+     тримається решта застосунку, а тут потрібен контраст до нього. */
+  .hero {
+    --hero-accent: #2563eb;
+    --hero-accent-foreground: #ffffff;
+  }
+
+  /* Картка з діалогом. Без тіні свідомо: фон секції плаский, і будь-яка
+     тінь на ньому одразу читається як «наліпка». Форму тримає рамка. */
+  .hero-card {
+    border: 1px solid var(--border);
+    border-radius: 22px;
+    background: var(--card);
+  }
+
+  /* «AI» плашкою з нахилом. Експеримент: у рівному наборі це слово
+     губиться серед решти, а нахилена плашка робить його єдиною точкою,
+     за яку чіпляється око — і саме воно відрізняє нас від каталогу.
+
+     Колір — через --hero-accent (див. .hero вище). Він же фарбує
+     галочки: у блоці має бути ОДИН кольоровий акцент, а не два різні,
+     і одна змінна цього не дає забути.
+
+     Значення фіксоване, а не з токенів теми: плашка однакова у світлій
+     і темній, тож і текст на ній лишається білим у обох. */
+  .hero-ai {
+    display: inline-block;
+    padding: 0.04em 0.22em;
+    border-radius: 0.26em;
+    background: var(--hero-accent);
+    color: var(--hero-accent-foreground);
+    transform: rotate(-2.5deg);
+  }
+
+  /* Іконки під відповіддю. Ледь помітні за замовчуванням і проявляються
+     під курсором — так само, як у справжніх AI-чатах: ряд не має
+     сперечатися з текстом відповіді, доки на нього не дивляться. */
+  .hero-msg-action {
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease;
+  }
+
+  .hero-msg-action:hover {
+    background: var(--muted);
+    color: var(--foreground);
+  }
+
+  /* Поле вводу всередині картки. */
+  .hero-composer {
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    background: color-mix(in oklch, var(--muted) 45%, var(--card));
+    transition:
+      border-color 0.2s ease,
+      box-shadow 0.2s ease;
+  }
+
+  .hero-composer:focus-within {
+    border-color: color-mix(in oklch, var(--foreground) 25%, var(--border));
+    box-shadow: 0 0 0 3px color-mix(in oklch, var(--foreground) 8%, transparent);
+  }
+
+  /* Стрілка в головній кнопці. Обгортка `.hero :global(...)` обовʼязкова:
+     клас їде в Button пропом class, розмітку малює сам компонент, і
+     хеша нашої області видимості на його елементах немає — звичайне
+     правило Svelte викинув би як невикористане, мовчки. */
+  .hero :global(.hero-cta .hero-cta-arrow) {
+    transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .hero :global(.hero-cta:hover .hero-cta-arrow) {
+    transform: translateX(3px);
+  }
+
+  /* Друга кнопка: на ховер заливається кольором тексту й інвертує підпис.
+     Через :global з тієї ж причини — розмітку малює сам Button. Колір
+     рамки теж змінюємо, інакше на залитому фоні лишається світла обвідка
+     і кнопка виглядає обрізаною. */
+  .hero :global(.hero-alt) {
+    transition:
+      background-color 0.18s ease,
+      border-color 0.18s ease,
+      color 0.18s ease;
+  }
+
+  .hero :global(.hero-alt:hover) {
+    background: var(--foreground);
+    border-color: var(--foreground);
+    color: var(--background);
+  }
+
+  /* Стрілка їде вгору на hover — мікрорух, який каже «це відправка».
+     :global потрібен, бо <svg> малює компонент lucide, а не наша
+     розмітка: хеша області видимості на ньому немає. */
+  .hero-send :global(svg) {
+    transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* :enabled обовʼязковий — інакше мікрофон у неактивній кнопці теж
+     підстрибував би під курсором і обіцяв дію, якої немає. */
+  .hero-send:enabled:hover :global(svg) {
+    transform: translateY(-2px);
+  }
+
+  /* Поява — CSS, а не svelte-transition: так її вимикає
+     prefers-reduced-motion (transition цього не вміє) і не витрачається
+     кадр JS на кожен елемент у найважливішому блоці сторінки.
+
+     Селектор через `.hero :global(...)`, бо клас hero-in їде і в Button
+     теж — розмітку малює сам компонент, хеша нашої області видимості на
+     його елементі немає, і звичайне правило Svelte викинув би як
+     невикористане, мовчки разом з анімацією. */
+  .hero :global(.hero-in) {
+    animation: hero-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: var(--d, 0ms);
+  }
+
+  @keyframes hero-rise {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hero :global(.hero-in) {
+      animation: none;
+    }
+
+    .hero-send :global(svg),
+    .hero :global(.hero-cta .hero-cta-arrow) {
+      transition: none;
+    }
+
+    .hero-send:enabled:hover :global(svg),
+    .hero :global(.hero-cta:hover .hero-cta-arrow) {
+      transform: none;
+    }
+  }
+</style>

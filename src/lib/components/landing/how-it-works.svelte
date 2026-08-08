@@ -216,9 +216,12 @@
   )
 </script>
 
+<!-- id — ціль для другої кнопки на головному екрані («Як це працює»).
+     Прибираєш id — перевір hero-section.svelte, там на нього посилання. -->
 <section
+  id="how-it-works"
   aria-labelledby="how-it-works-heading"
-  class="px-[clamp(20px,5vw,56px)] text-foreground"
+  class="scroll-mt-20 px-[clamp(20px,5vw,56px)] text-foreground"
 >
   <div class="mx-auto max-w-[1120px]">
     <header class="mx-auto mb-[clamp(32px,4vw,52px)] max-w-[38rem] text-center">
