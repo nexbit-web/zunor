@@ -129,21 +129,40 @@ describe('лейаут (auth)', () => {
   })
 })
 
+// Cookie читає сервер ДО рендеру — інакше панель мигнула б у дефолтній
+// ширині й перескочила у збережену після гідратації. Пише її сам
+// Sidebar.Provider з shadcn, тож ім'я й формат («true»/«false»)
+// диктує він, а не ми.
 describe('лейаут дашборда', () => {
-  it('стан сайдбара читається з cookie до рендеру', async () => {
+  it('стан панелі читається з cookie до рендеру', async () => {
     const event = makeEvent({ locals: sessionUser('u1') })
 
-    const collapsed = (await dashboardLayout.load({
+    const open = (await dashboardLayout.load({
       ...event,
-      cookies: { ...event.cookies, get: () => 'false' },
-    })) as { sidebarCollapsed: boolean }
-    expect(collapsed.sidebarCollapsed).toBe(false)
+      cookies: { ...event.cookies, get: () => 'true' },
+    })) as { sidebarOpen: boolean }
+    expect(open.sidebarOpen).toBe(true)
+  })
 
-    // Дефолт — згорнутий: на першому візиті менше шуму.
-    const def = (await dashboardLayout.load(event)) as {
-      sidebarCollapsed: boolean
+  it('дефолт — згорнута панель, а не розгорнута', async () => {
+    const event = makeEvent({ locals: sessionUser('u1') })
+
+    const def = (await dashboardLayout.load(event)) as { sidebarOpen: boolean }
+    expect(def.sidebarOpen).toBe(false)
+  })
+
+  // Будь-яке чуже значення в cookie має читатись як «згорнуто», а не
+  // валити лейаут: cookie редагується з DevTools одним рухом.
+  it('сміття в cookie не ламає лейаут', async () => {
+    const event = makeEvent({ locals: sessionUser('u1') })
+
+    for (const raw of ['', 'yes', '1', 'undefined']) {
+      const data = (await dashboardLayout.load({
+        ...event,
+        cookies: { ...event.cookies, get: () => raw },
+      })) as { sidebarOpen: boolean }
+      expect(data.sidebarOpen, raw).toBe(false)
     }
-    expect(def.sidebarCollapsed).toBe(true)
   })
 })
 
