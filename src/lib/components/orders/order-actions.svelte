@@ -1,6 +1,6 @@
-<!-- src/lib/components/orders/order-actions.svelte -->
 <script lang="ts">
   import { invalidateAll, goto } from '$app/navigation'
+  import toast from 'svelte-hot-french-toast'
   import {
     Play,
     Check,
@@ -33,6 +33,19 @@
   let startOpen = $state(false)
   let completeOpen = $state(false)
 
+  /**
+   * Підтвердження успіху. Статус на сторінці й так оновиться, але це
+   * події, навколо яких крутяться гроші й домовленість — людина має
+   * почути, що саме щойно сталося, а не звіряти плашку очима.
+   * Помилки лишаються під кнопками: там на них дивляться, коли щось пішло
+   * не так, і вони не зникають за чотири секунди.
+   */
+  const DONE_MESSAGE: Record<'start' | 'complete' | 'cancel', string> = {
+    start: 'Роботу розпочато',
+    complete: 'Роботу завершено — залиште відгук про співпрацю',
+    cancel: 'Замовлення скасовано',
+  }
+
   async function callAction(
     action: 'start' | 'complete' | 'cancel',
     body: any = {},
@@ -50,6 +63,10 @@
         throw new Error(err.message ?? 'Помилка')
       }
       await invalidateAll()
+
+      // Скасування — не привід святкувати, тому нейтральний тост.
+      if (action === 'cancel') toast(DONE_MESSAGE.cancel)
+      else toast.success(DONE_MESSAGE[action])
     } catch (err) {
       error = err instanceof Error ? err.message : 'Помилка'
     } finally {
@@ -77,8 +94,35 @@
     cancelReason = ''
   }
 
-  function openChat() {
-    if (chatId) goto(`/dashboard/messages/${chatId}`)
+  /**
+   * Чат заводиться на першому натисканні, а не разом із замовленням.
+   * Раніше кнопка була прихована, доки chatId порожній, — а він завжди
+   * був заповнений, бо чат створювався автоматично при виборі майстра.
+   */
+  let openingChat = $state(false)
+
+  async function openChat() {
+    if (openingChat) return
+
+    if (chatId) {
+      goto(`/dashboard/messages/${chatId}`)
+      return
+    }
+
+    openingChat = true
+    try {
+      const res = await fetch(`/api/orders/${orderId}/chat`, { method: 'POST' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || !json?.chatId) {
+        toast.error(json?.message ?? 'Не вдалося відкрити чат')
+        return
+      }
+      goto(`/dashboard/messages/${json.chatId}`)
+    } catch {
+      toast.error('Помилка зʼєднання')
+    } finally {
+      openingChat = false
+    }
   }
 
   // ─── Логіка кнопок ───
@@ -115,12 +159,14 @@
       </Button>
     {/if}
 
-    {#if chatId}
-      <Button variant="outline" onclick={openChat}>
+    <Button variant="outline" onclick={openChat} disabled={openingChat}>
+      {#if openingChat}
+        <Loader2 class="size-4 animate-spin" />
+      {:else}
         <MessageCircle class="size-4" />
-        Чат
-      </Button>
-    {/if}
+      {/if}
+      {chatId ? 'Чат' : 'Написати'}
+    </Button>
 
     {#if canCancel}
       <Button

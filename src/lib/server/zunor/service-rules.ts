@@ -1,4 +1,3 @@
-// src/lib/server/zunor/service-rules.ts
 import { SERVICES } from '$lib/categories/cleaning/presets'
 
 export type ServiceKey = (typeof SERVICES)[number]['key']

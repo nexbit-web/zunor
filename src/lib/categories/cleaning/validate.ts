@@ -1,5 +1,3 @@
-// src/lib/categories/cleaning/validate.ts
-//
 // Валідація metadata на сервері. Поля перевіряються залежно від послуги.
 
 import {

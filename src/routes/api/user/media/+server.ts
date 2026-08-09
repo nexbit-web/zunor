@@ -1,16 +1,16 @@
-// src/routes/api/user/media/+server.ts
 import { json } from '@sveltejs/kit'
-import { auth } from '$lib/server/auth'
+import { env } from '$env/dynamic/private'
 import { cloudinary } from '$lib/server/cloudinary'
 import { prisma } from '$lib/server/prisma'
 import { limit } from '$lib/server/rate-limit'
 import type { RequestHandler } from './$types'
 
-export const POST: RequestHandler = async ({ request }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) return json({ error: 'Unauthorized' }, { status: 401 })
+export const POST: RequestHandler = async ({ request, locals }) => {
+  // 401 у власному форматі { error } — див. коментар в upload/signature.
+  const user = locals.user
+  if (!user) return json({ error: 'Unauthorized' }, { status: 401 })
 
-  const rl = limit(`user-media:${session.user.id}`, {
+  const rl = limit(`user-media:${user.id}`, {
     points: 30,
     duration: 60_000,
   })
@@ -32,7 +32,39 @@ export const POST: RequestHandler = async ({ request }) => {
 
   if (!body?.kind) return json({ error: 'Missing kind' }, { status: 400 })
 
-  const userId = session.user.id
+  const userId = user.id
+
+  // publicId нижче перевіряється на префікс, а url раніше писався в базу
+  // як є — тобто аватаром чи портфоліо можна було зробити будь-яке
+  // посилання (чужий трекер, картинка з чужого сайту). Рендер від цього
+  // рятує CSP (img-src дозволяє лише Cloudinary), але зберігати чуже
+  // посилання в профілі однаково не треба: воно потім поїде в JSON API,
+  // у листи й у JSON-LD, де CSP уже не діє.
+  const isOwnCloudinaryUrl = (url: string, publicId: string): boolean => {
+    let parsed: URL
+    try {
+      parsed = new URL(url)
+    } catch {
+      return false
+    }
+
+    if (parsed.protocol !== 'https:') return false
+    if (parsed.hostname !== 'res.cloudinary.com') return false
+
+    // Хмара мусить бути НАША. res.cloudinary.com обслуговує всі акаунти
+    // світу, і перший сегмент шляху — це cloud name. Без цієї перевірки
+    // достатньо було завести власний безкоштовний Cloudinary, покласти
+    // туди файл із чужим publicId у назві — і посилання проходило як своє.
+    //
+    // Практичний наслідок: картинку в профілі можна підмінити ПІСЛЯ
+    // модерації, бо вміст лежить на чужому акаунті й нам не підпорядкований.
+    const [, cloudName] = parsed.pathname.split('/')
+    if (!cloudName || cloudName !== env.CLOUDINARY_CLOUD_NAME) return false
+
+    // publicId вже прив'язаний до userId перевіркою префікса нижче,
+    // тож збіг із ним і робить посилання «своїм».
+    return parsed.pathname.includes(publicId)
+  }
 
   // ── AVATAR ────────────────────────────────────────────────────────────
   if (body.kind === 'avatar') {
@@ -40,6 +72,9 @@ export const POST: RequestHandler = async ({ request }) => {
       return json({ error: 'Missing url or publicId' }, { status: 400 })
 
     if (!body.publicId.startsWith(`zunor/users/${userId}/avatar`))
+      return json({ error: 'Forbidden' }, { status: 403 })
+
+    if (!isOwnCloudinaryUrl(body.url, body.publicId))
       return json({ error: 'Forbidden' }, { status: 403 })
 
     const user = await prisma.user.findUnique({
@@ -69,6 +104,9 @@ export const POST: RequestHandler = async ({ request }) => {
       return json({ error: 'Missing url or publicId' }, { status: 400 })
 
     if (!body.publicId.startsWith(`zunor/users/${userId}/`))
+      return json({ error: 'Forbidden' }, { status: 403 })
+
+    if (!isOwnCloudinaryUrl(body.url, body.publicId))
       return json({ error: 'Forbidden' }, { status: 403 })
 
     const existing = await prisma.masterProfile.findUnique({

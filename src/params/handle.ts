@@ -1,4 +1,3 @@
-// src/params/handle.ts
 import type { ParamMatcher } from '@sveltejs/kit'
 
 /**

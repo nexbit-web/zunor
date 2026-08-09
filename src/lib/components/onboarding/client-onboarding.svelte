@@ -7,7 +7,12 @@
 -->
 <script lang="ts">
   import { goto, invalidateAll } from '$app/navigation'
-  import { untrack, tick, type Snippet } from 'svelte'
+  import { untrack, tick } from 'svelte'
+  import {
+    SettingsGroup,
+    SettingsField,
+    SettingsBlock,
+  } from '$lib/components/settings'
   import { Button } from '$lib/components/ui/button'
   import { Spinner } from '$lib/components/ui/spinner'
   import { Input } from '$lib/components/ui/input'
@@ -97,7 +102,9 @@
     nameTrim.length >= NAME_MIN && nameTrim.length <= NAME_MAX,
   )
   const bioTrim = $derived(bio.trim())
-  const cityName = $derived(data.cities.find((c) => c.slug === city)?.name ?? '')
+  const cityName = $derived(
+    data.cities.find((c) => c.slug === city)?.name ?? '',
+  )
 
   const nameError = $derived(
     touched.name && !nameValid
@@ -169,42 +176,12 @@
   }
 </script>
 
-<!-- Рядок картки: підпис ліворуч, контрол праворуч.
-     mx-4 замість divide-y — роздільник відступає від країв,
-     як у системних налаштуваннях. -->
-{#snippet row(
-  label: string,
-  forId: string | undefined,
-  control: Snippet,
-  hint?: string,
-  error?: string,
-)}
-  <div
-    class="mx-4 flex flex-col gap-2 border-t border-border/60 py-3 first:border-t-0 sm:flex-row sm:items-start sm:justify-between sm:gap-6"
-  >
-    <div class="min-w-0 sm:pt-1.5">
-      {#if forId}
-        <Label for={forId} class="text-sm font-normal">{label}</Label>
-      {:else}
-        <p class="text-sm">{label}</p>
-      {/if}
-      {#if hint}
-        <p class="mt-0.5 max-w-[28ch] text-[12px] leading-relaxed text-muted-foreground">
-          {hint}
-        </p>
-      {/if}
-    </div>
+<!-- Локальний сніпет row прибрано: це був той самий рядок, що й
+     SettingsField у налаштуваннях, скопійований сюди разом із класами.
+     Форма профілю і /settings/profile — той самий екран, тож і рядок
+     у них має бути один. -->
 
-    <div class="w-full sm:w-[56%] sm:max-w-[300px] sm:shrink-0">
-      {@render control()}
-      {#if error}
-        <p class="mt-1.5 text-[12px] text-destructive" role="alert">{error}</p>
-      {/if}
-    </div>
-  </div>
-{/snippet}
-
-<div class="mx-auto w-full max-w-2xl  ">
+<div class="mx-auto w-full max-w-2xl">
   <header class="mb-7">
     <h1 class="text-xl font-semibold tracking-[-0.02em]">
       {mode === 'edit' ? 'Профіль' : 'Знайомство'}
@@ -218,123 +195,124 @@
 
   <form onsubmit={submit} novalidate>
     <!-- ═══ Основне ═══ -->
-    <h2 class="mb-2 px-1 text-sm font-semibold">Основне</h2>
-    <div class="rounded-xl bg-muted/40 py-1">
-      {#snippet avatarControl()}
-        <AvatarUploader
-          bind:value={avatarUrl}
-          bind:publicId={avatarPublicId}
-          bind:uploading={avatarUploading}
-          fallback={nameTrim.charAt(0).toUpperCase() || 'U'}
-          onError={(msg) => toast.error(msg)}
-        />
-      {/snippet}
-      {@render row('Фото', undefined, avatarControl, "Необов'язково")}
+    <SettingsGroup title="Основне">
+      <SettingsField label="Фото" hint="Необов'язково">
+        {#snippet control()}
+          <AvatarUploader
+            bind:value={avatarUrl}
+            bind:publicId={avatarPublicId}
+            bind:uploading={avatarUploading}
+            fallback={nameTrim.charAt(0).toUpperCase() || 'U'}
+            onError={(msg) => toast.error(msg)}
+          />
+        {/snippet}
+      </SettingsField>
 
-      {#snippet nameControl()}
-        <Input
-          id="name"
-          bind:value={name}
-          onblur={() => (touched.name = true)}
-          placeholder="Олена Коваленко"
-          maxlength={NAME_MAX}
-          autocomplete="name"
-          aria-invalid={!!nameError}
-          class="bg-background"
-          required
-        />
-      {/snippet}
-      {@render row("Ім'я", 'name', nameControl, undefined, nameError)}
-
-      {#snippet phoneControl()}
-        <div class="flex items-center gap-2">
-          <span
-            class="flex h-9 shrink-0 items-center rounded-md bg-background px-2.5 text-sm text-muted-foreground"
-          >
-            +380
-          </span>
+      <SettingsField label="Ім'я" for="name" error={nameError}>
+        {#snippet control()}
           <Input
-            id="phone"
-            value={phoneDisplay}
-            oninput={onPhoneInput}
-            onblur={() => (touched.phone = true)}
-            placeholder="67 123 45 67"
-            inputmode="tel"
-            autocomplete="tel-national"
-            aria-invalid={!!phoneError}
+            id="name"
+            bind:value={name}
+            onblur={() => (touched.name = true)}
+            placeholder="Олена Коваленко"
+            maxlength={NAME_MAX}
+            autocomplete="name"
+            aria-invalid={!!nameError}
             class="bg-background"
             required
           />
-        </div>
-      {/snippet}
-      {@render row(
-        'Телефон',
-        'phone',
-        phoneControl,
-        'Видно виконавцю після підтвердження',
-        phoneError,
-      )}
+        {/snippet}
+      </SettingsField>
 
-      {#snippet cityControl()}
-        <!-- Combobox: Popover + Command, як у документації shadcn-svelte -->
-        <Popover.Root bind:open={cityOpen}>
-          <Popover.Trigger bind:ref={cityTriggerRef}>
-            {#snippet child({ props })}
-              <Button
-                {...props}
-                variant="outline"
-                role="combobox"
-                aria-expanded={cityOpen}
-                aria-invalid={!!cityError}
-                class="w-full justify-between bg-background font-normal"
-              >
-                <span class={cn(!cityName && 'text-muted-foreground')}>
-                  {cityName || 'Оберіть місто'}
-                </span>
-                <ChevronsUpDownIcon class="opacity-50" />
-              </Button>
-            {/snippet}
-          </Popover.Trigger>
-          <Popover.Content class="w-[--bits-popover-anchor-width] p-0">
-            <Command.Root>
-              <Command.Input placeholder="Пошук міста..." />
-              <Command.List>
-                <Command.Empty>Місто не знайдено</Command.Empty>
-                <Command.Group>
-                  {#each data.cities as c (c.slug)}
-                    <!-- value = назва, щоб пошук працював по тому,
+      <SettingsField
+        label="Телефон"
+        for="phone"
+        hint="Видно виконавцю після підтвердження"
+        error={phoneError}
+      >
+        {#snippet control()}
+          <div class="flex items-center gap-2">
+            <span
+              class="flex h-9 shrink-0 items-center rounded-md bg-background px-2.5 text-sm text-muted-foreground"
+            >
+              +380
+            </span>
+            <Input
+              id="phone"
+              value={phoneDisplay}
+              oninput={onPhoneInput}
+              onblur={() => (touched.phone = true)}
+              placeholder="67 123 45 67"
+              inputmode="tel"
+              autocomplete="tel-national"
+              aria-invalid={!!phoneError}
+              class="bg-background"
+              required
+            />
+          </div>
+        {/snippet}
+      </SettingsField>
+
+      <SettingsField
+        label="Місто"
+        hint="Заявки надходитимуть виконавцям звідси"
+        error={cityError}
+      >
+        {#snippet control()}
+          <!-- Combobox: Popover + Command, як у документації shadcn-svelte -->
+          <Popover.Root bind:open={cityOpen}>
+            <Popover.Trigger bind:ref={cityTriggerRef}>
+              {#snippet child({ props })}
+                <Button
+                  {...props}
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={cityOpen}
+                  aria-invalid={!!cityError}
+                  class="w-full justify-between bg-background font-normal"
+                >
+                  <span class={cn(!cityName && 'text-muted-foreground')}>
+                    {cityName || 'Оберіть місто'}
+                  </span>
+                  <ChevronsUpDownIcon class="opacity-50" />
+                </Button>
+              {/snippet}
+            </Popover.Trigger>
+            <Popover.Content class="w-[--bits-popover-anchor-width] p-0">
+              <Command.Root>
+                <Command.Input placeholder="Пошук міста..." />
+                <Command.List>
+                  <Command.Empty>Місто не знайдено</Command.Empty>
+                  <Command.Group>
+                    {#each data.cities as c (c.slug)}
+                      <!-- value = назва, щоб пошук працював по тому,
                          що людина бачить, а не по slug -->
-                    <Command.Item
-                      value={c.name}
-                      onSelect={() => {
-                        city = c.slug
-                        touched.city = true
-                        closeAndFocusTrigger()
-                      }}
-                    >
-                      <CheckIcon class={cn(city !== c.slug && 'text-transparent')} />
-                      {c.name}
-                    </Command.Item>
-                  {/each}
-                </Command.Group>
-              </Command.List>
-            </Command.Root>
-          </Popover.Content>
-        </Popover.Root>
-      {/snippet}
-      {@render row(
-        'Місто',
-        undefined,
-        cityControl,
-        'Заявки надходитимуть виконавцям звідси',
-        cityError,
-      )}
-    </div>
+                      <Command.Item
+                        value={c.name}
+                        onSelect={() => {
+                          city = c.slug
+                          touched.city = true
+                          closeAndFocusTrigger()
+                        }}
+                      >
+                        <CheckIcon
+                          class={cn(city !== c.slug && 'text-transparent')}
+                        />
+                        {c.name}
+                      </Command.Item>
+                    {/each}
+                  </Command.Group>
+                </Command.List>
+              </Command.Root>
+            </Popover.Content>
+          </Popover.Root>
+        {/snippet}
+      </SettingsField>
+    </SettingsGroup>
 
     <!-- ═══ Додатково ═══ -->
-    <h2 class="mt-7 mb-2 px-1 text-sm font-semibold">Додатково</h2>
-    <div class="rounded-xl bg-muted/40 py-1">
-      <div class="mx-4 py-3">
+    <SettingsGroup title="Додатково">
+      <SettingsBlock>
         <Label for="bio" class="text-sm font-normal">Про себе</Label>
         <p class="mt-0.5 text-[12px] text-muted-foreground">
           Необов'язково. Наприклад: є кіт, під'їзд із кодом, зручніше зранку.
@@ -347,13 +325,17 @@
           maxlength={BIO_MAX}
           class="mt-2 resize-none bg-background"
         />
-        <div class="mt-1.5 flex justify-end">
-          <span class="text-[12px] tabular-nums text-muted-foreground">
-            {bioTrim.length}/{BIO_MAX}
-          </span>
-        </div>
-      </div>
-    </div>
+        <!-- Лічильник лише коли є що рахувати: «0/922» під порожнім полем
+             читається як помилка. Так само зроблено в анкеті асистента. -->
+        {#if bioTrim.length > 0}
+          <div class="mt-1.5 flex justify-end">
+            <span class="text-[12px] tabular-nums text-muted-foreground">
+              {bioTrim.length}/{BIO_MAX}
+            </span>
+          </div>
+        {/if}
+      </SettingsBlock>
+    </SettingsGroup>
 
     <!-- ═══ Дії ═══
          У кінці форми, праворуч — як у діалогах macOS.
@@ -377,7 +359,11 @@
         class="relative min-w-[130px]"
       >
         <span>
-          {submitting ? 'Зберігаємо...' : mode === 'edit' ? 'Зберегти' : 'Продовжити'}
+          {submitting
+            ? 'Зберігаємо...'
+            : mode === 'edit'
+              ? 'Зберегти'
+              : 'Продовжити'}
         </span>
         {#if submitting}
           <Spinner class="absolute right-3 animate-spin" aria-hidden="true" />

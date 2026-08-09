@@ -1,17 +1,21 @@
 <script lang="ts">
-  import ThemePicker from '$lib/components/settings/theme-picker.svelte'
+  // Розділ зібраний із тих самих блоків, що й решта налаштувань:
+  // власної розмітки картки тут більше немає.
+
+  import {
+    SettingsGroup,
+    SettingsBlock,
+    ThemePicker,
+  } from '$lib/components/settings'
 </script>
 
-<div>
-  <h2 class="mb-2 px-1 text-sm font-semibold">Вигляд</h2>
-
-  <div class="rounded-xl bg-muted/40 py-1">
-    <div class="mx-4 py-4">
-      <ThemePicker />
-    </div>
-  </div>
-
-  <p class="mt-3 px-1 text-[12px] leading-relaxed text-muted-foreground">
-    «Системна» підлаштовується під налаштування вашого пристрою.
-  </p>
-</div>
+<SettingsGroup
+  title="Тема"
+  footnote="«Системна» підлаштовується під налаштування пристрою. Вибір зберігається в цьому браузері — на іншому пристрої тему треба обрати заново."
+>
+  <!-- Блок, а не рядок: вибір теми — це не «підпис ліворуч, контрол
+       праворуч», а три картки на всю ширину. -->
+  <SettingsBlock roomy>
+    <ThemePicker />
+  </SettingsBlock>
+</SettingsGroup>

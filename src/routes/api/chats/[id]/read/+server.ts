@@ -1,6 +1,5 @@
-// src/routes/api/chats/[id]/read/+server.ts
 import { json, error } from '@sveltejs/kit'
-import { auth } from '$lib/server/auth'
+import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
 import { channels, events, safeTrigger } from '$lib/server/pusher'
 import type { RequestHandler } from './$types'
@@ -12,12 +11,11 @@ import type { RequestHandler } from './$types'
  * lastReadAt оновлюється у БД у будь-якому разі. Без real-time
  * пуша інший юзер побачить «прочитано» при наступному оновленні.
  */
-export const POST: RequestHandler = async ({ params, request }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw error(401, 'Unauthorized')
+export const POST: RequestHandler = async ({ params, locals }) => {
+  const user = requireApiUser(locals)
 
   const chatId = params.id
-  const userId = session.user.id
+  const userId = user.id
 
   const membership = await prisma.chatMember.findUnique({
     where: { chatId_userId: { chatId, userId } },

@@ -1,4 +1,3 @@
-<!-- src/routes/(auth)/jobs/+page.svelte -->
 <script lang="ts">
   import ClientJobs from '$lib/components/jobs/client-jobs.svelte'
   import MasterFeed from '$lib/components/jobs/master-feed.svelte'
@@ -16,8 +15,15 @@
   <title>{pageTitle} · Zunor</title>
 </svelte:head>
 
+<!--
+  flex-col + min-h-svh потрібні порожньому стану: він бере flex-1 і стає
+  по центру сторінки, а не одразу під заголовком. Ширини колонок і
+  падінги лишились свої — від них залежить сітка карток і вилітання
+  фільтрів до країв екрана в стрічці майстра.
+-->
 <div
-  class="mx-auto px-2.5 py-3 sm:py-7 {data.view === 'mine'
+  class="mx-auto flex min-h-svh w-full flex-col px-2.5 py-3 sm:py-7 {data.view ===
+  'mine'
     ? 'max-w-3xl sm:px-6'
     : 'max-w-230 sm:px-8'}"
 >

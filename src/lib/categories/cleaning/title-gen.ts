@@ -1,5 +1,3 @@
-// src/lib/categories/cleaning/title-gen.ts
-//
 // Генерація заголовка заявки з metadata.
 // Поля адаптивні — залежать від типу послуги.
 

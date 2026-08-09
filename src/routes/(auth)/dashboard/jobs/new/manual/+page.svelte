@@ -344,8 +344,7 @@
         Готово!
       </h1>
       <p class="max-w-xs text-base leading-relaxed text-muted-foreground">
-        <span class="font-semibold text-foreground">Zuna:</span> я вже шукаю тобі
-        майстра.
+        <span class="font-semibold text-foreground">Zunor</span> уже шукає вам майстра.
       </p>
     </div>
   {:else}

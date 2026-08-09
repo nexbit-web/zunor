@@ -3,7 +3,7 @@
   import { Switch } from '$lib/components/ui/switch/index.js'
   import { notificationSound } from '$lib/notifications'
   import { BellOnIcon, BellOffIcon } from '$lib/components/icons'
-import toast from 'svelte-hot-french-toast'
+  import toast from 'svelte-hot-french-toast'
 
   // Тримаємо id останнього тоста, щоб закрити його перед показом нового.
   // Спільний id у toast() тут не годиться: бібліотека оновлює вміст,

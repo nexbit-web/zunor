@@ -1,5 +1,3 @@
-// src/lib/server/zunor/detect-service.ts
-//
 // Детект активної послуги (Intent Detection). Скан історії з КІНЦЯ,
 // тільки user-повідомлення. Це UX-оптимізація промпту, НЕ рівень безпеки:
 // авторитетне поле service все одно валідує validateCleaningMetadata.

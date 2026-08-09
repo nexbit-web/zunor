@@ -1,131 +1,66 @@
-<!-- src/lib/components/notifications/notification-list.svelte -->
 <script lang="ts">
-  import { onMount } from 'svelte'
-  import { goto } from '$app/navigation'
-  import { getPusher } from '$lib/pusher-client'
+  import { onMount, untrack } from 'svelte'
+  import { browser } from '$app/environment'
+  import toast from 'svelte-hot-french-toast'
   import { Button } from '$lib/components/ui/button'
-  import { Badge } from '$lib/components/ui/badge'
+  import { Skeleton } from '$lib/components/ui/skeleton'
   import { Spinner } from '$lib/components/ui/spinner'
+  import * as AlertDialog from '$lib/components/ui/alert-dialog'
+  import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
   import {
-    Bell,
     BellOff,
-    Briefcase,
-    Send,
-    CheckCircle2,
-    Play,
-    PartyPopper,
-    MessageCircle,
+    Check,
     CheckCheck,
+    ChevronDown,
     Trash2,
   } from 'lucide-svelte'
-  import type { Channel } from 'pusher-js'
-
-  interface NotificationItem {
-    id: string
-    type: string
-    title: string
-    body: string | null
-    orderId: string | null
-    proposalId: string | null
-    jobId: string | null
-    chatId: string | null
-    isRead: boolean
-    createdAt: string
-  }
+  import { notifications } from '$lib/notifications'
+  import { linkFor, type Notification } from '$lib/notifications/types'
+  import { formatRelative, formatFull } from '$lib/utils/time'
 
   let {
-    userId,
     initialItems,
     initialNextCursor,
     initialUnreadCount,
   }: {
-    userId: string
-    initialItems: NotificationItem[]
+    initialItems: Notification[]
     initialNextCursor: string | null
     initialUnreadCount: number
   } = $props()
 
-  let items = $state<NotificationItem[]>([...initialItems])
-  let nextCursor = $state<string | null>(initialNextCursor)
-  let unreadCount = $state(initialUnreadCount)
-  let filter = $state<'all' | 'unread'>('all')
+  type Filter = 'all' | 'unread'
+
+  const FILTER_LABELS: Record<Filter, string> = {
+    all: 'Усі',
+    unread: 'Непрочитані',
+  }
+
+  // untrack: SSR дає лише ПОЧАТКОВИЙ знімок стрічки. Далі список живе сам —
+  // догрузка по курсору й позначки «прочитано» правлять його локально.
+  let items = $state<Notification[]>(untrack(() => [...initialItems]))
+  let nextCursor = $state<string | null>(untrack(() => initialNextCursor))
+  let filter = $state<Filter>('all')
   let loadingMore = $state(false)
   let reloading = $state(false)
   let sentinelEl = $state<HTMLDivElement | null>(null)
 
-  // ─── Тип → іконка ───
-  function iconFor(type: string) {
-    switch (type) {
-      case 'NEW_JOB':
-        return Briefcase
-      case 'NEW_PROPOSAL':
-        return Send
-      case 'PROPOSAL_ACCEPTED':
-        return CheckCircle2
-      case 'ORDER_STARTED':
-        return Play
-      case 'ORDER_COMPLETED':
-        return PartyPopper
-      case 'NEW_MESSAGE':
-        return MessageCircle
-      default:
-        return Bell
-    }
-  }
+  // Лічильник — зі спільного стору, не власний.
+  //
+  // Саме тут був баг: сторінка вела своє число, сайдбар — своє. Прочитане
+  // на сторінці гасило лише те, що на сторінці, а бейдж у сайдбарі так і
+  // висів, бо ці два числа ніхто не зводив між собою.
+  //
+  // Синхронізуємо ЛИШЕ в браузері: стор — модульний синглтон, і на сервері
+  // він спільний для всіх запитів. Записати туди число одного користувача
+  // означало б віддати його наступному, хто відкриє сторінку.
+  if (browser) notifications.setUnreadCount(untrack(() => initialUnreadCount))
 
-  // ─── Куди веде сповіщення (та сама логіка, що в дзвіночку) ───
-  function linkFor(n: NotificationItem): string {
-    if (n.orderId) return `/dashboard/orders/${n.orderId}`
-    if (n.proposalId) return `/dashboard/proposals`
-    if (n.jobId) return `/dashboard/jobs/${n.jobId}`
-    if (n.chatId) return `/dashboard/messages/${n.chatId}`
-    return '/dashboard/notifications'
-  }
-
-  // ─── Час ───
-  function formatRelative(iso: string): string {
-    const date = new Date(iso)
-    const min = Math.floor((Date.now() - date.getTime()) / 60_000)
-    const hr = Math.floor(min / 60)
-    const days = Math.floor(hr / 24)
-    if (min < 1) return 'щойно'
-    if (min < 60) return `${min} хв тому`
-    if (hr < 24) return `${hr} год тому`
-    if (days < 7) return `${days} дн тому`
-    return date.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' })
-  }
-
-  // ─── Групування по даті ───
-  const DAY = 86_400_000
-  function bucketOf(iso: string): string {
-    const now = new Date()
-    const startToday = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate(),
-    ).getTime()
-    const t = new Date(iso).getTime()
-    if (t >= startToday) return 'Сьогодні'
-    if (t >= startToday - DAY) return 'Вчора'
-    if (t >= startToday - 7 * DAY) return 'Цього тижня'
-    return 'Раніше'
-  }
-
-  const groups = $derived.by(() => {
-    const order = ['Сьогодні', 'Вчора', 'Цього тижня', 'Раніше']
-    const map = new Map<string, NotificationItem[]>()
-    for (const n of items) {
-      const b = bucketOf(n.createdAt)
-      const arr = map.get(b)
-      if (arr) arr.push(n)
-      else map.set(b, [n])
-    }
-    return order
-      .filter((b) => map.has(b))
-      .map((b) => ({ label: b, items: map.get(b)! }))
-  })
+  const unreadCount = $derived(
+    browser ? notifications.unreadCount : initialUnreadCount,
+  )
 
   // ─── Завантаження ───
+
   function query(cursor: string | null): string {
     const p = new URLSearchParams({ limit: '20' })
     if (filter === 'unread') p.set('unreadOnly', 'true')
@@ -133,118 +68,133 @@
     return p.toString()
   }
 
-  async function reload() {
+  async function reload(): Promise<void> {
     reloading = true
     try {
       const res = await fetch(`/api/notifications?${query(null)}`)
-      if (!res.ok) return
+      if (!res.ok) {
+        toast.error('Не вдалося оновити список')
+        return
+      }
       const j = await res.json()
       items = j.items
       nextCursor = j.nextCursor
-      unreadCount = j.unreadCount
-    } catch (e) {
-      console.error('[notifications:reload]', e)
+      // Сервер щойно перерахував непрочитані — зводимо бейдж із істиною.
+      notifications.setUnreadCount(j.unreadCount)
+    } catch {
+      toast.error('Помилка зʼєднання')
     } finally {
       reloading = false
     }
   }
 
-  async function loadMore() {
+  async function loadMore(): Promise<void> {
     if (loadingMore || !nextCursor) return
     loadingMore = true
     try {
       const res = await fetch(`/api/notifications?${query(nextCursor)}`)
       if (!res.ok) return
       const j = await res.json()
-      items = [...items, ...j.items]
+      // Дублі можливі, якщо поки гортали, прилетіло нове зверху.
+      const seen = new Set(items.map((x) => x.id))
+      items = [
+        ...items,
+        ...j.items.filter((x: Notification) => !seen.has(x.id)),
+      ]
       nextCursor = j.nextCursor
-    } catch (e) {
-      console.error('[notifications:loadMore]', e)
+    } catch {
+      // Мовчки: сентинел лишиться на місці, наступний скрол спробує знову.
     } finally {
       loadingMore = false
     }
   }
 
-  function setFilter(f: 'all' | 'unread') {
+  function setFilter(f: Filter): void {
     if (filter === f) return
     filter = f
-    reload()
+    void reload()
   }
 
-  // ─── Дії (оптимістично, потім POST) ───
-  async function markRead(n: NotificationItem) {
+  // ─── Дії ───
+  //
+  // Скрізь однаково: спочатку правимо список у себе, потім питаємо сервер,
+  // і якщо той не погодився — вертаємо як було. Стор так само відкочує свій
+  // лічильник, тож бейдж і список ніколи не розходяться.
+
+  async function markRead(n: Notification): Promise<void> {
     if (n.isRead) return
+
+    const prev = items
     items =
       filter === 'unread'
         ? items.filter((x) => x.id !== n.id)
         : items.map((x) => (x.id === n.id ? { ...x, isRead: true } : x))
-    unreadCount = Math.max(0, unreadCount - 1)
-    try {
-      await fetch('/api/notifications', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'mark-read', ids: [n.id] }),
-      })
-    } catch (e) {
-      console.error('[notifications:markRead]', e)
+
+    if (!(await notifications.markRead([n.id]))) {
+      items = prev
+      toast.error('Не вдалося позначити прочитаним')
     }
   }
 
-  async function openNotification(n: NotificationItem) {
-    await markRead(n)
-    goto(linkFor(n))
-  }
-
-  async function markAllRead() {
+  async function markAllRead(): Promise<void> {
     if (unreadCount === 0) return
+
+    const prevItems = items
+    const prevCursor = nextCursor
+
     items =
       filter === 'unread' ? [] : items.map((x) => ({ ...x, isRead: true }))
-    unreadCount = 0
     if (filter === 'unread') nextCursor = null
-    try {
-      await fetch('/api/notifications', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'mark-all-read' }),
-      })
-    } catch (e) {
-      console.error('[notifications:markAllRead]', e)
+
+    if (!(await notifications.markAllRead())) {
+      items = prevItems
+      nextCursor = prevCursor
+      toast.error('Не вдалося позначити прочитаними')
     }
   }
 
-  async function remove(n: NotificationItem) {
-    const wasUnread = !n.isRead
+  async function confirmRemove(): Promise<void> {
+    const n = pendingDelete
+    if (!n) return
+
+    deleteOpen = false
+
+    const prev = items
     items = items.filter((x) => x.id !== n.id)
-    if (wasUnread) unreadCount = Math.max(0, unreadCount - 1)
-    try {
-      await fetch('/api/notifications', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'delete', ids: [n.id] }),
-      })
-    } catch (e) {
-      console.error('[notifications:remove]', e)
+
+    // Успіх не тостимо: рядок зник на очах, це і є відповідь.
+    if (!(await notifications.remove([n.id], n.isRead ? 0 : 1))) {
+      items = prev
+      toast.error('Не вдалося видалити сповіщення')
     }
+  }
+
+  // ─── Видалення: підтвердження ───
+
+  let deleteOpen = $state(false)
+  // Не скидаємо в null при закритті — інакше текст діалогу зникне
+  // прямо посеред анімації виходу.
+  let pendingDelete = $state<Notification | null>(null)
+
+  function askRemove(n: Notification): void {
+    pendingDelete = n
+    deleteOpen = true
   }
 
   // ─── Realtime ───
-  function onIncoming(data: NotificationItem) {
-    if (filter === 'unread' && data.isRead) return
-    items = [data, ...items.filter((x) => x.id !== data.id)]
-    if (!data.isRead) unreadCount++
-    // Звук не граємо: цим займається дзвіночок у шапці (спільний канал).
-  }
 
   onMount(() => {
-    const channel: Channel = getPusher().subscribe(`private-user-${userId}`)
-    channel.bind('notification', onIncoming)
+    // Підписка спільна зі стором — своєї сторінка не тримає.
+    const offNotification = notifications.onNotification((n) => {
+      items = [n, ...items.filter((x) => x.id !== n.id)]
+    })
 
     let obs: IntersectionObserver | null = null
     if (sentinelEl) {
       obs = new IntersectionObserver(
         (entries) => {
           if (entries[0].isIntersecting && nextCursor && !loadingMore)
-            loadMore()
+            void loadMore()
         },
         { rootMargin: '400px' },
       )
@@ -252,162 +202,198 @@
     }
 
     return () => {
-      // Канал спільний (дзвіночок і user-menu теж слухають) —
-      // відвʼязуємо ЛИШЕ свій хендлер, без unbind_all / unsubscribe.
-      channel.unbind('notification', onIncoming)
+      offNotification()
       obs?.disconnect()
     }
   })
 </script>
 
-<!-- Header -->
-<header class="mb-5 flex items-start justify-between gap-3">
-  <div>
-    <h1 class="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+<header class="mb-6 flex items-center justify-between gap-3 sm:mb-8">
+  <div class="flex min-w-0 items-center gap-2.5">
+    <h1 class="truncate text-2xl font-semibold tracking-tight sm:text-3xl">
       Сповіщення
     </h1>
-    <p class="mt-1.5 text-sm text-muted-foreground">
-      {unreadCount > 0 ? `${unreadCount} непрочитаних` : 'Усе прочитано'}
-    </p>
-  </div>
-
-  {#if unreadCount > 0}
-    <Button
-      variant="ghost"
-      size="sm"
-      class="shrink-0 rounded-full text-muted-foreground"
-      onclick={markAllRead}
-    >
-      <CheckCheck class="size-4" />
-      Прочитати всі
-    </Button>
-  {/if}
-</header>
-
-<!-- Filter -->
-<div class="mb-5 flex gap-2">
-  <Button
-    variant={filter === 'all' ? 'default' : 'secondary'}
-    size="sm"
-    class="rounded-full border border-border transition-all duration-300 hover:border-primary"
-    onclick={() => setFilter('all')}
-  >
-    Усі
-  </Button>
-  <Button
-    variant={filter === 'unread' ? 'default' : 'secondary'}
-    size="sm"
-    class="rounded-full  border border-border transition-all duration-300 hover:border-primary"
-    onclick={() => setFilter('unread')}
-  >
-    Непрочитані
     {#if unreadCount > 0}
-      <Badge
-        variant={filter === 'unread' ? 'secondary' : 'default'}
-        class="ml-1"
+      <span
+        class="rounded-full bg-primary/12 px-2 py-0.5 text-xs font-semibold tabular-nums text-primary"
       >
         {unreadCount > 99 ? '99+' : unreadCount}
-      </Badge>
+      </span>
     {/if}
-  </Button>
-</div>
+  </div>
 
-<!-- List -->
+  <div class="flex shrink-0 items-center gap-2">
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger>
+        {#snippet child({ props })}
+          <Button
+            {...props}
+            variant="secondary"
+            size="sm"
+            class="font-normal text-muted-foreground"
+          >
+            <span class="hidden sm:inline">Показати:</span>
+            <span class="font-medium text-foreground">
+              {FILTER_LABELS[filter]}
+            </span>
+            <ChevronDown class="size-3.5 opacity-60" />
+          </Button>
+        {/snippet}
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content align="end" class="w-44 rounded-2xl p-1.5">
+        {#each ['all', 'unread'] as const as value (value)}
+          <DropdownMenu.Item
+            class="flex cursor-pointer items-center justify-between gap-2 rounded-xl px-3 py-2 text-sm outline-none data-highlighted:bg-accent"
+            onclick={() => setFilter(value)}
+          >
+            <span>{FILTER_LABELS[value]}</span>
+            {#if filter === value}
+              <Check class="size-4 text-ring" />
+            {/if}
+          </DropdownMenu.Item>
+        {/each}
+      </DropdownMenu.Content>
+    </DropdownMenu.Root>
+
+    {#if unreadCount > 0}
+      <Button size="sm" onclick={markAllRead} title="Позначити всі прочитаними">
+        <CheckCheck />
+        <span class="hidden sm:inline">Прочитати всі</span>
+      </Button>
+    {/if}
+  </div>
+</header>
+
 {#if reloading && items.length === 0}
-  <div class="flex justify-center py-12"><Spinner /></div>
+  <!-- Скелет, а не спінер: список уже має форму, і вона не стрибне,
+       коли приїдуть дані. -->
+  <ul class="border-t border-border/60" aria-busy="true">
+    {#each Array.from({ length: 6 }), i (i)}
+      <li
+        class="flex items-center justify-between gap-6 border-b border-border/60 py-4.5"
+      >
+        <Skeleton class="h-4 w-[min(60%,22rem)]" />
+        <Skeleton class="h-3.5 w-20 shrink-0" />
+      </li>
+    {/each}
+  </ul>
 {:else if items.length === 0}
-  <div class="rounded-2xl border border-border bg-card px-6 py-16 text-center">
-    <div
-      class="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl bg-muted"
-    >
-      <BellOff class="size-6 text-muted-foreground" strokeWidth={1.75} />
-    </div>
-    <h2 class="mb-1 text-base font-semibold text-foreground">
+  <!-- flex-1: порожній стан займає всю висоту, що лишилась під шапкою,
+       і знак стоїть по центру сторінки, а не тулиться до заголовка. -->
+  <div
+    class="flex flex-1 flex-col items-center justify-center px-6 py-20 text-center"
+  >
+    <BellOff class="size-14 text-muted-foreground/70" strokeWidth={1} />
+    <h2 class="mt-6 text-lg font-medium">
       {filter === 'unread' ? 'Непрочитаних немає' : 'Сповіщень поки немає'}
     </h2>
-    <p class="text-sm text-muted-foreground">
+    <p class="mt-2 max-w-90 text-sm leading-relaxed text-muted-foreground">
       {filter === 'unread'
-        ? 'Усе прочитано — гарна робота'
-        : 'Тут зʼявляться оновлення по заявках, відгуках і замовленнях'}
+        ? 'Ви все переглянули.'
+        : 'Тут зʼявляться оновлення по заявках, відгуках і замовленнях.'}
     </p>
+    {#if filter === 'unread'}
+      <Button
+        variant="secondary"
+        size="sm"
+        class="mt-6  "
+        onclick={() => setFilter('all')}
+      >
+        Показати всі
+      </Button>
+    {/if}
   </div>
 {:else}
-  {#each groups as group (group.label)}
-    <h2
-      class="mt-5 mb-2 text-xs font-semibold text-muted-foreground first:mt-0"
-    >
-      {group.label}
-    </h2>
-    <ul
-      class="divide-y divide-border overflow-hidden rounded-3xl border border-border bg-card transition-all duration-300 hover:border-primary "
-    >
-      {#each group.items as n (n.id)}
-        {@const Icon = iconFor(n.type)}
-        <li
-          class="flex items-start gap-3 p-3.5 pl-4 {n.isRead
-            ? ''
-            : 'bg-brand/5'}"
+  <ul class="border-t border-border/60">
+    {#each items as n (n.id)}
+      <li class="group relative border-b border-border/60">
+        <div
+          class="-mx-3 flex items-center gap-4 rounded-lg px-3 py-4 transition-colors group-hover:bg-muted/40"
         >
-          <span
-            class="flex size-9 shrink-0 items-center justify-center rounded-[10px] {n.isRead
-              ? 'bg-secondary text-muted-foreground'
-              : 'bg-brand/15 text-brand'}"
+          <!-- Розтягнуте посилання: клікабельний увесь рядок, але це
+               справжній <a> — працюють середня кнопка й «відкрити в
+               новій вкладці». Кнопка видалення лишається зверху за z. -->
+          <a
+            href={linkFor(n)}
+            onclick={() => markRead(n)}
+            class="min-w-0 flex-1 after:absolute after:inset-0 after:rounded-lg after:content-[''] focus-visible:outline-none focus-visible:after:ring-3 focus-visible:after:ring-ring/50"
           >
-            <Icon class="size-4" />
-          </span>
-
-          <button
-            type="button"
-            class="min-w-0 flex-1 cursor-pointer text-left"
-            onclick={() => openNotification(n)}
-          >
-            <p
-              class="text-sm leading-snug text-foreground {n.isRead
-                ? 'font-medium'
-                : 'font-semibold'}"
-            >
-              {n.title}
-            </p>
+            <span class="flex items-center gap-2">
+              {#if !n.isRead}
+                <span
+                  class="size-1.5 shrink-0 rounded-full bg-primary"
+                  aria-label="Непрочитане"
+                ></span>
+              {/if}
+              <span
+                class="truncate text-[15px] {n.isRead
+                  ? 'text-foreground/90'
+                  : 'font-medium text-foreground'}"
+              >
+                {n.title}
+              </span>
+            </span>
             {#if n.body}
-              <p
-                class="mt-0.5 line-clamp-2 text-xs leading-snug text-muted-foreground"
+              <span
+                class="mt-0.5 block truncate text-[13px] text-muted-foreground {n.isRead
+                  ? ''
+                  : 'pl-3.5'}"
               >
                 {n.body}
-              </p>
+              </span>
             {/if}
-            <p class="mt-1 text-[11px] text-muted-foreground">
-              {formatRelative(n.createdAt)}
-            </p>
-          </button>
+          </a>
 
-          {#if !n.isRead}
-            <span
-              class="mt-1.5 size-2 shrink-0 rounded-full bg-brand"
-              aria-hidden="true"
-            ></span>
-          {/if}
+          <time
+            datetime={n.createdAt}
+            title={formatFull(n.createdAt)}
+            class="shrink-0 text-[13px] whitespace-nowrap text-muted-foreground"
+          >
+            {formatRelative(n.createdAt)}
+          </time>
 
+          <!-- На тачі ховера не буває, тож там кнопка видна завжди;
+               ховер ховає її лише на пристроях із курсором. -->
           <Button
             variant="ghost"
             size="icon-sm"
-            class="shrink-0 text-muted-foreground transition-all duration-300 hover:text-destructive"
-            onclick={() => remove(n)}
-            aria-label="Видалити сповіщення"
+            class="relative z-10 shrink-0 rounded-full text-muted-foreground transition-opacity hover:bg-destructive/10 hover:text-destructive pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:focus-visible:opacity-100"
+            onclick={() => askRemove(n)}
+            aria-label="Видалити сповіщення «{n.title}»"
           >
-            <Trash2 class="size-4" />
+            <Trash2 />
           </Button>
-        </li>
-      {/each}
-    </ul>
-  {/each}
+        </div>
+      </li>
+    {/each}
+  </ul>
 
   <div bind:this={sentinelEl} class="h-1"></div>
+
   {#if loadingMore}
     <div class="flex justify-center py-6"><Spinner /></div>
-  {/if}
-  {#if !nextCursor && items.length > 0 && !loadingMore}
+  {:else if !nextCursor}
     <p class="py-6 text-center text-xs text-muted-foreground">
       Це всі сповіщення
     </p>
   {/if}
 {/if}
+
+<AlertDialog.Root bind:open={deleteOpen}>
+  <AlertDialog.Content>
+    <AlertDialog.Header>
+      <AlertDialog.Title>Видалити сповіщення?</AlertDialog.Title>
+      <AlertDialog.Description>
+        {#if pendingDelete}
+          {pendingDelete.title}
+        {/if}
+      </AlertDialog.Description>
+    </AlertDialog.Header>
+    <AlertDialog.Footer>
+      <AlertDialog.Cancel>Скасувати</AlertDialog.Cancel>
+      <AlertDialog.Action variant="destructive" onclick={confirmRemove}>
+        Видалити
+      </AlertDialog.Action>
+    </AlertDialog.Footer>
+  </AlertDialog.Content>
+</AlertDialog.Root>

@@ -1,11 +1,10 @@
 import { json, error } from '@sveltejs/kit'
-import { auth } from '$lib/server/auth'
+import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
 import type { RequestHandler } from './$types'
 
-export const POST: RequestHandler = async ({ request }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw error(401, 'Unauthorized')
+export const POST: RequestHandler = async ({ request, locals }) => {
+  const user = requireApiUser(locals)
 
   const body = await request.json().catch(() => ({}) as Record<string, unknown>)
   const orderId = String(body.orderId ?? '')
@@ -26,7 +25,7 @@ export const POST: RequestHandler = async ({ request }) => {
   })
   if (!order) throw error(404, 'Замовлення не знайдено')
 
-  const userId = session.user.id
+  const userId = user.id
   const isClient = order.clientId === userId
   const isMaster = order.masterId === userId
   if (!isClient && !isMaster) throw error(403, 'Ви не учасник цього замовлення')

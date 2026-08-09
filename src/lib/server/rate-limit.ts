@@ -1,18 +1,11 @@
-// src/lib/rate-limit.ts
-
 /**
- * Простий in-memory rate-limit за IP/ключем.
+ * Простий in-memory rate-limit за ключем.
  *
- * ⚠️ ВАЖЛИВО для продакшну:
- * - Ця реалізація тримає дані в памʼяті одного процесу.
- *   При горизонтальному масштабуванні (кілька інстансів Node) — переходьте на Redis.
- * - Перезапуск сервера очищує ліміти.
- * - Для строгих гарантій використовуйте спеціалізовані рішення:
- *   Cloudflare Rate Limiting, Upstash Ratelimit, @vercel/functions rateLimit.
- *
- * Приклад використання:
- *   const { success } = await limit(ip, { points: 10, duration: 60_000 })
+ *   const { success } = await limit(key, { points: 10, duration: 60_000 })
  *   if (!success) return new Response('Too Many', { status: 429 })
+ *
+ * Дані живуть у памʼяті одного процесу: рестарт обнуляє лічильники, а другий
+ * інстанс зробить ліміт неточним — тоді потрібне спільне сховище.
  */
 
 interface Bucket {
@@ -22,6 +15,14 @@ interface Bucket {
 
 const buckets = new Map<string, Bucket>()
 
+/**
+ * Стеля на кількість кошиків. Чистка протухлих іде раз на хвилину — цього
+ * мало, якщо ключ залежить від чогось під контролем клієнта: Map встигне
+ * вирости безмежно й покласти процес, а процес у нас один на весь застосунок.
+ * Зараз усі ключі user-scoped, але стеля робить цей клас помилок нефатальним.
+ */
+const MAX_BUCKETS = 20_000
+
 // Періодично чистимо протухлі записи, щоб Map не ріс безкінечно
 let lastCleanup = 0
 function cleanup(now: number) {
@@ -29,6 +30,28 @@ function cleanup(now: number) {
   lastCleanup = now
   for (const [k, b] of buckets) {
     if (b.resetAt < now) buckets.delete(k)
+  }
+}
+
+/**
+ * Аварійне скидання при переповненні.
+ *
+ * Викидаємо найстаріші записи (Map тримає порядок вставки). Так, це
+ * послаблює ліміт для тих, кого викинули, — але вибір тут між «частина
+ * лімітів скинулась» і «процес помер», і перше очевидно краще.
+ */
+function evictIfNeeded(now: number): void {
+  if (buckets.size <= MAX_BUCKETS) return
+
+  for (const [k, b] of buckets) {
+    if (b.resetAt < now) buckets.delete(k)
+  }
+  // Протухлих не вистачило — ріжемо найстаріші живі.
+  let excess = buckets.size - MAX_BUCKETS
+  if (excess <= 0) return
+  for (const k of buckets.keys()) {
+    buckets.delete(k)
+    if (--excess <= 0) break
   }
 }
 
@@ -51,6 +74,7 @@ export function limit(
   if (!bucket || bucket.resetAt < now) {
     const resetAt = now + duration
     buckets.set(key, { count: 1, resetAt })
+    evictIfNeeded(now)
     return { success: true, remaining: points - 1, resetAt }
   }
 
@@ -66,14 +90,7 @@ export function limit(
   }
 }
 
-/**
- * Витягує ідентифікатор клієнта для rate-limit.
- * Пріоритет: X-Forwarded-For → X-Real-IP → remote address.
- */
-export function getClientKey(request: Request, prefix = 'default'): string {
-  const forwardedFor = request.headers.get('x-forwarded-for')
-  const ip = forwardedFor
-    ? forwardedFor.split(',')[0].trim()
-    : (request.headers.get('x-real-ip') ?? 'unknown')
-  return `${prefix}:${ip}`
-}
+// Ключі тут user-scoped. Якщо колись знадобиться лімітувати за IP, бери його
+// з `event.getClientAddress()`, а не з X-Forwarded-For: лівий елемент цього
+// заголовка задає клієнт, тобто дає новий ключ на кожен запит — і обхід
+// ліміту, і накачування Map.

@@ -1,6 +1,4 @@
-// src/routes/api/upload/signature/+server.ts
 import { json } from '@sveltejs/kit'
-import { auth } from '$lib/server/auth'
 import { signUploadParams } from '$lib/server/cloudinary'
 import { limit } from '$lib/server/rate-limit'
 import type { RequestHandler } from './$types'
@@ -19,11 +17,14 @@ function folderForKind(kind: Kind, userId: string): string {
   }
 }
 
-export const POST: RequestHandler = async ({ request }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) return json({ error: 'Unauthorized' }, { status: 401 })
+export const POST: RequestHandler = async ({ request, locals }) => {
+  // Не через requireApiUser: цей ендпоінт віддає 401 у власному форматі
+  // { error }, а гард кидає { message }. Джерело сесії єдине (locals),
+  // а тіло відповіді лишаємо як є, щоб не міняти контракт для клієнта.
+  const user = locals.user
+  if (!user) return json({ error: 'Unauthorized' }, { status: 401 })
 
-  const rl = limit(`upload-sign:${session.user.id}`, {
+  const rl = limit(`upload-sign:${user.id}`, {
     points: 30,
     duration: 60_000,
   })
@@ -50,7 +51,7 @@ export const POST: RequestHandler = async ({ request }) => {
   }
 
   const kind = body.kind as Kind
-  const folder = folderForKind(kind, session.user.id)
+  const folder = folderForKind(kind, user.id)
   const resourceType =
     body.resourceType === 'image' ||
     body.resourceType === 'raw' ||
@@ -60,9 +61,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
   // Для аватара — фіксований public_id щоб нове фото перезаписувало старе
   const publicId =
-    kind === 'avatar'
-      ? `zunor/users/${session.user.id}/avatar/profile`
-      : undefined
+    kind === 'avatar' ? `zunor/users/${user.id}/avatar/profile` : undefined
 
   return json(signUploadParams({ folder, resourceType, publicId }))
 }

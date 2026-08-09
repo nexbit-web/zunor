@@ -1,44 +1,58 @@
-<!-- src/routes/(auth)/orders/+page.svelte -->
 <script lang="ts">
-  import { goto } from '$app/navigation'
+  import { untrack } from 'svelte'
   import { page } from '$app/state'
-  import { Briefcase, Plus } from 'lucide-svelte'
-  import { fade } from 'svelte/transition'
+  import { replaceState } from '$app/navigation'
+  import { Briefcase, Check, ChevronDown, Plus } from 'lucide-svelte'
+  import { Button } from '$lib/components/ui/button'
+  import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
   import OrderCard from '$lib/components/orders/order-card.svelte'
   import type { PageData } from './$types'
-  import { Button } from '$lib/components/ui/button'
 
   let { data }: { data: PageData } = $props()
 
-  // ═══════════════════════════════════════════════════════════
-  // Types
-  // ═══════════════════════════════════════════════════════════
-
   type StatusTab = 'ACTIVE' | 'COMPLETED' | 'CANCELLED' | 'ALL'
 
-  // ═══════════════════════════════════════════════════════════
-  // State (синхронізується з URL)
-  // ═══════════════════════════════════════════════════════════
-
-  function getInitialTab(): StatusTab {
-    const t = page.url.searchParams.get('status')
-    if (t === 'COMPLETED' || t === 'CANCELLED' || t === 'ALL') return t
-    return 'ACTIVE'
+  const TAB_LABELS: Record<StatusTab, string> = {
+    ACTIVE: 'Активні',
+    COMPLETED: 'Завершені',
+    CANCELLED: 'Скасовані',
+    ALL: 'Усі',
   }
 
-  let activeTab = $state<StatusTab>(getInitialTab())
+  function tabFromUrl(): StatusTab {
+    const t = page.url.searchParams.get('status')
+    return t === 'COMPLETED' || t === 'CANCELLED' || t === 'ALL' ? t : 'ACTIVE'
+  }
 
-  // ═══════════════════════════════════════════════════════════
-  // Derived
-  // ═══════════════════════════════════════════════════════════
+  /**
+   * Вкладка живе в $state, а адресний рядок — це її ДЗЕРКАЛО, не джерело:
+   * `replaceState` міняє лише `page.state`, а `page.url` лишає старим, тож
+   * похідне від нього значення оновлювалось би тільки після F5.
+   *
+   * untrack: з URL беремо ПОЧАТКОВЕ значення (щоб працювали посилання), далі
+   * вкладку веде сам компонент.
+   */
+  let activeTab = $state<StatusTab>(untrack(() => tabFromUrl()))
+
+  const isClient = $derived(data.userRole === 'CLIENT')
+  const isMaster = $derived(data.userRole === 'MASTER')
+
+  const totalCount = $derived(data.orders.length)
+
+  const counts = $derived<Record<StatusTab, number>>({
+    ACTIVE: data.counts.active,
+    COMPLETED: data.counts.completed,
+    CANCELLED: data.counts.cancelled,
+    ALL: totalCount,
+  })
 
   const filtered = $derived.by(() => {
     switch (activeTab) {
       case 'ALL':
         return data.orders
       case 'ACTIVE':
-        return data.orders.filter((o) =>
-          ['CREATED', 'IN_PROGRESS'].includes(o.status),
+        return data.orders.filter(
+          (o) => o.status === 'CREATED' || o.status === 'IN_PROGRESS',
         )
       case 'COMPLETED':
         return data.orders.filter((o) => o.status === 'COMPLETED')
@@ -47,55 +61,26 @@
     }
   })
 
-  const activeCount = $derived(data.counts.active)
-  const totalCount = $derived(data.orders.length)
-  const isClient = $derived(data.userRole === 'CLIENT')
-  const isMaster = $derived(data.userRole === 'MASTER')
-
-  // ═══════════════════════════════════════════════════════════
-  // Actions
-  // ═══════════════════════════════════════════════════════════
-
-  function setStatusTab(tab: StatusTab) {
+  /**
+   * Спершу перемальовуємо список, потім пишемо адресу — щоб посиланням
+   * можна було поділитись і щоб F5 лишав ту саму вкладку.
+   *
+   * replaceState зі SvelteKit, а не з history: він не смикає `load`
+   * (усі замовлення вже в пам'яті, фільтр суто клієнтський) і правильно
+   * веде внутрішній стан роутера. Шлях беремо з `page.url.pathname` —
+   * захардкоджений '/orders' писав в адресу неіснуючий роут без
+   * префікса /dashboard, і перезавантаження давало 404.
+   */
+  function setTab(tab: StatusTab): void {
     if (tab === activeTab) return
     activeTab = tab
 
     const params = new URLSearchParams(page.url.searchParams)
-    if (tab === 'ACTIVE') {
-      params.delete('status')
-    } else {
-      params.set('status', tab)
-    }
+    if (tab === 'ACTIVE') params.delete('status')
+    else params.set('status', tab)
+
     const qs = params.toString()
-    const newUrl = qs ? `/orders?${qs}` : '/orders'
-    history.replaceState(history.state, '', newUrl)
-  }
-
-  // ═══════════════════════════════════════════════════════════
-  // Tabs config
-  // ═══════════════════════════════════════════════════════════
-
-  const statusTabs: { value: StatusTab; label: string; count: number }[] =
-    $derived([
-      { value: 'ACTIVE', label: 'Активні', count: data.counts.active },
-      {
-        value: 'COMPLETED',
-        label: 'Завершені',
-        count: data.counts.completed,
-      },
-      {
-        value: 'CANCELLED',
-        label: 'Скасовані',
-        count: data.counts.cancelled,
-      },
-      { value: 'ALL', label: 'Усі', count: totalCount },
-    ])
-
-
-  function getActiveLabel(n: number): string {
-    if (n === 1) return 'активне'
-    if (n >= 2 && n <= 4) return 'активних'
-    return 'активних'
+    replaceState(qs ? `${page.url.pathname}?${qs}` : page.url.pathname, {})
   }
 </script>
 
@@ -107,204 +92,142 @@
   />
 </svelte:head>
 
-<div class="max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-5">
-  <!-- ─── Заголовок ─── -->
-  <header class="mb-8">
-    <div class="flex items-start justify-between gap-4 flex-wrap">
-      <div>
-        <div class="flex items-baseline gap-3 flex-wrap">
-          <h1
-            class="text-3xl font-bold tracking-tight"
-            style="color: var(--foreground)"
-          >
-            Замовлення
-          </h1>
-          {#if activeCount > 0}
-            <span
-              class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
-              style="background-color: color-mix(in oklch, var(--primary) 10%, transparent);
-                     color: var(--primary)"
+<!--
+  max-w-230 — та сама колонка, що в заявках, відгуках і сповіщеннях.
+  min-h-svh + flex-col потрібні порожньому стану: він бере flex-1 і стає
+  по центру сторінки, а не одразу під заголовком.
+-->
+<div class="mx-auto flex min-h-svh w-full max-w-230 flex-col px-4 py-8 sm:px-6">
+  <header class="mb-6 flex items-center justify-between gap-3 sm:mb-8">
+    <div class="flex min-w-0 items-center gap-2.5">
+      <h1 class="truncate text-2xl font-semibold tracking-tight sm:text-3xl">
+        Замовлення
+      </h1>
+      {#if data.counts.active > 0}
+        <span
+          class="rounded-full bg-primary/12 px-2 py-0.5 text-xs font-semibold tabular-nums text-primary"
+        >
+          {data.counts.active}
+        </span>
+      {/if}
+    </div>
+
+    <div class="flex shrink-0 items-center gap-2">
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger>
+          {#snippet child({ props })}
+            <Button
+              {...props}
+              variant="secondary"
+              size="sm"
+              class="font-normal text-muted-foreground"
             >
-              <span
-                class="size-1.5 rounded-full"
-                style="background-color: var(--primary)"
-              ></span>
-              {activeCount}
-              {getActiveLabel(activeCount)}
-            </span>
-          {/if}
-        </div>
-        <p class="text-sm mt-2" style="color: var(--muted-foreground)">
-          {#if isClient}
-            Ваші замовлення — створіть нове або керуйте поточними
-          {:else if isMaster}
-            Замовлення, які ви виконуєте
-          {:else}
-            Замовлення в яких ви берете участь
-          {/if}
-        </p>
-      </div>
+              <span class="hidden sm:inline">Показати:</span>
+              <span class="font-medium text-foreground">
+                {TAB_LABELS[activeTab]}
+              </span>
+              <ChevronDown class="size-3.5 opacity-60" />
+            </Button>
+          {/snippet}
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content align="end" class="w-52 rounded-2xl p-1.5">
+          {#each ['ACTIVE', 'COMPLETED', 'CANCELLED', 'ALL'] as const as value (value)}
+            <DropdownMenu.Item
+              class="flex cursor-pointer items-center justify-between gap-2 rounded-xl px-3 py-2 text-sm outline-none data-highlighted:bg-accent"
+              onclick={() => setTab(value)}
+            >
+              <span class="flex items-center gap-2">
+                <span>{TAB_LABELS[value]}</span>
+                <span class="text-xs tabular-nums text-muted-foreground">
+                  {counts[value]}
+                </span>
+              </span>
+              {#if activeTab === value}
+                <Check class="size-4 text-ring" />
+              {/if}
+            </DropdownMenu.Item>
+          {/each}
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
 
       {#if isClient}
-        <button
-          type="button"
-          onclick={() => goto('/dashboard/jobs/new')}
-          class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold cursor-pointer transition-all hover:opacity-90 active:scale-95 shrink-0"
-          style="background-color: var(--primary); color: white"
-        >
-          <Plus class="size-4" strokeWidth={2.25} />
-          Нове замовлення
-        </button>
+        <Button size="sm" href="/dashboard/jobs/new">
+          <Plus />
+          <span class="hidden sm:inline">Нове замовлення</span>
+        </Button>
+      {:else if isMaster}
+        <Button size="sm" href="/dashboard/jobs">
+          <Briefcase />
+          <span class="hidden sm:inline">Знайти роботу</span>
+        </Button>
       {/if}
     </div>
   </header>
 
-  <!-- ─── Контроли (Status) ─── -->
-  <div class="mb-6 space-y-3">
-
-    <!-- Status tabs -->
+  {#if filtered.length === 0}
     <div
-      class="flex items-center gap-0 border-b overflow-x-auto"
-      style="border-color: var(--border)"
-      role="tablist"
-      aria-label="Статус замовлень"
+      class="flex flex-1 flex-col items-center justify-center px-6 py-20 text-center"
     >
-      {#each statusTabs as tab (tab.value)}
-        {@const isActive = activeTab === tab.value}
-        <button
-          type="button"
-          onclick={() => setStatusTab(tab.value)}
-          role="tab"
-          aria-selected={isActive}
-          class="status-tab inline-flex items-center gap-2 px-4 py-3 text-sm font-medium cursor-pointer transition-colors whitespace-nowrap relative"
-          class:active={isActive}
-        >
-          <span>{tab.label}</span>
-          {#if tab.count > 0}
-            <span
-              class="text-[11px] tabular-nums px-1.5 py-0.5 rounded font-semibold"
-              style="background-color: {isActive
-                ? 'color-mix(in oklch, var(--foreground) 8%, transparent)'
-                : 'var(--muted)'};
-                     color: {isActive
-                ? 'var(--foreground)'
-                : 'var(--muted-foreground)'}"
-            >
-              {tab.count}
-            </span>
+      <Briefcase class="size-14 text-muted-foreground/70" strokeWidth={1} />
+
+      <h2 class="mt-6 text-lg font-medium">
+        {totalCount === 0
+          ? 'Замовлень поки немає'
+          : `Немає замовлень зі статусом «${TAB_LABELS[activeTab].toLowerCase()}»`}
+      </h2>
+
+      <p class="mt-2 max-w-100 text-sm leading-relaxed text-muted-foreground">
+        {#if totalCount === 0}
+          {#if isClient}
+            Створіть заявку — щойно ви оберете майстра, тут зʼявиться
+            замовлення.
+          {:else if isMaster}
+            Відгукуйтесь на заявки: замовлення зʼявиться, щойно клієнт обере
+            вас.
+          {:else}
+            Замовлення зʼявляться тут, коли ви візьмете в них участь.
           {/if}
-        </button>
-      {/each}
-    </div>
-  </div>
+        {:else}
+          Спробуйте інший фільтр — усього замовлень: {totalCount}.
+        {/if}
+      </p>
 
-  <!-- ─── Контент ─── -->
-  {#key activeTab}
-    <div in:fade={{ duration: 120 }}>
-      {#if filtered.length === 0}
-        <!-- Empty state -->
-        <div
-          class="rounded-2xl px-6 py-14 sm:py-20 text-center"
-          style="background-color: var(--card); border: 1px solid var(--border)"
+      {#if totalCount === 0 && isClient}
+        <Button class="mt-6" href="/dashboard/jobs/new">
+          <Plus />
+          Створити заявку
+        </Button>
+      {:else if totalCount === 0 && isMaster}
+        <Button class="mt-6" href="/dashboard/jobs">
+          <Briefcase />
+          Знайти роботу
+        </Button>
+      {:else if totalCount > 0}
+        <Button
+          variant="secondary"
+          size="sm"
+          class="mt-6"
+          onclick={() => setTab('ALL')}
         >
-          <div
-            class="size-14 rounded-xl mx-auto mb-4 flex items-center justify-center"
-            style="background-color: var(--muted)"
-          >
-            <Briefcase
-              class="size-6"
-              style="color: var(--muted-foreground)"
-              strokeWidth={1.75}
-            />
-          </div>
-
-          <h2
-            class="text-base font-semibold mb-1"
-            style="color: var(--foreground)"
-          >
-            {totalCount === 0
-              ? 'Немає жодного замовлення'
-              : 'Немає замовлень у цій категорії'}
-          </h2>
-
-          <p
-            class="text-sm max-w-md mx-auto leading-relaxed"
-            style="color: var(--muted-foreground)"
-          >
-            {#if totalCount === 0}
-              {#if isClient}
-                Створіть першу заявку — і майстри почнуть надсилати пропозиції
-              {:else if isMaster}
-                Подавайте пропозиції на заявки — і прийняті замовлення зʼявляться тут
-              {:else}
-                Замовлення зʼявляться тут коли ви візьмете в них участь
-              {/if}
-            {:else}
-              Спробуйте інший статус або скиньте фільтр ролі
-            {/if}
-          </p>
-
-          {#if totalCount === 0}
-            {#if isClient}
-              <button
-                type="button"
-                onclick={() => goto('/dashboard/jobs/new')}
-                class="inline-flex items-center gap-2 mt-5 px-5 py-2.5 rounded-xl text-sm font-medium   hover:bg-primary-hover"
-                style="background-color: var(--primary); color: white"
-              >
-                <Plus class="size-4" strokeWidth={2.25} />
-                Створити заявку
-              </button>
-            {:else if isMaster}
-              <Button
-                type="button"
-                onclick={() => goto('/dashboard/jobs')}
-                class="inline-flex items-center gap-2 mt-5 px-5 py-2.5 rounded-xl text-sm font-medium   hover:bg-primary-hover"
-                
-              >
-                <Briefcase class="size-4" strokeWidth={2.25} />
-                Знайти роботу
-              </Button>
-            {/if}
-          {/if}
-        </div>
-      {:else}
-        <!-- Orders list -->
-        <div class="space-y-3">
-          {#each filtered as order (order.id)}
-            <OrderCard {order} viewerId={data.viewerId} />
-          {/each}
-        </div>
+          Показати всі
+        </Button>
       {/if}
     </div>
-  {/key}
+  {:else}
+    <ul class="grid gap-3 sm:grid-cols-2">
+      {#each filtered as order (order.id)}
+        <li class="min-w-0">
+          <OrderCard {order} viewerId={data.viewerId} />
+        </li>
+      {/each}
+    </ul>
+
+    {#if totalCount >= 200}
+      <!-- Лоадер бере рівно 200 записів. Мовчки обрізати список не можна:
+           людина мала б думати, що старіших замовлень не існує. -->
+      <p class="py-6 text-center text-xs text-muted-foreground">
+        Показані останні 200 замовлень
+      </p>
+    {/if}
+  {/if}
 </div>
-
-<style>
-  .status-tab {
-    color: color-mix(in oklch, var(--foreground) 60%, transparent);
-  }
-  .status-tab:hover {
-    color: var(--foreground);
-  }
-  .status-tab.active {
-    color: var(--foreground);
-  }
-  .status-tab.active::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: -1px;
-    height: 2px;
-    background-color: var(--foreground);
-    border-radius: 2px;
-  }
-
-  [role='tablist'] {
-    scrollbar-width: none;
-  }
-  [role='tablist']::-webkit-scrollbar {
-    display: none;
-  }
-</style>

@@ -1,4 +1,3 @@
-// src/routes/api/user/update/+server.ts
 import { json } from '@sveltejs/kit'
 import {
   Prisma,
@@ -6,17 +5,18 @@ import {
   Role,
 } from '../../../../generated/prisma/client'
 import { prisma } from '$lib/server/prisma'
-import { auth } from '$lib/server/auth'
 import type { RequestHandler } from './$types'
 
+// role та onboarded у цьому типі НЕМАЄ навмисно. Клієнт може їх прислати —
+// роут просто не дивиться в ці поля. Тримати їх у типі означало б натякати,
+// що вони працюють: саме так вони колись і повернулись у код після
+// «прибирання».
 interface UpdatePayload {
   // ─── Поля User ───
-  role?: 'CLIENT' | 'MASTER'
   username?: string
   name?: string
   phone?: string
   city?: string
-  onboarded?: boolean
   bio?: string
   avatar?: string | null
   avatarPublicId?: string | null
@@ -71,9 +71,10 @@ const LIMITS = {
 // й падав уже в Prisma з 500 замість зрозумілого 400.
 const isString = (v: unknown): v is string => typeof v === 'string'
 
-export const POST: RequestHandler = async ({ request }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) return json({ error: 'Unauthorized' }, { status: 401 })
+export const POST: RequestHandler = async ({ request, locals }) => {
+  // 401 у власному форматі { error } — див. коментар в upload/signature.
+  const sessionUser = locals.user
+  if (!sessionUser) return json({ error: 'Unauthorized' }, { status: 401 })
 
   let body: UpdatePayload
   try {
@@ -82,7 +83,7 @@ export const POST: RequestHandler = async ({ request }) => {
     return json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
-  const userId = session.user.id
+  const userId = sessionUser.id
 
   // ═══════════════════ Валідація ═══════════════════
 
@@ -199,8 +200,11 @@ export const POST: RequestHandler = async ({ request }) => {
 
   // ═══════════════════ Оновлення User ═══════════════════
 
+  // onboarded тут НЕ виставляється — навіть якщо його прислали в тілі.
+  // Це замок №3 з hooks.server.ts: із onboarded=true й порожнім профілем
+  // користувач проходить в дашборд повз онбординг. Прапорець ставить лише
+  // $lib/server/profile.ts, і лише разом із реально збереженим профілем.
   const userData: Prisma.UserUpdateInput = {}
-  if (body.onboarded === true) userData.onboarded = true
   if (body.name) userData.name = body.name
   if (body.phone !== undefined) userData.phone = body.phone
   if (body.city) userData.city = body.city
@@ -209,7 +213,6 @@ export const POST: RequestHandler = async ({ request }) => {
   if (body.avatar !== undefined) userData.avatar = body.avatar
   if (body.avatarPublicId !== undefined)
     userData.avatarPublicId = body.avatarPublicId
-  if (body.onboarded === true) userData.onboarded = true
 
   if (Object.keys(userData).length > 0) {
     try {

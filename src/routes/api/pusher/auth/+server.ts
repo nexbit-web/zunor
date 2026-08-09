@@ -1,6 +1,5 @@
-// src/routes/api/pusher/auth/+server.ts
 import { error } from '@sveltejs/kit'
-import { auth } from '$lib/server/auth'
+import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
 import { pusherServer } from '$lib/server/pusher'
 import type { RequestHandler } from './$types'
@@ -15,9 +14,8 @@ import type { RequestHandler } from './$types'
  *   private-chat-{chatId}     → тільки члени чату
  *   presence-chat-{chatId}    → тільки члени чату (з info про юзера)
  */
-export const POST: RequestHandler = async ({ request }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw error(401, 'Unauthorized')
+export const POST: RequestHandler = async ({ request, locals }) => {
+  const user = requireApiUser(locals)
 
   const formData = await request.formData()
   const socketId = formData.get('socket_id')?.toString()
@@ -27,7 +25,7 @@ export const POST: RequestHandler = async ({ request }) => {
     throw error(400, 'Missing socket_id or channel_name')
   }
 
-  const userId = session.user.id
+  const userId = user.id
 
   // ─── private-user-{userId} ───
   if (channel.startsWith('private-user-')) {

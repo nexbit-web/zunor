@@ -1,22 +1,36 @@
-// src/routes/(auth)/jobs/[id]/+page.server.ts
-import { auth } from '$lib/server/auth'
 import { prisma } from '$lib/server/prisma'
+import { requireUser } from '$lib/server/guards'
 import { error, redirect } from '@sveltejs/kit'
 import { markOpened } from '$lib/server/dispatch'
 import { getRecommendedIds } from '$lib/server/ranking'
+import { checkJobAccess, jobViewerSelect } from '$lib/server/job-access'
 import type { PageServerLoad } from './$types'
 
-export const load: PageServerLoad = async ({ params, request }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw redirect(302, '/user/login')
+/**
+ * Один унікальний перегляд на пару (заявка, глядач).
+ * Повторне відкриття не доходить до UPDATE — конфлікт по unique гаситься
+ * на рівні INSERT, і «гаряча» заявка не переписується щоразу.
+ */
+async function countUniqueView(jobId: string, viewerId: string) {
+  const inserted = await prisma.jobView.createMany({
+    data: [{ jobId, viewerId }],
+    skipDuplicates: true,
+  })
+  if (inserted.count === 0) return
 
-  const userId = session.user.id
+  await prisma.job.update({
+    where: { id: jobId },
+    data: { viewsCount: { increment: 1 } },
+  })
+}
+
+export const load: PageServerLoad = async ({ params, locals }) => {
+  const userId = requireUser(locals).id
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
-      role: true,
-      city: true,
+      ...jobViewerSelect,
       masterProfile: {
         select: {
           isActive: true,
@@ -64,33 +78,13 @@ export const load: PageServerLoad = async ({ params, request }) => {
 
   if (!job) throw error(404, 'Заявку не знайдено')
 
-  const isOwner = job.clientId === userId
-  const isMaster = user.role === 'MASTER'
-
   // ─── Контроль доступу ───
-  // Заявку (зокрема фото приміщень клієнта) бачить лише власник або
-  // релевантний майстер: відкрита заявка його міста й категорії (як у стрічці)
-  // АБО заявка, на яку він уже подавав пропозицію. Інакше 404 — не розкриваємо
-  // навіть існування чужої заявки.
-  let canView = isOwner
-  if (!canView && isMaster) {
-    const mp = user.masterProfile
-    const eligibleFromFeed =
-      !!mp?.isActive &&
-      job.status === 'OPEN' &&
-      user.city === job.city &&
-      mp.categories.includes(job.category)
-
-    if (eligibleFromFeed) {
-      canView = true
-    } else {
-      const ownProposal = await prisma.proposal.findFirst({
-        where: { jobId: job.id, masterId: userId },
-        select: { id: true },
-      })
-      canView = !!ownProposal
-    }
-  }
+  // Правило живе в $lib/server/job-access і спільне з GET /api/jobs/[id]:
+  // поки воно було лише тут, ендпоінт віддавав ту саму заявку без перевірок.
+  const { canView, isOwner, isMaster } = await checkJobAccess(job, {
+    id: userId,
+    ...user,
+  })
   if (!canView) throw error(404, 'Заявку не знайдено')
 
   // Людиночитні назви для категорії та міста (slug → name)
@@ -109,13 +103,12 @@ export const load: PageServerLoad = async ({ params, request }) => {
   const cityName = cityRow?.name ?? job.city
 
   // Лічильник переглядів — лише для не-власника, не блокуючи відповідь.
+  // Рахуємо УНІКАЛЬНІ перегляди: спершу пробуємо застовбити рядок JobView
+  // (INSERT ... ON CONFLICT DO NOTHING), і лише якщо він справді створився —
+  // рухаємо лічильник. Раніше UPDATE йшов на кожне відкриття: F5 накручував
+  // число, а рядок Job переписувався на кожне читання.
   if (!isOwner) {
-    prisma.job
-      .update({
-        where: { id: job.id },
-        data: { viewsCount: { increment: 1 } },
-      })
-      .catch(() => {})
+    countUniqueView(job.id, userId).catch(() => {})
   }
 
   // Память диспетчера: майстер відкрив розіслану йому заявку.

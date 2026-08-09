@@ -4,7 +4,7 @@
   друк/PDF, кнопка «нагору». Контент передається через children snippet.
 -->
 <script lang="ts">
-  import type { Snippet } from 'svelte'
+  import { untrack, type Snippet } from 'svelte'
   import ArrowLeft from '@lucide/svelte/icons/arrow-left'
   import ChevronUp from '@lucide/svelte/icons/chevron-up'
   import Printer from '@lucide/svelte/icons/printer'
@@ -31,7 +31,8 @@
     }),
   )
 
-  let activeId = $state(sections[0]?.id ?? '')
+  // untrack: початковий активний розділ. Далі його веде scrollspy нижче.
+  let activeId = $state(untrack(() => sections[0]?.id ?? ''))
   let showTop = $state(false)
 
   // Scrollspy — легітимний випадок роботи з DOM API поза реактивністю Svelte.

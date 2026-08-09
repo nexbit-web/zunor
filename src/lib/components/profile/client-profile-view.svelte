@@ -99,7 +99,7 @@
 </svelte:head>
 
 <article
-  class="min-h-svh  p-2 pt-4 md:pb-12"
+  class="min-h-svh p-2 pt-4 md:pb-12"
   itemscope
   itemtype="https://schema.org/Person"
 >

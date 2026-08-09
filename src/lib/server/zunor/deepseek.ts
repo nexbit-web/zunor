@@ -1,4 +1,3 @@
-// src/lib/server/zunor/deepseek.ts
 import { DEEPSEEK_API_KEY } from '$env/static/private'
 import { turnLog } from './turn-log'
 
@@ -260,9 +259,7 @@ export async function* chatCompletionStream(
     turnLog().note(`Стрім обірвався: ${String(err)}`)
     turnLog().response({
       text: content,
-      toolCall: toolName
-        ? { name: toolName, arguments: toolArgs }
-        : null,
+      toolCall: toolName ? { name: toolName, arguments: toolArgs } : null,
       finishReason,
       ms: Date.now() - t0,
     })

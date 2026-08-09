@@ -1,6 +1,5 @@
-// src/routes/api/categories/+server.ts
 import { json } from '@sveltejs/kit'
-import { prisma } from '$lib/server/prisma'
+import { getCategories } from '$lib/server/reference'
 import type { RequestHandler } from './$types'
 
 /**
@@ -10,19 +9,11 @@ import type { RequestHandler } from './$types'
  *   - форме создания Job (выбор категории)
  *   - settings (мастер выбирает свои категории)
  *   - главной странице
+ *
+ * Читает из кеша в памяти процесса (см. $lib/server/reference).
  */
 export const GET: RequestHandler = async ({ setHeaders }) => {
-  const categories = await prisma.category.findMany({
-    where: { isActive: true },
-    orderBy: { sortOrder: 'asc' },
-    select: {
-      id: true,
-      slug: true,
-      name: true,
-      description: true,
-      icon: true,
-    },
-  })
+  const categories = await getCategories()
 
   setHeaders({
     'cache-control':

@@ -1,4 +1,3 @@
-<!-- src/lib/components/icons/brand-icon.svelte -->
 <script lang="ts">
   import type { SVGAttributes } from 'svelte/elements'
   import { BRAND_ICON_PATHS, type BrandName } from './brand-icons'

@@ -1,41 +1,23 @@
-// src/routes/api/me/badges/+server.ts
-import { json, error } from '@sveltejs/kit'
-import { auth } from '$lib/server/auth'
+import { json } from '@sveltejs/kit'
+import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
 import type { RequestHandler } from './$types'
 
 /**
- * GET /api/me/badges
+ * GET /api/me/badges — початковий лічильник непрочитаних сповіщень.
  *
- * Бэйджи для шапки: непрочитанные уведомления и чаты.
+ * Викликається ОДИН раз за сесію, зі стору сповіщень; далі число живе на
+ * подіях Pusher. Раніше цей же ендпоінт рахував ще й непрочитані чати —
+ * корельованим підзапитом по всій переписці. Він більше не потрібен:
+ * chatStore рахує суму з уже завантаженого списку чатів, тобто без
+ * жодного окремого запиту до бази.
  */
-export const GET: RequestHandler = async ({ request }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw error(401, 'Unauthorized')
+export const GET: RequestHandler = async ({ locals }) => {
+  const user = requireApiUser(locals)
 
-  const userId = session.user.id
-
-  const [unreadNotifications, unreadChats] = await Promise.all([
-    prisma.notification.count({
-      where: { userId, isRead: false },
-    }),
-    prisma.chatMember.count({
-      where: {
-        userId,
-        chat: {
-          messages: {
-            some: {
-              senderId: { not: userId },
-              isRead: false,
-            },
-          },
-        },
-      },
-    }),
-  ])
-
-  return json({
-    notifications: unreadNotifications,
-    messages: unreadChats,
+  const notifications = await prisma.notification.count({
+    where: { userId: user.id, isRead: false },
   })
+
+  return json({ notifications })
 }

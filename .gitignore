@@ -22,8 +22,7 @@ Thumbs.db
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
-/../generated/prisma
-
+# Prisma-клієнт генерується сюди (див. generator client у schema.prisma)
 src/generated
 
 # Logs and debug output
@@ -43,9 +42,6 @@ yarn-error.log*
 
 # TypeScript
 *.tsbuildinfo
-
-# Test coverage
-/coverage
 
 # Test coverage
 /coverage

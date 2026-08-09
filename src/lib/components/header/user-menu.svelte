@@ -1,10 +1,6 @@
-<!-- src/lib/components/header/user-menu.svelte
-     Тільки акаунт: аватар, меню профілю, вихід. Для гостя — кнопки входу.
-
-     Сповіщення й чати звідси прибрані: вони живуть у сайдбарі дашборда,
-     а стан тримає $lib/notifications. Хедер сховано на всьому /dashboard
-     (hiddenLayoutRoutes), тож тримати тут другу копію тих самих лічильників
-     не було сенсу — вони ще й розходились між собою. -->
+<!-- Тільки акаунт: аватар, меню профілю, вихід. Для гостя — кнопки входу.
+     Лічильників сповіщень і чатів тут немає навмисно: хедер сховано на всьому
+     /dashboard, а бейджі живуть у сайдбарі й читають $lib/notifications. -->
 <script lang="ts">
   import {
     Avatar,
@@ -13,12 +9,10 @@
   } from '$lib/components/ui/avatar'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
   import { Button } from '$lib/components/ui/button'
-  import {
-    LayoutDashboard,
-    CircleUserRound,
-    Settings,
-    LogOut,
-  } from 'lucide-svelte'
+  import LayoutDashboard from '@lucide/svelte/icons/layout-dashboard'
+  import CircleUserRound from '@lucide/svelte/icons/circle-user-round'
+  import Settings from '@lucide/svelte/icons/settings'
+  import LogOut from '@lucide/svelte/icons/log-out'
   import { signOut } from '$lib/auth-client'
   import { goto, invalidateAll } from '$app/navigation'
   import { page } from '$app/state'

@@ -1,4 +1,3 @@
-<!-- src/lib/components/photo-gallery.svelte -->
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
   import PhotoSwipeLightbox from 'photoswipe/lightbox'

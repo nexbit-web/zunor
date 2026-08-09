@@ -1,18 +1,17 @@
-// src/lib/server/chats-loader.ts
- 
 import type { ChatPreview } from '$lib/components/chat/types'
 import { prisma } from './prisma'
 
 /**
- * Загружает превью чатов юзера одним эффективным запросом.
- * Используется в:
- *   - src/routes/+layout.server.ts (для бейджа в хедере)
- *   - src/routes/(auth)/messages/+layout.server.ts (для списка чатов)
- *   - src/routes/api/chats/+server.ts (для refresh из chat-store)
+ * Стеля списку чатів. Список відсортований за свіжістю, тож зріз ріже лише
+ * «хвіст», який у сайдбарі ніхто не гортає. Без ліміту запит ріс би разом з
+ * історією юзера.
  */
+const MAX_CHATS = 100
+
 export async function loadChatsForUser(userId: string): Promise<ChatPreview[]> {
   const memberships = await prisma.chatMember.findMany({
     where: { userId },
+    take: MAX_CHATS,
     select: {
       lastReadAt: true,
       chat: {

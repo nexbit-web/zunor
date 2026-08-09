@@ -3,7 +3,10 @@
   import { fade } from 'svelte/transition'
   import { goto } from '$app/navigation'
   import { page } from '$app/state'
-  import { Menu, X } from 'lucide-svelte'
+  // Точкові імпорти, а не barrel 'lucide-svelte': цей компонент у кореневому
+  // лейауті, тобто в чанку КОЖНОЇ сторінки. Barrel тягнув туди всю бібліотеку.
+  import Menu from '@lucide/svelte/icons/menu'
+  import X from '@lucide/svelte/icons/x'
   import UserMenu from './user-menu.svelte'
   import Logo from './logo.svelte'
   import MobileNav from './mobile-nav.svelte'
@@ -143,7 +146,7 @@
   ></button>
 {/if}
 
-<MobileNav onnavigate={navigate} hasNotifications={true} />
+<MobileNav onnavigate={navigate} />
 
 <style>
   /* За замовчуванням хедер повністю прозорий — фон hero-секції видно
@@ -167,7 +170,7 @@
     text-decoration: none;
     white-space: nowrap;
   }
-   .nav-link:hover::after {
+  .nav-link:hover::after {
     content: '';
     position: absolute;
     left: 12px;

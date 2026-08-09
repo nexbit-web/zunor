@@ -1,6 +1,5 @@
-// src/routes/api/orders/[id]/[action]/+server.ts
 import { json, error } from '@sveltejs/kit'
-import { auth } from '$lib/server/auth'
+import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
 import {
   canTransition,
@@ -42,9 +41,8 @@ function transitionToEventType(transition: OrderTransition): string {
   }
 }
 
-export const POST: RequestHandler = async ({ params, request }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw error(401, 'Unauthorized')
+export const POST: RequestHandler = async ({ params, request, locals }) => {
+  const user = requireApiUser(locals)
 
   const transition = ACTION_TO_TRANSITION[params.action]
   if (!transition) throw error(400, 'Невідома дія')
@@ -62,7 +60,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
   })
   if (!order) throw error(404, 'Замовлення не знайдено')
 
-  const actor = getActor(session.user.id, order)
+  const actor = getActor(user.id, order)
   if (!actor) throw error(403, 'Ви не учасник цього замовлення')
 
   const errMsg = canTransition(order.status, transition, actor)
@@ -100,7 +98,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
         }
         case 'CANCEL': {
           data.cancelledAt = now
-          data.cancelledById = session.user.id
+          data.cancelledById = user.id
           const reason = String(body.reason ?? '').trim()
           if (reason.length > 500) throw error(400, 'Причина занадто довга')
           data.cancelReason = reason || null
@@ -166,7 +164,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
         data: {
           orderId: order.id,
           type: transitionToEventType(transition),
-          actorId: session.user.id,
+          actorId: user.id,
           payload:
             transition === 'CANCEL' && data.cancelReason
               ? { reason: String(data.cancelReason) }

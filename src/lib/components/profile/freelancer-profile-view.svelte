@@ -5,6 +5,7 @@
     AvatarImage,
   } from '$lib/components/ui/avatar'
   import { Skeleton } from '$lib/components/ui/skeleton'
+  import { safeJsonLd } from '$lib/utils/json-ld'
   import { goto } from '$app/navigation'
   import {
     BadgeCheck,
@@ -36,20 +37,10 @@
   // isAuthenticated поки не використовується у в'ю — не деструктуруємо, щоб не плодити m's warning.
   let { user, isOwner }: Props = $props()
 
-  // ── Безпечний JSON-LD: екрануємо символи, що можуть зламати <script> або HTML-контекст ──
-  function safeJsonLd(data: Record<string, unknown>): string {
-    const map: Record<string, string> = {
-      '<': '\\u003c',
-      '>': '\\u003e',
-      '&': '\\u0026',
-      '\u2028': '\\u2028',
-      '\u2029': '\\u2029',
-    }
-    return JSON.stringify(data).replace(
-      /[<>&\u2028\u2029]/g,
-      (c) => map[c] ?? c,
-    )
-  }
+  // Безпечний JSON-LD — спільна реалізація в $lib/utils/json-ld, вона ж
+  // покрита тестами. Локальна копія жила тільки тут, і другий компонент
+  // із JSON-LD (seo/JsonLd.svelte) про неї не знав — там стояв голий
+  // JSON.stringify.
 
   /** Дата у локалі uk-UA. Невалідне значення не роняє рендер. */
   function formatDate(
@@ -162,8 +153,13 @@
       : null,
   )
 
-  // Категорія, до якої належить майстер (на MVP — одна: «Прибирання»).
-  const primaryCategory = $derived(user.categories[0] ?? null)
+  // Показуємо ВСІ категорії, а не лише першу. На сьогодні вона одна
+  // («Прибирання»), але додавання другої має бути додаванням контенту, а
+  // не правкою розмітки. Тим паче що в schema.org (knowsAbout) уже їдуть
+  // усі — тобто пошуковик бачив більше, ніж людина на сторінці.
+  const categoryLabel = $derived(
+    user.categories.length > 1 ? 'Категорії' : 'Категорія',
+  )
 
   function goEdit(): void {
     goto('dashboard/settings/profile')
@@ -345,14 +341,18 @@
         </p>
       {/if}
 
-      {#if primaryCategory}
-        <div class="mt-5 flex items-center gap-2.5">
-          <span class="text-[13px] text-muted-foreground">Категорія</span>
-          <span
-            class="inline-flex h-8 items-center rounded-full bg-secondary px-3.5 text-[13px] font-medium text-secondary-foreground"
-          >
-            {primaryCategory}
-          </span>
+      {#if user.categories.length > 0}
+        <!-- flex-wrap: із кількома категоріями рядок не має виїжджати
+             за картку на вузькому екрані. -->
+        <div class="mt-5 flex flex-wrap items-center gap-2.5">
+          <span class="text-[13px] text-muted-foreground">{categoryLabel}</span>
+          {#each user.categories as category (category)}
+            <span
+              class="inline-flex h-8 items-center rounded-full bg-secondary px-3.5 text-[13px] font-medium text-secondary-foreground"
+            >
+              {category}
+            </span>
+          {/each}
         </div>
       {/if}
     </section>

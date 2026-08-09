@@ -1,4 +1,3 @@
-import { auth } from '$lib/server/auth'
 import { prisma } from '$lib/server/prisma'
 import { error, redirect } from '@sveltejs/kit'
 import type { PageServerLoad } from './$types'
@@ -37,7 +36,7 @@ async function loadReviews(
   })
 }
 
-export const load: PageServerLoad = async ({ params, request, setHeaders }) => {
+export const load: PageServerLoad = async ({ params, locals, setHeaders }) => {
   const raw = params.handle.startsWith('@')
     ? params.handle.slice(1)
     : params.handle
@@ -47,13 +46,13 @@ export const load: PageServerLoad = async ({ params, request, setHeaders }) => {
     throw error(404, 'Користувача не знайдено')
   }
 
-  const [session, user] = await Promise.all([
-    auth.api.getSession({ headers: request.headers }),
-    prisma.user.findUnique({
-      where: { username },
-      include: { masterProfile: true },
-    }),
-  ])
+  // Сторінка публічна: сесія тут не обовʼязкова, лише впливає на вигляд.
+  // Береться з locals — hooks.server.ts уже її резолвнув.
+  const session = locals.session
+  const user = await prisma.user.findUnique({
+    where: { username },
+    include: { masterProfile: true },
+  })
 
   const isAuthenticated = !!session
   if (!user) throw error(404, 'Користувача не знайдено')

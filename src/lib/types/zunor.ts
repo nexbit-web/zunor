@@ -1,5 +1,3 @@
-// src/lib/types/zunor.ts
-//
 // Контракт клієнт ↔ /api/zunor/chat. Ізоморфний: БЕЗ server-залежностей,
 // імпортується і клієнтським чатом, і серверним агентом.
 import type { CleaningMetadata } from '$lib/categories/cleaning/title-gen'

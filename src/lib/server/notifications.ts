@@ -1,26 +1,26 @@
 import { prisma } from './prisma'
 import { safeTrigger } from './pusher'
-import type { Prisma } from '../../generated/prisma/client'
 
-export type PrismaTx = Omit<
-  Prisma.TransactionClient,
-  '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'
->
-
-export async function notify(
-  params: {
-    userId: string
-    type: string
-    title: string
-    body?: string
-    jobId?: string
-    proposalId?: string
-    orderId?: string
-    chatId?: string
-  },
-  tx: PrismaTx = prisma as unknown as PrismaTx,
-): Promise<void> {
-  const notification = await tx.notification.create({
+/**
+ * Створює сповіщення й одразу шле подію в особистий канал користувача.
+ *
+ * Транзакційного клієнта функція НЕ приймає навмисно. Подія летить відразу
+ * після create, і всередині транзакції це означало б broadcast до коміту:
+ * відкотилась — а у вкладці вже спалахнуло сповіщення про замовлення, якого
+ * в базі немає. Тому кличемо тільки ПІСЛЯ успішного коміту, як зроблено в
+ * `api/proposals/[id]/accept`.
+ */
+export async function notify(params: {
+  userId: string
+  type: string
+  title: string
+  body?: string
+  jobId?: string
+  proposalId?: string
+  orderId?: string
+  chatId?: string
+}): Promise<void> {
+  const notification = await prisma.notification.create({
     data: {
       userId: params.userId,
       type: params.type,

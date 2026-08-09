@@ -9,7 +9,6 @@
   import { notifications } from './store.svelte'
 
   const userId = $derived(page.data.session?.user?.id ?? null)
-  const initialUnread = $derived(page.data.badges?.notifications ?? 0)
 
   $effect(() => {
     const id = userId
@@ -18,7 +17,9 @@
       return
     }
 
-    notifications.connect(id, initialUnread)
+    // Початковий лічильник стор тягне сам, одним запитом за сесію —
+    // раніше він приходив із серверного лейауту на кожній навігації.
+    notifications.connect(id)
     return () => notifications.disconnect()
   })
 </script>

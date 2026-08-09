@@ -12,10 +12,10 @@
 </script>
 
 <svelte:head><title>Мій профіль · Zunor</title></svelte:head>
-<div class="py-8" >
-{#if isMaster}
-  <MasterOnboarding {data} mode="edit" onBack={() => goto('/dashboard')} />
-{:else}
-  <ClientOnboarding {data} mode="edit" onBack={() => goto('/dashboard')} />
-{/if}
+<div class="py-8">
+  {#if isMaster}
+    <MasterOnboarding {data} mode="edit" onBack={() => goto('/dashboard')} />
+  {:else}
+    <ClientOnboarding {data} mode="edit" onBack={() => goto('/dashboard')} />
+  {/if}
 </div>

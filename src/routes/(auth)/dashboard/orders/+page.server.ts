@@ -1,22 +1,15 @@
-// src/routes/(auth)/orders/+page.server.ts
-import { auth } from '$lib/server/auth'
 import { prisma } from '$lib/server/prisma'
-import { redirect } from '@sveltejs/kit'
+import { requireUser } from '$lib/server/guards'
 import type { PageServerLoad } from './$types'
 
-export const load: PageServerLoad = async ({ request, url }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw redirect(302, `/user/login?redirectTo=/orders`)
+export const load: PageServerLoad = async ({ locals, url }) => {
+  const userId = requireUser(locals).id
 
-  const userId = session.user.id
-
-  // Отримуємо актуальну роль із БД
-  const dbUser = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { role: true },
-  })
-
-  const userRole = dbUser?.role ?? 'CLIENT'
+  // Роль уже прочитана з БД у guardHandle і лежить у locals.account —
+  // окремий SELECT тут був другим запитом за ту саму колонку на кожен
+  // вхід на сторінку. Фолбек на CLIENT лишається на випадок, якщо роут
+  // колись винесуть з-під /dashboard, де account не заповнюється.
+  const userRole = locals.account?.role ?? 'CLIENT'
   const roleParam = url.searchParams.get('role')
   const role: 'all' | 'client' | 'master' =
     roleParam === 'client' || roleParam === 'master' ? roleParam : 'all'
