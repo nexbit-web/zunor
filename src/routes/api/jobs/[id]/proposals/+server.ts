@@ -1,10 +1,10 @@
-// src/routes/api/jobs/[id]/proposals/+server.ts
 import { json, error } from '@sveltejs/kit'
-import { auth } from '$lib/server/auth'
+import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
 import { limit } from '$lib/server/rate-limit'
 import { Notify } from '$lib/server/notifications'
 import { markResponded } from '$lib/server/dispatch'
+import { masterRatingSelect, flattenMasterRating } from '$lib/server/user-dto'
 import type { RequestHandler } from './$types'
 
 /**
@@ -13,18 +13,17 @@ import type { RequestHandler } from './$types'
  * Body: { message: string, priceUah: number, estimatedDays: number }
  * Безкоштовно (lead fee прибрано).
  */
-export const POST: RequestHandler = async ({ params, request }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw error(401, 'Unauthorized')
+export const POST: RequestHandler = async ({ params, request, locals }) => {
+  const user = requireApiUser(locals)
 
-  const rl = limit(`proposal:${session.user.id}`, {
+  const rl = limit(`proposal:${user.id}`, {
     points: 30,
     duration: 60 * 60_000,
   })
   if (!rl.success) throw error(429, 'Забагато відгуків')
 
   const me = await prisma.user.findUnique({
-    where: { id: session.user.id },
+    where: { id: user.id },
     select: {
       role: true,
       city: true,
@@ -76,7 +75,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
   })
 
   if (!job) throw error(404, 'Заявку не знайдено')
-  if (job.clientId === session.user.id)
+  if (job.clientId === user.id)
     throw error(400, 'Не можна відгукнутись на свою заявку')
   if (job.status !== 'OPEN')
     throw error(400, 'Заявка більше не приймає відгуки')
@@ -93,7 +92,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
   // Повторний відгук неможливий (унікальний ключ jobId+masterId).
   const existing = await prisma.proposal.findUnique({
-    where: { jobId_masterId: { jobId: job.id, masterId: session.user.id } },
+    where: { jobId_masterId: { jobId: job.id, masterId: user.id } },
     select: { id: true },
   })
   if (existing) {
@@ -105,7 +104,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
     const created = await tx.proposal.create({
       data: {
         jobId: job.id,
-        masterId: session.user.id,
+        masterId: user.id,
         message,
         priceCents,
         estimatedDays,
@@ -138,7 +137,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
   // Память диспетчера: майстер відповів на розіслану заявку — ключова метрика
   // якості розсилки (хто з уведомлених реально відгукнувся).
-  markResponded(job.id, session.user.id).catch(() => {})
+  markResponded(job.id, user.id).catch(() => {})
 
   return json({ proposal }, { status: 201 })
 }
@@ -147,16 +146,15 @@ export const POST: RequestHandler = async ({ params, request }) => {
  * GET /api/jobs/[id]/proposals — усі відгуки на заявку.
  * Доступ: лише власник заявки.
  */
-export const GET: RequestHandler = async ({ params, request }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw error(401, 'Unauthorized')
+export const GET: RequestHandler = async ({ params, locals }) => {
+  const user = requireApiUser(locals)
 
   const job = await prisma.job.findUnique({
     where: { id: params.id },
     select: { id: true, clientId: true },
   })
   if (!job) throw error(404, 'Не знайдено')
-  if (job.clientId !== session.user.id) throw error(403, 'Доступ заборонено')
+  if (job.clientId !== user.id) throw error(403, 'Доступ заборонено')
 
   const proposals = await prisma.proposal.findMany({
     where: { jobId: job.id },
@@ -175,8 +173,7 @@ export const GET: RequestHandler = async ({ params, request }) => {
           username: true,
           avatar: true,
           city: true,
-          avgRating: true,
-          reviewsCount: true,
+          ...masterRatingSelect,
           masterProfile: {
             select: {
               verificationStatus: true,
@@ -188,5 +185,10 @@ export const GET: RequestHandler = async ({ params, request }) => {
     },
   })
 
-  return json({ proposals })
+  return json({
+    proposals: proposals.map((p) => ({
+      ...p,
+      master: flattenMasterRating(p.master),
+    })),
+  })
 }

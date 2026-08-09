@@ -3,6 +3,11 @@
 // Раніше стан жив у трьох місцях: список у user-menu, лічильник
 // у сайдбарі, тост у окремому компоненті — кожен зі своєю підпискою
 // на той самий Pusher-канал. Тепер підписка одна, читачів багато.
+//
+// Лічильник тут — той самий, що світиться в сайдбарі, нижньому меню й
+// мобільному меню. Сторінка /dashboard/notifications НЕ тримає власного:
+// доки тримала, прочитане на сторінці не гасило бейдж у сайдбарі, бо це
+// були два різні числа, які ніхто не зводив.
 
 import { browser } from '$app/environment'
 import { getPusher } from '$lib/pusher-client'
@@ -10,25 +15,29 @@ import { notificationSound } from './sound.svelte'
 import { showNotificationToast } from './toast'
 import { isChatNotification, type Notification } from './types'
 
-const FEED_LIMIT = 6
-
 type Channel = ReturnType<ReturnType<typeof getPusher>['subscribe']>
+type Listener = (n: Notification) => void
 
 class NotificationStore {
-  /** Останні сповіщення для випадайки в хедері. */
-  items = $state<Notification[]>([])
   unreadCount = $state(0)
 
   #channel: Channel | null = null
   #userId: string | null = null
+  #listeners = new Set<Listener>()
 
-  /** Викликається один раз із <NotificationsListener /> у layout. */
-  connect(userId: string, initialUnread = 0): void {
+  /**
+   * Викликається один раз із <NotificationsListener /> у layout.
+   *
+   * Початковий лічильник тягнемо з сервера самі, а не отримуємо з даних
+   * лейауту: інакше кожна навігація коштувала б запиту до БД заради числа,
+   * яке далі однаково оновлює Pusher.
+   */
+  connect(userId: string): void {
     if (!browser || this.#userId === userId) return
 
     this.disconnect()
     this.#userId = userId
-    this.unreadCount = initialUnread
+    void this.#loadUnreadCount()
 
     try {
       const pusher = getPusher()
@@ -47,58 +56,114 @@ class NotificationStore {
     this.#channel?.unbind('notification:new', this.#handleIncoming)
     this.#channel = null
     this.#userId = null
-    this.items = []
     this.unreadCount = 0
+    // #listeners не чіпаємо: їх знімають ті, хто ставив, у своєму onMount-cleanup.
+  }
+
+  /**
+   * Стрічка сповіщень отримує з SSR точне число непрочитаних — воно
+   * свіжіше за все, що встиг накрутити стор. Приймаємо його як істину.
+   */
+  setUnreadCount(count: number): void {
+    this.unreadCount = Math.max(0, count)
+  }
+
+  /**
+   * Підписка на нові сповіщення для тих, хто показує їх списком.
+   * Повертає функцію відписки — саме її треба повернути з onMount.
+   *
+   * Потрібна, бо власний `channel.bind` на сторінці означав би другу
+   * підписку на ту саму подію (і саме там був живий баг: сторінка слухала
+   * подію 'notification', а сервер шле 'notification:new', тож стрічка
+   * не оновлювалась наживо взагалі).
+   */
+  onNotification(fn: Listener): () => void {
+    this.#listeners.add(fn)
+    return () => this.#listeners.delete(fn)
+  }
+
+  /** Один запит за сесію: скільки непрочитаних на момент відкриття. */
+  async #loadUnreadCount(): Promise<void> {
+    try {
+      const res = await fetch('/api/me/badges')
+      if (!res.ok) return
+      const data = (await res.json()) as { notifications?: number }
+      // Поки запит летів, Pusher міг уже щось додати — беремо більше,
+      // щоб не загубити свіже сповіщення.
+      this.unreadCount = Math.max(this.unreadCount, data.notifications ?? 0)
+    } catch {
+      // Мовчки: лічильник лишиться на нулі й підніметься з першою подією.
+    }
   }
 
   // Стрілка, щоб зберегти this і мати ту саму посилання для unbind.
   #handleIncoming = (data: { notification: Notification }): void => {
     const n = data.notification
 
-    this.items = [n, ...this.items].slice(0, FEED_LIMIT)
-    this.unreadCount++
-
+    // Чати мають власний бейдж — у лічильник сповіщень вони не йдуть.
     if (isChatNotification(n)) return
+
+    this.unreadCount++
+    for (const fn of this.#listeners) fn(n)
 
     notificationSound.play()
     showNotificationToast(n)
   }
 
-  /** Оптимістична позначка: UI оновлюється миттєво, запит іде фоном. */
-  async markRead(id: string): Promise<void> {
-    this.items = this.items.map((n) =>
-      n.id === id ? { ...n, isRead: true } : n,
-    )
-    this.unreadCount = Math.max(0, this.unreadCount - 1)
+  /**
+   * Оптимістична позначка: UI оновлюється миттєво, запит іде фоном. Не пройшов
+   * — вертаємо як було й кажемо про це викликачу через `false`. Інтерфейс не
+   * має показувати те, чого на сервері не сталось.
+   *
+   * Тоста тут немає навмисно: стор не знає про UI-бібліотеку, а сторінка все
+   * одно вирішує це разом із відкотом власного списку.
+   */
+  async markRead(ids: string[]): Promise<boolean> {
+    if (ids.length === 0) return true
 
-    await fetch('/api/notifications', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'mark-read', ids: [id] }),
-    }).catch(() => {})
+    const prev = this.unreadCount
+    this.unreadCount = Math.max(0, this.unreadCount - ids.length)
+
+    const ok = await this.#post({ action: 'mark-read', ids })
+    if (!ok) this.unreadCount = prev
+    return ok
   }
 
-  async markAllRead(): Promise<void> {
-    this.items = this.items.map((n) => ({ ...n, isRead: true }))
+  async markAllRead(): Promise<boolean> {
+    const prev = this.unreadCount
     this.unreadCount = 0
 
-    await fetch('/api/notifications', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'mark-all-read' }),
-    }).catch(() => {})
+    const ok = await this.#post({ action: 'mark-all-read' })
+    if (!ok) this.unreadCount = prev
+    return ok
   }
 
-  /** Підвантаження стрічки при відкритті випадайки. */
-  async load(): Promise<void> {
+  /**
+   * `unreadRemoved` — скільки з видалених були непрочитані. Знає це лише
+   * той, хто тримає список, тож рахунок приходить ззовні.
+   */
+  async remove(ids: string[], unreadRemoved: number): Promise<boolean> {
+    if (ids.length === 0) return true
+
+    const prev = this.unreadCount
+    this.unreadCount = Math.max(0, this.unreadCount - unreadRemoved)
+
+    const ok = await this.#post({ action: 'delete', ids })
+    if (!ok) this.unreadCount = prev
+    return ok
+  }
+
+  /** true — сервер прийняв. Мережеві збої не кидають назовні. */
+  async #post(body: Record<string, unknown>): Promise<boolean> {
     try {
-      const res = await fetch('/api/notifications')
-      if (!res.ok) return
-      const data = (await res.json()) as { notifications?: Notification[] }
-      if (data.notifications)
-        this.items = data.notifications.slice(0, FEED_LIMIT)
+      const res = await fetch('/api/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      return res.ok
     } catch {
-      // Мовчки: стрічка лишиться з тим, що прийшло через Pusher.
+      return false
     }
   }
 }

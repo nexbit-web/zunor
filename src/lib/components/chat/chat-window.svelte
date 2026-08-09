@@ -1,4 +1,3 @@
-<!-- src/lib/components/chat/chat-window.svelte -->
 <script lang="ts">
   import { tick, untrack } from 'svelte'
   import { goto } from '$app/navigation'
@@ -7,6 +6,7 @@
     AvatarFallback,
     AvatarImage,
   } from '$lib/components/ui/avatar'
+  import { Button } from '$lib/components/ui/button'
   import {
     ArrowDown,
     ArrowUp,
@@ -26,6 +26,7 @@
     unlockAudio,
   } from '$lib/sound/notification'
   import { chatStore } from '$lib/stores/chat-store.svelte'
+  import ChatBackground from './chat-background.svelte'
   import MessageBubble from './message-bubble.svelte'
   import MessageComposer from './message-composer.svelte'
   import HeaderTyping from './header-typing.svelte'
@@ -58,8 +59,13 @@
 
   // ═══════════════════════ Стан ═══════════════════════
 
-  let messages = $state<ChatMessage[]>([...initialMessages].reverse())
-  let nextCursor = $state(initialNextCursor)
+  // untrack: пропси беремо як ПОЧАТКОВИЙ знімок і далі живемо своїм станом
+  // (нові повідомлення приходять по Pusher). Перечитування при зміні чату
+  // робить окремий $effect нижче — див. «Зміна чату».
+  let messages = $state<ChatMessage[]>(
+    untrack(() => [...initialMessages].reverse()),
+  )
+  let nextCursor = $state(untrack(() => initialNextCursor))
   let loadingMore = $state(false)
   let peerLastReadAt = $state<Date | null>(null)
   let typingPeer = $state<string | null>(null)
@@ -301,12 +307,10 @@
     if (now - lastTypingSent < 2000) return
     lastTypingSent = now
     try {
-      getPusher()
-        .channel(`private-chat-${chatId}`)
-        ?.trigger('client-typing', {
-          userId: currentUserId,
-          userName: 'співрозмовник',
-        })
+      getPusher().channel(`private-chat-${chatId}`)?.trigger('client-typing', {
+        userId: currentUserId,
+        userName: 'співрозмовник',
+      })
     } catch {
       // Pusher може бути недоступний — індикатор друку не критичний
     }
@@ -450,266 +454,251 @@
   }
 </script>
 
-<!-- Фон дає .chat-page у layout: тут усе прозоре, панелі «плавають» -->
+<!--
+  Шпалери лежать під УСІМ вікном чату, а шапка, пошук і поле вводу
+  «плавають» над ними скругленими блоками — тому візерунок видно і за
+  ними, а не тільки в смузі між ними.
+
+  Ширину всім трьом задає один і той самий max-w-3xl: стрічка, шапка й
+  композер стоять однією колонкою по центру. Без цього на широкому
+  моніторі рядок тексту розтягувався через увесь екран, і читати його
+  доводилось поворотом голови.
+
+  У лейауті розділу шпалер немає навмисно: там вони лежали ще й під
+  списком чатів, і сайдбар просвічувався візерунком.
+-->
 <div
-  class="mx-auto flex h-full w-full flex-col gap-2 p-2 sm:w-[70%] sm:gap-3 sm:p-3"
+  class="relative flex h-full w-full min-w-0 flex-col overflow-hidden bg-background"
 >
+  <ChatBackground />
+
   <!-- ═══════ HEADER ═══════ -->
-  <!-- p-1.5 pr-2 тримає симетрію: відступ зліва до аватара = відступ справа
-       до крайньої іконки, незалежно від наявності кнопки «назад» -->
-  <header
-    class="flex h-13 w-full min-w-0 shrink-0 items-center gap-1 rounded-full bg-card p-1.5 pr-2 shadow-sm"
-  >
-    <button
-      type="button"
-      onclick={() => goto('/dashboard/messages')}
-      class="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted md:hidden"
-      aria-label="Назад до списку чатів"
+  <div class="relative z-10 shrink-0 px-2 pt-2 sm:px-3 sm:pt-3">
+    <header
+      class="mx-auto flex h-15 w-full max-w-3xl min-w-0 items-center gap-1 rounded-2xl border border-border/60 bg-card/85 px-2 shadow-sm backdrop-blur-xl sm:px-3"
     >
-      <ChevronLeft class="size-[22px]" />
-    </button>
+      <button
+        type="button"
+        onclick={() => goto('/dashboard/messages')}
+        class="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted md:hidden"
+        aria-label="Назад до списку чатів"
+      >
+        <ChevronLeft class="size-5.5" />
+      </button>
 
-    <button
-      type="button"
-      onclick={() => peer.username && goto(`/@${peer.username}`)}
-      class="flex min-w-0 flex-1 cursor-pointer items-center gap-3.5 rounded-full text-left"
-    >
-      <Avatar class="size-[42px] shrink-0 ring-1 ring-black/5">
-        <AvatarImage src={peer.avatar ?? ''} alt={peer.name} />
-        <AvatarFallback class="bg-muted text-base font-semibold">
-          {peer.name?.[0]?.toUpperCase() ?? '?'}
-        </AvatarFallback>
-      </Avatar>
+      <button
+        type="button"
+        onclick={() => peer.username && goto(`/@${peer.username}`)}
+        class="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-full text-left"
+      >
+        <Avatar class="size-9.5 shrink-0">
+          <AvatarImage src={peer.avatar ?? ''} alt={peer.name} />
+          <AvatarFallback class="bg-muted text-sm font-semibold">
+            {peer.name?.[0]?.toUpperCase() ?? '?'}
+          </AvatarFallback>
+        </Avatar>
 
-      <div class="flex min-w-0 flex-1 flex-col justify-center">
-        <div class="flex min-w-0 items-center gap-1">
-          <p class="truncate text-[15px] leading-tight font-bold">
-            {peer.name}
-          </p>
-          {#if peer.isVerified}
-            <BadgeCheck class="size-4 shrink-0 fill-primary text-primary" />
-          {/if}
-        </div>
-        <div class="mt-0.5 min-w-0 leading-tight">
-          {#if typingPeer}
-            <HeaderTyping />
-          {:else}
-            <p class="truncate text-[13px] text-muted-foreground">
-              {lastSeenLabel}
+        <div class="flex min-w-0 flex-1 flex-col justify-center">
+          <div class="flex min-w-0 items-center gap-1">
+            <p class="truncate text-[15px] leading-tight font-semibold">
+              {peer.name}
             </p>
-          {/if}
+            {#if peer.isVerified}
+              <BadgeCheck class="size-4 shrink-0 fill-primary text-primary" />
+            {/if}
+          </div>
+          <div class="mt-0.5 min-w-0 leading-tight">
+            {#if typingPeer}
+              <HeaderTyping />
+            {:else}
+              <p class="truncate text-[13px] text-muted-foreground">
+                {lastSeenLabel}
+              </p>
+            {/if}
+          </div>
         </div>
-      </div>
-    </button>
+      </button>
 
-    <button
-      type="button"
-      onclick={toggleSearch}
-      class="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted"
-      class:bg-accent={searchOpen}
-      aria-label="Пошук"
-      aria-pressed={searchOpen}
-    >
-      <Search class="size-[22px]" />
-    </button>
+      <Button
+        variant="ghost"
+        size="icon-lg"
+        onclick={toggleSearch}
+        aria-label="Пошук"
+        aria-pressed={searchOpen}
+        class="shrink-0 rounded-full text-muted-foreground {searchOpen
+          ? 'bg-muted text-foreground'
+          : ''}"
+      >
+        <Search class="size-5.25" />
+      </Button>
 
-    <button
-      type="button"
-      onclick={toggleMute}
-      class="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted"
-      aria-label={muted ? 'Увімкнути звук' : 'Вимкнути звук'}
-    >
-      {#if muted}
-        <VolumeX class="size-[22px]" />
-      {:else}
-        <Volume2 class="size-[22px]" />
-      {/if}
-    </button>
-  </header>
+      <Button
+        variant="ghost"
+        size="icon-lg"
+        onclick={toggleMute}
+        aria-label={muted ? 'Увімкнути звук' : 'Вимкнути звук'}
+        class="shrink-0 rounded-full text-muted-foreground"
+      >
+        {#if muted}
+          <VolumeX class="size-5.25" />
+        {:else}
+          <Volume2 class="size-5.25" />
+        {/if}
+      </Button>
+    </header>
+  </div>
 
   <!-- ═══════ SEARCH BAR ═══════ -->
   {#if searchOpen}
-    <div
-      class="flex shrink-0 items-center gap-2 rounded-full bg-card px-4 py-2 shadow-sm"
-    >
-      <Search class="size-4 shrink-0 text-muted-foreground" />
-      <input
-        bind:this={searchInput}
-        bind:value={searchQuery}
-        onkeydown={onSearchKeydown}
-        type="text"
-        placeholder="Пошук у цьому чаті"
-        class="min-w-0 flex-1 bg-transparent text-[13px] outline-none"
-      />
-      {#if searchQuery}
-        <span class="text-[11px] tabular-nums text-muted-foreground">
-          {matchedIds.length === 0
-            ? 'нічого'
-            : `${currentMatchIdx + 1} / ${matchedIds.length}`}
-        </span>
-        <button
-          type="button"
-          onclick={prevMatch}
-          disabled={matchedIds.length === 0}
-          class="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-30"
-          aria-label="Попередній збіг"
-        >
-          <ArrowUp class="size-3.5" />
-        </button>
-        <button
-          type="button"
-          onclick={nextMatch}
-          disabled={matchedIds.length === 0}
-          class="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-30"
-          aria-label="Наступний збіг"
-        >
-          <ArrowDown class="size-3.5" />
-        </button>
-      {/if}
-      <button
-        type="button"
-        onclick={toggleSearch}
-        class="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted"
-        aria-label="Закрити пошук"
+    <div class="relative z-10 shrink-0 px-2 pt-2 sm:px-3">
+      <div
+        class="mx-auto flex w-full max-w-3xl items-center gap-2 rounded-2xl border border-border/60 bg-card/85 px-3 py-2 shadow-sm backdrop-blur-xl"
       >
-        <X class="size-3.5" />
-      </button>
+        <Search class="size-4 shrink-0 text-muted-foreground" />
+        <input
+          bind:this={searchInput}
+          bind:value={searchQuery}
+          onkeydown={onSearchKeydown}
+          type="text"
+          placeholder="Пошук у цьому чаті"
+          class="min-w-0 flex-1 bg-transparent text-[13px] outline-none"
+        />
+        {#if searchQuery}
+          <span class="text-[11px] tabular-nums text-muted-foreground">
+            {matchedIds.length === 0
+              ? 'нічого'
+              : `${currentMatchIdx + 1} / ${matchedIds.length}`}
+          </span>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onclick={prevMatch}
+            disabled={matchedIds.length === 0}
+            aria-label="Попередній збіг"
+            class="rounded-full text-muted-foreground"
+          >
+            <ArrowUp class="size-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onclick={nextMatch}
+            disabled={matchedIds.length === 0}
+            aria-label="Наступний збіг"
+            class="rounded-full text-muted-foreground"
+          >
+            <ArrowDown class="size-3.5" />
+          </Button>
+        {/if}
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onclick={toggleSearch}
+          aria-label="Закрити пошук"
+          class="rounded-full text-muted-foreground"
+        >
+          <X class="size-3.5" />
+        </Button>
+      </div>
     </div>
   {/if}
 
   <!-- ═══════ MESSAGES ═══════ -->
-  <div class="relative min-h-0 flex-1">
-    <div
-      bind:this={scrollContainer}
-      onscroll={onScroll}
-      class="chat-scroll absolute inset-0 overflow-y-auto"
-    >
-      <!-- Без max-w-контейнера: стрічка на всю ширину панелі.
-           Вертикальні відступи між пузирями задає сам MessageBubble. -->
-      <div class="px-3 py-4 sm:px-4">
-        {#if loadingMore}
-          <div class="flex justify-center py-2">
-            <div
-              class="size-4 animate-spin rounded-full border-2 border-white/70 border-t-transparent"
-            ></div>
-          </div>
-        {/if}
+  <div
+    bind:this={scrollContainer}
+    onscroll={onScroll}
+    class="relative z-10 min-h-0 flex-1 overflow-y-auto"
+  >
+    <!-- Вертикальні відступи між пузирями задає сам MessageBubble. -->
+    <div class="mx-auto w-full max-w-3xl px-3 py-4 sm:px-4">
+      {#if loadingMore}
+        <div class="flex justify-center py-2">
+          <div
+            class="size-4 animate-spin rounded-full border-2 border-muted-foreground/40 border-t-transparent"
+          ></div>
+        </div>
+      {/if}
 
-        {#if messages.length === 0}
-          <div class="flex justify-center py-20">
-            <div
-              class="flex flex-col items-center rounded-3xl bg-card px-6 py-5 text-center shadow-sm"
-            >
-              <Avatar class="mb-3 size-14">
-                <AvatarImage src={peer.avatar ?? ''} alt={peer.name} />
-                <AvatarFallback class="text-lg font-semibold">
-                  {peer.name?.[0]?.toUpperCase() ?? '?'}
-                </AvatarFallback>
-              </Avatar>
-              <p class="text-[13px] font-medium">{peer.name}</p>
-              <p class="mt-1 text-xs text-muted-foreground">
-                Напишіть перше повідомлення
-              </p>
-            </div>
+      {#if messages.length === 0}
+        <div class="flex justify-center py-20">
+          <div
+            class="flex flex-col items-center rounded-3xl border border-border/60 bg-card/85 px-6 py-5 text-center shadow-sm backdrop-blur-xl"
+          >
+            <Avatar class="mb-3 size-14">
+              <AvatarImage src={peer.avatar ?? ''} alt={peer.name} />
+              <AvatarFallback class="text-lg font-semibold">
+                {peer.name?.[0]?.toUpperCase() ?? '?'}
+              </AvatarFallback>
+            </Avatar>
+            <p class="text-[13px] font-medium">{peer.name}</p>
+            <p class="mt-1 text-xs text-muted-foreground">
+              Напишіть перше повідомлення
+            </p>
           </div>
-        {:else}
-          {#each messages as msg, idx (msg.id)}
-            {@const dateLabel = shouldShowDateSeparator(idx)}
-            {#if dateLabel}
-              <div class="flex justify-center py-3">
-                <span
-                  class="rounded-full bg-black/30 px-3 py-0.5 text-[11px] text-white backdrop-blur-sm"
-                >
-                  {dateLabel}
-                </span>
-              </div>
-            {/if}
-            <MessageBubble
-              message={msg}
-              isMine={msg.senderId === currentUserId}
-              isLastInGroup={isLastInGroup(idx)}
-              showReadStatus={msg.senderId === currentUserId &&
-                idx === messages.length - 1}
-              isRead={isReadByPeer(msg)}
-              isPending={pendingIds.has(msg.id)}
-              isFailed={failedIds.has(msg.id)}
-              isHighlighted={searchQuery !== '' &&
-                matchedIds[currentMatchIdx] === msg.id}
-              replyAuthorName={replyAuthorName(msg)}
-              onReply={(m) => {
-                replyTo = m
-                editing = null
-              }}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-            />
-          {/each}
-        {/if}
-      </div>
+        </div>
+      {:else}
+        {#each messages as msg, idx (msg.id)}
+          {@const dateLabel = shouldShowDateSeparator(idx)}
+          {#if dateLabel}
+            <div class="flex justify-center py-3">
+              <span
+                class="rounded-full border border-border/60 bg-card/85 px-3 py-0.5 text-[11px] text-muted-foreground backdrop-blur-sm"
+              >
+                {dateLabel}
+              </span>
+            </div>
+          {/if}
+          <MessageBubble
+            message={msg}
+            isMine={msg.senderId === currentUserId}
+            isLastInGroup={isLastInGroup(idx)}
+            showReadStatus={msg.senderId === currentUserId &&
+              idx === messages.length - 1}
+            isRead={isReadByPeer(msg)}
+            isPending={pendingIds.has(msg.id)}
+            isFailed={failedIds.has(msg.id)}
+            isHighlighted={searchQuery !== '' &&
+              matchedIds[currentMatchIdx] === msg.id}
+            replyAuthorName={replyAuthorName(msg)}
+            onReply={(m) => {
+              replyTo = m
+              editing = null
+            }}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+          />
+        {/each}
+      {/if}
     </div>
   </div>
 
   {#if error}
-    <div
-      class="shrink-0 rounded-full bg-card px-4 py-2 text-center text-xs text-destructive shadow-sm"
-      role="alert"
-    >
-      {error}
+    <div class="relative z-10 shrink-0 px-2 pt-2 sm:px-3">
+      <div
+        class="mx-auto w-full max-w-3xl rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-2 text-center text-xs text-destructive backdrop-blur-xl"
+        role="alert"
+      >
+        {error}
+      </div>
     </div>
   {/if}
 
   <!-- ═══════ COMPOSER ═══════ -->
-  <!-- Без overflow-hidden: він зрізає тінь пілюлі -->
-  <div class="shrink-0">
-    <MessageComposer
-      {chatId}
-      {currentUserId}
-      {replyTo}
-      {editing}
-      onCancelReply={() => (replyTo = null)}
-      onCancelEdit={() => (editing = null)}
-      onSendOptimistic={handleSendOptimistic}
-      onSendConfirmed={handleSendConfirmed}
-      onSendFailed={handleSendFailed}
-      onEditDone={handleEditDone}
-      {onTyping}
-    />
+  <div class="relative z-10 shrink-0 px-2 pt-2 pb-2 sm:px-3 sm:pb-3">
+    <div class="mx-auto w-full max-w-3xl">
+      <MessageComposer
+        {chatId}
+        {currentUserId}
+        {replyTo}
+        {editing}
+        onCancelReply={() => (replyTo = null)}
+        onCancelEdit={() => (editing = null)}
+        onSendOptimistic={handleSendOptimistic}
+        onSendConfirmed={handleSendConfirmed}
+        onSendFailed={handleSendFailed}
+        onEditDone={handleEditDone}
+        {onTyping}
+      />
+    </div>
   </div>
 </div>
-
-<style>
-  /* Тонка смужка, без стрілок і підкладки */
-  .chat-scroll {
-    scrollbar-width: thin;
-    scrollbar-color: rgb(0 0 0 / 0.18) transparent;
-  }
-
-  .chat-scroll::-webkit-scrollbar {
-    width: 6px;
-  }
-
-  .chat-scroll::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .chat-scroll::-webkit-scrollbar-thumb {
-    background-color: rgb(0 0 0 / 0.18);
-    border-radius: 9999px;
-  }
-
-  .chat-scroll::-webkit-scrollbar-thumb:hover {
-    background-color: rgb(0 0 0 / 0.3);
-  }
-
-  :global(.dark) .chat-scroll {
-    scrollbar-color: rgb(255 255 255 / 0.2) transparent;
-  }
-
-  :global(.dark) .chat-scroll::-webkit-scrollbar-thumb {
-    background-color: rgb(255 255 255 / 0.2);
-  }
-
-  :global(.dark) .chat-scroll::-webkit-scrollbar-thumb:hover {
-    background-color: rgb(255 255 255 / 0.35);
-  }
-</style>

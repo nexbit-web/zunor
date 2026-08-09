@@ -95,11 +95,39 @@ model Job {
   client               User       @relation("ClientJobs", fields: [clientId], references: [id], onDelete: Cascade)
   selectedOrder        Order?     @relation("JobToOrder", fields: [selectedOrderId], references: [id])
   proposals            Proposal[]
+  views                JobView[]
 
+  // Індекси зібрані під РЕАЛЬНІ запити, по одному на кожен:
+  //   [status, createdAt]              — cron dispatch-waves (OPEN за вікном часу)
+  //   [status, city, category, createdAt] — стрічка майстра (/api/jobs/feed):
+  //       status і city — рівність, category — IN зі списку профілю,
+  //       createdAt наприкінці, щоб LIMIT брався прямо з індексу без сортування
+  //   [clientId, createdAt]            — «мої заявки» з курсорною пагінацією
+  //   [status, expiresAt]              — cron auto-expire
   @@index([status, createdAt])
-  @@index([category, city, status])
-  @@index([clientId])
-  @@index([expiresAt])
+  @@index([status, city, category, createdAt])
+  @@index([clientId, createdAt])
+  @@index([status, expiresAt])
+}
+
+/// Унікальні перегляди заявки. Потрібна саме таблиця, а не лічильник:
+/// інакше кожне відкриття сторінки — це UPDATE рядка Job, тобто читання
+/// породжує запис (нова версія рядка в Postgres + блокування «гарячої»
+/// заявки), а F5 накручує лічильник.
+///
+/// Чому не DispatchEvent: там openedAt є ЛИШЕ у майстрів, яким заявку
+/// розіслали. Майстер, що знайшов її сам у стрічці, рядка не має, а
+/// створювати його не можна — це зіпсувало б responseRate у скорингу
+/// (заявка вважалася б розісланою).
+model JobView {
+  id        String   @id @default(cuid())
+  jobId     String
+  viewerId  String
+  createdAt DateTime @default(now())
+  job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, viewerId])
+  @@index([jobId])
 }
 
 model Proposal {

@@ -1,4 +1,3 @@
-<!-- src/routes/(auth)/user/forgot/+page.svelte -->
 <script lang="ts">
   import { Button } from '$lib/components/ui/button'
   import * as Card from '$lib/components/ui/card'

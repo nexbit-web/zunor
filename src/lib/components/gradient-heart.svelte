@@ -1,4 +1,3 @@
-<!-- src/lib/components/gradient-heart.svelte -->
 <script lang="ts">
   import { onMount } from 'svelte'
 
@@ -20,11 +19,11 @@
   function drawHeart(ctx: CanvasRenderingContext2D, w: number, h: number) {
     ctx.clearRect(0, 0, w, h)
 
-const gradient = ctx.createLinearGradient(w * 0.15, 0, w * 0.55, h)
-gradient.addColorStop(0, '#1f5aff')
-gradient.addColorStop(0.35, '#6d36f7')
-gradient.addColorStop(0.65, '#ff4da6')
-gradient.addColorStop(1, '#ff8b1f')
+    const gradient = ctx.createLinearGradient(w * 0.15, 0, w * 0.55, h)
+    gradient.addColorStop(0, '#1f5aff')
+    gradient.addColorStop(0.35, '#6d36f7')
+    gradient.addColorStop(0.65, '#ff4da6')
+    gradient.addColorStop(1, '#ff8b1f')
 
     const cx = w / 2
     const cy = h / 2
@@ -34,15 +33,15 @@ gradient.addColorStop(1, '#ff8b1f')
     ctx.translate(cx, cy - 3 * scale)
     ctx.scale(scale, scale)
 
-   ctx.beginPath()
-ctx.moveTo(0, 3)
-ctx.bezierCurveTo(0, 0, -1.2, -6, -3.8, -6)
-ctx.bezierCurveTo(-6.8, -6, -8.5, -3, -8.5, 1)
-ctx.bezierCurveTo(-8.5, 7, -4, 11, 0, 17.5)
-ctx.bezierCurveTo(4, 11, 8.5, 7, 8.5, 1)
-ctx.bezierCurveTo(8.5, -3, 6.8, -6, 3.8, -6)
-ctx.bezierCurveTo(1.2, -6, 0, 0, 0, 3)
-ctx.closePath()
+    ctx.beginPath()
+    ctx.moveTo(0, 3)
+    ctx.bezierCurveTo(0, 0, -1.2, -6, -3.8, -6)
+    ctx.bezierCurveTo(-6.8, -6, -8.5, -3, -8.5, 1)
+    ctx.bezierCurveTo(-8.5, 7, -4, 11, 0, 17.5)
+    ctx.bezierCurveTo(4, 11, 8.5, 7, 8.5, 1)
+    ctx.bezierCurveTo(8.5, -3, 6.8, -6, 3.8, -6)
+    ctx.bezierCurveTo(1.2, -6, 0, 0, 0, 3)
+    ctx.closePath()
     ctx.restore()
 
     ctx.fillStyle = gradient

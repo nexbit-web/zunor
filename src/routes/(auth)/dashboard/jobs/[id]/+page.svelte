@@ -1,4 +1,3 @@
-<!-- src/routes/(auth)/jobs/[id]/+page.svelte -->
 <script lang="ts">
   import type { PageData } from './$types'
   import JobClientView from './job-client-view.svelte'

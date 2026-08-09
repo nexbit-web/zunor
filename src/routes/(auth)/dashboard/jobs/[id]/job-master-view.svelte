@@ -1,4 +1,3 @@
-<!-- src/routes/(auth)/jobs/[id]/job-master-view.svelte -->
 <script lang="ts">
   import { goto, invalidateAll } from '$app/navigation'
   import {
@@ -135,8 +134,7 @@
     if (joke) toast(joke, { id: 'days-joke', duration: 3500 })
   }
 
-  const cardCls =
-    'rounded-[26px] border border-border bg-card '
+  const cardCls = 'rounded-[26px] border border-border bg-card '
   const badgeBase =
     'inline-flex h-[22px] items-center rounded-full px-2.5 text-[10px] font-bold tracking-[0.06em] uppercase'
 </script>

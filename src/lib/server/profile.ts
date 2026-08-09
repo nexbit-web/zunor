@@ -7,6 +7,7 @@
 
 import { error } from '@sveltejs/kit'
 import { prisma } from './prisma'
+import { getCategories, getCities } from './reference'
 import { cloudinary } from './cloudinary'
 import { safeTrigger, channels, events } from './pusher'
 import { validateUsername } from '$lib/username'
@@ -97,24 +98,31 @@ export async function loadProfileData(userId: string) {
         },
       },
     }),
-    prisma.category.findMany({
-      where: { isActive: true },
-      orderBy: { sortOrder: 'asc' },
-      select: { slug: true, name: true, icon: true },
-    }),
-    prisma.city.findMany({
-      where: { isActive: true },
-      orderBy: [{ isCapital: 'desc' }, { name: 'asc' }],
-      select: { slug: true, name: true, region: true, isCapital: true },
-    }),
+    // Довідники з кешу в пам'яті процесу, а не з БД: вони однакові для всіх
+    // і майже не змінюються, а ця функція обслуговує і онбординг, і кожне
+    // відкриття /settings/profile — тобто будила базу двома зайвими
+    // запитами щоразу. Див. $lib/server/reference.
+    getCategories(),
+    getCities(),
   ])
 
   if (!user) throw error(401, 'Unauthorized')
 
   return {
     user,
-    categories,
-    cities,
+    // Урізаємо до полів, які читають форми: усе зайве поїхало б у payload
+    // сторінки на кожне її відкриття.
+    categories: categories.map((c) => ({
+      slug: c.slug,
+      name: c.name,
+      icon: c.icon,
+    })),
+    cities: cities.map((c) => ({
+      slug: c.slug,
+      name: c.name,
+      region: c.region,
+      isCapital: c.isCapital,
+    })),
     prefill: {
       name: user.name ?? '',
       phone: user.phone ?? '',
@@ -347,7 +355,7 @@ export async function saveMasterProfile(
     }),
   ])
 
-// Кожна подача = запит на (повторну) модерацію.
+  // Кожна подача = запит на (повторну) модерацію.
   await safeTrigger(channels.admin, events.moderationNew, {
     name,
     resubmission: Boolean(me.masterProfile),

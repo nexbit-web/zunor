@@ -1,6 +1,5 @@
-// src/routes/api/chats/[id]/messages/+server.ts
 import { json, error } from '@sveltejs/kit'
-import { auth } from '$lib/server/auth'
+import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
 import { channels, events, safeTrigger } from '$lib/server/pusher'
 import { limit } from '$lib/server/rate-limit'
@@ -16,15 +15,14 @@ type AllowedType = (typeof ALLOWED_TYPES)[number]
 const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
 const MAX_ATTACHMENT_NAME = 255
 
-export const GET: RequestHandler = async ({ params, url, request }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw error(401, 'Unauthorized')
+export const GET: RequestHandler = async ({ params, url, locals }) => {
+  const user = requireApiUser(locals)
 
   const chatId = params.id
   const cursor = url.searchParams.get('cursor')
 
   const membership = await prisma.chatMember.findUnique({
-    where: { chatId_userId: { chatId, userId: session.user.id } },
+    where: { chatId_userId: { chatId, userId: user.id } },
     select: { id: true },
   })
   if (!membership) throw error(403, 'Not a member')
@@ -87,11 +85,10 @@ export const GET: RequestHandler = async ({ params, url, request }) => {
   return json({ messages: transformed, nextCursor })
 }
 
-export const POST: RequestHandler = async ({ params, request }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw error(401, 'Unauthorized')
+export const POST: RequestHandler = async ({ params, request, locals }) => {
+  const user = requireApiUser(locals)
 
-  const rl = limit(`msg:${session.user.id}`, {
+  const rl = limit(`msg:${user.id}`, {
     points: 60,
     duration: 60_000,
   })
@@ -171,12 +168,12 @@ export const POST: RequestHandler = async ({ params, request }) => {
   const chatId = params.id
 
   const membership = await prisma.chatMember.findUnique({
-    where: { chatId_userId: { chatId, userId: session.user.id } },
+    where: { chatId_userId: { chatId, userId: user.id } },
     select: {
       chat: {
         select: {
           members: {
-            where: { userId: { not: session.user.id } },
+            where: { userId: { not: user.id } },
             select: { userId: true },
           },
         },
@@ -207,7 +204,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
     prisma.message.create({
       data: {
         chatId,
-        senderId: session.user.id,
+        senderId: user.id,
         type,
         text,
         attachmentUrl,
@@ -244,7 +241,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
       data: {
         lastMessageText: previewText,
         lastMessageAt: new Date(),
-        lastSenderId: session.user.id,
+        lastSenderId: user.id,
       },
     }),
   ])
@@ -290,7 +287,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
         chatId,
         lastMessageText: previewText,
         lastMessageAt: payload.createdAt,
-        lastSenderId: session.user.id,
+        lastSenderId: user.id,
       }),
     ),
   )

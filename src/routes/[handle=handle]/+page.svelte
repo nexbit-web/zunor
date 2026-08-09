@@ -1,4 +1,3 @@
-<!-- src/routes/[handle=handle]/+page.svelte -->
 <script lang="ts">
   import FreelancerProfileView from '$lib/components/profile/freelancer-profile-view.svelte'
   import { page } from '$app/state'

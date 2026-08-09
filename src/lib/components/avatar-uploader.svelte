@@ -1,4 +1,3 @@
-<!-- src/lib/components/avatar-uploader.svelte -->
 <script lang="ts">
   import * as Avatar from '$lib/components/ui/avatar'
   import { Camera } from 'lucide-svelte'
@@ -92,6 +91,7 @@
     }
   }
 </script>
+
 <div class="inline-flex flex-col items-start gap-2">
   <button
     type="button"
@@ -104,7 +104,9 @@
       {#if value}
         <Avatar.Image src={value} alt="" class="object-cover" />
       {/if}
-      <Avatar.Fallback class="bg-muted text-xl font-medium text-muted-foreground">
+      <Avatar.Fallback
+        class="bg-muted text-xl font-medium text-muted-foreground"
+      >
         {fallback}
       </Avatar.Fallback>
     </Avatar.Root>

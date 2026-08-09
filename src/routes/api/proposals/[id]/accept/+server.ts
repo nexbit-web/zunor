@@ -1,27 +1,29 @@
-// src/routes/api/proposals/[id]/accept/+server.ts
 import { json, error } from '@sveltejs/kit'
-import { auth } from '$lib/server/auth'
+import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
 import { Notify } from '$lib/server/notifications'
+import { cancelWaves } from '$lib/server/dispatch/scheduler'
 import type { RequestHandler } from './$types'
 
 /**
  * POST /api/proposals/[id]/accept — клиент выбирает мастера.
  *
  * Атомарно:
- *   1. Создаёт Chat (client + master)
- *   2. Создаёт Order (status=CREATED, chatId)
- *   3. Этот proposal → ACCEPTED
- *   4. Остальные proposals → REJECTED
- *   5. Job → IN_PROGRESS + selectedOrderId
- *   6. OrderEvent(CREATED)
+ *   1. Создаёт Order (status=CREATED, БЕЗ чата)
+ *   2. Этот proposal → ACCEPTED
+ *   3. Остальные proposals → REJECTED
+ *   4. Job → IN_PROGRESS + selectedOrderId
+ *   5. OrderEvent(CREATED)
+ *
+ * Чат тут НЕ створюється — інакше кожен вибір майстра плодив би порожній чат
+ * у обох списках повідомлень. Його заводить перша спроба написати:
+ * POST /api/orders/[id]/chat.
  *
  * После (fail-soft):
  *   - Notification мастеру
  */
-export const POST: RequestHandler = async ({ params, request }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw error(401, 'Unauthorized')
+export const POST: RequestHandler = async ({ params, locals }) => {
+  const user = requireApiUser(locals)
 
   const proposal = await prisma.proposal.findUnique({
     where: { id: params.id },
@@ -49,7 +51,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
   if (!proposal) throw error(404, 'Proposal не знайдено')
 
   // Только владелец job может принимать
-  if (proposal.job.clientId !== session.user.id) {
+  if (proposal.job.clientId !== user.id) {
     throw error(403, 'Тільки замовник може обрати майстра')
   }
   if (proposal.job.status !== 'OPEN') {
@@ -61,20 +63,11 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
   // Атомарная транзакция
   const result = await prisma.$transaction(async (tx) => {
-    // 1. Создаём Chat с двумя участниками
-    const chat = await tx.chat.create({
-      data: {
-        members: {
-          create: [{ userId: session.user.id }, { userId: proposal.masterId }],
-        },
-      },
-      select: { id: true },
-    })
-
-    // 2. Создаём Order
+    // 1. Создаём Order. chatId лишається null — чат заведе перший, хто
+    //    натисне «Написати» (POST /api/orders/[id]/chat).
     const order = await tx.order.create({
       data: {
-        clientId: session.user.id,
+        clientId: user.id,
         masterId: proposal.masterId,
         title: proposal.job.title,
         description: proposal.job.description ?? '',
@@ -82,7 +75,6 @@ export const POST: RequestHandler = async ({ params, request }) => {
         priceCents: proposal.priceCents,
         currency: 'UAH',
         status: 'CREATED',
-        chatId: chat.id,
       },
       select: {
         id: true,
@@ -127,7 +119,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
       data: {
         orderId: order.id,
         type: 'CREATED',
-        actorId: session.user.id,
+        actorId: user.id,
         payload: {
           jobId: proposal.jobId,
           proposalId: proposal.id,
@@ -137,6 +129,10 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
     return order
   })
+
+  // Майстра обрано, заявка більше не приймає відгуки — знімаємо заплановані
+  // хвилі, щоб таймер не будив базу заради закритої заявки.
+  cancelWaves(proposal.jobId)
 
   // Notification мастеру (fail-soft)
   try {

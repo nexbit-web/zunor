@@ -1,12 +1,20 @@
-<!-- src/routes/(auth)/dashboard/+layout.svelte -->
 <script lang="ts">
+  import { untrack } from 'svelte'
   import { page } from '$app/state'
   import { goto } from '$app/navigation'
-  import Sidebar from '$lib/components/dashboard/sidebar.svelte'
+  import * as Sidebar from '$lib/components/ui/sidebar/index.js'
+  import AppSidebar from '$lib/components/dashboard/app-sidebar.svelte'
+  import MobileTrigger from '$lib/components/dashboard/mobile-trigger.svelte'
+
   let { data, children } = $props()
 
-  let sidebarCollapsed = $state(data.sidebarCollapsed)
+  // untrack: cookie дає лише ПОЧАТКОВИЙ стан. Далі його веде сам
+  // Sidebar.Provider через bind, і перезапис із data згортав би панель
+  // на кожній навігації.
+  let sidebarOpen = $state(untrack(() => data.sidebarOpen))
 
+  // Чат і майстер заявки — повноекранні: там скролить внутрішня область,
+  // а не сторінка, інакше композер їде за межі вікна.
   let isChat = $derived(
     page.url.pathname === '/dashboard/jobs/new' ||
       page.url.pathname.startsWith('/dashboard/messages'),
@@ -61,20 +69,31 @@
 
 <svelte:window onpageshow={onPageShow} />
 
-<div
-  class="flex bg-(--dashboard)"
-  class:h-screen={isChat}
-  class:min-h-screen={!isChat}
->
-  <Sidebar bind:collapsed={sidebarCollapsed} />
+<Sidebar.Provider bind:open={sidebarOpen}>
+  <AppSidebar />
 
-  <div
-    class="flex min-w-0 flex-1 flex-col bg-background"
-    class:min-h-0={isChat}
-    class:overflow-hidden={isChat}
+  <Sidebar.Inset
+    class="min-w-0 bg-background"
+    style="background-color: var(--background)"
   >
-    <main class="flex-1" class:min-h-0={isChat} class:overflow-hidden={isChat}>
-      {@render children()}
+    <!-- Кнопка панелі лише для мобільного: на десктопі згортання живе в
+         самій панелі, на місці логотипа. Окремої шапки на дашборді немає
+         навмисно — вона забирала б рядок контенту на кожному екрані
+         заради однієї кнопки.
+
+         Окремого нижнього меню теж більше немає: Sidebar сам відповідає
+         за мобільний режим, а два різні меню рано чи пізно розійшлись би
+         складом пунктів. -->
+    <MobileTrigger />
+
+    <main
+      class="flex flex-1"
+      class:min-h-0={isChat}
+      class:overflow-hidden={isChat}
+    >
+      <div class="min-w-0 flex-1" class:overflow-hidden={isChat}>
+        {@render children()}
+      </div>
     </main>
-  </div>
-</div>
+  </Sidebar.Inset>
+</Sidebar.Provider>

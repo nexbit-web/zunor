@@ -14,7 +14,10 @@
 <div class="grid min-h-svh lg:grid-cols-2">
   <div class="flex flex-col gap-4 p-6 md:p-10">
     <div class="flex gap-2 md:justify-start">
-      <a href="/user/login" class="flex items-center gap-2 font-medium hover:text-muted-foreground">
+      <a
+        href="/user/login"
+        class="flex items-center gap-2 font-medium hover:text-muted-foreground"
+      >
         <ArrowLeft size={20} aria-hidden="true" />
         Назад
       </a>

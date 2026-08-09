@@ -29,7 +29,7 @@ export interface OnboardingUser {
   phone: string | null
   avatar: string | null
   avatarPublicId: string | null
-city: string | null
+  city: string | null
   bio: string | null
   role: string
   onboarded: boolean

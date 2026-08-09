@@ -1,8 +1,7 @@
-<!-- src/routes/(auth)/jobs/[id]/job-client-view.svelte -->
 <!--
   Заявка очима клієнта + пропозиції майстрів — на токенах теми.
   Логіка 1:1: describeJob, cancelJob / acceptProposal (з модалками), showAll
-  (recommended vs others), статуси/бейджі, Zuna waiting, форматтери.
+  (recommended vs others), статуси/бейджі, картка асистента, форматтери.
   Усе клієнтське — UX; сервер валідує власність і права повторно.
 -->
 <script lang="ts">
@@ -26,7 +25,7 @@
   import { describeJob } from '$lib/categories/cleaning/describe'
   import PhotoGallery from '$lib/components/photo-gallery.svelte'
   import * as AlertDialog from '$lib/components/ui/alert-dialog'
-  import Zuna from '$lib/components/zuna.svelte'
+  import AssistantCard from '$lib/components/assistant-card.svelte'
   import toast from 'svelte-hot-french-toast'
   import {
     formatMoney,
@@ -71,6 +70,9 @@
         toast.error(json?.message ?? 'Не вдалось скасувати')
         return
       }
+      // Тост, бо сторінка зникає: на /dashboard/jobs заявки вже немає,
+      // і без повідомлення незрозуміло, чи вона скасована, чи не збереглась.
+      toast('Заявку скасовано')
       goto('/dashboard/jobs', { invalidateAll: true })
     } catch {
       toast.error('Помилка зʼєднання')
@@ -92,7 +94,12 @@
         toast.error(json?.message ?? 'Не вдалось прийняти')
         return
       }
-      if (json.orderId) goto(`/dashboard/orders/${json.orderId}`, { invalidateAll: true })
+      // Ключовий момент усього маркетплейсу — тут заявка стає замовленням.
+      // Сторінка змінюється на іншу, тож підтвердити подію більше нічому:
+      // на екрані замовлення вже не написано, що майстра щойно обрано.
+      toast.success('Майстра обрано! Домовляйтесь у чаті про деталі')
+      if (json.orderId)
+        goto(`/dashboard/orders/${json.orderId}`, { invalidateAll: true })
       else location.reload()
     } catch {
       toast.error('Помилка зʼєднання')
@@ -101,8 +108,7 @@
     }
   }
 
-  const cardCls =
-    'rounded-[26px] border border-border bg-card  '
+  const cardCls = 'rounded-[26px] border border-border bg-card  '
   const badgeBase =
     'inline-flex h-[22px] items-center gap-1 rounded-full px-2.5 text-[10px] font-bold tracking-[0.06em] uppercase'
 </script>
@@ -318,9 +324,11 @@
                   >
                 {/if}
                 {#if p.isNew}
+                  <!-- Був var(--brand): токен прибрали з теми, і бейдж
+                       малювався прозорою рамкою по прозорому тексту —
+                       на місці «Новачка» була порожнеча. -->
                   <span
-                    class="{badgeBase} border bg-card"
-                    style="border-color: var(--brand); color: var(--brand)"
+                    class="{badgeBase} border border-primary bg-card text-primary"
                     >Новачок</span
                   >
                 {/if}
@@ -386,13 +394,13 @@
       {/if}
     {:else if data.job.status === 'OPEN'}
       <div class="{cardCls} p-6">
-        <Zuna
+        <AssistantCard
           variant="card"
           size={48}
           showName
           online
           typewriter
-          text="Шукаю для тебе майстрів. Можеш спокійно займатися справами — я надішлю сповіщення, щойно хтось відгукнеться."
+          text="Zunor уже шукає майстрів. Можете спокійно займатися справами — сповіщення прийде, щойно хтось відгукнеться."
         />
       </div>
     {/if}
@@ -422,8 +430,6 @@
   </AlertDialog.Content>
 </AlertDialog.Root>
 
- 
-
 <!-- Модалка прийняття пропозиції -->
 <AlertDialog.Root bind:open={acceptDialogOpen}>
   <AlertDialog.Content>
@@ -449,5 +455,3 @@
     </AlertDialog.Footer>
   </AlertDialog.Content>
 </AlertDialog.Root>
-
- 

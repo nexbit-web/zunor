@@ -1,7 +1,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils.js'
   import { LoaderCircle } from 'lucide-svelte'
- 
+
   import type { SVGAttributes } from 'svelte/elements'
 
   let {

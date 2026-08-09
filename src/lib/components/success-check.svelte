@@ -1,4 +1,3 @@
-<!-- src/lib/components/success-check.svelte -->
 <!-- Анімована галочка успіху: малюється по контуру + pop із крапками -->
 <script lang="ts">
   let { size = 96 }: { size?: number } = $props()

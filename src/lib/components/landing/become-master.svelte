@@ -34,7 +34,7 @@
       <p
         class="mt-5 max-w-[34rem] text-[clamp(0.9375rem,1.6vw,1.0625rem)] leading-relaxed text-pretty text-white/65"
       >
-        Zunor приводить клієнтів — ви обираєте, що і коли виконувати. 
+        Zunor приводить клієнтів — ви обираєте, що і коли виконувати.
       </p>
 
       <div class="mt-9 flex flex-wrap items-center gap-x-7 gap-y-4">

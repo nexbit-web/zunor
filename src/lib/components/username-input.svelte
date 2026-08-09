@@ -1,4 +1,3 @@
-<!-- src/lib/components/username-input.svelte -->
 <script lang="ts">
   import { Input } from '$lib/components/ui/input'
   import * as Field from '$lib/components/ui/field'
@@ -57,6 +56,13 @@
         checking = false
       }
     }, 400)
+
+    // Прибирання за собою: без нього таймер переживає демонтування, і
+    // піти з форми, не дочекавшись 400 мс, означало запит для компонента,
+    // якого вже немає. $effect із таймером мусить його ж і знімати.
+    return () => {
+      if (timer) clearTimeout(timer)
+    }
   })
 </script>
 

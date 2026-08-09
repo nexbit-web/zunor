@@ -26,9 +26,25 @@
   )
 
   const sections = $derived(sectionsForRole(page.data.role ?? null))
+
+  // Заголовок вкладки з назвою розділу. Раніше всі розділи називались
+  // однаково, і кілька вкладок налаштувань були невідрізнимі — як і сусідні
+  // записи в історії браузера.
+  // 'Профіль' окремо: картка профілю не входить у рейку розділів.
+  const sectionLabel = $derived(
+    isProfileActive
+      ? 'Профіль'
+      : (sections.find((s) => s.slug === activeSlug)?.label ?? null),
+  )
+
+  const pageTitle = $derived(
+    sectionLabel
+      ? `${sectionLabel} · Налаштування · Zunor`
+      : 'Налаштування · Zunor',
+  )
 </script>
 
-<svelte:head><title>Налаштування · Zunor</title></svelte:head>
+<svelte:head><title>{pageTitle}</title></svelte:head>
 
 <div class="mx-auto w-full max-w-4xl px-4 py-8">
   <div class="flex flex-col gap-6 md:flex-row md:gap-8">

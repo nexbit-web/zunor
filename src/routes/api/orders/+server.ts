@@ -1,6 +1,5 @@
-// src/routes/api/orders/+server.ts
 import { json, error } from '@sveltejs/kit'
-import { auth } from '$lib/server/auth'
+import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
 import type { RequestHandler } from './$types'
 
@@ -9,13 +8,12 @@ import type { RequestHandler } from './$types'
  *
  * Мои заказы (создаются только через accept proposal — POST нет).
  */
-export const GET: RequestHandler = async ({ request, url }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw error(401, 'Unauthorized')
+export const GET: RequestHandler = async ({ locals, url }) => {
+  const user = requireApiUser(locals)
 
   const role = url.searchParams.get('role') ?? 'all'
   const statusFilter = url.searchParams.get('status') ?? 'all'
-  const userId = session.user.id
+  const userId = user.id
 
   let statusList:
     | ('CREATED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED')[]

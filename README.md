@@ -1,42 +1,130 @@
-# sv
+# Zunor
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+Сервіс замовлення прибирання в Україні (старт — Одеса).
 
-## Creating a project
+Не каталог виконавців: клієнт описує задачу чат-асистенту, платформа сама
+розсилає заявку відповідним майстрам хвилями й показує відібраних — push
+замість пошуку.
 
-If you're seeing this, you've probably already done this step. Congrats!
+**Продуктовий контекст і причини рішень** — у [MANIFESTO.md](MANIFESTO.md).
+**Правила для розробників і coding-агентів** — у [AGENTS.md](AGENTS.md).
 
-```sh
-# create a new project
-npx sv create my-app
-```
+## Стек
 
-To recreate this project with the same configuration:
+| Шар         | Технологія                                          |
+| ----------- | --------------------------------------------------- |
+| Framework   | SvelteKit 2, Svelte 5 (runes mode)                  |
+| Мова        | TypeScript (`strict`)                               |
+| Стилі       | Tailwind CSS 4 + shadcn-svelte                      |
+| БД          | PostgreSQL через Prisma 7 (`@prisma/adapter-pg`)    |
+| Auth        | better-auth (email + OTP)                           |
+| Realtime    | Pusher Channels                                     |
+| Файли       | Cloudinary                                          |
+| Пошта       | Nodemailer (SMTP)                                   |
+| AI-асистент | DeepSeek API                                        |
+| Деплой      | `@sveltejs/adapter-node` — один довгоживучий процес |
 
-```sh
-# recreate this project
-npx sv@0.15.1 create --template minimal --types ts --add tailwindcss="plugins:none" --install npm my-app
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```sh
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
-```
-
-## Building
-
-To create a production version of your app:
+## Швидкий старт
 
 ```sh
-npm run build
+npm install
+cp .env.example .env        # заповнити ключі, див. коментарі всередині
+npx prisma migrate deploy
+npx tsx prisma/seed-cities.ts
+npx tsx prisma/seed-categories.ts
+npm run dev                 # :5173
 ```
 
-You can preview the production build with `npm run preview`.
+Prisma-клієнт генерується не в `node_modules`, а в `src/generated/prisma` —
+імпортувати треба звідти.
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+## Скрипти
+
+```sh
+npm run dev          # dev-сервер
+npm run build        # продакшн-збірка
+npm run preview      # прев'ю збірки
+npm run check        # svelte-kit sync + svelte-check (типи)
+npm run test         # vitest run
+npm run test:watch   # vitest у watch-режимі
+```
+
+ESLint у проєкті немає: перевірки — це `npm run check` і `npm run test`.
+
+## Структура
+
+```
+src/
+├── routes/
+│   ├── (auth)/dashboard/   захищена зона (сесія + роль)
+│   ├── [handle=handle]/    публічний профіль майстра за @handle
+│   └── api/                REST-подібні ендпоінти
+├── lib/
+│   ├── categories/         контент-шар: усе, що знає про прибирання
+│   ├── components/         .svelte по фічах + ui/ (shadcn-svelte)
+│   ├── server/
+│   │   ├── dispatch/       матчинг заявка↔майстри: скоринг, хвилі
+│   │   ├── zunor/          AI-асистент (DeepSeek)
+│   │   ├── guard.ts        роль із БД, для load()
+│   │   ├── guards.ts       сесія з locals, для сторінок і API
+│   │   └── order-state-machine.ts
+│   └── stores/             Svelte 5 runes-стори (*.svelte.ts)
+└── generated/prisma/       згенеровано, руками не редагувати
+```
+
+## Два принципи, на яких тримається код
+
+**Движок універсальний, контент специфічний.** Схема БД і API не знають про
+прибирання: усе категорійно-специфічне живе в `metadata: Json?` і в
+`src/lib/categories/`. Додати нову категорію завтра має бути додаванням
+контенту, а не переписуванням движка.
+
+**Процес один і довгоживучий.** Стан у пам'яті (`rate-limit`, `presence`,
+`account-cache`, планувальник хвиль) — свідомий вибір, а не недогляд: Redis
+тут не потрібен. Ціна — рестарт обнуляє лічильники й скасовує заплановані
+хвилі; друге підбирає рідкісний крон.
+
+## Тести
+
+Vitest покриває чисте ядро — модулі без БД, мережі й `$env`: скоринг
+диспетчера, стейт-машину замовлення, валідацію прибирання, генерацію текстів,
+визначення послуги, DTO користувача, правило доступу до заявки. Окремий шар —
+безпека: open redirect, підміна імені, ліміти запитів, prompt injection в
+анкеті асистента, XSS у JSON-LD.
+
+Окремий шар — **сервер цілком**: усі власні API-ендпоінти й усі серверні
+лоадери сторінок викликаються напряму як функції, з моками Prisma, Pusher і
+Cloudinary. Перевіряються права доступу, валідація тіла, стелі на масиви й
+сторінки, атомарність транзакцій і те, що саме їде в базу. Плюс
+`hooks.server.ts` — порядок замків (бан → пошта → онбординг) і заголовки
+безпеки.
+
+Окремо застережена головна продуктова обіцянка: **телефон з'являється лише
+там, де вже є `Order` і глядач — його учасник**. Ані у стрічці, ані в
+профілі, ані в чаті його немає, і на це є тести.
+
+Покриті також **движок хвиль** (зупинки розсилки, накопичувальні ліміти
+хвиль, advisory-лок і claim до відправки, самоочищення планувальника) і
+**AI-агент** — на моці DeepSeek: постобробка виводу моделі, валідація драфта,
+детект мови, структура системного промпту.
+
+Третій шар — **компоненти**, окремим vitest-проєктом у jsdom: рунні стори
+(бейджі, список чатів, відкат оптимістичних оновлень), картки налаштувань,
+стрічка сповіщень, бульбашка чату, картка замовлення, профілі й розбір
+мікроформату відповідей асистента. Тут же друга лінія головної обіцянки:
+**телефон не з'являється в розмітці, навіть якщо приїхав у пропсах**.
+
+Усі тести — в одній теці `src/tests/` (`npm run test`), справжня БД для них
+не потрібна. Не покриті: форми входу й онбордингу, чат цілком, стрічки
+заявок, лендинг і вендорений `components/ui/**`.
+
+Перевіряється **поведінка, а не числа**: у скорингу тест каже «новачок
+обходить рівного ветерана», а не «score дорівнює 42» — константи крутити
+можна, обіцянки з маніфесту ні.
+
+## Крон
+
+`/api/cron?task=dispatch-waves|auto-expire|all`, авторизація через
+`CRON_SECRET`. Це страховка на випадок рестарту процесу: `dispatch-waves` —
+раз на 30 хвилин, `auto-expire` — раз на добу. Частіше ставити не можна,
+причина — у `src/lib/server/dispatch/scheduler.ts`.

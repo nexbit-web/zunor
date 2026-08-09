@@ -1,4 +1,3 @@
-<!-- src/lib/components/lottie-player.svelte -->
 <!--
   Легкий Lottie-плеєр: lottie-web вантажиться ЛІНИВО (динамічний import),
   JSON анімації тягнеться з static/ за URL (не роздуває бандл).

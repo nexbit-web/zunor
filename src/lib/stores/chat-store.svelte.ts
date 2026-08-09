@@ -1,4 +1,3 @@
-// src/lib/stores/chat-store.svelte.ts
 import { browser } from '$app/environment'
 import { getPusher } from '$lib/pusher-client'
 import { playMessageSound } from '$lib/sound/notification'
@@ -18,12 +17,20 @@ import type {
  * Викликати subscribeToUserEvents(userId) один раз у root +layout.svelte.
  */
 
-class ChatStore {
-  /** Тотальний лічильник непрочитаних — для бейджа у хедері */
-  totalUnread = $state(0)
+type Channel = ReturnType<ReturnType<typeof getPusher>['subscribe']>
 
+class ChatStore {
   /** Список превью чатів, синхронізується з /messages */
   chats = $state<ChatPreview[]>([])
+
+  /**
+   * Тотальний лічильник непрочитаних — для бейджа у хедері.
+   *
+   * Саме $derived, а не $state, який доводилось перераховувати руками
+   * після кожної мутації списку: похідне значення не може розійтися
+   * з джерелом, тож забути виклик перерахунку в новій гілці неможливо.
+   */
+  totalUnread = $derived(this.chats.reduce((sum, c) => sum + c.unreadCount, 0))
 
   /** Чи store ініціалізований (через subscribe) */
   initialized = $state(false)
@@ -31,28 +38,26 @@ class ChatStore {
   /** ID юзера якого ми слухаємо (щоб не підписатися двічі) */
   private boundUserId: string | null = null
 
+  // Канал і посилання на обробники тримаємо, щоб було ЩО знімати.
+  // Інлайнові стрілки в bind не дають цієї можливості: unbind без тієї
+  // самої посилки не знімає нічого.
+  private channel: Channel | null = null
+  private onChatUpdate: ((data: ChatUpdatePayload) => void) | null = null
+  private onMessageNew: ((data: MessageNewPayload) => void) | null = null
+
   /** ID активно відкритого чату — щоб не звукувати на нього */
   activeChatId = $state<string | null>(null)
-
-  /** Підраховує totalUnread за список чатів */
-  recomputeUnread() {
-    this.totalUnread = this.chats.reduce((sum, c) => sum + c.unreadCount, 0)
-  }
 
   /** Викликається коли /messages вантажить початковий список */
   setChats(chats: ChatPreview[]) {
     this.chats = chats
-    this.recomputeUnread()
     this.initialized = true
   }
 
   /** Локально позначити чат як прочитаний (коли юзер його відкриває) */
   markChatRead(chatId: string) {
     const chat = this.chats.find((c) => c.id === chatId)
-    if (chat && chat.unreadCount > 0) {
-      chat.unreadCount = 0
-      this.recomputeUnread()
-    }
+    if (chat && chat.unreadCount > 0) chat.unreadCount = 0
   }
 
   /** Підписатися на персональний канал юзера для real-time оновлень */
@@ -60,32 +65,57 @@ class ChatStore {
     if (!browser) return
     if (this.boundUserId === userId) return
 
+    // Зміна користувача: старі обробники треба зняти, інакше вони
+    // залишаться висіти на попередньому каналі назавжди.
+    this.unbindChannel()
+
     const pusher = getPusher()
     const channelName = `private-user-${userId}`
     const channel = pusher.subscribe(channelName)
 
     // Прийшло нове/інше оновлення в чаті — оновлюємо preview і unread
-    channel.bind('chat:update', (data: ChatUpdatePayload) => {
+    this.onChatUpdate = (data: ChatUpdatePayload) => {
       this.handleChatUpdate(data, userId)
-    })
-
+    }
     // Деталь повідомлення (для звуку коли чат закритий)
-    channel.bind('message:new', (data: MessageNewPayload) => {
+    this.onMessageNew = (data: MessageNewPayload) => {
       this.handleIncomingMessage(data, userId)
-    })
+    }
 
+    channel.bind('chat:update', this.onChatUpdate)
+    channel.bind('message:new', this.onMessageNew)
+
+    this.channel = channel
     this.boundUserId = userId
   }
 
   /** Cleanup при logout */
   unsubscribeAll() {
     if (!browser || !this.boundUserId) return
-    const pusher = getPusher()
-    pusher.unsubscribe(`private-user-${this.boundUserId}`)
+
+    this.unbindChannel()
     this.boundUserId = null
-    this.chats = []
-    this.totalUnread = 0
+    this.chats = [] // totalUnread похідний — обнулиться сам
     this.initialized = false
+  }
+
+  /**
+   * Знімає ТІЛЬКИ свої обробники — unbind, а не unsubscribe.
+   *
+   * На цьому ж каналі private-user-* висить стор сповіщень. unsubscribe
+   * гасив би канал цілком, тобто разом із дзвіночком. Зараз це проходило
+   * непоміченим лише тому, що unsubscribeAll кличуть при виході з акаунта,
+   * коли сторінка однаково перезавантажується.
+   */
+  private unbindChannel() {
+    if (this.onChatUpdate)
+      this.channel?.unbind('chat:update', this.onChatUpdate)
+    if (this.onMessageNew)
+      this.channel?.unbind('message:new', this.onMessageNew)
+
+    this.channel = null
+    this.onChatUpdate = null
+    this.onMessageNew = null
   }
 
   private handleChatUpdate(data: ChatUpdatePayload, currentUserId: string) {
@@ -102,8 +132,7 @@ class ChatStore {
 
     // Інкрементуємо unread якщо повідомлення не від мене
     // і чат не відкритий зараз
-    const isFromOther =
-      data.lastSenderId && data.lastSenderId !== currentUserId
+    const isFromOther = data.lastSenderId && data.lastSenderId !== currentUserId
     const isActiveChat = this.activeChatId === data.chatId
 
     if (isFromOther && !isActiveChat) {
@@ -112,7 +141,6 @@ class ChatStore {
 
     // Переміщаємо чат на верх списку
     this.chats = [chat, ...this.chats.filter((c) => c.id !== data.chatId)]
-    this.recomputeUnread()
   }
 
   private handleIncomingMessage(
@@ -127,14 +155,23 @@ class ChatStore {
     }
   }
 
-  private async refreshChats() {
+  /**
+   * Тягне список чатів з сервера. Публічний, бо це ЄДИНЕ місце, де чати
+   * потрапляють у стор поза сторінкою /messages.
+   *
+   * Раніше список приходив із серверного лейауту на КОЖНІЙ навігації
+   * дашборда — два запити до БД за кожен перехід, хоча дані змінюються
+   * рідко й у реальному часі їх однаково оновлює Pusher. Тепер: один
+   * запит за сесію, далі стор живе сам.
+   */
+  async refreshChats(): Promise<void> {
     try {
       const res = await fetch('/api/chats')
       if (!res.ok) return
       const json = await res.json()
       this.setChats(json.chats ?? [])
     } catch {
-      // ignore
+      // ignore: без списку бейдж просто лишиться порожнім
     }
   }
 

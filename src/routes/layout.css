@@ -8,176 +8,118 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* ═══════════════════════════════════════════════
-   Zunor — Палітра «Premium Monochrome»
-   Інспірація: Linear, Vercel, monobank, Cal.com.
-   Чистий білий + глибокий чорний. Акцент — тільки
-   для головної дії на сторінці.
-   ═══════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════
+   Zunor — токени теми.
 
-.text-zunor-gradient {
-  background-image: linear-gradient(
-    135deg,
-    #fab319 0%,
-    #00e6a0 12%,
-    #ff2323 30%,
+   Правило одне: токен живе тут доти, доки на нього хтось посилається.
+   Мертвий токен гірший за відсутній — розмітка з `var(--brand)` не падає
+   й не підсвічується в редакторі, вона просто малює прозоре по прозорому.
+   Так уже зникали чип із датою на картці заявки, підсвітка непрочитаних
+   сповіщень і бейдж «Новачок». Прибираєш токен — прогрепай `var(--назва)`.
 
-    #3b82f6 50%,
-    #2f072d 75%,
-    #ffffff 100%
-  );
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
-}
-
-/* dodger-blue {
-  '50': '#eff9ff',
-  '100': '#dbf1fe',
-  '200': '#bfe7fe',
-  '300': '#93d9fd',
-  '400': '#60c2fa',
-  '500': '#3ba5f6',
-  '600': '#3390ec',
-  '700': '#1d71d8',
-  '800': '#1e5baf',
-  '900': '#1e4e8a',
-  '950': '#173154',
-} */
+   Кожен токен, що є тут, має бути в ОБОХ темах: :root і .dark.
+   Виняток — --radius, він не залежить від теми.
+   ═══════════════════════════════════════════════════════════════ */
 
 :root {
-  /* Top-loading bar — раньше оранжевый (--brand), теперь единый акцент. */
-  --nprogress-bar: #3390ec;
-  --catalog-sidebar-hover: #fafafa;
-  --bg-header: #ffffff;
-
-  /* ─── Монохромна база: фон/текст/картки/бордери ─── */
-  --background: #f9f9f7; /* #FFFFFF */
-  --foreground: #131313; /* #0A0A0A */
+  /* ─── База: фон, текст, поверхні ─── */
+  --background: #fcfcfb;
+  --foreground: #131313;
 
   --card: #ffffff;
   --card-foreground: oklch(0.145 0 0);
-  --dashboard: #f9f9f7;
 
-  /* Колір тексту */
+  /* Фон робочої зони дашборда (bg-(--dashboard) у його лейауті). */
+  --dashboard: #fcfcfa;
+
+  --popover: oklch(1 0 0);
+  /* Було помилково #3390ec — увесь текст у попап-меню ставав синім. */
+  --popover-foreground: oklch(0.145 0 0);
+
+  /* Напівпрозорий фон під шапкою майстра заявки (jobs/new). */
+  --bg-translucent: lab(100% 0 0/0.8);
+
+  /* Текстові кольори для місць із власною версткою (header, +error). */
   --color-text: #131313;
   --color-text-500: #7b7974;
 
-  --popover: oklch(1 0 0);
-  /* Було помилково #3390ec — увесь текст у попап-меню ставав синім. Фікс. */
-  --popover-foreground: oklch(0.145 0 0);
-
-  --bg-translucent: lab(100% 0 0/0.8);
-  --fg-primary: #030303;
-  /* ─── Єдиний акцент: #3390ec. Керує primary-кнопками, посиланнями,
-     focus-ring і фокусною рамкою інпутів (shadcn Input вже прив'язаний
-     до --ring через focus-visible:border-ring focus-visible:ring-ring/50,
-     тож інпути підхоплюють це без правок компонентів). ─── */
-  --primary: #c6613f; 
+  /* ─── Акцент ─── */
+  --primary: #c6613f;
   --primary-foreground: oklch(1 0 0);
   --primary-hover: #d97757;
-    --ring: #0071e3;
 
-  /* Secondary/muted/accent — нейтральні, без кольору. */
-  --secondary: #f1f0ed; /* #F4F4F5 */
+  /* Фокусна рамка синя, а акцент теракотовий: залишок попередньої
+     палітри, не задум. Звести до одного — --ring: var(--primary). */
+  --ring: #0071e3;
+
+  /* ─── Нейтральні ─── */
+  --secondary: #f1f0ed;
   --secondary-foreground: oklch(0.145 0 0);
 
   --muted: #ececea;
-  --muted-foreground: #7b7974; /* #71717A */
+  --muted-foreground: #7b7974;
 
   --accent: #f1f0ed;
   --accent-foreground: oklch(0.145 0 0);
 
   --destructive: #ef4444;
 
-  /* Бордери в звичайному стані лишаються нейтральними — синім стає
-     тільки фокус (через --ring), не дефолтний стан поля. */
-  --border: #dfdfdd; /* #E4E4E7 */
+  /* Бордер у звичайному стані нейтральний — кольоровим стає лише фокус. */
+  --border: #dfdfdd;
   --input: oklch(0.92 0 0);
 
-  --chart-1: oklch(0.145 0 0);
-  --chart-2: oklch(0.35 0 0);
-  --chart-3: oklch(0.55 0 0);
-  --chart-4: oklch(0.7 0 0);
-  --chart-5: oklch(0.82 0 0);
+  /* ─── Сайдбар ───
+     Повний набір потрібен компонентам з shadcn-svelte (ui/sidebar): вони
+     звертаються до bg-sidebar, bg-sidebar-accent, border-sidebar-border
+     і ring-sidebar-ring. Значення навмисно повторюють базові токени, а не
+     заводять окрему палітру: панель має бути частиною застосунку, а не
+     виглядати як вставка з чужої теми. Захочеш відділити її фоном —
+     міняти треба тут, в одному місці.
+
+     --sidebar береться з --dashboard, а не з --background: рівно так було
+     й до переїзду на shadcn — панель лежала на фоні робочої зони, а
+     контент поруч був на чистому --background. У світлій темі різниця
+     майже непомітна, у темній панель на пів тону глибша за сторінку, і
+     саме це відділяло її від контенту без зайвої лінії. */
+  --sidebar: var(--dashboard);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+
+  /* ─── Смуга прокрутки ─── */
+  --scrollbar-thumb: rgb(0 0 0 / 0.18);
+  --scrollbar-thumb-hover: rgb(0 0 0 / 0.3);
 
   --radius: 0.625rem;
-
-  /* Sidebar — активний пункт тепер теж на акценті (одна система кольору). */
-  --sidebar: oklch(0.985 0 0); /* #FAFAFA */
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: #3390ec;
-  --sidebar-primary-foreground: oklch(1 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.145 0 0);
-  --sidebar-border: oklch(0.92 0 0);
-  --sidebar-ring: #3390ec;
-
-  /* --brand видалено: акцент тепер один — --primary/--ring (#3390ec). */
-
-  /* ─── Toast-статуси: семантичні кольори, НЕ бренд-акцент.
-     Успіх лишається зеленим, помилка — червоною, попри зміну бренду:
-     статус має читатись миттєво, незалежно від акцентного кольору. ─── */
-  --w-bg: #fff0c2;
-  --w-border: #f59e0b;
-  --w-icon: #d97706;
-  --w-text: #92400e;
-
-  --s-bg: #d1fae5;
-  --s-border: #10b981;
-  --s-icon: #059669;
-  --s-text: #065f46;
-
-  --e-bg: #fee2e2;
-  --e-border: #ef4444;
-  --e-icon: #dc2626;
-  --e-text: #991b1b;
-
-  --i-bg: #dbeafe;
-  --i-border: #3b82f6;
-  --i-icon: #2563eb;
-  --i-text: #1e40af;
-
-  --d-bg: #f8fafc;
-  --d-border: #cbd5e1;
-  --d-icon: #64748b;
-  --d-text: #334155;
-
-  --n-bg: #ede9fe;
-  --n-border: #8b5cf6;
-  --n-icon: #7c3aed;
-  --n-text: #5b21b6;
 }
 
 .dark {
-  --nprogress-bar: oklch(52.43% 0.2396 264.41);
-  --catalog-sidebar-hover: oklch(27.2% 0.002 107);
-  --bg-header: oklch(20.42% 0.002 107);
-
-  --background: #1c1c1c;
+  --background: #1a1a19;
   --foreground: #f9f9f7;
 
   --card: #272725;
   --card-foreground: oklch(100% 0 0);
-  --dashboard: #1f1f1e;
 
-  /* Колір тексту */
-  --color-text: #f9f9f7;
-  --color-text-500: #7b7974;
-
-  --bg-translucent: lab(49.8943% -0.875205 3.29613/0.16);
-  --fg-primary: lab(100% 0 0);
+  --dashboard: #161615;
 
   --popover: oklch(23% 0.002 107);
   --popover-foreground: oklch(100% 0 0);
- 
-  --primary: #c6613f; 
+
+  --bg-translucent: lab(49.8943% -0.875205 3.29613/0.16);
+
+  --color-text: #f9f9f7;
+  --color-text-500: #7b7974;
+
+  --primary: #c6613f;
   --primary-foreground: oklch(1 0 0);
- --primary-hover: #d97757;
+  --primary-hover: #d97757;
   --ring: #0071e3;
 
-  --secondary: #3c3c3a;
+  --secondary: #313130;
   --secondary-foreground: oklch(90.95% 0.002 107);
 
   --muted: #3f3f3d;
@@ -191,56 +133,17 @@
   --border: #353533;
   --input: oklch(37.2% 0.004 107 / 40%);
 
-  --chart-1: oklch(70.62% 0.1391 264.41);
-  --chart-2: oklch(72.92% 0.155 138.23);
-  --chart-3: oklch(75.82% 0.1594 40.04);
-  --chart-4: oklch(76.61% 0.1614 294.88);
-  --chart-5: oklch(76.15% 0.1564 26.56);
-
-  --sidebar: oklch(23% 0.002 107);
+  --sidebar: var(--dashboard);
   --sidebar-foreground: oklch(100% 0 0);
-  --sidebar-primary: oklch(52.43% 0.2396 264.41);
-  --sidebar-primary-foreground: oklch(100% 0 0);
-  --sidebar-accent: oklch(27.2% 0.002 107);
-  --sidebar-accent-foreground: oklch(100% 0 0);
-  --sidebar-border: oklch(34.74% 0.004 107 / 40%);
-  --sidebar-ring: oklch(70.62% 0.1391 264.41);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
 
-  /* Warning */
-  --w-bg: oklch(58.01% 0.1819 40.04 / 20%);
-  --w-border: oklch(58.01% 0.1819 40.04 / 40%);
-  --w-icon: oklch(75.82% 0.1594 40.04);
-  --w-text: oklch(75.82% 0.1594 40.04);
-
-  /* Success */
-  --s-bg: oklch(54.42% 0.1689 138.23 / 20%);
-  --s-border: oklch(54.42% 0.1689 138.23 / 40%);
-  --s-icon: oklch(72.92% 0.155 138.23);
-  --s-text: oklch(72.92% 0.155 138.23);
-
-  /* Error */
-  --e-bg: oklch(58.53% 0.2203 26.56 / 20%);
-  --e-border: oklch(58.53% 0.2203 26.56 / 40%);
-  --e-icon: oklch(76.15% 0.1564 26.56);
-  --e-text: oklch(76.15% 0.1564 26.56);
-
-  /* Info */
-  --i-bg: oklch(52.43% 0.2396 264.41 / 20%);
-  --i-border: oklch(52.43% 0.2396 264.41 / 40%);
-  --i-icon: oklch(70.62% 0.1391 264.41);
-  --i-text: oklch(70.62% 0.1391 264.41);
-
-  /* Default */
-  --d-bg: oklch(30% 0.002 107);
-  --d-border: oklch(40% 0.004 107 / 40%);
-  --d-icon: oklch(72.34% 0.002 107);
-  --d-text: oklch(72.34% 0.002 107);
-
-  /* Neutral / Special */
-  --n-bg: oklch(58.99% 0.2523 294.88 / 20%);
-  --n-border: oklch(58.99% 0.2523 294.88 / 40%);
-  --n-icon: oklch(76.61% 0.1614 294.88);
-  --n-text: oklch(76.61% 0.1614 294.88);
+  --scrollbar-thumb: rgb(255 255 255 / 0.2);
+  --scrollbar-thumb-hover: rgb(255 255 255 / 0.35);
 }
 
 @theme inline {
@@ -249,42 +152,38 @@
     Ubuntu, Cantarell, 'Helvetica Neue', sans-serif;
 
   --font-mono: 'Roboto Mono', monospace;
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-primary-hover: var(--primary-hover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
-  --color-card: var(--card);
-  --color-foreground: var(--foreground);
-  --color-background: var(--background);
 
-  /* Брендовий акцент — доступний як bg-brand, text-brand */
-  --color-brand: var(--brand);
-  --color-brand-foreground: var(--brand-foreground);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-ring: var(--ring);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+
+  --color-border: var(--border);
+  --color-input: var(--input);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
 
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
@@ -299,24 +198,61 @@
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
     font-feature-settings: 'cv11', 'ss01', 'ss03';
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+
   html {
     @apply font-sans;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
     scroll-behavior: smooth;
+    /* Місце під смугу резервується завжди — інакше при переході зі
+       сторінки без прокрутки на сторінку з нею весь контент стрибає
+       вбік на ширину смуги. */
+    scrollbar-gutter: stable;
   }
-  html::-webkit-scrollbar {
-    display: none;
+
+  /* ─── Смуга прокрутки ───
+     Firefox читає scrollbar-width/-color, WebKit — псевдоелементи, тому
+     обидва описи потрібні. Прозорий border разом із background-clip дає
+     повітря навколо повзунка — від цього смуга й виглядає тонкою.
+
+     scrollbar-width не успадковується, тож задаємо на * : інакше тонкою
+     була б лише сторінка, а чат і стрічки лишились би із системною. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
   }
+
+  ::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--scrollbar-thumb);
+    background-clip: padding-box;
+    border: 4px solid transparent;
+    border-radius: 9999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--scrollbar-thumb-hover);
+  }
+
+  /* Іконка всередині кнопки не повинна перехоплювати клік. */
   svg {
     pointer-events: none;
   }
+
   h1,
   h2,
   h3,
@@ -324,25 +260,8 @@
     letter-spacing: -0.01em;
     font-weight: 700;
   }
-}
 
-html #nprogress .bar {
-  background: var(--primary);
-  height: 2px;
-}
-
-/* Светящийся «хвост» на переднем крае полосы — убираем */
-html #nprogress .peg {
-  display: none;
-}
-
-@media (max-width: 1023px) {
-  main {
-    padding-bottom: 40px;
-  }
-}
-
-@layer base {
+  /* Курсор на всьому, що клікається. */
   button:not(:disabled),
   [role='button']:not([aria-disabled='true']),
   a[href],
@@ -353,219 +272,48 @@ html #nprogress .peg {
   }
 }
 
-/* toster */
-
-/* ─── Прив'язка палітри до типів ─── */
-.t-success {
-  background-color: var(--s-bg);
-  border-color: var(--s-border);
-  color: var(--s-text);
-}
-.t-success .t-icon,
-.t-success .t-close,
-.t-success .t-action {
-  color: var(--s-icon);
-}
-.t-success .t-close:hover {
-  background-color: color-mix(in srgb, var(--s-icon) 12%, transparent);
-}
-.t-success .t-progress-bar {
-  background-color: var(--s-icon);
-}
-.t-success .t-progress-track {
-  background-color: color-mix(in srgb, var(--s-border) 40%, transparent);
-}
-
-.t-error {
-  background-color: var(--e-bg);
-  border-color: var(--e-border);
-  color: var(--e-text);
-}
-.t-error .t-icon,
-.t-error .t-close,
-.t-error .t-action {
-  color: var(--e-icon);
-}
-.t-error .t-close:hover {
-  background-color: color-mix(in srgb, var(--e-icon) 12%, transparent);
-}
-.t-error .t-progress-bar {
-  background-color: var(--e-icon);
-}
-.t-error .t-progress-track {
-  background-color: color-mix(in srgb, var(--e-border) 40%, transparent);
-}
-
-.t-warning {
-  background-color: var(--w-bg);
-  border-color: var(--w-border);
-  color: var(--w-text);
-}
-.t-warning .t-icon,
-.t-warning .t-close,
-.t-warning .t-action {
-  color: var(--w-icon);
-}
-.t-warning .t-close:hover {
-  background-color: color-mix(in srgb, var(--w-icon) 12%, transparent);
-}
-.t-warning .t-progress-bar {
-  background-color: var(--w-icon);
-}
-.t-warning .t-progress-track {
-  background-color: color-mix(in srgb, var(--w-border) 40%, transparent);
-}
-
-.t-info {
-  background-color: var(--i-bg);
-  border-color: var(--i-border);
-  color: var(--i-text);
-}
-.t-info .t-icon,
-.t-info .t-close,
-.t-info .t-action {
-  color: var(--i-icon);
-}
-.t-info .t-close:hover {
-  background-color: color-mix(in srgb, var(--i-icon) 12%, transparent);
-}
-.t-info .t-progress-bar {
-  background-color: var(--i-icon);
-}
-.t-info .t-progress-track {
-  background-color: color-mix(in srgb, var(--i-border) 40%, transparent);
-}
-
-.t-default {
-  background-color: var(--d-bg);
-  border-color: var(--d-border);
-  color: var(--d-text);
-}
-.t-default .t-icon,
-.t-default .t-close,
-.t-default .t-action {
-  color: var(--d-icon);
-}
-.t-default .t-close:hover {
-  background-color: color-mix(in srgb, var(--d-icon) 12%, transparent);
-}
-.t-default .t-progress-bar {
-  background-color: var(--d-icon);
-}
-.t-default .t-progress-track {
-  background-color: color-mix(in srgb, var(--d-border) 40%, transparent);
-}
-
-.t-notification {
-  background-color: var(--n-bg);
-  border-color: var(--n-border);
-  color: var(--n-text);
-}
-.t-notification .t-icon,
-.t-notification .t-close,
-.t-notification .t-action {
-  color: var(--n-icon);
-}
-.t-notification .t-close:hover {
-  background-color: color-mix(in srgb, var(--n-icon) 12%, transparent);
-}
-.t-notification .t-progress-bar {
-  background-color: var(--n-icon);
-}
-.t-notification .t-progress-track {
-  background-color: color-mix(in srgb, var(--n-border) 40%, transparent);
-}
-
-/* ─── Анімація появи/зникнення ───
-   Трюк з grid-template-rows 0fr→1fr плавно розштовхує сусідні тости. */
-.toast-item {
-  display: grid;
-  grid-template-rows: 0fr;
-  opacity: 0;
-  transition:
-    opacity 280ms cubic-bezier(0.165, 0.85, 0.45, 1),
-    transform 280ms cubic-bezier(0.165, 0.85, 0.45, 1),
-    grid-template-rows 280ms cubic-bezier(0.165, 0.85, 0.45, 1);
-}
-
-/* Напрямок виїзду залежить від позиції контейнера */
-.toast-item.from-right {
-  transform: translateX(calc(100% + 20px));
-}
-.toast-item.from-left {
-  transform: translateX(calc(-100% - 20px));
-}
-.toast-item.from-top {
-  transform: translateY(-16px) scale(0.96);
-}
-.toast-item.from-bottom {
-  transform: translateY(16px) scale(0.96);
-}
-
-/* Горизонтальне вирівнювання тоста в колонці за позицією.
-   Потрібно тому, що .toast-item — grid (display:grid), і flex-класи
-   justify-* на ньому не діють; вирівнюємо через justify-content гріда. */
-.toast-item.from-left {
-  justify-content: start;
-}
-.toast-item.from-right {
-  justify-content: end;
-}
-.toast-item.from-top,
-.toast-item.from-bottom {
-  justify-content: center;
-}
-
-.toast-item.in {
-  grid-template-rows: 1fr;
-  opacity: 1;
-  transform: translateX(0) translateY(0) scale(1);
-}
-
-.toast-item.out {
-  grid-template-rows: 0fr;
-  opacity: 0;
-  transform: translateX(0) scale(0.98);
-  transition:
-    opacity 240ms cubic-bezier(0.4, 0, 0.2, 1),
-    transform 240ms cubic-bezier(0.4, 0, 0.2, 1),
-    grid-template-rows 240ms cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.toast-inner {
-  overflow: hidden;
-}
-
-/* ─── Прогрес-бар: чистий CSS, нуль JS під час відліку ───
-   Тривалість задається інлайн (animation-duration), пауза — клас .paused. */
-@keyframes toast-progress {
-  from {
-    width: 0%;
-  }
-  to {
-    width: 100%;
-  }
-}
-.t-progress-bar {
-  width: 0;
-  animation-name: toast-progress;
-  animation-timing-function: linear;
-  animation-fill-mode: forwards;
-}
-.t-progress-bar.paused {
-  animation-play-state: paused;
-}
-
-/* Повага до системного prefers-reduced-motion */
 @media (prefers-reduced-motion: reduce) {
-  .toast-item,
-  .toast-item.in,
-  .toast-item.out {
-    transition-duration: 1ms;
-    transform: none;
+  html {
+    scroll-behavior: auto;
   }
-  .t-progress-bar {
-    animation: none;
-    width: 100%;
+}
+
+/* Заголовок лендінга для майстрів (master/about). */
+.text-zunor-gradient {
+  background-image: linear-gradient(
+    135deg,
+    #fab319 0%,
+    #00e6a0 12%,
+    #ff2323 30%,
+    #3b82f6 50%,
+    #2f072d 75%,
+    #ffffff 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* ─── NProgress (смуга завантаження вгорі) ─── */
+html #nprogress .bar {
+  background: var(--primary);
+  height: 2px;
+}
+
+#nprogress {
+  position: fixed;
+  z-index: 99999;
+}
+
+/* Світний «хвіст» на передньому краї смуги — прибираємо. */
+html #nprogress .peg {
+  display: none;
+}
+
+/* Запас під нижнє меню на вузьких екранах. */
+@media (max-width: 1023px) {
+  main {
+    padding-bottom: 40px;
   }
 }

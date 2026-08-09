@@ -1,16 +1,11 @@
-// src/routes/(auth)/notifications/+page.server.ts
-import { auth } from '$lib/server/auth'
 import { prisma } from '$lib/server/prisma'
-import { redirect } from '@sveltejs/kit'
+import { requireUser } from '$lib/server/guards'
 import type { PageServerLoad } from './$types'
 
 const PAGE_SIZE = 20
 
-export const load: PageServerLoad = async ({ request }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw redirect(302, '/user/login?redirectTo=/notifications')
-
-  const userId = session.user.id
+export const load: PageServerLoad = async ({ locals }) => {
+  const userId = requireUser(locals).id
 
   // Перша сторінка + лічильник непрочитаних — паралельно.
   const [rows, unreadCount] = await Promise.all([
@@ -38,8 +33,9 @@ export const load: PageServerLoad = async ({ request }) => {
   const list = hasMore ? rows.slice(0, PAGE_SIZE) : rows
   const nextCursor = hasMore ? list[list.length - 1].id : null
 
+  // userId назовні не віддаємо: сторінка більше не заводить власної
+  // Pusher-підписки — події приходять зі спільного стору сповіщень.
   return {
-    userId,
     notifications: list.map((n) => ({
       ...n,
       createdAt: n.createdAt.toISOString(),

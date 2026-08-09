@@ -1,7 +1,6 @@
-// src/routes/(auth)/dashboard/messages/[chatId]/+page.server.ts
-import { auth } from '$lib/server/auth'
 import { prisma } from '$lib/server/prisma'
-import { error, redirect } from '@sveltejs/kit'
+import { requireUser } from '$lib/server/guards'
+import { error } from '@sveltejs/kit'
 import type { PageServerLoad } from './$types'
 import type {
   ChatDetails,
@@ -11,31 +10,34 @@ import type {
 
 const PAGE_SIZE = 50
 
-export const load: PageServerLoad = async ({ params, request }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw redirect(302, '/user/login')
-
+export const load: PageServerLoad = async ({ params, locals }) => {
   const chatId = params.chatId
-  const userId = session.user.id
+  const userId = requireUser(locals).id
 
-  const membership = await prisma.chatMember.findUnique({
-    where: { chatId_userId: { chatId, userId } },
-    select: {
-      lastReadAt: true,
-      chat: {
-        select: {
-          id: true,
-          members: {
-            select: {
-              user: {
-                select: {
-                  id: true,
-                  name: true,
-                  username: true,
-                  avatar: true,
-                  role: true,
-                  masterProfile: {
-                    select: { verificationStatus: true },
+  // Обидва запити залежать лише від chatId, тому йдуть паралельно:
+  // послідовно це були два round-trip до Neon на кожне відкриття чату.
+  // Доступ це не послаблює — перевірка membership нижче однаково відсікає
+  // чужий чат ДО того, як повідомлення потраплять у відповідь.
+  const [membership, messages] = await Promise.all([
+    prisma.chatMember.findUnique({
+      where: { chatId_userId: { chatId, userId } },
+      select: {
+        lastReadAt: true,
+        chat: {
+          select: {
+            id: true,
+            members: {
+              select: {
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    username: true,
+                    avatar: true,
+                    role: true,
+                    masterProfile: {
+                      select: { verificationStatus: true },
+                    },
                   },
                 },
               },
@@ -43,46 +45,43 @@ export const load: PageServerLoad = async ({ params, request }) => {
           },
         },
       },
-    },
-  })
+    }),
+    // Замовлення тут навмисно НЕ вантажимо: чат — тільки для спілкування.
+    // Статус замовлення живе на /dashboard/orders, у сповіщеннях і в OrderEvent.
+    prisma.message.findMany({
+      // type != SYSTEM — legacy-рядки більше не частина стрічки
+      where: { chatId, type: { not: 'SYSTEM' } },
+      orderBy: { createdAt: 'desc' },
+      take: PAGE_SIZE + 1,
+      select: {
+        id: true,
+        type: true,
+        text: true,
+        attachmentUrl: true,
+        attachmentMimeType: true,
+        attachmentSize: true,
+        attachmentName: true,
+        isRead: true,
+        editedAt: true,
+        deletedAt: true,
+        createdAt: true,
+        senderId: true,
+        replyToId: true,
+        replyTo: {
+          select: { id: true, text: true, senderId: true, type: true },
+        },
+      },
+    }),
+  ])
 
   if (!membership) throw error(404, 'Чат не знайдено')
 
   const peer = membership.chat.members.find((m) => m.user.id !== userId)?.user
   if (!peer) throw error(404, 'Співрозмовник не знайдено')
 
-  const me = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { role: true },
-  })
-
-  // Замовлення тут навмисно НЕ вантажимо: чат — тільки для спілкування.
-  // Статус замовлення живе на /dashboard/orders, у сповіщеннях і в OrderEvent.
-
-  const messages = await prisma.message.findMany({
-    // type != SYSTEM — legacy-рядки більше не частина стрічки
-    where: { chatId, type: { not: 'SYSTEM' } },
-    orderBy: { createdAt: 'desc' },
-    take: PAGE_SIZE + 1,
-    select: {
-      id: true,
-      type: true,
-      text: true,
-      attachmentUrl: true,
-      attachmentMimeType: true,
-      attachmentSize: true,
-      attachmentName: true,
-      isRead: true,
-      editedAt: true,
-      deletedAt: true,
-      createdAt: true,
-      senderId: true,
-      replyToId: true,
-      replyTo: {
-        select: { id: true, text: true, senderId: true, type: true },
-      },
-    },
-  })
+  // Роль беремо з locals.account (її вже прочитав guardHandle) — окремий
+  // SELECT був третім запитом на відкриття чату.
+  const myRole = locals.account?.role ?? null
 
   const hasMore = messages.length > PAGE_SIZE
   const items = hasMore ? messages.slice(0, PAGE_SIZE) : messages
@@ -137,6 +136,6 @@ export const load: PageServerLoad = async ({ params, request }) => {
     initialMessages,
     initialNextCursor: nextCursor,
     currentUserId: userId,
-    currentUserRole: me?.role ?? null,
+    currentUserRole: myRole,
   }
 }

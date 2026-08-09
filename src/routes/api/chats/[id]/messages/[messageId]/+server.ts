@@ -1,6 +1,5 @@
-// src/routes/api/chats/[id]/messages/[messageId]/+server.ts
 import { json, error } from '@sveltejs/kit'
-import { auth } from '$lib/server/auth'
+import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
 import { channels, events, safeTrigger } from '$lib/server/pusher'
 import type { RequestHandler } from './$types'
@@ -14,9 +13,8 @@ const EDIT_WINDOW_MS = 24 * 60 * 60 * 1000 // 24 години на редагу�
  *
  * Редагування власного TEXT повідомлення в межах 24 годин.
  */
-export const PATCH: RequestHandler = async ({ params, request }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw error(401, 'Unauthorized')
+export const PATCH: RequestHandler = async ({ params, request, locals }) => {
+  const user = requireApiUser(locals)
 
   const body = await request.json().catch(() => null)
   const newText = String(body?.text ?? '').trim()
@@ -37,7 +35,7 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
 
   if (!message) throw error(404, 'Message not found')
   if (message.chatId !== params.id) throw error(403, 'Wrong chat')
-  if (message.senderId !== session.user.id) throw error(403, 'Not your message')
+  if (message.senderId !== user.id) throw error(403, 'Not your message')
   if (message.deletedAt) throw error(400, 'Message deleted')
   if (message.type !== 'TEXT') throw error(400, 'Only text can be edited')
 
@@ -57,7 +55,7 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
   await prisma.chat.updateMany({
     where: {
       id: params.id,
-      lastSenderId: session.user.id,
+      lastSenderId: user.id,
     },
     data: { lastMessageText: newText.slice(0, 200) },
   })
@@ -82,9 +80,8 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
  * Soft delete власного повідомлення. У UI замість тексту покажеться
  * "Повідомлення видалено".
  */
-export const DELETE: RequestHandler = async ({ params, request }) => {
-  const session = await auth.api.getSession({ headers: request.headers })
-  if (!session) throw error(401, 'Unauthorized')
+export const DELETE: RequestHandler = async ({ params, locals }) => {
+  const user = requireApiUser(locals)
 
   const message = await prisma.message.findUnique({
     where: { id: params.messageId },
@@ -98,7 +95,7 @@ export const DELETE: RequestHandler = async ({ params, request }) => {
 
   if (!message) throw error(404, 'Message not found')
   if (message.chatId !== params.id) throw error(403, 'Wrong chat')
-  if (message.senderId !== session.user.id) throw error(403, 'Not your message')
+  if (message.senderId !== user.id) throw error(403, 'Not your message')
   if (message.deletedAt) {
     return json({ ok: true, alreadyDeleted: true })
   }

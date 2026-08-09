@@ -13,7 +13,6 @@ import {
 import { prisma } from './prisma'
 import { sendResetPasswordEmail } from './email'
 import { sendOtpEmail } from './email/otp-email'
- 
 
 const OTP_TTL_SECONDS = 600 // 10 хв — довше, ніж середня затримка SMTP
 

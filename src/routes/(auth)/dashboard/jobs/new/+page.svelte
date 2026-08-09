@@ -36,6 +36,12 @@
   import ThinkingLogo from '$lib/components/thinking-logo.svelte'
   import toast from 'svelte-hot-french-toast'
   import MessageBody from '$lib/components/zunor/MessageBody.svelte'
+  import {
+    saveDialog,
+    loadDialog,
+    clearDialog,
+    type ZunorDialogMessage,
+  } from '$lib/zunor/dialog-storage'
 
   // ─── AI-оформлення заявки ───
   // Діалог веде Zunor-агент через POST /api/zunor/chat (сервер → DeepSeek).
@@ -46,17 +52,9 @@
   // подвійний rAF, blur-шари) — без змін відносно макета: коментарі про
   // ResizeObserver-нюанс дивись біля pinIfAtBottom().
 
-  type Msg =
-    | { id: number; role: 'user'; text: string; images?: string[] }
-    | {
-        id: number
-        role: 'zunor'
-        text: string
-        shown: number
-        typing: boolean
-        thinkSeconds: number
-      }
-    | { id: number; role: 'summary'; draft: ZunorDraft }
+  // Тип живе поруч зі сховищем діалогу: він же і серіалізується в
+  // localStorage, тож двох визначень бути не повинно.
+  type Msg = ZunorDialogMessage
 
   let messages = $state<Msg[]>([])
   // Швидкі відповіді від Zunor (парсяться сервером із відповіді моделі)
@@ -191,10 +189,13 @@
         uploadingCount--
       }
     }
+    // Фото вже лежить у Cloudinary — хай переживе F5 разом із діалогом.
+    persistDialog()
   }
 
   function removePending(i: number) {
     pendingPhotos = pendingPhotos.filter((_, idx) => idx !== i)
+    persistDialog()
   }
 
   let inputPanelHeight = $state(180)
@@ -355,6 +356,64 @@
     if (target.closest('button, a, img, input, textarea')) return
     e.preventDefault() // не збиваємо каретку/виділення
     textareaEl?.focus()
+  }
+
+  // ─── Збереження діалогу між перезавантаженнями ───
+  //
+  // Кожен хід уже коштував грошей у DeepSeek, а сервер stateless — він
+  // отримує всю історію в тілі запиту. Тож достатньо, щоб вона пережила
+  // F5 на клієнті: у базу діалог не пишемо (див. $lib/zunor/dialog-storage).
+  const dialogUserId = $derived(page.data.session?.user?.id ?? '')
+
+  /**
+   * Записує поточний стан діалогу. Викликається у стабільних точках —
+   * після завершеного ходу і після змін із фото, а НЕ з $effect: ефект
+   * спрацьовував би на кожному кадрі друкарки, тобто сотні разів за хід.
+   */
+  function persistDialog(): void {
+    if (!started || finished) return
+    // $state.snapshot — знімаємо проксі перед виходом за межі Svelte.
+    saveDialog(dialogUserId, {
+      messages: $state.snapshot(messages),
+      chips: $state.snapshot(chips),
+      sentPhotos: $state.snapshot(sentPhotos),
+      pendingPhotos: $state.snapshot(pendingPhotos),
+      nextMsgId: msgId,
+    })
+  }
+
+  /**
+   * Явний вихід із розмови. Фото на Cloudinary лишаються — вони прив'язані
+   * до папки користувача, і чистити їх звідси не варто: людина може
+   * передумати в межах того ж завантаження сторінки.
+   */
+  function resetDialog(): void {
+    clearDialog(dialogUserId)
+    messages = []
+    chips = []
+    sentPhotos = []
+    pendingPhotos = []
+    input = ''
+    uploadError = ''
+    msgId = 0
+    started = false
+    waiting = false
+    heartVisible = true
+  }
+
+  /** Відновлює збережений діалог. true — щось відновили. */
+  function restoreDialog(): boolean {
+    const saved = loadDialog(dialogUserId)
+    if (!saved) return false
+
+    messages = saved.messages
+    chips = saved.chips
+    sentPhotos = saved.sentPhotos
+    pendingPhotos = saved.pendingPhotos
+    msgId = saved.nextMsgId
+    started = true
+    heartVisible = false
+    return true
   }
 
   // ─── Діалог з агентом ───
@@ -603,6 +662,10 @@
       )
     } finally {
       if (spacerRaf) cancelAnimationFrame(spacerRaf)
+      // Єдина точка збереження на всі гілки ходу — успіх, помилка сервера
+      // й обрив зв'язку проходять сюди однаково. Ставити виклик у кожну
+      // гілку означало б рано чи пізно пропустити одну.
+      persistDialog()
     }
     await focusInput()
   }
@@ -684,6 +747,9 @@
       }
 
       finished = true
+      // Заявка створена — чернетка розмови більше не потрібна. Без цього
+      // наступний вхід на сторінку відновив би вже оформлену заявку.
+      clearDialog(dialogUserId)
       celebrate()
       playSuccessSound()
       setTimeout(() => goto('/dashboard/jobs', { invalidateAll: true }), 2200)
@@ -778,12 +844,26 @@
   onMount(() => {
     document.body.style.overflow = 'hidden'
 
-    requestAnimationFrame(() => {
-      heartVisible = true
-    })
-
     // Автозапуск, якщо прийшли з головної з готовим текстом (?q=)
     const initialQuery = page.url.searchParams.get('q')
+
+    // Незавершена розмова з минулого разу. Новий запит із ?q= має пріоритет:
+    // людина щойно сформулювала нове завдання, підставляти їй стару розмову
+    // було б дивно.
+    const restored = !initialQuery && restoreDialog()
+
+    requestAnimationFrame(() => {
+      // Hero показуємо лише коли показувати нема чого: після відновлення
+      // на екрані вже стрічка діалогу.
+      if (!restored) heartVisible = true
+    })
+
+    if (restored) {
+      // Чекаємо рендер стрічки й ставимо людину в кінець розмови —
+      // інакше вона побачить її початок і вирішить, що нічого не зберіглось.
+      tick().then(() => revealContentEnd(true))
+    }
+
     if (initialQuery) {
       startChat(initialQuery)
       // прибираємо ?q= з адреси, щоб F5 не стартував діалог заново
@@ -1032,6 +1112,19 @@
   {:else}
     <!-- ─── ЧАТ ─── -->
     <div class="relative min-h-0 flex-1">
+      <!-- Розмова тепер переживає перезавантаження, тож потрібен і явний
+           вихід із неї: інакше стару розмову не скинути до кінця TTL. -->
+      {#if !finished}
+        <button
+          type="button"
+          onclick={resetDialog}
+          class="absolute top-3 right-4 z-20 flex cursor-pointer items-center gap-1.5 rounded-lg border border-border/70 bg-background/90 px-2.5 py-1.5 text-[12.5px] text-muted-foreground shadow-[0_4px_16px_-4px_rgba(0,0,0,0.25)] backdrop-blur-sm transition hover:bg-muted hover:text-foreground"
+        >
+          <Repeat size={13} aria-hidden="true" />
+          Почати заново
+        </button>
+      {/if}
+
       <div
         bind:this={scrollEl}
         onscroll={handleScroll}

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { safeJsonLd } from '$lib/utils/json-ld'
+
   // Контракт пропсів (Data Interface Contract)
   interface Props {
     title: string
@@ -16,8 +18,8 @@
     '@type': 'LocalBusiness',
     name: 'Zunor Cleaning Service',
     alternateName: 'Zunor',
-    description: description,  
-    url: canonical,  
+    description: description,
+    url: canonical,
     logo: `${canonical}/logo.png`,
     image: `${canonical}/og-image.jpg`,
     priceRange: '$$',
@@ -54,9 +56,11 @@
     },
   })
 
-  // Другий рівень реактивності (Derived String serialization)
-  // Рядок буде перегенеровано виключно тоді, коли зміниться сам об'єкт schemaData
-  const jsonString = $derived(JSON.stringify(schemaData))
+  // Серіалізація через safeJsonLd, а не голий JSON.stringify: пропси
+  // title/description/canonical зараз приходять із константи, але сам
+  // компонент про це не знає. Варто передати сюди значення від користувача —
+  // і закривний тег скрипта всередині нього виконався б як код сторінки.
+  const jsonString = $derived(safeJsonLd(schemaData))
 </script>
 
 <svelte:head>
