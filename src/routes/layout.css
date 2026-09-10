@@ -22,128 +22,206 @@
    ═══════════════════════════════════════════════════════════════ */
 
 :root {
-  /* ─── База: фон, текст, поверхні ─── */
-  --background: #fcfcfb;
-  --foreground: #131313;
+  /* ─────────────────────────────────────────────
+     BASE
+     ───────────────────────────────────────────── */
+
+  --background: #ffffff;
+  --foreground: #1d1d1f;
 
   --card: #ffffff;
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: #1d1d1f;
 
-  /* Фон робочої зони дашборда (bg-(--dashboard) у його лейауті). */
-  --dashboard: #fcfcfa;
+  --dashboard: #f5f5f7;
 
-  --popover: oklch(1 0 0);
-  /* Було помилково #3390ec — увесь текст у попап-меню ставав синім. */
-  --popover-foreground: oklch(0.145 0 0);
+  --popover: rgb(255, 255, 255);
+  --popover-foreground: #1d1d1f;
 
-  /* Напівпрозорий фон під шапкою майстра заявки (jobs/new). */
-  --bg-translucent: lab(100% 0 0/0.8);
+  /* ─────────────────────────────────────────────
+     GLASS / MATERIAL
+     ───────────────────────────────────────────── */
 
-  /* Текстові кольори для місць із власною версткою (header, +error). */
-  --color-text: #131313;
-  --color-text-500: #7b7974;
+  --bg-translucent: rgb(255 255 255 / 0.72);
 
-  /* ─── Акцент ─── */
-  --primary: #c6613f;
-  --primary-foreground: oklch(1 0 0);
-  --primary-hover: #d97757;
+  --glass-background: rgb(255 255 255 / 0.72);
+  --glass-border: rgb(0 0 0 / 0.08);
+  --glass-highlight: rgb(255 255 255 / 0.55);
+  --glass-shadow: 0 12px 40px rgb(0 0 0 / 0.08);
 
-  /* Фокусна рамка синя, а акцент теракотовий: залишок попередньої
-     палітри, не задум. Звести до одного — --ring: var(--primary). */
+  /* ─────────────────────────────────────────────
+     TEXT
+     ───────────────────────────────────────────── */
+
+  --color-text: #1d1d1f;
+  --color-text-500: #86868b;
+
+  --muted-foreground: #86868b;
+
+  /* ─────────────────────────────────────────────
+     PRIMARY
+     ───────────────────────────────────────────── */
+
+  --primary: #0071e3;
+  --primary-foreground: #ffffff;
+  --primary-hover: #0077ed;
+
   --ring: #0071e3;
 
-  /* ─── Нейтральні ─── */
-  --secondary: #f1f0ed;
-  --secondary-foreground: oklch(0.145 0 0);
+  /* ─────────────────────────────────────────────
+     NEUTRALS
+     ───────────────────────────────────────────── */
 
-  --muted: #ececea;
-  --muted-foreground: #7b7974;
+  --secondary: #e9e9eb;
+  --secondary-foreground: #1d1d1f;
 
-  --accent: #f1f0ed;
-  --accent-foreground: oklch(0.145 0 0);
+  --muted: #e9e9eb;
 
-  --destructive: #ef4444;
+  --accent: #e9e9eb;
+  --accent-foreground: #1d1d1f;
 
-  /* Бордер у звичайному стані нейтральний — кольоровим стає лише фокус. */
-  --border: #dfdfdd;
-  --input: oklch(0.92 0 0);
+  /* ─────────────────────────────────────────────
+     STATUS
+     ───────────────────────────────────────────── */
 
-  /* ─── Сайдбар ───
-     Повний набір потрібен компонентам з shadcn-svelte (ui/sidebar): вони
-     звертаються до bg-sidebar, bg-sidebar-accent, border-sidebar-border
-     і ring-sidebar-ring. Значення навмисно повторюють базові токени, а не
-     заводять окрему палітру: панель має бути частиною застосунку, а не
-     виглядати як вставка з чужої теми. Захочеш відділити її фоном —
-     міняти треба тут, в одному місці.
+  --destructive: #ff3b30;
 
-     --sidebar береться з --dashboard, а не з --background: рівно так було
-     й до переїзду на shadcn — панель лежала на фоні робочої зони, а
-     контент поруч був на чистому --background. У світлій темі різниця
-     майже непомітна, у темній панель на пів тону глибша за сторінку, і
-     саме це відділяло її від контенту без зайвої лінії. */
-  --sidebar: var(--dashboard);
-  --sidebar-foreground: oklch(0.145 0 0);
+  /* ─────────────────────────────────────────────
+     BORDERS / INPUTS
+     ───────────────────────────────────────────── */
+
+  --border: rgb(0 0 0 / 0.10);
+  --input: rgb(0 0 0 / 0.08);
+
+  /* ─────────────────────────────────────────────
+     SIDEBAR
+     ───────────────────────────────────────────── */
+
+  --sidebar: #fbfbfd;
+  --sidebar-foreground: #1d1d1f;
+
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: var(--primary-foreground);
-  --sidebar-accent: var(--accent);
-  --sidebar-accent-foreground: var(--accent-foreground);
-  --sidebar-border: var(--border);
+
+  --sidebar-accent: rgb(0 0 0 / 0.055);
+  --sidebar-accent-foreground: #1d1d1f;
+
+  --sidebar-border: rgb(0 0 0 / 0.08);
   --sidebar-ring: var(--ring);
 
-  /* ─── Смуга прокрутки ─── */
-  --scrollbar-thumb: rgb(0 0 0 / 0.18);
-  --scrollbar-thumb-hover: rgb(0 0 0 / 0.3);
+  /* ─────────────────────────────────────────────
+     SCROLLBAR
+     ───────────────────────────────────────────── */
 
-  --radius: 0.625rem;
+  --scrollbar-thumb: rgb(0 0 0 / 0.18);
+  --scrollbar-thumb-hover: rgb(0 0 0 / 0.28);
+
+  /* ─────────────────────────────────────────────
+     SYSTEM
+     ───────────────────────────────────────────── */
+
+  --radius: 0.75rem;
 }
 
+
 .dark {
-  --background: #1a1a19;
-  --foreground: #f9f9f7;
+  /* ─────────────────────────────────────────────
+     BASE
+     ───────────────────────────────────────────── */
 
-  --card: #272725;
-  --card-foreground: oklch(100% 0 0);
+  --background: #1d1d1f;
+  --foreground: #f5f5f7;
 
-  --dashboard: #161615;
+  --card: #2c2c2e;
+  --card-foreground: #f5f5f7;
 
-  --popover: oklch(23% 0.002 107);
-  --popover-foreground: oklch(100% 0 0);
+  --dashboard: #1d1d1f;
 
-  --bg-translucent: lab(49.8943% -0.875205 3.29613/0.16);
+  --popover: rgb(44, 44, 46);
+  --popover-foreground: #f5f5f7;
 
-  --color-text: #f9f9f7;
-  --color-text-500: #7b7974;
+  /* ─────────────────────────────────────────────
+     GLASS / MATERIAL
+     ───────────────────────────────────────────── */
 
-  --primary: #c6613f;
-  --primary-foreground: oklch(1 0 0);
-  --primary-hover: #d97757;
-  --ring: #0071e3;
+  --bg-translucent: rgb(44 44 46 / 0.72);
 
-  --secondary: #313130;
-  --secondary-foreground: oklch(90.95% 0.002 107);
+  --glass-background: rgb(44 44 46 / 0.72);
+  --glass-border: rgb(255 255 255 / 0.10);
+  --glass-highlight: rgb(255 255 255 / 0.08);
+  --glass-shadow: 0 16px 50px rgb(0 0 0 / 0.35);
 
-  --muted: #3f3f3d;
-  --muted-foreground: #a8a6a0;
+  /* ─────────────────────────────────────────────
+     TEXT
+     ───────────────────────────────────────────── */
 
-  --accent: #3c3c3a;
-  --accent-foreground: oklch(100% 0 0);
+  --color-text: #f5f5f7;
+  --color-text-500: #98989d;
 
-  --destructive: #f87171;
+  --muted-foreground: #98989d;
 
-  --border: #353533;
-  --input: oklch(37.2% 0.004 107 / 40%);
+  /* ─────────────────────────────────────────────
+     PRIMARY
+     ───────────────────────────────────────────── */
 
-  --sidebar: var(--dashboard);
-  --sidebar-foreground: oklch(100% 0 0);
+  --primary: #0a84ff;
+  --primary-foreground: #ffffff;
+  --primary-hover: #409cff;
+
+  --ring: #0a84ff;
+
+  /* ─────────────────────────────────────────────
+     NEUTRALS
+     ───────────────────────────────────────────── */
+
+  --secondary: #2c2c2e;
+  --secondary-foreground: #f5f5f7;
+
+  --muted: #2c2c2e;
+
+  --accent: #3a3a3c;
+  --accent-foreground: #f5f5f7;
+
+  /* ─────────────────────────────────────────────
+     STATUS
+     ───────────────────────────────────────────── */
+
+  --destructive: #ff453a;
+
+  /* ─────────────────────────────────────────────
+     BORDERS / INPUTS
+     ───────────────────────────────────────────── */
+
+  --border: rgb(255 255 255 / 0.10);
+  --input: rgb(255 255 255 / 0.08);
+
+  /* ─────────────────────────────────────────────
+     SIDEBAR
+     ───────────────────────────────────────────── */
+
+  --sidebar: rgb(29 29 31 / 0.78);
+  --sidebar-foreground: #f5f5f7;
+
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: var(--primary-foreground);
-  --sidebar-accent: var(--accent);
-  --sidebar-accent-foreground: var(--accent-foreground);
-  --sidebar-border: var(--border);
+
+  --sidebar-accent: rgb(255 255 255 / 0.07);
+  --sidebar-accent-foreground: #f5f5f7;
+
+  --sidebar-border: rgb(255 255 255 / 0.08);
   --sidebar-ring: var(--ring);
 
-  --scrollbar-thumb: rgb(255 255 255 / 0.2);
-  --scrollbar-thumb-hover: rgb(255 255 255 / 0.35);
+  /* ─────────────────────────────────────────────
+     SCROLLBAR
+     ───────────────────────────────────────────── */
+
+  --scrollbar-thumb: rgb(255 255 255 / 0.20);
+  --scrollbar-thumb-hover: rgb(255 255 255 / 0.32);
+
+  /* ─────────────────────────────────────────────
+     SYSTEM
+     ───────────────────────────────────────────── */
+
+  --radius: 0.75rem;
 }
 
 @theme inline {

@@ -21,6 +21,7 @@
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import { useSidebar } from '$lib/components/ui/sidebar/index.js'
   import { chatStore } from '$lib/stores/chat-store.svelte'
+  import { settingsDialog } from '$lib/stores/settings-dialog.svelte'
   import { notifications } from '$lib/notifications'
   import NavUser from './nav-user.svelte'
   import {
@@ -151,6 +152,23 @@
 
   const pathname = $derived(page.url.pathname)
   const settingsActive = $derived(pathname.startsWith('/dashboard/settings'))
+
+  // Налаштування відкриваються модалкою поверх поточної сторінки, тому
+  // звичайний клік по посиланню перехоплюємо. Модифікатори й середню
+  // кнопку не чіпаємо: це «відкрити в новій вкладці», і там має
+  // спрацювати справжній маршрут.
+  function openSettings(event: MouseEvent): void {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    if (event.button !== 0) return
+
+    event.preventDefault()
+
+    // На телефоні панель — шторка поверх сторінки: лишити її відкритою
+    // під модалкою означає два накладені шари.
+    if (sidebar.isMobile) sidebar.setOpenMobile(false)
+
+    settingsDialog.show()
+  }
 
   // Активний пункт рахуємо один раз: інакше /dashboard/jobs/new
   // підсвічував би одночасно і «Нове замовлення», і «Мої заявки».
@@ -323,14 +341,18 @@
     <Sidebar.Menu>
       <Sidebar.MenuItem>
         <Sidebar.MenuButton
-          isActive={settingsActive}
+          isActive={settingsActive || settingsDialog.open}
           tooltipContent="Налаштування"
         >
           {#snippet child({ props })}
+            <!-- Лишається посиланням, а не кнопкою: середній клік і
+                 «відкрити в новій вкладці» ведуть на справжній маршрут,
+                 звичайний клік відкриває модалку поверх сторінки. -->
             <a
               {...props}
               href="/dashboard/settings"
               aria-current={settingsActive ? 'page' : undefined}
+              onclick={openSettings}
             >
               <span class="nav-icon settings-icon-wrap flex shrink-0">
                 <SettingsIcon size={ICON_SIZE} strokeWidth={ICON_STROKE} />

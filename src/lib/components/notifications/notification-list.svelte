@@ -283,7 +283,7 @@
   <div
     class="flex flex-1 flex-col items-center justify-center px-6 py-20 text-center"
   >
-    <BellOff class="size-14 text-muted-foreground/70" strokeWidth={1} />
+    <BellOff class="size-24 text-primary " strokeWidth={1} />
     <h2 class="mt-6 text-lg font-medium">
       {filter === 'unread' ? 'Непрочитаних немає' : 'Сповіщень поки немає'}
     </h2>

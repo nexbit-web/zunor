@@ -5,6 +5,7 @@
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import AppSidebar from '$lib/components/dashboard/app-sidebar.svelte'
   import MobileTrigger from '$lib/components/dashboard/mobile-trigger.svelte'
+  import SettingsDialog from './settings-dialog.svelte'
 
   let { data, children } = $props()
 
@@ -86,14 +87,15 @@
          складом пунктів. -->
     <MobileTrigger />
 
-    <main
-      class="flex flex-1"
-      class:min-h-0={isChat}
-      class:overflow-hidden={isChat}
-    >
+    <main class="flex flex-1">
       <div class="min-w-0 flex-1" class:overflow-hidden={isChat}>
         {@render children()}
       </div>
     </main>
   </Sidebar.Inset>
+
+  <!-- Налаштування — шар поверх дашборда, а не окремий екран: під ним
+       лишається те, чим користувач зайнятий. Тому модалка живе тут, у
+       лейауті, а не в маршруті /settings. -->
+  <SettingsDialog />
 </Sidebar.Provider>
