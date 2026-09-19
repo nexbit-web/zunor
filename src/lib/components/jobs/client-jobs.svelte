@@ -1,31 +1,24 @@
 <script lang="ts">
   import { Button } from '$lib/components/ui/button'
-  import { Badge } from '$lib/components/ui/badge'
-  import { Card, CardContent, CardFooter } from '$lib/components/ui/card'
-  import * as Tabs from '$lib/components/ui/tabs'
+  import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
+  import PageHead from '$lib/components/dashboard/page-head.svelte'
   import JobCardSkeleton from './job-card-skeleton.svelte'
   import {
     Plus,
     Briefcase,
-    Eye,
+    ChevronDown,
+    Check,
     MessageSquare,
-    ChevronRight,
+    Sparkles,
   } from 'lucide-svelte'
   import { onMount, untrack } from 'svelte'
-  import { describeJob } from '$lib/categories/cleaning/describe'
-  import { detailIcon } from '$lib/categories/cleaning/detail-icons'
   import { formatRelative } from '$lib/utils/time'
-  function jobDetails(job: any) {
-    return describeJob(job.metadata).filter(
-      (d) => d.label !== 'Послуга' && !d.items,
-    )
-  }
+  import { serviceLabel } from '$lib/categories/cleaning/presets'
 
   let {
     initialJobs,
     initialNextCursor,
     counts,
-    filters,
   }: {
     initialJobs: any[]
     initialNextCursor: string | null
@@ -36,15 +29,7 @@
       completed: number
       other: number
     }
-    filters: {
-      categories: { slug: string; name: string }[]
-      cities: {
-        slug: string
-        name: string
-        region?: string | null
-        isCapital?: boolean
-      }[]
-    }
+    filters?: unknown
   } = $props()
 
   // untrack: перша сторінка з SSR — це ПОЧАТКОВИЙ знімок. Далі список
@@ -65,8 +50,8 @@
   })
 
   // $derived, а не const: лічильники приходять пропом і змінюються.
-  const STATUS_TABS = $derived([
-    { value: 'all' as const, label: 'Усі', count: counts.all },
+  const STATUS_OPTIONS = $derived([
+    { value: 'all' as const, label: 'Усі заявки', count: counts.all },
     { value: 'OPEN' as const, label: 'Відкриті', count: counts.open },
     {
       value: 'IN_PROGRESS' as const,
@@ -78,12 +63,16 @@
       label: 'Завершені',
       count: counts.completed,
     },
-    { value: 'OTHER' as const, label: 'Інше', count: counts.other },
+    {
+      value: 'OTHER' as const,
+      label: 'Скасовані й прострочені',
+      count: counts.other,
+    },
   ])
 
-  // categoryLabel / cityLabel / formatMoney / formatBudget звідси прибрані:
-  // жодну з них розмітка не викликала. Бюджет на картці заявки клієнта не
-  // показуємо взагалі — ціну визначає відгук майстра, а не заявка.
+  const activeLabel = $derived(
+    STATUS_OPTIONS.find((o) => o.value === statusFilter)?.label ?? 'Усі заявки',
+  )
 
   function expiresIn(iso: string) {
     const diff = new Date(iso).getTime() - Date.now()
@@ -94,13 +83,14 @@
     if (hr >= 1) return `${hr} год`
     return '< 1 год'
   }
-  function statusVariant(
-    s: string,
-  ): 'default' | 'secondary' | 'destructive' | 'outline' {
-    if (s === 'OPEN') return 'default'
-    if (s === 'IN_PROGRESS') return 'secondary'
-    return 'outline'
+
+  /** Тип послуги з metadata — те, чим заявка є. Фолбек на назву
+      категорії: старі заявки metadata.service могли не мати. */
+  function serviceOf(job: any) {
+    const key = (job.metadata as Record<string, unknown> | null)?.service
+    return typeof key === 'string' ? serviceLabel(key) : 'Прибирання'
   }
+
   function statusLabel(s: string) {
     return (
       (
@@ -145,61 +135,67 @@
   })
 </script>
 
-<!-- Header -->
-<header class="mb-6 flex items-center justify-between gap-3 sm:mb-8">
-  <div class="flex min-w-0 items-center gap-2.5">
+<PageHead>
+  <div class="flex items-center justify-between gap-3">
     <h1 class="truncate text-2xl font-semibold tracking-tight sm:text-3xl">
       Мої заявки
     </h1>
-    {#if counts.open > 0}
-      <span
-        class="rounded-full bg-primary/12 px-2 py-0.5 text-xs font-semibold tabular-nums text-primary"
-      >
-        {counts.open}
-      </span>
-    {/if}
+
+    <div class="flex shrink-0 items-center gap-2">
+      <!-- Фільтр — звичайна кнопка поруч із головною, приглушена: вона
+           не дія, а стан списку, і перетягувати увагу на себе їй нема за
+           що. П'ять вкладок із лічильниками займали цілий рядок і на
+           телефоні переносились у два, хоча обраний завжди рівно один. -->
+      {#if counts.all > 0}
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger>
+            {#snippet child({ props })}
+              <Button
+                {...props}
+                variant="secondary"
+                size="sm"
+                class="rounded-full"
+              >
+                {activeLabel}
+                <ChevronDown />
+              </Button>
+            {/snippet}
+          </DropdownMenu.Trigger>
+
+          <DropdownMenu.Content align="end" class="w-60 rounded-2xl p-1.5">
+            {#each STATUS_OPTIONS as option (option.value)}
+              <DropdownMenu.Item
+                class="flex cursor-pointer items-center justify-between gap-3 rounded-xl px-3 py-2 text-sm outline-none data-highlighted:bg-accent"
+                onclick={() => (statusFilter = option.value)}
+              >
+                <span class="flex min-w-0 items-center gap-2">
+                  <span class="truncate">{option.label}</span>
+                  {#if option.count > 0}
+                    <span class="text-xs tabular-nums text-muted-foreground">
+                      {option.count}
+                    </span>
+                  {/if}
+                </span>
+                {#if statusFilter === option.value}
+                  <Check class="size-4 shrink-0 text-primary" />
+                {/if}
+              </DropdownMenu.Item>
+            {/each}
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>
+      {/if}
+
+      <Button size="sm" href="/dashboard/jobs/new" class="rounded-full">
+        <Plus />
+        <span class="hidden sm:inline">Нова заявка</span>
+      </Button>
+    </div>
   </div>
+</PageHead>
 
-  <Button size="sm" href="/dashboard/jobs/new" class="shrink-0">
-    <Plus />
-    <span class="hidden sm:inline">Нова заявка</span>
-  </Button>
-</header>
-
-<!-- Status tabs -->
-{#if counts.all > 0}
-  <!--
-    Tabs із ui замість власних кнопок: підкреслення активної вкладки
-    давав рукописний `.status-tab::after`, і точно такий самий блок стилів
-    лежав ще й на сторінці замовлень — два описи однієї вкладки.
-
-    flex-wrap замість overflow-x-auto: горизонтальний скрол ховав останні
-    вкладки за краєм екрана без жодного натяку, що вони є. h-auto —
-    бо стандартна висота List розрахована на один рядок.
-  -->
-  <Tabs.Root
-    value={statusFilter}
-    onValueChange={(v) => (statusFilter = v as StatusFilter)}
-    class="mb-6"
-  >
-    <Tabs.List variant="line" class="h-auto w-full flex-wrap justify-start">
-      {#each STATUS_TABS as tab (tab.value)}
-        <Tabs.Trigger value={tab.value} class="flex-none gap-2 px-3 py-2">
-          {tab.label}
-          {#if tab.count > 0}
-            <Badge variant="secondary" class="tabular-nums">{tab.count}</Badge>
-          {/if}
-        </Tabs.Trigger>
-      {/each}
-    </Tabs.List>
-  </Tabs.Root>
-{/if}
-
-<!-- List -->
 {#if filtered.length === 0}
   <!-- flex-1: порожній стан займає всю висоту, що лишилась під шапкою,
-       і знак стоїть по центру сторінки. Підкладки під іконкою немає —
-       вона й була тим блоком, через який стан виглядав як картка. -->
+       і знак стоїть по центру сторінки. -->
   <div
     class="flex flex-1 flex-col items-center justify-center px-6 py-20 text-center"
   >
@@ -229,88 +225,65 @@
     {/if}
   </div>
 {:else}
-  <div class="space-y-3">
+  <!-- Картки. Межу дає ледь помітна рамка, а не тінь: тінь підіймає
+       картку над сторінкою, а тут нічого не спливає — це список.
+       Заокруглення 16px і поля 16/20px тримають однаковий ритм із
+       рештою дашборда. -->
+  <div class="mt-4 space-y-3">
     {#each filtered as job (job.id)}
-      <a href={`/dashboard/jobs/${job.id}`} class="group block">
-        <Card
-          size="sm"
-          class="gap-3 rounded-3xl transition-transform group-hover:-translate-y-0.5"
+      <a
+        href={`/dashboard/jobs/${job.id}`}
+        class="block rounded-2xl border border-border/60 bg-card p-4 transition-colors hover:border-border hover:bg-accent/30 sm:p-5"
+      >
+        <!-- Верхній рядок — про що заявка: іконка й тег послуги.
+             Тег приглушений, бо це класифікація, а не новина. -->
+        <div class="flex items-center gap-2">
+          <Sparkles class="size-4 shrink-0 text-primary" />
+          <span
+            class="rounded-full bg-muted px-2.5 py-0.5 text-[12.5px] font-medium text-muted-foreground"
+          >
+            {serviceOf(job)}
+          </span>
+        </div>
+
+        <h3 class="mt-3 text-[17px] leading-snug font-semibold text-foreground">
+          {job.title}
+        </h3>
+
+        {#if job.description}
+          <p
+            class="mt-1.5 line-clamp-2 text-[15px] leading-relaxed text-muted-foreground"
+          >
+            {job.description}
+          </p>
+        {/if}
+
+        <!-- Нижній рядок — стан. Час праворуч: він потрібен лише для
+             орієнтації й не має перебивати те, що ліворуч. -->
+        <div
+          class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[13px] text-muted-foreground"
         >
-          <CardContent class="space-y-2.5">
-            <div class="flex items-center justify-between gap-2">
-              <div class="flex min-w-0 flex-wrap items-center gap-2">
-                <Badge
-                  variant={statusVariant(job.status)}
-                  class="text-[10px] font-bold uppercase"
-                >
-                  {statusLabel(job.status)}
-                </Badge>
-                <span class="text-xs text-muted-foreground">
-                  {formatRelative(job.createdAt)}
-                </span>
-                {#if job.status === 'OPEN'}
-                  <span class="text-xs text-muted-foreground">
-                    · Активна ще {expiresIn(job.expiresAt)}
-                  </span>
-                {/if}
-              </div>
-              <ChevronRight
-                class="size-5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
-              />
-            </div>
-
-            <h3
-              class="text-base leading-snug font-semibold text-foreground sm:text-lg"
+          {#if job.status === 'OPEN'}
+            <!-- Єдиний колір картки — «пошук іде просто зараз». -->
+            <span
+              class="inline-flex items-center gap-1.5 font-medium text-primary"
             >
-              {job.title}
-            </h3>
-
-            {#if job.description}
-              <p
-                class="line-clamp-2 text-sm leading-relaxed text-muted-foreground"
-              >
-                {job.description}
-              </p>
-            {/if}
-
-            {#if jobDetails(job).length > 0}
-              <div class="flex flex-wrap items-center gap-1.5 pt-0.5">
-                {#each jobDetails(job) as d (d.label)}
-                  {@const Icon = detailIcon(d.icon)}
-                  <!-- Чипи — Badge з ui. Раніше тут був `var(--brand)`:
-                       токен видалили з теми, і чип «Коли» малювався
-                       прозорим по прозорому — дати не було видно взагалі. -->
-                  {#if d.label === 'Коли'}
-                    <Badge
-                      class="h-7 gap-1.5 bg-primary/12 px-2.5 font-semibold text-primary"
-                    >
-                      {#if Icon}<Icon />{/if}
-                      {d.value}
-                    </Badge>
-                  {:else}
-                    <Badge variant="secondary" class="h-7 gap-1.5 px-2.5">
-                      {#if Icon}<Icon class="opacity-60" />{/if}
-                      {d.value}
-                    </Badge>
-                  {/if}
-                {/each}
-              </div>
-            {/if}
-          </CardContent>
-
-          <CardFooter class="gap-3 border-t pt-4 text-xs text-muted-foreground">
-            <span class="inline-flex items-center gap-1">
-              <MessageSquare class="size-3.5" />
-              {job.proposalsCount} пропозиц{job.proposalsCount === 1
-                ? 'ія'
-                : 'ій'}
+              <span class="live-dot size-1.5 rounded-full bg-primary"></span>
+              Шукаємо майстра
             </span>
-            <span class="inline-flex items-center gap-1">
-              <Eye class="size-3.5" />
-              {job.viewsCount}
+          {:else}
+            <span>{statusLabel(job.status)}</span>
+          {/if}
+
+          <span class="inline-flex items-center gap-1.5">
+            <MessageSquare class="size-3.5" />
+            <span class={job.proposalsCount > 0 ? 'text-foreground' : ''}>
+              {job.proposalsCount}
             </span>
-          </CardFooter>
-        </Card>
+          </span>
+
+          <span class="ms-auto">{formatRelative(job.createdAt)}</span>
+        </div>
       </a>
     {/each}
   </div>
@@ -318,11 +291,32 @@
   <div bind:this={sentinelEl} class="h-1"></div>
 
   {#if loadingMore}
-    <div class="mt-3 space-y-3">
-      <JobCardSkeleton count={2} />
-    </div>
+    <JobCardSkeleton count={2} />
   {/if}
   {#if !nextCursor && jobs.length > 0 && !loadingMore}
     <p class="py-8 text-center text-xs text-muted-foreground">Кінець списку</p>
   {/if}
 {/if}
+
+<style>
+  /* Пульс — не прикраса: він відрізняє «іде просто зараз» від статусу,
+     який просто написаний словом. І саме тому він рівно один на рядок:
+     якби дихало все, не казало б нічого. */
+  .live-dot {
+    animation: live-pulse 2s ease-in-out infinite;
+  }
+  @keyframes live-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.35;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .live-dot {
+      animation: none;
+    }
+  }
+</style>

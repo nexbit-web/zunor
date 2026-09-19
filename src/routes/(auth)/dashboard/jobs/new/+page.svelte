@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte'
+  import { onMount, onDestroy, tick } from 'svelte'
   import ArrowUp from '@lucide/svelte/icons/arrow-up'
   import ArrowDown from '@lucide/svelte/icons/arrow-down'
   import Check from '@lucide/svelte/icons/check'
@@ -8,7 +8,6 @@
   import { quintOut } from 'svelte/easing'
   import { page } from '$app/state'
   import { goto } from '$app/navigation'
-  import GradientHeart from '$lib/components/gradient-heart.svelte'
   import LottiePlayer from '$lib/components/lottie-player.svelte'
   import { Spinner } from '$lib/components/ui/spinner'
   import * as Tooltip from '$lib/components/ui/tooltip'
@@ -25,6 +24,9 @@
   import AppWindow from '@lucide/svelte/icons/app-window'
   import Columns2 from '@lucide/svelte/icons/columns-2'
   import Plus from '@lucide/svelte/icons/plus'
+  import Mic from '@lucide/svelte/icons/mic'
+  import MapPin from '@lucide/svelte/icons/map-pin'
+  import Square from '@lucide/svelte/icons/square'
   import X from '@lucide/svelte/icons/x'
   import { dev } from '$app/environment'
   import { playSuccessSound, unlockAudio } from '$lib/sound/notification'
@@ -34,8 +36,10 @@
     ZunorClientMessage,
   } from '$lib/types/zunor'
   import ThinkingLogo from '$lib/components/thinking-logo.svelte'
+  import { ZunorMark } from '$lib/components/icons'
   import toast from 'svelte-hot-french-toast'
   import MessageBody from '$lib/components/zunor/MessageBody.svelte'
+  import { Dictation } from '$lib/zunor/dictation.svelte'
   import {
     saveDialog,
     loadDialog,
@@ -66,7 +70,6 @@
   let started = $state(false)
   let copiedId = $state<number | null>(null)
   let showScrollButton = $state(false)
-  let heartVisible = $state(false)
   let scrollEl = $state<HTMLDivElement | undefined>(undefined)
   let textareaEl = $state<HTMLTextAreaElement | undefined>(undefined)
 
@@ -209,8 +212,6 @@
     'Хімчистка',
     'Генеральне прибирання',
     'Помити вікна',
-    'Прибрати після ремонту',
-    'Регулярне прибирання',
   ]
 
   // ─── Анімований плейсхолдер на hero-інпуті ───
@@ -365,6 +366,11 @@
   // F5 на клієнті: у базу діалог не пишемо (див. $lib/zunor/dialog-storage).
   const dialogUserId = $derived(page.data.session?.user?.id ?? '')
 
+  // Питання на порожньому екрані. Не привітання за часом доби: воно
+  // однакове для всіх і не наближає людину до заявки ні на крок, а
+  // питання одразу каже, з чого почати.
+  const HERO_TITLE = 'Що потрібно прибрати?'
+
   /**
    * Записує поточний стан діалогу. Викликається у стабільних точках —
    * після завершеного ходу і після змін із фото, а НЕ з $effect: ефект
@@ -398,7 +404,6 @@
     msgId = 0
     started = false
     waiting = false
-    heartVisible = true
   }
 
   /** Відновлює збережений діалог. true — щось відновили. */
@@ -412,7 +417,6 @@
     pendingPhotos = saved.pendingPhotos
     msgId = saved.nextMsgId
     started = true
-    heartVisible = false
     return true
   }
 
@@ -671,6 +675,8 @@
   }
 
   function send() {
+    // Репліку відправлено — диктувати далі нема куди.
+    dictation.stop()
     advance(input)
   }
 
@@ -790,8 +796,9 @@
   async function startChat(text: string) {
     if ((!text.trim() && pendingPhotos.length === 0) || started || waiting)
       return
+    // Репліку вже відправлено — далі диктувати нема куди.
+    dictation.stop()
     unlockAudio() // розблокування звуку на перший жест (autoplay policy)
-    heartVisible = false
     started = true
     await tick()
     await advance(text)
@@ -812,7 +819,43 @@
     }
   }
 
-  function autoResize() {
+  // ─── Дві форми панелі вводу ───
+  // Порожня панель — рядок-капсула: «+», текст і мікрофон в одну лінію.
+  // Щойно текст перестає вміщатись в рядок (або з'явились фото), панель
+  // розкривається у звичну форму: текст зверху, кнопки під ним.
+  //
+  // Перемикається КЛАСАМИ на тих самих вузлах, а не двома гілками
+  // розмітки: перенести <textarea> в інший контейнер означало б
+  // перестворити елемент — із втратою фокуса й каретки просто під час
+  // набору.
+  let multiline = $state(false)
+
+  // Прев'ю фото (і смуга завантаження, і помилка) живе всередині панелі,
+  // тож у капсулу воно не вміщається за визначенням: доки воно там,
+  // панель розкрита. Без цього під час завантаження виходив високий
+  // блок із заокругленням капсули.
+  const expanded = $derived(
+    multiline || pendingPhotos.length > 0 || uploading || !!uploadError,
+  )
+
+  /** Перенос рядка як константа: у розмітці Svelte екранування 
+ у
+   * рядковому літералі легко загубити при наступній правці. */
+  const NEWLINE = String.fromCharCode(10)
+
+  /** Ширина поля в капсулі — щоб знати, коли текст туди ВЖЕ вміщається. */
+  let compactWidth = 0
+  let mirrorEl = $state<HTMLSpanElement | undefined>(undefined)
+
+  /** Ширина тексту одним рядком: міряємо на невидимому двійнику. */
+  function textWidth(): number {
+    if (!mirrorEl) return 0
+    mirrorEl.textContent = input
+    return mirrorEl.scrollWidth
+  }
+
+  /** Тільки висота поля — без рішень про форму панелі. */
+  function applyHeight() {
     if (!textareaEl) return
     textareaEl.style.height = 'auto'
     const next = Math.min(textareaEl.scrollHeight, inputMaxH)
@@ -822,7 +865,87 @@
       textareaEl.scrollHeight > inputMaxH ? 'auto' : 'hidden'
   }
 
+  // Форму панелі вирішує ШИРИНА ТЕКСТУ, а не поточна висота поля.
+  //
+  // Через висоту й не вийде: у капсулі поле вужче (поруч кнопки), у
+  // розкритій панелі — на всю ширину. Текст, який щойно не вліз у
+  // капсулу, у широкому рядку вміщається знову, і панель клацала б між
+  // двома формами на кожній клавіші. Ширина ж тексту від форми панелі
+  // не залежить взагалі: міряємо її на невидимому двійнику й порівнюємо
+  // з шириною, яку поле МАЄ в капсулі. Запас у 8px не дає стану
+  // перемикатись туди-сюди рівно на межі.
+  function autoResize() {
+    applyHeight()
+    if (!textareaEl) return
+
+    if (!input) {
+      multiline = false
+      return
+    }
+
+    // Явний перенос рядка згортати назад нема сенсу.
+    if (input.includes(NEWLINE)) {
+      multiline = true
+      return
+    }
+
+    if (!multiline) {
+      // Поки ми в капсулі, її ширина відома точно — запам'ятовуємо саме
+      // ту, що вже враховує кнопку надсилання.
+      compactWidth = textareaEl.clientWidth
+
+      if (textWidth() > compactWidth - 2) {
+        multiline = true
+        // Поле щойно стало ширшим — висота за старою шириною лишила б
+        // зайвий порожній рядок.
+        requestAnimationFrame(applyHeight)
+      }
+      return
+    }
+
+    if (compactWidth && textWidth() <= compactWidth - 8) {
+      multiline = false
+      requestAnimationFrame(applyHeight)
+    }
+  }
+
+  // ─── Голосовий ввід ───
+  // Розпізнане дописується до того, що вже набрано руками: людина могла
+  // почати друкувати, застрягти на довгому описі й перейти на голос.
+  // Тому запам'ятовуємо текст на момент старту й далі щоразу складаємо
+  // його з розпізнаним, а не затираємо поле.
+  let dictationBase = ''
+
+  const dictation = new Dictation({
+    onChange: (transcript) => {
+      input = dictationBase ? `${dictationBase} ${transcript}` : transcript
+      autoResize()
+    },
+    onError: (message) => toast.error(message),
+  })
+
+  // Кнопка надсилання з'являється лише тоді, коли є що надсилати.
+  // Порожня сіра стрілка поруч із мікрофоном лише збиває: обидві кнопки
+  // виглядають однаково доступними, а працює одна.
+  const canSend = $derived(!!input.trim() || pendingPhotos.length > 0)
+
+  function toggleMic() {
+    if (dictation.listening) {
+      dictation.stop()
+      return
+    }
+
+    dictationBase = input.trim()
+    dictation.start()
+    textareaEl?.focus()
+  }
+
+  onDestroy(() => dictation.destroy())
+
   function resetTextareaHeight() {
+    // Репліку відправлено, поле порожнє — панель повертається в капсулу.
+    multiline = false
+
     requestAnimationFrame(() => {
       if (!textareaEl) return
       textareaEl.style.height = 'auto'
@@ -851,12 +974,6 @@
     // людина щойно сформулювала нове завдання, підставляти їй стару розмову
     // було б дивно.
     const restored = !initialQuery && restoreDialog()
-
-    requestAnimationFrame(() => {
-      // Hero показуємо лише коли показувати нема чого: після відновлення
-      // на екрані вже стрічка діалогу.
-      if (!restored) heartVisible = true
-    })
 
     if (restored) {
       // Чекаємо рендер стрічки й ставимо людину в кінець розмови —
@@ -910,6 +1027,50 @@
 <div
   class="job-scope relative flex h-full min-h-0 flex-col overflow-hidden bg-background"
 >
+  <!-- Місто — не контрол панелі вводу, а обставина розмови: воно не
+       міняється від репліки до репліки й не потребує місця в рядку з
+       кнопками. Тому воно вгорі праворуч, поза панеллю, і однакове на
+       порожньому екрані та в чаті. -->
+  <div
+    class="pointer-events-none absolute top-3 right-4 z-20 flex items-center gap-1.5 text-[12.5px] text-muted-foreground"
+  >
+    <MapPin size={13} aria-hidden="true" />
+    Одеса
+  </div>
+
+  {#snippet micButton()}
+    <!-- Кнопки немає взагалі, якщо браузер не вміє розпізнавати мову
+         (Firefox): контрол, який на дотик пояснює, що не працює, гірший
+         за його відсутність. -->
+    {#if dictation.supported}
+      <Tooltip.Provider delayDuration={150}>
+        <Tooltip.Root>
+          <Tooltip.Trigger
+            onclick={toggleMic}
+            aria-label={dictation.listening
+              ? 'Зупинити запис'
+              : 'Продиктувати голосом'}
+            class={[
+              'flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-xl transition-[background-color,color,transform] duration-150 active:scale-[0.96]',
+              dictation.listening
+                ? 'job-mic-live bg-destructive/10 text-destructive'
+                : 'text-foreground hover:bg-accent',
+            ]}
+          >
+            {#if dictation.listening}
+              <Square size={16} strokeWidth={2.5} aria-hidden="true" />
+            {:else}
+              <Mic size={20} strokeWidth={2} aria-hidden="true" />
+            {/if}
+          </Tooltip.Trigger>
+          <Tooltip.Content side="bottom" sideOffset={6} arrowClasses="hidden">
+            {dictation.listening ? 'Зупинити запис' : 'Продиктувати голосом'}
+          </Tooltip.Content>
+        </Tooltip.Root>
+      </Tooltip.Provider>
+    {/if}
+  {/snippet}
+
   {#snippet photoButton()}
     <Tooltip.Provider delayDuration={150}>
       <Tooltip.Root>
@@ -920,20 +1081,29 @@
           class={[
             'flex size-8 shrink-0 items-center justify-center rounded-xl transition-[background-color,color,transform] duration-150 active:scale-[0.96]',
             photosAllowed && !uploading
-              ? 'cursor-pointer text-muted-foreground hover:bg-muted hover:text-foreground'
+              ? 'cursor-pointer text-foreground hover:bg-accent'
               : 'cursor-not-allowed text-muted-foreground/40',
           ]}
         >
-          <Plus size={18} strokeWidth={2} aria-hidden="true" />
+          <Plus size={21} strokeWidth={2} aria-hidden="true" />
         </Tooltip.Trigger>
         {#if !photosAllowed}
-          <Tooltip.Content side="top" class="max-w-56 text-center">
+          <Tooltip.Content
+            side="bottom"
+            sideOffset={6}
+            arrowClasses="hidden"
+            class="max-w-56 text-center"
+          >
             {PHOTOS_LOCKED_HINT}
           </Tooltip.Content>
         {:else if uploading}
-          <Tooltip.Content side="top"
-            >Зачекай, фото завантажується…</Tooltip.Content
-          >
+          <Tooltip.Content side="bottom" sideOffset={6} arrowClasses="hidden">
+            Зачекай, фото завантажується…
+          </Tooltip.Content>
+        {:else}
+          <Tooltip.Content side="bottom" sideOffset={6} arrowClasses="hidden">
+            Додати фото
+          </Tooltip.Content>
         {/if}
       </Tooltip.Root>
     </Tooltip.Provider>
@@ -983,26 +1153,6 @@
     {/if}
   {/snippet}
 
-  {#if heartVisible}
-    <div
-      class="pointer-events-none absolute inset-0 z-0 flex items-end justify-center overflow-hidden"
-      aria-hidden="true"
-    >
-      <div
-        class="translate-y-1/3"
-        in:fly={{ y: 80, duration: 1400, easing: quintOut }}
-        out:fade={{ duration: 900, easing: quintOut }}
-      >
-        <GradientHeart
-          size={640}
-          blur={60}
-          stretchWidth={3300}
-          stretchHeight={1000}
-        />
-      </div>
-    </div>
-  {/if}
-
   {#if finished}
     <div
       class="flex flex-1 flex-col items-center justify-center gap-2 px-8 text-center"
@@ -1029,31 +1179,56 @@
       class="flex flex-1 flex-col items-center justify-center px-4"
       in:fade={{ duration: 250 }}
     >
+      <!-- Привітання замість питання «Що прибрати?»: питання й так стоїть
+           у полі вводу, а вітання на порожньому екрані робить його
+           початком розмови, а не порожньою формою. -->
       <div
-        class="mb-7 flex max-w-md flex-col items-center gap-2 text-center"
+        class="mb-6 flex max-w-2xl flex-col items-center gap-2 text-center"
         in:fly={{ y: 8, duration: 350, easing: quintOut }}
       >
+        <!-- Розміри в em і clamp, а не в брейкпойнтах: знак і відступ
+             мусять масштабуватись РАЗОМ із кеглем, інакше на вузькому
+             екрані лого висить окремо від тексту. -->
         <h1
-          class="text-primary-pulse flex items-center gap-1 text-2xl leading-tight font-medium opacity-100 transition-opacity duration-500 md:gap-0 md:text-3xl"
+          class="flex items-center justify-center font-medium tracking-[-0.02em]"
+          style="line-height: 1.25; font-size: clamp(1.875rem, 1.2rem + 2vw, 2.375rem)"
         >
-          <span class="min-h-6 pt-0.5 sm:min-h-7 md:min-h-8 md:pt-0"
-            >Що прибрати?</span
+          <span
+            class="hero-mark me-[0.3em] inline-flex size-[0.78em] shrink-0 items-center justify-center"
           >
+            <ZunorMark />
+          </span>
+          <span>{HERO_TITLE}</span>
         </h1>
       </div>
 
       <div
-        class="z-1 flex w-full max-w-2xl flex-col gap-3"
+        class="z-1 flex w-full max-w-[40rem] flex-col gap-3"
         in:fly={{ y: 10, duration: 400, delay: 80, easing: quintOut }}
       >
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
-          class="job-input-shell border border-border flex cursor-text flex-col rounded-[20px] bg-card"
+          class="job-input-shell border border-border flex cursor-text flex-col bg-card transition-[border-radius] duration-150 {expanded
+            ? 'rounded-[20px]'
+            : 'rounded-full'}"
           onmousedown={focusFromShell}
         >
           {@render pendingPreview()}
 
-          <div class="flex flex-col gap-4 px-4 py-4">
+          <!-- gap-1, а не gap-2: у капсулі саме цей проміжок відсуває
+               текст від «+», і восьми пікселів там забагато. -->
+          <div class="relative flex flex-wrap items-center gap-1 px-2 py-2">
+            <!-- Невидимий двійник тексту: єдине його призначення —
+                 виміряти, скільки місця займе рядок. Класи шрифту мусять
+                 збігатися з полем, інакше міряємо не той текст. -->
+            <span
+              bind:this={mirrorEl}
+              aria-hidden="true"
+              class="pointer-events-none invisible absolute top-0 left-0 -z-10 px-0.5 py-1 text-[16px] leading-relaxed whitespace-pre"
+            ></span>
+            <!-- basis-full у розкритому вигляді переносить поле в окремий
+                 рядок; order-2 у капсулі ставить його між «+» і рештою,
+                 не змінюючи порядку вузлів у DOM. -->
             <textarea
               bind:this={textareaEl}
               bind:value={input}
@@ -1063,29 +1238,41 @@
               placeholder={heroPlaceholder}
               disabled={waiting}
               style:max-height="{inputMaxH}px"
-              class="job-input-plain min-h-[2lh] w-full resize-none bg-transparent px-1.5 pt-1 text-[16px] leading-relaxed"
+              class="job-input-plain resize-none bg-transparent px-0.5 py-1 text-[16px] leading-relaxed {expanded
+                ? 'order-first w-full basis-full'
+                : 'order-2 min-w-0 flex-1 self-center'}"
             ></textarea>
 
-            <div class="flex items-center gap-2">
-              {@render photoButton()}
-              <div class="grow"></div>
-              <span
-                class="job-chip-city rounded-lg px-3 py-1.5 text-[12.5px] font-medium text-muted-foreground"
-              >
-                Прибирання · Одеса
-              </span>
-              <button
-                type="button"
-                onclick={heroSend}
-                disabled={waiting ||
-                  uploading ||
-                  (!input.trim() && !pendingPhotos.length)}
-                aria-label="Надіслати"
-                class="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-primary hover:primary-hover text-white transition-[transform,opacity] duration-150 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-30"
-              >
-                <ArrowUp size={16} aria-hidden="true" />
-              </button>
-            </div>
+            {@render photoButton()}
+            <!-- Розпірка потрібна лише розкритій панелі: у капсулі місце
+                 між «+» і мікрофоном забирає саме поле вводу. -->
+            <div class="order-3 grow" class:hidden={!expanded}></div>
+            <span class="order-5 flex items-center gap-2">
+              {@render micButton()}
+              {#if canSend}
+                <div in:scale={{ duration: 140, start: 0.8, easing: quintOut }}>
+                  <Tooltip.Provider delayDuration={150}>
+                    <Tooltip.Root>
+                      <Tooltip.Trigger
+                        onclick={heroSend}
+                        aria-disabled={waiting || uploading}
+                        aria-label="Надіслати"
+                        class="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-primary hover:primary-hover text-white transition-[transform,opacity] duration-150 active:scale-[0.96] aria-disabled:cursor-not-allowed aria-disabled:opacity-30"
+                      >
+                        <ArrowUp size={18} aria-hidden="true" />
+                      </Tooltip.Trigger>
+                      <Tooltip.Content
+                        side="bottom"
+                        sideOffset={6}
+                        arrowClasses="hidden"
+                      >
+                        Надіслати
+                      </Tooltip.Content>
+                    </Tooltip.Root>
+                  </Tooltip.Provider>
+                </div>
+              {/if}
+            </span>
           </div>
         </div>
 
@@ -1094,7 +1281,7 @@
             <button
               type="button"
               onclick={() => heroPick(c)}
-              class="cursor-pointer rounded-xl border border-border bg-card px-4 py-2 text-[13.5px] font-medium text-foreground transition-all duration-300 hover:bg-muted active:scale-[0.98]"
+              class="cursor-pointer rounded-xl border border-border bg-card px-4 py-2 text-[13.5px] font-medium text-foreground transition-all duration-300 hover:bg-accent active:scale-[0.98]"
             >
               {c}
             </button>
@@ -1118,7 +1305,7 @@
         <button
           type="button"
           onclick={resetDialog}
-          class="absolute top-3 right-4 z-20 flex cursor-pointer items-center gap-1.5 rounded-lg border border-border/70 bg-background/90 px-2.5 py-1.5 text-[12.5px] text-muted-foreground shadow-[0_4px_16px_-4px_rgba(0,0,0,0.25)] backdrop-blur-sm transition hover:bg-muted hover:text-foreground"
+          class="absolute top-10 right-4 z-20 flex cursor-pointer items-center gap-1.5 rounded-lg border border-border/70 bg-background/90 px-2.5 py-1.5 text-[12.5px] text-muted-foreground shadow-[0_4px_16px_-4px_rgba(0,0,0,0.25)] backdrop-blur-sm transition hover:bg-accent hover:text-foreground"
         >
           <Repeat size={13} aria-hidden="true" />
           Почати заново
@@ -1183,7 +1370,7 @@
                       type="button"
                       aria-label="Копіювати"
                       onclick={() => copyText(m.id, m.text)}
-                      class="flex size-7 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      class="flex size-7 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                     >
                       {#if copiedId === m.id}
                         <Check size={14} aria-hidden="true" />
@@ -1363,7 +1550,7 @@
             </div>
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div
-              class="job-input-shell flex cursor-text flex-col rounded-[20px] bg-card"
+              class="job-input-shell flex cursor-text flex-col rounded-2xl bg-card"
               onmousedown={focusFromShell}
             >
               {@render pendingPreview()}
@@ -1377,28 +1564,37 @@
                   placeholder="Напиши Zunor..."
                   disabled={waiting || submitting}
                   style:max-height="{inputMaxH}px"
-                  class="job-input-plain block w-full resize-none px-1.5 pt-1 text-[15px] leading-relaxed"
+                  class="job-input-plain block w-full resize-none px-0.5 pt-1 text-[15px] leading-relaxed"
                 ></textarea>
                 <div class="flex items-center gap-2">
                   {@render photoButton()}
                   <div class="grow"></div>
-                  <span
-                    class="job-chip-city rounded-lg px-3 py-1.5 text-[12.5px] font-medium text-muted-foreground"
-                  >
-                    Прибирання · Одеса
-                  </span>
-                  <button
-                    type="button"
-                    onclick={send}
-                    disabled={waiting ||
-                      submitting ||
-                      uploading ||
-                      (!input.trim() && !pendingPhotos.length)}
-                    aria-label="Надіслати"
-                    class="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-primary hover:primary-hover text-white transition-[transform,opacity] duration-150 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-30"
-                  >
-                    <ArrowUp size={16} aria-hidden="true" />
-                  </button>
+                  {@render micButton()}
+                  {#if canSend}
+                    <div
+                      in:scale={{ duration: 140, start: 0.8, easing: quintOut }}
+                    >
+                      <Tooltip.Provider delayDuration={150}>
+                        <Tooltip.Root>
+                          <Tooltip.Trigger
+                            onclick={send}
+                            aria-disabled={waiting || submitting || uploading}
+                            aria-label="Надіслати"
+                            class="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-primary hover:primary-hover text-white transition-[transform,opacity] duration-150 active:scale-[0.96] aria-disabled:cursor-not-allowed aria-disabled:opacity-30"
+                          >
+                            <ArrowUp size={18} aria-hidden="true" />
+                          </Tooltip.Trigger>
+                          <Tooltip.Content
+                            side="bottom"
+                            sideOffset={6}
+                            arrowClasses="hidden"
+                          >
+                            Надіслати
+                          </Tooltip.Content>
+                        </Tooltip.Root>
+                      </Tooltip.Provider>
+                    </div>
+                  {/if}
                 </div>
               </div>
             </div>
@@ -1410,6 +1606,36 @@
 </div>
 
 <style>
+  .hero-mark :global(svg) {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  /* Запис іде — кнопка дихає. Тост тут був би зайвим: стан видно на
+     самій кнопці, і він триває, а не блимає раз.
+
+     :global, бо клас їде в Tooltip.Trigger — розмітку малює бібліотека,
+     і скоупнутий селектор до неї просто не доїжджає. Префікс job-, як у
+     решти глобальних класів цієї сторінки. */
+  :global(.job-mic-live) {
+    animation: mic-pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes mic-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.55;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    :global(.job-mic-live) {
+      animation: none;
+    }
+  }
+
   .thinking-text {
     font-size: 15px;
     line-height: 1;
@@ -1503,17 +1729,13 @@
     }
   }
 
-  /* Оболонка інпута (Claude-style): рамки НЕМАЄ — волосяний ring 0.5px
-     через box-shadow + мʼяка ambient-тінь.
-     ⚠️ Тінь ЗАВЖДИ темна (--always-black), не через --foreground:
-     у .dark він білий і замість тіні виходило б світіння. */
+  /* Оболонка інпута: рамки НЕМАЄ — волосяний ring 0.5px через box-shadow.
+     Тіні під панеллю теж немає навмисно: ambient-тінь відривала панель
+     від полотна, а вона тут не спливає над сторінкою — вона і є
+     сторінка. Стан (ховер, фокус) показує сам контур. */
   .job-input-shell {
-    --always-black: 0 0 0;
     --shell-ring: color-mix(in srgb, var(--border) 60%, transparent);
-    --shell-ambient: rgb(var(--always-black) / 0.035);
-    box-shadow:
-      0 4px 20px var(--shell-ambient),
-      0 0 0 0.5px var(--shell-ring);
+    box-shadow: 0 0 0 0.5px var(--shell-ring);
     transition: box-shadow 200ms ease;
   }
   .job-input-shell:hover {
@@ -1521,25 +1743,18 @@
   }
   .job-input-shell:focus-within {
     --shell-ring: color-mix(in srgb, var(--border) 100%, var(--foreground) 15%);
-    --shell-ambient: rgb(var(--always-black) / 0.075);
   }
 
-  /* У темній темі ambient-тінь на темному тлі не читається — ring несе
-     всю роботу, тому робимо його контрастнішим, а тінь глибшою. */
+  /* У темній темі контур несе всю роботу сам, тож робимо його
+     контрастнішим. */
   :global(.dark) .job-input-shell {
     --shell-ring: color-mix(in srgb, var(--border) 90%, transparent);
-    --shell-ambient: rgb(var(--always-black) / 0.25);
   }
   :global(.dark) .job-input-shell:hover {
     --shell-ring: color-mix(in srgb, var(--border) 100%, white 8%);
   }
   :global(.dark) .job-input-shell:focus-within {
-    --shell-ambient: rgb(var(--always-black) / 0.4);
-  }
-
-  .job-chip-city {
-    border: 1px solid var(--border);
-    background: var(--bg-translucent, var(--background));
+    --shell-ring: color-mix(in srgb, var(--border) 100%, white 18%);
   }
 
   /* Тільки бордер на hover. Окремим правилом, а не transition-all:

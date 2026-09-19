@@ -1,10 +1,27 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import 'shadcn-svelte/tailwind.css';
-@import '@fontsource/roboto/400.css';
-@import '@fontsource/roboto/500.css';
-@import '@fontsource/roboto/700.css';
+@import '@fontsource-variable/inter/opsz.css';
 @import '@fontsource/roboto-mono/400.css';
+
+/* ═══════════════════════════════════════════════════════════════
+   Inter — шрифт інтерфейсу.
+
+   Взято замість SF UI: ліцензія Apple дозволяє SF лише в застосунках
+   під платформи Apple і прямо забороняє його на вебсайтах. Inter
+   малювався як відкрита заміна саме цій гарнітурі — ті самі пропорції
+   й високий x-height, тільки під ліцензією OFL.
+
+   Варіативне накреслення з віссю opsz: одна вісь ваги 100–900 замість
+   п'яти окремих файлів і оптичний розмір, який браузер підбирає САМ під
+   кегль. Це те, заради чого в SF існували два сімейства (Text для
+   дрібного, Display для великого) — тут воно робиться без другого
+   сімейства й без нашої участі.
+
+   Кирилиця лежить окремим файлом з власним unicode-range: браузер
+   візьме латиницю (73KB) і кирилицю (29KB), а грецьку й вʼєтнамську з
+   того самого пакета не завантажить ніколи.
+   ═══════════════════════════════════════════════════════════════ */
 
 @custom-variant dark (&:is(.dark *));
 
@@ -32,7 +49,7 @@
   --card: #ffffff;
   --card-foreground: #1d1d1f;
 
-  --dashboard: #f5f5f7;
+  --dashboard: #fbfbfd;
 
   --popover: rgb(255, 255, 255);
   --popover-foreground: #1d1d1f;
@@ -89,14 +106,16 @@
      BORDERS / INPUTS
      ───────────────────────────────────────────── */
 
-  --border: rgb(0 0 0 / 0.10);
+  --border: rgb(0 0 0 / 0.1);
   --input: rgb(0 0 0 / 0.08);
 
   /* ─────────────────────────────────────────────
      SIDEBAR
      ───────────────────────────────────────────── */
 
-  --sidebar: #fbfbfd;
+  /* Панель — того ж тону, що й полотно дашборда: окремий, трохи інший
+     відтінок давав ледь помітний шов по краю панелі. */
+  --sidebar: var(--dashboard);
   --sidebar-foreground: #1d1d1f;
 
   --sidebar-primary: var(--primary);
@@ -122,19 +141,18 @@
   --radius: 0.75rem;
 }
 
-
 .dark {
   /* ─────────────────────────────────────────────
      BASE
      ───────────────────────────────────────────── */
 
-  --background: #1d1d1f;
+  --background: #1c1c1e;
   --foreground: #f5f5f7;
 
   --card: #2c2c2e;
   --card-foreground: #f5f5f7;
 
-  --dashboard: #1d1d1f;
+  --dashboard: #202023;
 
   --popover: rgb(44, 44, 46);
   --popover-foreground: #f5f5f7;
@@ -146,7 +164,7 @@
   --bg-translucent: rgb(44 44 46 / 0.72);
 
   --glass-background: rgb(44 44 46 / 0.72);
-  --glass-border: rgb(255 255 255 / 0.10);
+  --glass-border: rgb(255 255 255 / 0.1);
   --glass-highlight: rgb(255 255 255 / 0.08);
   --glass-shadow: 0 16px 50px rgb(0 0 0 / 0.35);
 
@@ -191,14 +209,14 @@
      BORDERS / INPUTS
      ───────────────────────────────────────────── */
 
-  --border: rgb(255 255 255 / 0.10);
+  --border: rgb(255 255 255 / 0.1);
   --input: rgb(255 255 255 / 0.08);
 
   /* ─────────────────────────────────────────────
      SIDEBAR
      ───────────────────────────────────────────── */
 
-  --sidebar: rgb(29 29 31 / 0.78);
+  --sidebar: var(--dashboard);
   --sidebar-foreground: #f5f5f7;
 
   --sidebar-primary: var(--primary);
@@ -214,7 +232,7 @@
      SCROLLBAR
      ───────────────────────────────────────────── */
 
-  --scrollbar-thumb: rgb(255 255 255 / 0.20);
+  --scrollbar-thumb: rgb(255 255 255 / 0.2);
   --scrollbar-thumb-hover: rgb(255 255 255 / 0.32);
 
   /* ─────────────────────────────────────────────
@@ -225,9 +243,12 @@
 }
 
 @theme inline {
+  /* Системні шрифти в запасі — не формальність: на macOS та iOS
+     -apple-system це SF, найближчий родич Inter, тож підміна на час
+     завантаження лишається непомітною. */
   --font-sans:
-    'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Oxygen-Sans',
-    Ubuntu, Cantarell, 'Helvetica Neue', sans-serif;
+    'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', sans-serif;
 
   --font-mono: 'Roboto Mono', monospace;
 

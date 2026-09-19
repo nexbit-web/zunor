@@ -10,6 +10,7 @@
   import { page } from '$app/state'
   import * as Avatar from '$lib/components/ui/avatar/index.js'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
+  import { useSidebar } from '$lib/components/ui/sidebar/index.js'
 
   const session = $derived(page.data.session)
 
@@ -21,15 +22,25 @@
   })
 
   const active = $derived(page.url.pathname.startsWith('/dashboard/profile'))
+
+  const sidebar = useSidebar()
+
+  // Як і решта пунктів: на телефоні перехід закриває шторку, інакше вона
+  // лишилась би поверх щойно відкритої сторінки.
+  function closeOnMobile(): void {
+    if (sidebar.isMobile) sidebar.setOpenMobile(false)
+  }
 </script>
 
 <Sidebar.Menu>
   <Sidebar.MenuItem>
-    <Sidebar.MenuButton size="lg" isActive={active} tooltipContent={user.name}>
+    <!-- Без тултипа: імʼя й пошта написані в самому рядку. -->
+    <Sidebar.MenuButton size="lg" isActive={active}>
       {#snippet child({ props })}
         <a
           {...props}
           href="/dashboard/profile"
+          onclick={closeOnMobile}
           aria-current={active ? 'page' : undefined}
         >
           <Avatar.Root class="size-8 rounded-lg">
