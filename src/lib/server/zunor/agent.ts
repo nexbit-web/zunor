@@ -32,8 +32,9 @@ import {
   type DsTool,
   type DsToolCall,
 } from './deepseek'
-import { buildSystemPrompt, TOOL_NAME } from './prompt'
+import { buildSystemPrompt, TOOL_NAME, type DialogLang } from './prompt'
 import { detectActiveService } from './detect-service'
+import { premiseMentioned, questionChips, type ChipContext } from './chips'
 import { turnLog } from './turn-log'
 import type { ZunorClientMessage, ZunorResponse } from '$lib/types/zunor'
 
@@ -73,9 +74,12 @@ function buildTool(): DsTool {
           description: {
             type: 'string',
             description:
-              'Опис для майстра: 2–4 речення українською. ЛИШЕ факти з розмови, ' +
-              'яких НЕМАЄ в інших полях: площа, санвузли, сторона миття, тварини, ' +
-              'доступ, стан, побажання клієнта. ЗАБОРОНЕНО повторювати тип ' +
+              'Опис для майстра: 2–4 речення українською, або порожній рядок, якщо ' +
+              'деталей поза полями немає. ЛИШЕ факти з розмови, ' +
+              'яких НЕМАЄ в інших полях: площа, санвузли, обсяг сміття, роботи ' +
+              'понад стандарт, тварини, доступ, стан, побажання клієнта. Лише ' +
+              'ствердні факти: заперечення («тварин немає») і невідоме («не ' +
+              'уточнив») НЕ пиши. ЗАБОРОНЕНО повторювати тип ' +
               'прибирання, помешкання, кількість кімнат чи вікон і дату — клієнт ' +
               'бачить їх окремо. Без адреси, без ціни, без контактів, БЕЗ приміток ' +
               'про фото (додано/не додано — система показує це сама). ' +
@@ -104,7 +108,14 @@ function buildTool(): DsTool {
               'ОБОВʼЯЗКОВЕ для послуги windows: з якого боку мити. ' +
               'Ніколи не вгадуй — це питання ставиться завжди.',
           },
-          balcony: { type: 'string', enum: keys(BALCONY_OPTIONS) },
+          balcony: {
+            type: 'string',
+            enum: keys(BALCONY_OPTIONS),
+            description:
+              'Лише генеральне прибирання КВАРТИРИ: балкон, який ТРЕБА прибрати. ' +
+              'Балкон є, але прибирати не треба → none. Для інших послуг ' +
+              '(вікна теж) балкон іде в description: поле там не зберігається.',
+          },
           items: {
             type: 'array',
             description: 'Для хімчистки: предмети і кількість',
@@ -161,6 +172,10 @@ function stripPrematurePhotoOffer(reply: string): string {
  * Ріже рядок «>>> A | B» на чіпси. Спершу нормалізує маркери (щоб '* питання'
  * стало '— питання' і його побачив stripPrematurePhotoOffer), потім ріже
  * передчасне фото — порядок важливий.
+ *
+ * Рядок >>> шукаємо не лише останнім: модель інколи дописує після нього
+ * «або напиши свій варіант», і тоді кнопки губились, а сирий «>>> …»
+ * лишався в тексті повідомлення.
  */
 function extractSuggestions(text: string): {
   reply: string
@@ -168,18 +183,65 @@ function extractSuggestions(text: string): {
 } {
   const normalized = stripPrematurePhotoOffer(normalizeListMarkers(text))
   const lines = normalized.trimEnd().split('\n')
-  const last = (lines[lines.length - 1] ?? '').trim()
-  if (!last.startsWith('>>>')) return { reply: normalized.trim() }
+  const at = lines.findLastIndex((l) => l.trim().startsWith('>>>'))
+  if (at === -1) return { reply: normalized.trim() }
 
-  const suggestions = last
+  const suggestions = lines[at]!.trim()
     .slice(3)
     .split('|')
     .map((x) => x.trim())
     .filter(Boolean)
     .slice(0, 6)
     .map((x) => x.slice(0, 32))
-  const reply = lines.slice(0, -1).join('\n').trim()
+  const reply = [...lines.slice(0, at), ...lines.slice(at + 1)]
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
   return suggestions.length ? { reply, suggestions } : { reply }
+}
+
+/** Мова й послуга ходу: від них залежать промпт і підставні кнопки. */
+type TurnContext = ChipContext
+
+/**
+ * Текст моделі → повідомлення клієнту. Один шлях для стріму, синхронного
+ * ходу й питання після невалідного драфта: страховки кнопок раніше жили
+ * лише в стрімі, і фолбек-хід приходив без них.
+ */
+function toMessage(raw: string, ctx: TurnContext): ZunorResponse {
+  const { reply, suggestions } = extractSuggestions(raw)
+
+  // Модель інколи відповідає САМИМ рядком >>> без тексту. Після зрізання
+  // чіпсів лишається порожній рядок → клієнт малює порожню бульбашку, вона
+  // потрапляє в історію, і наступного ходу модель не розуміє, що вже казала.
+  // Порожній reply із чіпсами замінюємо на нейтральну підводку.
+  if (!reply && suggestions?.length) {
+    return { kind: 'message', reply: PICK_ONE[ctx.lang], suggestions }
+  }
+  if (suggestions?.length) return { kind: 'message', reply, suggestions }
+
+  // Страховка фото-чіпсів — ЛИШЕ для чистого фото-кроку: якщо в повідомленні
+  // є інші питання (рядки «— »), чіпси фото туди підставляти не можна.
+  //
+  // ⚠️ \p{L}*, а не \w*: \w в JS — це [A-Za-z0-9_], тож на кирилиці він
+  // матчив ПОРОЖНІЙ рядок, після чого \s+ упирався в «и» від «додати» —
+  // і обидві гілки не спрацьовували ЖОДНОГО разу. Страховка існувала лише
+  // на папері, а крок 6 (фото) міг лишитись без кнопок, і клієнт мусив
+  // друкувати відповідь руками на останньому кроці перед заявкою.
+  if (
+    /(додат|добав)\p{L}*\s+фото|add\s+(a\s+)?photos?|кнопк\p{L}*\s*«?\+/iu.test(
+      reply,
+    ) &&
+    !/^—\s/m.test(reply)
+  ) {
+    return { kind: 'message', reply, suggestions: PHOTO_CHIPS[ctx.lang] }
+  }
+
+  // Закрите питання воронки без кнопок (дата, кімнати, сторона миття).
+  const fallback = questionChips(reply, ctx)
+  return fallback
+    ? { kind: 'message', reply, suggestions: fallback }
+    : { kind: 'message', reply }
 }
 
 // ─────────────────────── Історія та режим ───────────────────────
@@ -216,26 +278,62 @@ const BOUNDARY_AFTER = '(?![\\p{L}\\p{N}_])'
 const marker = (words: string) =>
   new RegExp(`${BOUNDARY_BEFORE}(${words})${BOUNDARY_AFTER}`, 'giu')
 
+// Назви послуг — лише російські («химчистка», «после»): «Химчистка дивана»
+// не мала жодного маркера, нічия віддавала українській, і росіянин отримував
+// українську відповідь. Українських підписів кнопок у UK_MARKERS навмисно
+// немає: поки мову не впізнано, росіянин бачить і тисне саме їх.
 const RU_MARKERS = marker(
-  'привет|нужно|надо|можно|этаж|есть|да|нет|спасибо|квартира|окна|убрать|уборка|сколько|который|очень|ещё|еще|хорошо|числа?',
+  'привет|нужно|нужна|нужен|надо|можно|этаж|есть|да|нет|спасибо|пожалуйста|мне|расскажи|если|квартира|окна|убрать|уборка|уборку|сколько|который|очень|ещё|еще|хорошо|числа?|химчистка|химчистку|после|помыть|генеральная|генеральную|обычная|обычную',
 )
 const UK_MARKERS = marker(
-  'привіт|потрібно|треба|можна|поверх|є|так|ні|дякую|квартира|вікна|прибрати|прибирання|скільки|який|дуже|ще|добре|числа?',
+  'привіт|потрібно|потрібна|потрібен|треба|можна|поверх|є|так|ні|дякую|будь ласка|мені|розкажи|якщо|квартира|вікна|прибрати|прибирання|скільки|який|дуже|ще|добре|числа?',
 )
 const UK_LETTERS = /[іїєґ]/g
 const RU_LETTERS = /[ыэъё]/g
+const CYRILLIC = /\p{Script=Cyrillic}/gu
+const LATIN = /[a-z]/gi
 
-function detectLang(history: ZunorClientMessage[]): 'ru' | 'uk' {
+/**
+ * Підставні кнопки — мовою розмови. Українські «Додати фото» в російському
+ * діалозі виглядали як збій, а англомовному клієнтові були незрозумілі.
+ */
+const PHOTO_CHIPS: Record<DialogLang, string[]> = {
+  uk: ['Додати фото', 'Продовжити без фото'],
+  ru: ['Добавить фото', 'Продолжить без фото'],
+  en: ['Add photos', 'Continue without photos'],
+}
+const PICK_ONE: Record<DialogLang, string> = {
+  uk: 'Оберіть варіант:',
+  ru: 'Выберите вариант:',
+  en: 'Pick an option:',
+}
+
+/**
+ * Англійська — коли клієнт пише латиницею: іноземці в Одесі теж
+ * замовляють прибирання, а відповідь російською для них — глухий кут.
+ * Поріг у літерах відсікає одиничні «ok» і «m2» у кириличній репліці.
+ */
+const LATIN_MIN = 12
+
+function detectLang(history: ZunorClientMessage[]): DialogLang {
   let ru = 0
   let uk = 0
+  let latin = 0
+  let cyrillic = 0
   for (const m of history) {
     if (m.role !== 'user') continue
     ru += (m.content.match(RU_MARKERS)?.length ?? 0) * 2
     uk += (m.content.match(UK_MARKERS)?.length ?? 0) * 2
     ru += m.content.match(RU_LETTERS)?.length ?? 0
     uk += m.content.match(UK_LETTERS)?.length ?? 0
+    latin += m.content.match(LATIN)?.length ?? 0
+    cyrillic += m.content.match(CYRILLIC)?.length ?? 0
   }
-  return uk > ru ? 'uk' : 'ru'
+  if (latin >= LATIN_MIN && latin > cyrillic) return 'en'
+  // Нічия («Розкажи анекдот» без жодного маркера) — українська: продукт
+  // український, і російська відповідь на українську репліку дратує
+  // більше, ніж навпаки.
+  return ru > uk ? 'ru' : 'uk'
 }
 
 function baseMessages(
@@ -246,33 +344,65 @@ function baseMessages(
   // Детект послуги — по ПОВНІЙ історії: послуга могла бути названа на
   // початку, який уже випав з вікна MAX_HISTORY. LLM отримує хвіст,
   // але ФОКУС-блок у промпті має лишатися стабільним до кінця воронки.
-  const activeService = detectActiveService(history)
+  const ctx: TurnContext = {
+    lang: detectLang(history),
+    service: detectActiveService(history),
+    premiseKnown: premiseMentioned(
+      history.filter((m) => m.role === 'user').map((m) => m.content),
+    ),
+  }
   const messages: DsMessage[] = [
     {
       role: 'system',
-      content: buildSystemPrompt(
-        city,
-        activeService,
-        detectLang(history),
-        aiProfile,
-      ),
+      content: buildSystemPrompt(city, ctx.service, ctx.lang, aiProfile),
     },
     ...trimHistory(history).map(
       (m): DsMessage => ({ role: m.role, content: m.content }),
     ),
   ]
-  return { messages }
+  return { messages, ctx }
 }
 
 // ─────────────────────── Драфт: валідація + ретраї ───────────────────────
 // Викликається і зі стріму (tool_start), і з синхронного шляху.
 // Драфт клієнт НЕ бачить до успішної валідації, тому все синхронне.
 
+/**
+ * Заявку читає майстер в українському інтерфейсі, тож title і description
+ * — українською, хоч би якою мовою йшла розмова. У російському діалозі
+ * модель інколи писала їх російською («Ковер 3×4 м. Есть собака»).
+ *
+ * Рахунок як у detectLang: слова-маркери й літери обох мов. Самих літер
+ * ы/э/ъ/ё мало — у прикладі вище їх немає жодної. А «немає і/ї/є/ґ» —
+ * хибний сигнал: «Прибирання квартири» чи «Площа 50 м², два санвузли» —
+ * чиста українська без жодної з них.
+ */
+const RU_COPY = marker(
+  'и|есть|это|что|нужно|надо|площадь|санузел|санузла|санузлов|комнаты|комнат|уборка|уборки|окна|пятна|ковер|ковёр|животные|животных',
+)
+const UK_COPY = marker(
+  'і|й|є|прибирання|площа|санвузол|санвузли|кімнати|кімнат|вікна|плями|килим|тварини|тварин|потрібно|треба',
+)
+
+function russianCopy(title: unknown, description: unknown): string | null {
+  const text = `${typeof title === 'string' ? title : ''} ${typeof description === 'string' ? description : ''}`
+  const ru =
+    (text.match(RU_COPY)?.length ?? 0) * 2 +
+    (text.match(RU_LETTERS)?.length ?? 0)
+  const uk =
+    (text.match(UK_COPY)?.length ?? 0) * 2 +
+    (text.match(UK_LETTERS)?.length ?? 0)
+  return ru > uk
+    ? 'title і description написані російською, а мають бути українською.'
+    : null
+}
+
 async function resolveDraft(
   messages: DsMessage[],
   tool: DsTool,
   firstText: string,
   firstCall: DsToolCall,
+  ctx: TurnContext,
 ): Promise<ZunorResponse> {
   let call: DsToolCall | null = firstCall
   let text = firstText
@@ -289,9 +419,16 @@ async function resolveDraft(
 
       const { title: rawTitle, description: rawDescription, ...metadata } = args
       const validation = validateCleaningMetadata(metadata)
-      turnLog().validation(validation.ok, validation.error)
+      // Мова заявки — лише ОДНА спроба виправити: через мову клієнт не має
+      // застрягнути без заявки, тож другий російський варіант приймаємо.
+      const copyError =
+        round === 0 ? russianCopy(rawTitle, rawDescription) : null
+      turnLog().validation(
+        validation.ok && !copyError,
+        validation.error ?? copyError ?? undefined,
+      )
 
-      if (validation.ok && validation.clean) {
+      if (validation.ok && validation.clean && !copyError) {
         const clean = validation.clean
         return {
           kind: 'draft',
@@ -317,7 +454,9 @@ async function resolveDraft(
       messages.push({
         role: 'tool',
         tool_call_id: call.id,
-        content: `Помилка валідації: ${validation.error ?? 'невідома'}. Виправ дані (звір дату з календарем із системних інструкцій) і виклич інструмент ще раз, або постав клієнту ОДНЕ уточнююче питання.`,
+        content: copyError
+          ? `Помилка: ${copyError} Виклич інструмент ще раз із тими самими даними, переклавши title і description українською.`
+          : `Помилка валідації: ${validation.error ?? 'невідома'}. Виправ дані (звір дату з календарем із системних інструкцій) і виклич інструмент ще раз, або постав клієнту ОДНЕ уточнююче питання.`,
       })
     }
 
@@ -330,10 +469,7 @@ async function resolveDraft(
     call = msg.tool_calls?.find((c) => c.function.name === TOOL_NAME) ?? null
 
     // Текст замість драфта — це питання клієнту, віддаємо
-    if (!call && text) {
-      const { reply, suggestions } = extractSuggestions(text)
-      return { kind: 'message', reply, suggestions }
-    }
+    if (!call && text) return toMessage(text, ctx)
   }
 
   return {
@@ -355,13 +491,14 @@ export async function runZunorTurnStream(
   city: string | null,
   onText: (delta: string) => void,
   aiProfile: unknown = null,
+  signal?: AbortSignal,
 ): Promise<ZunorResponse> {
   const tool = buildTool()
-  const { messages } = baseMessages(history, city, aiProfile)
+  const { messages, ctx } = baseMessages(history, city, aiProfile)
 
-  turnLog().setup({ service: detectActiveService(history), tool })
+  turnLog().setup({ service: ctx.service, tool })
 
-  const stream = chatCompletionStream(messages, [tool], true)
+  const stream = chatCompletionStream(messages, [tool], true, signal)
   let streamedText = ''
   let toolStarted = false
 
@@ -396,7 +533,7 @@ export async function runZunorTurnStream(
 
   // Драфт: стрім зібрав tool_call → синхронна валідація
   if (toolCall) {
-    return resolveDraft(messages, tool, content, toolCall)
+    return resolveDraft(messages, tool, content, toolCall, ctx)
   }
 
   // Уперлись у max_tokens: не видаємо обрубок за готову відповідь
@@ -420,37 +557,7 @@ export async function runZunorTurnStream(
         'Вибач, я трохи збився. Нагадай, будь ласка, останню деталь — і продовжимо.',
     }
   }
-  const { reply, suggestions } = extractSuggestions(raw)
-
-  // Модель інколи відповідає САМИМ рядком >>> без тексту. Після зрізання
-  // чіпсів лишається порожній рядок → клієнт малює порожню бульбашку, вона
-  // потрапляє в історію, і наступного ходу модель не розуміє, що вже казала.
-  // Порожній reply із чіпсами замінюємо на нейтральну підводку.
-  if (!reply && suggestions?.length) {
-    return { kind: 'message', reply: 'Оберіть варіант:', suggestions }
-  }
-
-  // Страховка фото-чіпсів — ЛИШЕ для чистого фото-кроку: якщо в повідомленні
-  // є інші питання (рядки «— »), чіпси фото туди підставляти не можна.
-  //
-  // ⚠️ \p{L}*, а не \w*: \w в JS — це [A-Za-z0-9_], тож на кирилиці він
-  // матчив ПОРОЖНІЙ рядок, після чого \s+ упирався в «и» від «додати» —
-  // і обидві гілки не спрацьовували ЖОДНОГО разу. Страховка існувала лише
-  // на папері, а крок 6 (фото) міг лишитись без кнопок, і клієнт мусив
-  // друкувати відповідь руками на останньому кроці перед заявкою.
-  if (
-    !suggestions?.length &&
-    /(додат|добав)\p{L}*\s+фото|кнопк\p{L}*\s*«?\+/iu.test(reply) &&
-    !/^—\s/m.test(reply)
-  ) {
-    return {
-      kind: 'message',
-      reply,
-      suggestions: ['Додати фото', 'Продовжити без фото'],
-    }
-  }
-
-  return { kind: 'message', reply, suggestions }
+  return toMessage(raw, ctx)
 }
 
 // ─────────────────────── Синхронний хід (фолбек) ───────────────────────
@@ -461,7 +568,7 @@ export async function runZunorTurn(
   aiProfile: unknown = null,
 ): Promise<ZunorResponse> {
   const tool = buildTool()
-  const { messages } = baseMessages(history, city, aiProfile)
+  const { messages, ctx } = baseMessages(history, city, aiProfile)
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     const res = await chatCompletion(messages, [tool], false)
@@ -492,11 +599,10 @@ export async function runZunorTurn(
         })
         continue
       }
-      const { reply, suggestions } = extractSuggestions(raw)
-      return { kind: 'message', reply, suggestions }
+      return toMessage(raw, ctx)
     }
 
-    return resolveDraft(messages, tool, (msg.content ?? '').trim(), call)
+    return resolveDraft(messages, tool, (msg.content ?? '').trim(), call, ctx)
   }
 
   return {

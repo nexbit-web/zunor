@@ -11,6 +11,11 @@
   import LottiePlayer from '$lib/components/lottie-player.svelte'
   import { Spinner } from '$lib/components/ui/spinner'
   import * as Tooltip from '$lib/components/ui/tooltip'
+  import * as Marker from '$lib/components/ui/marker'
+  import * as Trace from '$lib/components/ui/trace'
+  import CircleAlert from '@lucide/svelte/icons/circle-alert'
+  import RotateCcw from '@lucide/svelte/icons/rotate-ccw'
+  import Images from '@lucide/svelte/icons/images'
   import ClipboardCheck from '@lucide/svelte/icons/clipboard-check'
   import Home from '@lucide/svelte/icons/home'
   import Building from '@lucide/svelte/icons/building'
@@ -25,9 +30,11 @@
   import Columns2 from '@lucide/svelte/icons/columns-2'
   import Plus from '@lucide/svelte/icons/plus'
   import Mic from '@lucide/svelte/icons/mic'
-  import MapPin from '@lucide/svelte/icons/map-pin'
   import Square from '@lucide/svelte/icons/square'
   import X from '@lucide/svelte/icons/x'
+  import RefreshCw from '@lucide/svelte/icons/refresh-cw'
+  import ImagePlus from '@lucide/svelte/icons/image-plus'
+  import Sofa from '@lucide/svelte/icons/sofa'
   import { dev } from '$app/environment'
   import { playSuccessSound, unlockAudio } from '$lib/sound/notification'
   import type {
@@ -35,10 +42,12 @@
     ZunorResponse,
     ZunorClientMessage,
   } from '$lib/types/zunor'
-  import ThinkingLogo from '$lib/components/thinking-logo.svelte'
   import { ZunorMark } from '$lib/components/icons'
   import toast from 'svelte-hot-french-toast'
   import MessageBody from '$lib/components/zunor/MessageBody.svelte'
+  import ChatHeader from '$lib/components/zunor/chat-header.svelte'
+  import ThinkingIndicator from '$lib/components/zunor/thinking-indicator.svelte'
+  import { plainText } from '$lib/zunor/message-format'
   import { Dictation } from '$lib/zunor/dictation.svelte'
   import {
     saveDialog,
@@ -64,7 +73,8 @@
   // Швидкі відповіді від Zunor (парсяться сервером із відповіді моделі)
   let chips = $state<string[]>([])
   let input = $state('')
-  let waiting = $state(false) // чекаємо відповідь /api/zunor/chat
+  let waiting = $state(false) // чекаємо ПЕРШЕ слово від /api/zunor/chat
+  let streaming = $state(false) // хід агента в польоті: від запиту до фіналу
   let submitting = $state(false) // створюємо заявку через /api/jobs
   let finished = $state(false)
   let started = $state(false)
@@ -110,12 +120,13 @@
     return (name && ROW_ICONS[name]) || ClipboardCheck
   }
 
-  // Чіпси приходять мовою клієнта («Додати фото» / «Добавить фото»),
-  // тому порівнюємо за змістом, а не за точним рядком.
-  // «без» відсікає «Продовжити без фото».
+  // Чіпси приходять мовою клієнта («Додати фото» / «Добавить фото» /
+  // «Add photos»), тому порівнюємо за змістом, а не за точним рядком.
+  // «без» / «without» відсікає «Продовжити без фото».
   function isAddPhotoChip(label: string): boolean {
     const s = label.toLowerCase()
-    return s.includes('фото') && !s.includes('без')
+    const photo = s.includes('фото') || s.includes('photo')
+    return photo && !s.includes('без') && !s.includes('without')
   }
 
   // Hero росте вище (більше місця на екрані), чатовий — до 260px, далі скрол
@@ -208,10 +219,10 @@
   let msgId = 0
 
   const HERO_CHIPS = [
-    'Прибрати квартиру',
-    'Хімчистка',
-    'Генеральне прибирання',
-    'Помити вікна',
+    { label: 'Прибрати квартиру', icon: Home },
+    { label: 'Хімчистка', icon: Sofa },
+    { label: 'Генеральне прибирання', icon: Sparkles },
+    { label: 'Помити вікна', icon: AppWindow },
   ]
 
   // ─── Анімований плейсхолдер на hero-інпуті ───
@@ -394,6 +405,7 @@
    * передумати в межах того ж завантаження сторінки.
    */
   function resetDialog(): void {
+    discardTurn()
     clearDialog(dialogUserId)
     messages = []
     chips = []
@@ -402,9 +414,15 @@
     input = ''
     uploadError = ''
     msgId = 0
+    resumedAfter = null
     started = false
     waiting = false
   }
+
+  // Після якої репліки стоїть роздільник «Розмову відновлено». Без нього
+  // стара розмова на свіжому екрані виглядає так, ніби її щойно написали.
+  // У сховище не пишемо: це подія ЦЬОГО відкриття сторінки.
+  let resumedAfter = $state<number | null>(null)
 
   /** Відновлює збережений діалог. true — щось відновили. */
   function restoreDialog(): boolean {
@@ -416,13 +434,14 @@
     sentPhotos = saved.sentPhotos
     pendingPhotos = saved.pendingPhotos
     msgId = saved.nextMsgId
+    resumedAfter = saved.messages.at(-1)?.id ?? null
     started = true
     return true
   }
 
   // ─── Діалог з агентом ───
 
-  /** Історія для API: user + повні тексти zunor (без summary-карток). */
+  /** Історія для API: user + повні тексти zunor (без summary-карток і приміток). */
   function apiHistory(): ZunorClientMessage[] {
     return messages.flatMap((m): ZunorClientMessage[] => {
       if (m.role === 'user') {
@@ -440,8 +459,14 @@
     })
   }
 
+  // «Стоп» під час друкарки. Текст тут уже прийшов цілком, друкарка — лише
+  // ефект, тож «Стоп» показує його весь одразу, а не обрізає: обрізаний
+  // текст розійшовся б з тим, що піде моделі в історії.
+  let skipTyping = false
+
   /** Друкує відповідь агента з typewriter-ефектом. */
   async function pushZunor(text: string, thinkSeconds: number) {
+    skipTyping = false
     const id = msgId++
     messages = [
       ...messages,
@@ -450,7 +475,7 @@
     await revealContentEnd()
 
     const speed = text.length > 160 ? 6 : text.length > 80 ? 10 : 14
-    for (let i = 1; i <= text.length; i++) {
+    for (let i = 1; i <= text.length && !skipTyping; i++) {
       await sleep(speed)
       messages = messages.map((m) =>
         m.role === 'zunor' && m.id === id ? { ...m, shown: i } : m,
@@ -459,7 +484,9 @@
       updateSpacer()
     }
     messages = messages.map((m) =>
-      m.role === 'zunor' && m.id === id ? { ...m, typing: false } : m,
+      m.role === 'zunor' && m.id === id
+        ? { ...m, shown: text.length, typing: false }
+        : m,
     )
     await revealContentEnd()
   }
@@ -525,7 +552,7 @@
 
   async function advance(userText: string) {
     const text = userText.trim()
-    if ((!text && pendingPhotos.length === 0) || waiting || submitting) return
+    if ((!text && pendingPhotos.length === 0) || streaming || submitting) return
     if (uploading) return
 
     const photos = pendingPhotos
@@ -547,7 +574,95 @@
     input = ''
     resetTextareaHeight()
     await scrollAnchorToTop()
+    await ask()
+  }
 
+  function secondsSince(t0: number): number {
+    return Math.max(1, Math.round((Date.now() - t0) / 1000))
+  }
+
+  /**
+   * Службова примітка в стрічці. Не через pushZunor: збій стався в нас, і
+   * репліка асистента з ним потрапила б в історію, яку бачить модель.
+   */
+  async function notice(
+    text: string,
+    retry: boolean,
+    tone: 'error' | 'stopped' = 'error',
+  ) {
+    messages = [...messages, { id: msgId++, role: 'notice', text, tone, retry }]
+    await revealContentEnd()
+  }
+
+  /** Примітки про хід, що зараз повториться, — ті, що після останньої репліки людини. */
+  function dropTrailingNotices() {
+    const lastUser = messages.findLast((m) => m.role === 'user')?.id ?? -1
+    messages = messages.filter((m) => m.role !== 'notice' || m.id < lastUser)
+  }
+
+  /** «Повторити»: той самий хід ще раз — без повторного набору репліки. */
+  async function retry() {
+    if (streaming || submitting) return
+    dropTrailingNotices()
+    await ask()
+  }
+
+  // «Інша відповідь»: остання репліка Zunor — на свіжу. Лише коли перед нею
+  // репліка людини: локальна підказка після картки («Напиши, що змінити»)
+  // моделі не належить, а хід без репліки людини сервер відхилить.
+  const regenerableId = $derived.by(() => {
+    const thread = messages.filter((m) => m.role !== 'notice')
+    const last = thread.at(-1)
+    return last?.role === 'zunor' && thread.at(-2)?.role === 'user'
+      ? last.id
+      : null
+  })
+
+  async function regenerate() {
+    if (streaming || submitting || regenerableId === null) return
+    const id = regenerableId
+    messages = messages.filter((m) => m.id !== id)
+    dropTrailingNotices()
+    chips = []
+    await ask()
+  }
+
+  // ─── «Стоп» ───
+  // Поточний хід агента. «Стоп» обриває fetch, сервер бачить розрив і кидає
+  // запит до моделі — далі платити нема за що (див. api/zunor/chat).
+  let turn: AbortController | null = null
+
+  /** Причина обриву, після якої старій розмові вже нічого не пишемо. */
+  const DISCARDED = 'discarded'
+
+  function stop() {
+    turn?.abort()
+    skipTyping = true
+  }
+
+  /** Людина зупинила хід. Надруковане лишаємо — як у будь-якому ШІ-чаті. */
+  async function stopped(zunorId: number) {
+    const partial = messages.find((m) => m.id === zunorId)
+    const kept = partial?.role === 'zunor' && partial.text.trim() !== ''
+    messages = kept
+      ? messages.map((m) =>
+          m.role === 'zunor' && m.id === zunorId
+            ? { ...m, shown: m.text.length, typing: false }
+            : m,
+        )
+      : messages.filter((m) => m.id !== zunorId)
+    // Порожній хід можна повторити; обірвану відповідь — замінити «Іншою».
+    await notice('Відповідь зупинено', !kept, 'stopped')
+  }
+
+  /**
+   * Відповідь агента на поточну історію. Окремо від advance, бо зірваний
+   * хід повторюється без нової репліки людини.
+   */
+  async function ask() {
+    const ctrl = new AbortController()
+    turn = ctrl
+    streaming = true
     waiting = true
     const t0 = Date.now()
 
@@ -560,7 +675,7 @@
       if (streamStarted) return
       streamStarted = true
       waiting = false
-      const thinkSeconds = Math.max(1, Math.round((Date.now() - t0) / 1000))
+      const thinkSeconds = secondsSince(t0)
       messages = [
         ...messages,
         {
@@ -599,6 +714,7 @@
           'X-Requested-With': 'XMLHttpRequest',
         },
         body: JSON.stringify({ messages: apiHistory() }),
+        signal: ctrl.signal,
       })
 
       if (!res.ok) {
@@ -608,17 +724,18 @@
           message?: string
         } | null
         await focusInput()
-        await pushZunor(
+        await notice(
           errData?.message ??
             (res.status === 429
               ? 'Забагато запитів. Спробуй трохи пізніше.'
               : 'Щось пішло не так. Спробуй ще раз.'),
-          1,
+          true,
         )
         return
       }
 
       const final = await readStream(res, appendText)
+      if (ctrl.signal.reason === DISCARDED) return
       await focusInput()
 
       const cleanReply = final && 'reply' in final ? final.reply : undefined
@@ -635,7 +752,7 @@
 
       if (!final) {
         if (!streamStarted)
-          await pushZunor('Щось пішло не так. Спробуй ще раз.', 1)
+          await notice('Щось пішло не так. Спробуй ще раз.', true)
         return
       }
 
@@ -643,12 +760,15 @@
         chips = final.suggestions
         await revealContentEnd()
       } else {
+        // Після tick: міряти треба DOM уже з рядком дій під відповіддю.
+        await tick()
         updateSpacer()
       }
 
       if (final.kind === 'draft') {
         const summaryId = msgId++
-        if (!streamStarted && final.reply) await pushZunor(final.reply, 1)
+        if (!streamStarted && final.reply)
+          await pushZunor(final.reply, secondsSince(t0))
         messages = [
           ...messages.filter((m) => m.role !== 'summary'),
           { id: summaryId, role: 'summary', draft: final.draft },
@@ -657,21 +777,61 @@
         await scrollAnchorToTop()
       }
     } catch {
+      // «Нова розмова» чи вихід зі сторінки посеред ходу: старій розмові
+      // вже нічого не пишемо — ні примітки, ні збереження.
+      if (ctrl.signal.reason === DISCARDED) return
       waiting = false
-      messages = messages.filter((m) => m.id !== zunorId)
-      await focusInput()
-      await pushZunor(
-        "Помилка з'єднання. Перевір інтернет і спробуй ще раз.",
-        1,
-      )
+      if (ctrl.signal.aborted) {
+        await stopped(zunorId)
+      } else {
+        messages = messages.filter((m) => m.id !== zunorId)
+        await focusInput()
+        await notice(
+          "Помилка з'єднання. Перевір інтернет і спробуй ще раз.",
+          true,
+        )
+      }
     } finally {
       if (spacerRaf) cancelAnimationFrame(spacerRaf)
+      // Скинута розмова вже могла почати НОВИЙ хід — його не чіпаємо.
+      if (turn === ctrl) {
+        turn = null
+        streaming = false
+      }
       // Єдина точка збереження на всі гілки ходу — успіх, помилка сервера
       // й обрив зв'язку проходять сюди однаково. Ставити виклик у кожну
       // гілку означало б рано чи пізно пропустити одну.
-      persistDialog()
+      if (ctrl.signal.reason !== DISCARDED) persistDialog()
     }
-    await focusInput()
+    if (ctrl.signal.reason !== DISCARDED) await focusInput()
+  }
+
+  /** Розмову скинуто: хід у польоті обриваємо мовчки. */
+  function discardTurn() {
+    turn?.abort(DISCARDED)
+    turn = null
+    streaming = false
+    waiting = false
+  }
+
+  /** Уся розмова текстом — щоб переслати чи зберегти собі. */
+  async function copyDialog() {
+    const parts = messages.flatMap((m): string[] => {
+      if (m.role === 'user') return m.text ? [`Я: ${m.text}`] : []
+      if (m.role === 'zunor')
+        return m.text ? [`Zunor: ${plainText(m.text)}`] : []
+      if (m.role === 'summary') {
+        const { title, description } = m.draft
+        return [`Заявка: ${title}${description ? `\n${description}` : ''}`]
+      }
+      return []
+    })
+    try {
+      await navigator.clipboard.writeText(parts.join('\n\n'))
+      toast.success('Розмову скопійовано', { duration: 1500 })
+    } catch {
+      toast.error('Не вдалося скопіювати')
+    }
   }
 
   function send() {
@@ -688,30 +848,23 @@
     advance(label)
   }
 
-  function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      send()
-    }
-  }
-
   // «Змінити» на драфті: локальна підказка агента (потрапить в історію
   // як assistant — модель побачить контекст) + фокус в інпут.
   async function requestEdit() {
+    const text = 'Добре! Напиши, що змінити — я оновлю заявку.'
     messages = [
       ...messages,
       {
         id: msgId++,
         role: 'zunor',
-        text: 'Добре! Напиши, що змінити — я оновлю заявку.',
-        shown: 44,
+        text,
+        shown: text.length,
         typing: false,
-        thinkSeconds: 1,
+        // Репліка локальна, моделі тут не було: «Думав 1 с» над нею —
+        // неправда. Нуль ховає позначку.
+        thinkSeconds: 0,
       },
     ]
-    messages = messages.map((m) =>
-      m.role === 'zunor' && m.typing === false ? m : m,
-    )
     updateSpacer()
     await focusInput()
   }
@@ -742,12 +895,14 @@
 
       if (!res.ok) {
         submitting = false
-        await pushZunor(
+        // Без «Повторити»: кнопка підтвердження на картці лишається, вона
+        // і є повтор.
+        await notice(
           json?.message ??
             (res.status === 429
               ? 'Забагато заявок. Спробуй трохи пізніше.'
               : 'Не вдалось створити заявку. Спробуй ще раз.'),
-          1,
+          false,
         )
         return
       }
@@ -761,9 +916,9 @@
       setTimeout(() => goto('/dashboard/jobs', { invalidateAll: true }), 2200)
     } catch {
       submitting = false
-      await pushZunor(
+      await notice(
         "Помилка з'єднання. Перевір інтернет і спробуй ще раз.",
-        1,
+        false,
       )
     }
   }
@@ -794,8 +949,11 @@
 
   // ─── Hero ───
   async function startChat(text: string) {
-    if ((!text.trim() && pendingPhotos.length === 0) || started || waiting)
+    if ((!text.trim() && pendingPhotos.length === 0) || started || streaming)
       return
+    // Інакше чат відкрився б, а advance відмовив би через завантаження:
+    // порожня розмова без жодної репліки.
+    if (uploading) return
     // Репліку вже відправлено — далі диктувати нема куди.
     dictation.stop()
     unlockAudio() // розблокування звуку на перший жест (autoplay policy)
@@ -808,16 +966,36 @@
     startChat(label)
   }
 
-  function heroSend() {
-    startChat(input)
+  // ─── Одна панель вводу на обидва екрани ───
+  // На порожньому екрані й у розмові — той самий composer: людина не має
+  // переучуватись на півслові, коли hero змінюється чатом. До старту
+  // репліка відкриває розмову, після — продовжує її.
+  const CHAT_PLACEHOLDER = 'Напиши Zunor...'
+
+  function submit() {
+    if (started) send()
+    else startChat(input)
   }
 
-  function handleHeroKeydown(e: KeyboardEvent) {
-    if (e.key === 'Enter' && !e.shiftKey) {
+  function handleKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape' && streaming) {
       e.preventDefault()
-      heroSend()
+      stop()
+      return
+    }
+    // isComposing: Enter, яким підтверджують слово в IME (наприклад,
+    // голосовий чи японський ввід), не має відправляти репліку.
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+      e.preventDefault()
+      // Поки Zunor відповідає, друкувати далі можна, а надіслати — лише
+      // після відповіді або «Стоп».
+      if (!streaming) submit()
     }
   }
+
+  // Кнопка «Повторити» — лише під ОСТАННЬОЮ приміткою: після нової репліки
+  // повторювати старий хід уже нема сенсу.
+  const lastMsgId = $derived(messages.at(-1)?.id)
 
   // ─── Дві форми панелі вводу ───
   // Порожня панель — рядок-капсула: «+», текст і мікрофон в одну лінію.
@@ -940,7 +1118,11 @@
     textareaEl?.focus()
   }
 
-  onDestroy(() => dictation.destroy())
+  onDestroy(() => {
+    dictation.destroy()
+    // Пішли зі сторінки посеред ходу — відповідь уже нікому не потрібна.
+    discardTurn()
+  })
 
   function resetTextareaHeight() {
     // Репліку відправлено, поле порожнє — панель повертається в капсулу.
@@ -991,22 +1173,32 @@
       })
     }
 
-    const ro = new ResizeObserver(() => {
-      handleScroll()
-      updateSpacer()
-    })
-
-    if (scrollEl) {
-      ro.observe(scrollEl)
-      if (scrollEl.firstElementChild) ro.observe(scrollEl.firstElementChild)
-    }
     window.addEventListener('resize', handleScroll)
 
     return () => {
       document.body.style.overflow = ''
-      ro.disconnect()
       window.removeEventListener('resize', handleScroll)
     }
+  })
+
+  // Спейсер стежить за висотою стрічки: кожна зміна (рядок дій під
+  // відповіддю, «Думаю…», чіпси, що міняють fadeZone) його перераховує.
+  //
+  // $effect, а не onMount: стрічка існує лише в гілці чату. На момент
+  // onMount на екрані ще hero, scrollEl порожній — і спостерігач, що
+  // жив там, не стежив ні за чим. Спейсер лишався на висоту рядка дій
+  // більшим, ніж треба, і до низу можна було докрутити так, що репліка
+  // людини ховалась за верхній край.
+  $effect(() => {
+    const el = scrollEl
+    if (!el) return
+    const ro = new ResizeObserver(() => {
+      handleScroll()
+      updateSpacer()
+    })
+    ro.observe(el)
+    if (el.firstElementChild) ro.observe(el.firstElementChild)
+    return () => ro.disconnect()
   })
 </script>
 
@@ -1027,16 +1219,14 @@
 <div
   class="job-scope relative flex h-full min-h-0 flex-col overflow-hidden bg-background"
 >
-  <!-- Місто — не контрол панелі вводу, а обставина розмови: воно не
-       міняється від репліки до репліки й не потребує місця в рядку з
-       кнопками. Тому воно вгорі праворуч, поза панеллю, і однакове на
-       порожньому екрані та в чаті. -->
-  <div
-    class="pointer-events-none absolute top-3 right-4 z-20 flex items-center gap-1.5 text-[12.5px] text-muted-foreground"
-  >
-    <MapPin size={13} aria-hidden="true" />
-    Одеса
-  </div>
+  {#if !finished}
+    <ChatHeader
+      city="Одеса"
+      {started}
+      onreset={resetDialog}
+      oncopy={copyDialog}
+    />
+  {/if}
 
   {#snippet micButton()}
     <!-- Кнопки немає взагалі, якщо браузер не вміє розпізнавати мову
@@ -1051,7 +1241,7 @@
               ? 'Зупинити запис'
               : 'Продиктувати голосом'}
             class={[
-              'flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-xl transition-[background-color,color,transform] duration-150 active:scale-[0.96]',
+              'flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full transition-[background-color,color,transform] duration-150 active:scale-[0.96]',
               dictation.listening
                 ? 'job-mic-live bg-destructive/10 text-destructive'
                 : 'text-foreground hover:bg-accent',
@@ -1079,7 +1269,7 @@
           aria-disabled={!photosAllowed || uploading}
           aria-label="Додати фото"
           class={[
-            'flex size-8 shrink-0 items-center justify-center rounded-xl transition-[background-color,color,transform] duration-150 active:scale-[0.96]',
+            'flex size-8 shrink-0 items-center justify-center rounded-full transition-[background-color,color,transform] duration-150 active:scale-[0.96]',
             photosAllowed && !uploading
               ? 'cursor-pointer text-foreground hover:bg-accent'
               : 'cursor-not-allowed text-muted-foreground/40',
@@ -1153,6 +1343,131 @@
     {/if}
   {/snippet}
 
+  <!-- Дія під відповіддю Zunor: іконка з підказкою. Підпис і для
+       скрінрідера, і для курсора — дві копії тексту розійшлись би. -->
+  {#snippet messageAction(
+    label: string,
+    onclick: () => void,
+    Icon: typeof Copy,
+  )}
+    <Tooltip.Provider delayDuration={150}>
+      <Tooltip.Root>
+        <Tooltip.Trigger
+          {onclick}
+          aria-label={label}
+          class="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        >
+          <Icon size={14} aria-hidden="true" />
+        </Tooltip.Trigger>
+        <Tooltip.Content side="bottom" sideOffset={6} arrowClasses="hidden">
+          {label}
+        </Tooltip.Content>
+      </Tooltip.Root>
+    </Tooltip.Provider>
+  {/snippet}
+
+  <!-- Панель вводу. Одна на hero і чат: hero та розмова — гілки {#if},
+       тож у DOM вона завжди одна, і bind:this не ділять два поля. -->
+  {#snippet composer()}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      class="job-input-shell flex cursor-text flex-col border border-border bg-card transition-[border-radius] duration-150 {expanded
+        ? 'rounded-[20px]'
+        : 'rounded-full'}"
+      onmousedown={focusFromShell}
+    >
+      {@render pendingPreview()}
+
+      <!-- gap-1, а не gap-2: у капсулі саме цей проміжок відсуває
+           текст від «+», і восьми пікселів там забагато. -->
+      <div class="relative flex flex-wrap items-center gap-1 px-2 py-2">
+        <!-- Невидимий двійник тексту: єдине його призначення —
+             виміряти, скільки місця займе рядок. Класи шрифту мусять
+             збігатися з полем, інакше міряємо не той текст. -->
+        <span
+          bind:this={mirrorEl}
+          aria-hidden="true"
+          class="pointer-events-none invisible absolute top-0 left-0 -z-10 px-0.5 py-1 text-[16px] leading-relaxed whitespace-pre"
+        ></span>
+        <!-- basis-full у розкритому вигляді переносить поле в окремий
+             рядок; order-2 у капсулі ставить його між «+» і рештою,
+             не змінюючи порядку вузлів у DOM. -->
+        <textarea
+          bind:this={textareaEl}
+          bind:value={input}
+          oninput={autoResize}
+          onkeydown={handleKeydown}
+          rows="1"
+          placeholder={started ? CHAT_PLACEHOLDER : heroPlaceholder}
+          disabled={submitting}
+          style:max-height="{inputMaxH}px"
+          class="job-input-plain resize-none bg-transparent px-0.5 py-1 text-[16px] leading-relaxed {expanded
+            ? 'order-first w-full basis-full'
+            : 'order-2 min-w-0 flex-1 self-center'}"
+        ></textarea>
+
+        {@render photoButton()}
+        <!-- Розпірка потрібна лише розкритій панелі: у капсулі місце
+             між «+» і мікрофоном забирає саме поле вводу. -->
+        <div class="order-3 grow" class:hidden={!expanded}></div>
+        <span class="order-5 flex items-center gap-2">
+          {@render micButton()}
+          <!-- Поки Zunor відповідає, на місці «Надіслати» — «Стоп», як у
+               будь-якому ШІ-чаті: одна кнопка, одне місце, ніякого пошуку. -->
+          {#if streaming}
+            <div in:scale={{ duration: 140, start: 0.8, easing: quintOut }}>
+              <Tooltip.Provider delayDuration={150}>
+                <Tooltip.Root>
+                  <Tooltip.Trigger
+                    onclick={stop}
+                    aria-label="Зупинити відповідь"
+                    class="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-foreground text-background transition-transform duration-150 hover:opacity-85 active:scale-[0.94]"
+                  >
+                    <Square
+                      size={11}
+                      fill="currentColor"
+                      strokeWidth={0}
+                      aria-hidden="true"
+                    />
+                  </Tooltip.Trigger>
+                  <Tooltip.Content
+                    side="bottom"
+                    sideOffset={6}
+                    arrowClasses="hidden"
+                  >
+                    Зупинити · Esc
+                  </Tooltip.Content>
+                </Tooltip.Root>
+              </Tooltip.Provider>
+            </div>
+          {:else if canSend}
+            <div in:scale={{ duration: 140, start: 0.8, easing: quintOut }}>
+              <Tooltip.Provider delayDuration={150}>
+                <Tooltip.Root>
+                  <Tooltip.Trigger
+                    onclick={submit}
+                    aria-disabled={submitting || uploading}
+                    aria-label="Надіслати"
+                    class="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-primary hover:primary-hover text-white transition-[transform,opacity] duration-150 active:scale-[0.96] aria-disabled:cursor-not-allowed aria-disabled:opacity-30"
+                  >
+                    <ArrowUp size={18} aria-hidden="true" />
+                  </Tooltip.Trigger>
+                  <Tooltip.Content
+                    side="bottom"
+                    sideOffset={6}
+                    arrowClasses="hidden"
+                  >
+                    Надіслати
+                  </Tooltip.Content>
+                </Tooltip.Root>
+              </Tooltip.Provider>
+            </div>
+          {/if}
+        </span>
+      </div>
+    </div>
+  {/snippet}
+
   {#if finished}
     <div
       class="flex flex-1 flex-col items-center justify-center gap-2 px-8 text-center"
@@ -1168,10 +1483,32 @@
       <h2 class="text-[22px] font-bold tracking-[-0.03em] text-foreground">
         Готово!
       </h2>
-      <p class="max-w-70 text-[14.5px] leading-relaxed text-muted-foreground">
-        <span class="font-semibold text-foreground">Zunor:</span> я вже шукаю тобі
-        клінера.
-      </p>
+      <!-- Кроки, які вже РЕАЛЬНО відбулись: POST /api/jobs повертається
+           після першої хвилі розсилки, а наступні хвилі йдуть далі —
+           тому останній рядок «у роботі», а не «готово». -->
+      <Trace.Root class="mt-3 w-fit gap-2.5 text-left">
+        <div in:fly={{ y: 4, duration: 260, delay: 150, easing: quintOut }}>
+          <Trace.Line class="text-[14.5px]">
+            <Trace.Icon class="text-primary"><Check /></Trace.Icon>
+            <Trace.Title>Заявку опубліковано</Trace.Title>
+          </Trace.Line>
+        </div>
+        {#if sentPhotos.length}
+          <div in:fly={{ y: 4, duration: 260, delay: 300, easing: quintOut }}>
+            <Trace.Line class="text-[14.5px]">
+              <Trace.Icon class="text-primary"><Images /></Trace.Icon>
+              <Trace.Title>Фото додано</Trace.Title>
+              <Trace.Description>{sentPhotos.length}</Trace.Description>
+            </Trace.Line>
+          </div>
+        {/if}
+        <div in:fly={{ y: 4, duration: 260, delay: 450, easing: quintOut }}>
+          <Trace.Line status="running" class="text-[14.5px]">
+            <Trace.Icon><Spinner class="size-4" /></Trace.Icon>
+            <Trace.Title>Шукаю тобі клінера поруч</Trace.Title>
+          </Trace.Line>
+        </div>
+      </Trace.Root>
     </div>
   {:else if !started}
     <!-- ─── HERO ─── -->
@@ -1206,84 +1543,23 @@
         class="z-1 flex w-full max-w-[40rem] flex-col gap-3"
         in:fly={{ y: 10, duration: 400, delay: 80, easing: quintOut }}
       >
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div
-          class="job-input-shell border border-border flex cursor-text flex-col bg-card transition-[border-radius] duration-150 {expanded
-            ? 'rounded-[20px]'
-            : 'rounded-full'}"
-          onmousedown={focusFromShell}
-        >
-          {@render pendingPreview()}
-
-          <!-- gap-1, а не gap-2: у капсулі саме цей проміжок відсуває
-               текст від «+», і восьми пікселів там забагато. -->
-          <div class="relative flex flex-wrap items-center gap-1 px-2 py-2">
-            <!-- Невидимий двійник тексту: єдине його призначення —
-                 виміряти, скільки місця займе рядок. Класи шрифту мусять
-                 збігатися з полем, інакше міряємо не той текст. -->
-            <span
-              bind:this={mirrorEl}
-              aria-hidden="true"
-              class="pointer-events-none invisible absolute top-0 left-0 -z-10 px-0.5 py-1 text-[16px] leading-relaxed whitespace-pre"
-            ></span>
-            <!-- basis-full у розкритому вигляді переносить поле в окремий
-                 рядок; order-2 у капсулі ставить його між «+» і рештою,
-                 не змінюючи порядку вузлів у DOM. -->
-            <textarea
-              bind:this={textareaEl}
-              bind:value={input}
-              oninput={autoResize}
-              onkeydown={handleHeroKeydown}
-              rows="1"
-              placeholder={heroPlaceholder}
-              disabled={waiting}
-              style:max-height="{inputMaxH}px"
-              class="job-input-plain resize-none bg-transparent px-0.5 py-1 text-[16px] leading-relaxed {expanded
-                ? 'order-first w-full basis-full'
-                : 'order-2 min-w-0 flex-1 self-center'}"
-            ></textarea>
-
-            {@render photoButton()}
-            <!-- Розпірка потрібна лише розкритій панелі: у капсулі місце
-                 між «+» і мікрофоном забирає саме поле вводу. -->
-            <div class="order-3 grow" class:hidden={!expanded}></div>
-            <span class="order-5 flex items-center gap-2">
-              {@render micButton()}
-              {#if canSend}
-                <div in:scale={{ duration: 140, start: 0.8, easing: quintOut }}>
-                  <Tooltip.Provider delayDuration={150}>
-                    <Tooltip.Root>
-                      <Tooltip.Trigger
-                        onclick={heroSend}
-                        aria-disabled={waiting || uploading}
-                        aria-label="Надіслати"
-                        class="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-primary hover:primary-hover text-white transition-[transform,opacity] duration-150 active:scale-[0.96] aria-disabled:cursor-not-allowed aria-disabled:opacity-30"
-                      >
-                        <ArrowUp size={18} aria-hidden="true" />
-                      </Tooltip.Trigger>
-                      <Tooltip.Content
-                        side="bottom"
-                        sideOffset={6}
-                        arrowClasses="hidden"
-                      >
-                        Надіслати
-                      </Tooltip.Content>
-                    </Tooltip.Root>
-                  </Tooltip.Provider>
-                </div>
-              {/if}
-            </span>
-          </div>
-        </div>
+        {@render composer()}
 
         <div class="flex flex-wrap justify-center gap-2">
-          {#each HERO_CHIPS as c (c)}
+          {#each HERO_CHIPS as c, i (c.label)}
             <button
               type="button"
-              onclick={() => heroPick(c)}
-              class="cursor-pointer rounded-xl border border-border bg-card px-4 py-2 text-[13.5px] font-medium text-foreground transition-all duration-300 hover:bg-accent active:scale-[0.98]"
+              onclick={() => heroPick(c.label)}
+              class="suggestion-chip"
+              in:fly={{
+                y: 6,
+                duration: 450,
+                delay: 160 + i * 60,
+                easing: quintOut,
+              }}
             >
-              {c}
+              <c.icon size={15} aria-hidden="true" />
+              {c.label}
             </button>
           {/each}
         </div>
@@ -1299,19 +1575,6 @@
   {:else}
     <!-- ─── ЧАТ ─── -->
     <div class="relative min-h-0 flex-1">
-      <!-- Розмова тепер переживає перезавантаження, тож потрібен і явний
-           вихід із неї: інакше стару розмову не скинути до кінця TTL. -->
-      {#if !finished}
-        <button
-          type="button"
-          onclick={resetDialog}
-          class="absolute top-10 right-4 z-20 flex cursor-pointer items-center gap-1.5 rounded-lg border border-border/70 bg-background/90 px-2.5 py-1.5 text-[12.5px] text-muted-foreground shadow-[0_4px_16px_-4px_rgba(0,0,0,0.25)] backdrop-blur-sm transition hover:bg-accent hover:text-foreground"
-        >
-          <Repeat size={13} aria-hidden="true" />
-          Почати заново
-        </button>
-      {/if}
-
       <div
         bind:this={scrollEl}
         onscroll={handleScroll}
@@ -1329,7 +1592,7 @@
                 class="flex justify-end"
                 in:fly={{ y: 6, duration: 280, easing: quintOut }}
               >
-                <div class="flex max-w-[75%] flex-col items-end gap-1.5">
+                <div class="group flex max-w-[75%] flex-col items-end gap-1.5">
                   {#if m.images?.length}
                     <div class="flex flex-wrap justify-end gap-1.5">
                       {#each m.images as img, ii (img + ii)}
@@ -1344,19 +1607,37 @@
                     </div>
                   {/if}
                   {#if m.text}
+                    <!-- Репліка людини — акцентним кольором: свою від
+                         відповідей Zunor видно з першого погляду. Колір і
+                         текст на ньому беруться з акценту в налаштуваннях
+                         вигляду (data-accent), тож читаються з будь-яким. -->
                     <div
-                      class="w-fit rounded-3xl rounded-br-md border border-border bg-card px-4 py-3 text-[16px] leading-5.5 whitespace-pre-wrap wrap-break-word text-foreground"
+                      class="w-fit rounded-3xl rounded-br-md bg-primary px-4 py-3 text-[16px] leading-5.5 whitespace-pre-wrap wrap-break-word text-primary-foreground selection:bg-primary-foreground/25 selection:text-primary-foreground"
                     >
                       {m.text}
+                    </div>
+                    <!-- Дії з'являються під наведенням, як у ChatGPT: під
+                         кожною реплікою постійний рядок іконок лише шумить.
+                         На тачскріні наведення немає — там видно завжди. -->
+                    <div
+                      class="-mr-1.5 flex items-center opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100"
+                    >
+                      {@render messageAction(
+                        copiedId === m.id ? 'Скопійовано' : 'Копіювати',
+                        () => copyText(m.id, m.text),
+                        copiedId === m.id ? Check : Copy,
+                      )}
                     </div>
                   {/if}
                 </div>
               </div>
             {:else if m.role === 'zunor'}
               <div data-msg-id={m.id} in:fade={{ duration: 220 }}>
-                <p class="mb-2 text-[13px] text-muted-foreground">
-                  Thought for {m.thinkSeconds}s
-                </p>
+                {#if m.thinkSeconds > 0}
+                  <Marker.Root class="mb-2 text-[13px]">
+                    <Marker.Content>Думав {m.thinkSeconds} с</Marker.Content>
+                  </Marker.Root>
+                {/if}
                 <MessageBody
                   text={m.text.slice(0, m.shown)}
                   typing={m.typing}
@@ -1366,19 +1647,57 @@
                     class="mt-3 -ml-1.5 flex items-center gap-0.5"
                     transition:fade={{ duration: 200 }}
                   >
-                    <button
-                      type="button"
-                      aria-label="Копіювати"
-                      onclick={() => copyText(m.id, m.text)}
-                      class="flex size-7 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                    >
-                      {#if copiedId === m.id}
-                        <Check size={14} aria-hidden="true" />
-                      {:else}
-                        <Copy size={14} aria-hidden="true" />
-                      {/if}
-                    </button>
+                    {@render messageAction(
+                      copiedId === m.id ? 'Скопійовано' : 'Копіювати',
+                      () => copyText(m.id, plainText(m.text)),
+                      copiedId === m.id ? Check : Copy,
+                    )}
+                    {#if m.id === regenerableId && !streaming}
+                      {@render messageAction(
+                        'Інша відповідь',
+                        regenerate,
+                        RefreshCw,
+                      )}
+                    {/if}
                   </div>
+                {/if}
+              </div>
+            {:else if m.role === 'notice'}
+              <!-- Збій чи «Стоп» — службова примітка, а не репліка в
+                   бульбашці: говорить не Zunor, а сама сторінка. -->
+              <div
+                data-msg-id={m.id}
+                class="flex flex-col gap-2.5"
+                in:fade={{ duration: 200 }}
+              >
+                {#if m.tone === 'stopped'}
+                  <Marker.Root class="text-[13.5px]">
+                    <Marker.Icon>
+                      <Square size={12} fill="currentColor" strokeWidth={0} />
+                    </Marker.Icon>
+                    <Marker.Content>{m.text}</Marker.Content>
+                  </Marker.Root>
+                {:else}
+                  <Marker.Root role="alert" class="items-start text-[14px]">
+                    <Marker.Icon class="mt-0.5 text-destructive">
+                      <CircleAlert />
+                    </Marker.Icon>
+                    <Marker.Content>{m.text}</Marker.Content>
+                  </Marker.Root>
+                {/if}
+                {#if m.retry && m.id === lastMsgId && !streaming}
+                  <!-- Класи — на Root: там їх зводить cn, і w-fit перемагає
+                       w-full маркера, а не залежить від порядку в CSS. -->
+                  <Marker.Root
+                    class="w-fit cursor-pointer rounded-md text-[14px] font-medium text-foreground transition-opacity hover:opacity-70"
+                  >
+                    {#snippet child({ props })}
+                      <button type="button" onclick={retry} {...props}>
+                        <Marker.Icon><RotateCcw /></Marker.Icon>
+                        <Marker.Content>Повторити</Marker.Content>
+                      </button>
+                    {/snippet}
+                  </Marker.Root>
                 {/if}
               </div>
             {:else}
@@ -1471,6 +1790,12 @@
                 </button>
               </div>
             {/if}
+            {#if m.id === resumedAfter}
+              <!-- Без role="separator": з ним підпис не прочитає скрінрідер. -->
+              <Marker.Root variant="separator" class="text-[12.5px]">
+                <Marker.Content>Розмову відновлено</Marker.Content>
+              </Marker.Root>
+            {/if}
           {/each}
 
           {#if photoStage && !waiting && !uploading && !pendingPhotos.length}
@@ -1484,14 +1809,8 @@
           {/if}
 
           {#if waiting}
-            <div
-              class="thinking-row flex items-center gap-2"
-              in:fade={{ duration: 200 }}
-              role="status"
-              aria-live="polite"
-            >
-              <ThinkingLogo size={20} />
-              <span class="thinking-text">Thinking</span>
+            <div in:fade={{ duration: 200 }}>
+              <ThinkingIndicator />
             </div>
           {/if}
           <!-- Місце під якір: дозволяє останньому повідомленню стати вгорі -->
@@ -1521,83 +1840,47 @@
       <div class="pointer-events-none absolute right-0 bottom-0 left-0 z-10">
         <div
           bind:clientHeight={inputPanelHeight}
-          class="pointer-events-auto px-4 pb-3"
+          class="pointer-events-auto px-4 pb-2"
         >
           <div class="mx-auto flex w-full max-w-3xl flex-col">
             <!-- Обгортка завжди в DOM: висота анімується grid-рядком,
                  інакше панель стрибає і чіпси залітають у текст. -->
             <div class="chips-wrap" class:chips-open={chips.length > 0}>
               <div class="min-h-0 overflow-hidden">
-                <div class="flex flex-wrap gap-2 pb-2">
+                <!-- Швидкі відповіді — пігулки, як теги в DESIGN.md. Фото-чіпс
+                     несе іконку: він не відповідає, а відкриває вибір файлу. -->
+                <div class="flex flex-wrap gap-2 pb-2.5">
                   {#each chips as c, i (c)}
                     <button
                       type="button"
                       onclick={() => pickChip(c)}
+                      disabled={streaming}
                       in:fly={{
                         y: 8,
-                        duration: 520,
-                        delay: 180 + i * 90,
+                        duration: 450,
+                        delay: 120 + i * 60,
                         easing: quintOut,
                       }}
                       out:fade={{ duration: 180 }}
-                      class="chip-btn cursor-pointer rounded-xl border border-border bg-card px-4 py-2 text-[13.5px] font-medium text-foreground active:scale-[0.98]"
+                      class="suggestion-chip"
                     >
+                      {#if isAddPhotoChip(c)}
+                        <ImagePlus size={15} aria-hidden="true" />
+                      {/if}
                       {c}
                     </button>
                   {/each}
                 </div>
               </div>
             </div>
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div
-              class="job-input-shell flex cursor-text flex-col rounded-2xl bg-card"
-              onmousedown={focusFromShell}
+            {@render composer()}
+            <!-- Чесне застереження під полем, як у будь-якого ШІ-чату:
+                 заявку підтверджує людина, тож і перевірити її мусить вона. -->
+            <p
+              class="pt-2 text-center text-[12px] leading-4 text-balance text-muted-foreground"
             >
-              {@render pendingPreview()}
-              <div class="flex flex-col gap-3.5 px-4 py-3.5">
-                <textarea
-                  bind:this={textareaEl}
-                  bind:value={input}
-                  oninput={autoResize}
-                  onkeydown={handleKeydown}
-                  rows="1"
-                  placeholder="Напиши Zunor..."
-                  disabled={waiting || submitting}
-                  style:max-height="{inputMaxH}px"
-                  class="job-input-plain block w-full resize-none px-0.5 pt-1 text-[15px] leading-relaxed"
-                ></textarea>
-                <div class="flex items-center gap-2">
-                  {@render photoButton()}
-                  <div class="grow"></div>
-                  {@render micButton()}
-                  {#if canSend}
-                    <div
-                      in:scale={{ duration: 140, start: 0.8, easing: quintOut }}
-                    >
-                      <Tooltip.Provider delayDuration={150}>
-                        <Tooltip.Root>
-                          <Tooltip.Trigger
-                            onclick={send}
-                            aria-disabled={waiting || submitting || uploading}
-                            aria-label="Надіслати"
-                            class="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-primary hover:primary-hover text-white transition-[transform,opacity] duration-150 active:scale-[0.96] aria-disabled:cursor-not-allowed aria-disabled:opacity-30"
-                          >
-                            <ArrowUp size={18} aria-hidden="true" />
-                          </Tooltip.Trigger>
-                          <Tooltip.Content
-                            side="bottom"
-                            sideOffset={6}
-                            arrowClasses="hidden"
-                          >
-                            Надіслати
-                          </Tooltip.Content>
-                        </Tooltip.Root>
-                      </Tooltip.Provider>
-                    </div>
-                  {/if}
-                </div>
-              </div>
-            </div>
+              Zunor — це ШІ, і він може помилятися. Перевіряй деталі заявки.
+            </p>
           </div>
         </div>
       </div>
@@ -1633,30 +1916,6 @@
   @media (prefers-reduced-motion: reduce) {
     :global(.job-mic-live) {
       animation: none;
-    }
-  }
-
-  .thinking-text {
-    font-size: 15px;
-    line-height: 1;
-    background: linear-gradient(
-      90deg,
-      color-mix(in srgb, var(--muted-foreground) 55%, transparent) 0%,
-      var(--foreground) 50%,
-      color-mix(in srgb, var(--muted-foreground) 55%, transparent) 100%
-    );
-    background-size: 250% 100%;
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    animation: thinking-shimmer 1.8s ease-in-out infinite;
-  }
-  @keyframes thinking-shimmer {
-    0% {
-      background-position: 200% 0;
-    }
-    100% {
-      background-position: -100% 0;
     }
   }
 
@@ -1757,15 +2016,40 @@
     --shell-ring: color-mix(in srgb, var(--border) 100%, white 18%);
   }
 
-  /* Тільки бордер на hover. Окремим правилом, а не transition-all:
-     інакше воно конфліктує з fly/scale і на вході чіпси смикає. */
-  .chip-btn {
+  /* Підказки hero й швидкі відповіді — пігулка з DESIGN.md: повне
+     заокруглення, волосяна рамка, без тіні. Переходи перелічені явно, а
+     не transition-all: інакше вони конфліктують з fly/scale, і на вході
+     чіпси смикає. */
+  .suggestion-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    border-radius: 9999px;
+    background: var(--background);
+    padding: 0.4rem 0.9rem;
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--foreground);
     transition:
-      border-color 400ms ease,
+      border-color 200ms ease,
+      background-color 200ms ease,
       transform 150ms ease;
   }
-  .chip-btn:hover {
-    border-color: var(--primary);
+  .suggestion-chip :global(svg) {
+    color: var(--muted-foreground);
+  }
+  .suggestion-chip:hover {
+    border-color: color-mix(in srgb, var(--foreground) 22%, var(--border));
+    background: var(--accent);
+  }
+  .suggestion-chip:active {
+    transform: scale(0.98);
+  }
+  .suggestion-chip:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
   }
 
   .chips-wrap {

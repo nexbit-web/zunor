@@ -188,6 +188,19 @@ describe('після ремонту і регулярне', () => {
       validateCleaningMetadata({ ...withoutFreq, frequency: 'weekly' }).ok,
     ).toBe(true)
   })
+
+  // Без «щодня» щоденне прибирання офісу оформлювалось як «раз на
+  // тиждень», і картка заявки казала майстрові неправду.
+  it('щоденна частота — допустима', () => {
+    const office = {
+      premise: 'office',
+      service: 'regular',
+      when: 'today',
+      rooms: '1',
+      frequency: 'daily',
+    }
+    expect(validateCleaningMetadata(office)).toMatchObject({ ok: true })
+  })
 })
 
 describe('хімчистка', () => {

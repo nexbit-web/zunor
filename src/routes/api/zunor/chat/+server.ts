@@ -60,11 +60,20 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
   // ── Усе провалідовано → відкриваємо потік ──
   const encoder = new TextEncoder()
+  // Клієнт натиснув «Стоп» або закрив вкладку → сервер скасовує потік.
+  // Тоді обриваємо й запит до моделі: відповідь, яку ніхто не прочитає,
+  // однаково оплачується потокенно.
+  const gone = new AbortController()
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
+      // Після скасування enqueue кидає — і цей виняток запустив би
+      // фолбек-хід, тобто ДРУГИЙ платний запит у порожнечу.
       const send = (
         obj: { t: 'text'; d: string } | { t: 'final'; r: ZunorResponse },
-      ) => controller.enqueue(encoder.encode(JSON.stringify(obj) + '\n'))
+      ) => {
+        if (gone.signal.aborted) return
+        controller.enqueue(encoder.encode(JSON.stringify(obj) + '\n'))
+      }
 
       await withTurnLog({ userId, city }, async () => {
         try {
@@ -75,10 +84,15 @@ export const POST: RequestHandler = async ({ request, locals }) => {
               send({ t: 'text', d: delta })
             },
             aiProfile,
+            gone.signal,
           )
           turnLog().final(final)
           send({ t: 'final', r: final })
         } catch (err) {
+          if (gone.signal.aborted) {
+            turnLog().note('Клієнт зупинив відповідь')
+            return
+          }
           console.error('[zunor] stream turn failed:', err)
           turnLog().note(`ХІД УПАВ: ${String(err)}`)
 
@@ -99,7 +113,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
         }
       })
 
-      controller.close()
+      if (!gone.signal.aborted) controller.close()
+    },
+    cancel() {
+      gone.abort()
     },
   })
 

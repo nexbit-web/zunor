@@ -2,18 +2,13 @@
   import { Button } from '$lib/components/ui/button'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
   import PageHead from '$lib/components/dashboard/page-head.svelte'
+  import JobRow from './job-row.svelte'
   import JobCardSkeleton from './job-card-skeleton.svelte'
-  import {
-    Plus,
-    Briefcase,
-    ChevronDown,
-    Check,
-    MessageSquare,
-    Sparkles,
-  } from 'lucide-svelte'
+  import { Plus, Briefcase, ChevronDown, Check, Calendar } from 'lucide-svelte'
   import { onMount, untrack } from 'svelte'
-  import { formatRelative } from '$lib/utils/time'
-  import { serviceLabel } from '$lib/categories/cleaning/presets'
+  import { formatDay } from '$lib/utils/time'
+  import { pluralUk } from '$lib/utils/plural'
+  import { resolveWhen } from '$lib/categories/cleaning/presets'
 
   let {
     initialJobs,
@@ -51,7 +46,7 @@
 
   // $derived, а не const: лічильники приходять пропом і змінюються.
   const STATUS_OPTIONS = $derived([
-    { value: 'all' as const, label: 'Усі заявки', count: counts.all },
+    { value: 'all' as const, label: 'Усі', count: counts.all },
     { value: 'OPEN' as const, label: 'Відкриті', count: counts.open },
     {
       value: 'IN_PROGRESS' as const,
@@ -71,38 +66,54 @@
   ])
 
   const activeLabel = $derived(
-    STATUS_OPTIONS.find((o) => o.value === statusFilter)?.label ?? 'Усі заявки',
+    STATUS_OPTIONS.find((o) => o.value === statusFilter)?.label ?? 'Усі',
   )
 
-  function expiresIn(iso: string) {
-    const diff = new Date(iso).getTime() - Date.now()
-    if (diff <= 0) return 'Прострочено'
-    const days = Math.floor(diff / (24 * 60 * 60_000))
-    const hr = Math.floor(diff / (60 * 60_000))
-    if (days >= 1) return `${days} дн`
-    if (hr >= 1) return `${hr} год`
-    return '< 1 год'
+  /** Живі заявки — те, що ще чекає на клієнта чи майстра. */
+  const activeCount = $derived(counts.open + counts.inProgress)
+
+  /**
+   * Стан словами клієнта, а не статусом із бази. «Відкрита» нічого не
+   * каже людині: їй важливо, чи шукають ще майстра, чи вже є з кого
+   * обирати. Тому відкрита заявка з пропозиціями — окремий стан, і саме
+   * він єдиний залитий кольором: це місце, де клієнт має щось зробити.
+   */
+  type Tone = 'action' | 'live' | 'progress' | 'done' | 'off'
+
+  function stateOf(job: any): { label: string; tone: Tone } {
+    switch (job.status) {
+      case 'OPEN': {
+        const n = job.proposalsCount ?? 0
+        return n > 0
+          ? {
+              label: `${n} ${pluralUk(n, 'пропозиція', 'пропозиції', 'пропозицій')}`,
+              tone: 'action',
+            }
+          : { label: 'Шукаємо майстра', tone: 'live' }
+      }
+      case 'IN_PROGRESS':
+        return { label: 'Майстра обрано', tone: 'progress' }
+      case 'COMPLETED':
+        return { label: 'Завершена', tone: 'done' }
+      case 'EXPIRED':
+        return { label: 'Термін минув', tone: 'off' }
+      default:
+        return { label: 'Скасована', tone: 'off' }
+    }
   }
 
-  /** Тип послуги з metadata — те, чим заявка є. Фолбек на назву
-      категорії: старі заявки metadata.service могли не мати. */
-  function serviceOf(job: any) {
-    const key = (job.metadata as Record<string, unknown> | null)?.service
-    return typeof key === 'string' ? serviceLabel(key) : 'Прибирання'
+  const TONE: Record<Tone, string> = {
+    action: 'bg-primary text-primary-foreground',
+    live: 'bg-primary/10 text-primary',
+    progress: 'bg-amber-500/12 text-amber-700 dark:text-amber-400',
+    done: 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-400',
+    off: 'bg-muted text-muted-foreground',
   }
 
-  function statusLabel(s: string) {
-    return (
-      (
-        {
-          OPEN: 'Відкрита',
-          IN_PROGRESS: 'У роботі',
-          COMPLETED: 'Завершена',
-          CANCELLED: 'Скасована',
-          EXPIRED: 'Прострочена',
-        } as Record<string, string>
-      )[s] ?? s
-    )
+  /** День прибирання з урахуванням «today/tomorrow» від дня створення. */
+  function dayOf(job: any): string {
+    const iso = resolveWhen(job.metadata?.when, job.createdAt)
+    return iso ? formatDay(iso) : ''
   }
 
   async function loadMore() {
@@ -137,15 +148,24 @@
 
 <PageHead>
   <div class="flex items-center justify-between gap-3">
-    <h1 class="truncate text-2xl font-semibold tracking-tight sm:text-3xl">
-      Мої заявки
-    </h1>
+    <div class="flex min-w-0 items-center gap-2.5">
+      <h1 class="truncate text-2xl font-semibold tracking-tight sm:text-3xl">
+        Мої заявки
+      </h1>
+      {#if activeCount > 0}
+        <span
+          class="rounded-full bg-primary/12 px-2 py-0.5 text-xs font-semibold tabular-nums text-primary"
+          title="Активні заявки"
+        >
+          {activeCount}
+        </span>
+      {/if}
+    </div>
 
     <div class="flex shrink-0 items-center gap-2">
-      <!-- Фільтр — звичайна кнопка поруч із головною, приглушена: вона
-           не дія, а стан списку, і перетягувати увагу на себе їй нема за
-           що. П'ять вкладок із лічильниками займали цілий рядок і на
-           телефоні переносились у два, хоча обраний завжди рівно один. -->
+      <!-- Фільтр — як у «Замовленнях» і «Сповіщеннях»: приглушена кнопка
+           «Показати: …». Пʼять вкладок із лічильниками займали цілий
+           рядок і на телефоні переносились у два, хоча обрана завжди одна. -->
       {#if counts.all > 0}
         <DropdownMenu.Root>
           <DropdownMenu.Trigger>
@@ -154,10 +174,11 @@
                 {...props}
                 variant="secondary"
                 size="sm"
-                class="rounded-full"
+                class="font-normal text-muted-foreground"
               >
-                {activeLabel}
-                <ChevronDown />
+                <span class="hidden sm:inline">Показати:</span>
+                <span class="font-medium text-foreground">{activeLabel}</span>
+                <ChevronDown class="size-3.5 opacity-60" />
               </Button>
             {/snippet}
           </DropdownMenu.Trigger>
@@ -170,14 +191,12 @@
               >
                 <span class="flex min-w-0 items-center gap-2">
                   <span class="truncate">{option.label}</span>
-                  {#if option.count > 0}
-                    <span class="text-xs tabular-nums text-muted-foreground">
-                      {option.count}
-                    </span>
-                  {/if}
+                  <span class="text-xs tabular-nums text-muted-foreground">
+                    {option.count}
+                  </span>
                 </span>
                 {#if statusFilter === option.value}
-                  <Check class="size-4 shrink-0 text-primary" />
+                  <Check class="size-4 shrink-0 text-ring" />
                 {/if}
               </DropdownMenu.Item>
             {/each}
@@ -185,7 +204,7 @@
         </DropdownMenu.Root>
       {/if}
 
-      <Button size="sm" href="/dashboard/jobs/new" class="rounded-full">
+      <Button size="sm" href="/dashboard/jobs/new">
         <Plus />
         <span class="hidden sm:inline">Нова заявка</span>
       </Button>
@@ -205,7 +224,7 @@
     </h2>
     <p class="mt-2 max-w-90 text-sm leading-relaxed text-muted-foreground">
       {counts.all === 0
-        ? 'Створіть першу заявку — і майстри почнуть надсилати пропозиції.'
+        ? 'Опишіть, що прибрати, — майстри поруч самі запропонують ціну.'
         : 'Спробуйте інший фільтр.'}
     </p>
     {#if counts.all === 0}
@@ -225,68 +244,43 @@
     {/if}
   </div>
 {:else}
-  <!-- Картки. Межу дає ледь помітна рамка, а не тінь: тінь підіймає
-       картку над сторінкою, а тут нічого не спливає — це список.
-       Заокруглення 16px і поля 16/20px тримають однаковий ритм із
-       рештою дашборда. -->
-  <div class="mt-4 space-y-3">
+  <ul class="mt-1 border-t border-border/60">
     {#each filtered as job (job.id)}
-      <a
+      {@const state = stateOf(job)}
+      {@const day = dayOf(job)}
+      <JobRow
         href={`/dashboard/jobs/${job.id}`}
-        class="block rounded-2xl border border-border/60 bg-card p-4 transition-colors hover:border-border hover:bg-accent/30 sm:p-5"
+        service={job.metadata?.service}
+        title={job.title}
+        description={job.description}
+        dimmed={state.tone === 'off'}
       >
-        <!-- Верхній рядок — про що заявка: іконка й тег послуги.
-             Тег приглушений, бо це класифікація, а не новина. -->
-        <div class="flex items-center gap-2">
-          <Sparkles class="size-4 shrink-0 text-primary" />
+        {#snippet status()}
           <span
-            class="rounded-full bg-muted px-2.5 py-0.5 text-[12.5px] font-medium text-muted-foreground"
+            class={[
+              'inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-[12.5px] font-medium whitespace-nowrap',
+              TONE[state.tone],
+            ]}
           >
-            {serviceOf(job)}
-          </span>
-        </div>
-
-        <h3 class="mt-3 text-[17px] leading-snug font-semibold text-foreground">
-          {job.title}
-        </h3>
-
-        {#if job.description}
-          <p
-            class="mt-1.5 line-clamp-2 text-[15px] leading-relaxed text-muted-foreground"
-          >
-            {job.description}
-          </p>
-        {/if}
-
-        <!-- Нижній рядок — стан. Час праворуч: він потрібен лише для
-             орієнтації й не має перебивати те, що ліворуч. -->
-        <div
-          class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[13px] text-muted-foreground"
-        >
-          {#if job.status === 'OPEN'}
-            <!-- Єдиний колір картки — «пошук іде просто зараз». -->
-            <span
-              class="inline-flex items-center gap-1.5 font-medium text-primary"
-            >
+            {#if state.tone === 'live'}
+              <!-- Пульс — «пошук іде просто зараз». Рівно один на рядок:
+                   якби дихало все, не казало б нічого. -->
               <span class="live-dot size-1.5 rounded-full bg-primary"></span>
-              Шукаємо майстра
-            </span>
-          {:else}
-            <span>{statusLabel(job.status)}</span>
-          {/if}
-
-          <span class="inline-flex items-center gap-1.5">
-            <MessageSquare class="size-3.5" />
-            <span class={job.proposalsCount > 0 ? 'text-foreground' : ''}>
-              {job.proposalsCount}
-            </span>
+            {/if}
+            {state.label}
           </span>
-
-          <span class="ms-auto">{formatRelative(job.createdAt)}</span>
-        </div>
-      </a>
+        {/snippet}
+        {#snippet meta()}
+          {#if day}
+            <span class="inline-flex items-center gap-1.5">
+              <Calendar class="size-3.5" aria-hidden="true" />
+              <span class="text-foreground/80">{day}</span>
+            </span>
+          {/if}
+        {/snippet}
+      </JobRow>
     {/each}
-  </div>
+  </ul>
 
   <div bind:this={sentinelEl} class="h-1"></div>
 
@@ -299,9 +293,6 @@
 {/if}
 
 <style>
-  /* Пульс — не прикраса: він відрізняє «іде просто зараз» від статусу,
-     який просто написаний словом. І саме тому він рівно один на рядок:
-     якби дихало все, не казало б нічого. */
   .live-dot {
     animation: live-pulse 2s ease-in-out infinite;
   }

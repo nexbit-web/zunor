@@ -106,9 +106,17 @@
   >
     <AppSidebar />
 
+    <!-- Чат отримує ЖОРСТКУ висоту екрана й на телефоні теж. Без неї
+         ланцюжок h-full нічого не тримав: main за замовчуванням не
+         менший за свій вміст (min-height: auto), тож стрічка разом зі
+         спейсером розтягувала сторінку, композер їхав за край, а спейсер,
+         що рахується від висоти стрічки, ріс сам від себе. -->
     <Sidebar.Inset
       bind:ref={insetEl}
-      class="min-w-0 bg-background md:m-1.5! md:ml-0! md:h-[calc(100svh-0.75rem)] md:overflow-y-auto md:rounded-[10px]! md:border md:border-panel-border md:shadow-none"
+      class={[
+        'min-w-0 bg-background md:m-1.5! md:ml-0! md:h-[calc(100svh-0.75rem)] md:rounded-[10px]! md:border md:border-panel-border md:shadow-none',
+        isChat ? 'h-svh overflow-hidden' : 'md:overflow-y-auto',
+      ]}
     >
       <!-- Кнопка панелі лише для мобільного: на десктопі свою кнопку малює
            сам AppSidebar — у шапці, доки панель відкрита, і в лівому
@@ -121,12 +129,13 @@
            складом пунктів. -->
       <MobileTrigger />
 
-      <main class="flex flex-1">
+      <!-- min-h-0 знімає ту саму «не менше за вміст»: лише тоді висота
+           main — це висота Inset, і h-full у чаті справді щось означає. -->
+      <main class="flex flex-1" class:min-h-0={isChat}>
         <div class="min-w-0 flex-1" class:overflow-hidden={isChat}>
           {@render children()}
         </div>
       </main>
     </Sidebar.Inset>
-
   </Sidebar.Provider>
 {/if}

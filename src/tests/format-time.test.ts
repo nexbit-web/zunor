@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { formatRelative, formatFull } from '$lib/utils/time'
+import { formatRelative, formatFull, formatDay } from '$lib/utils/time'
 
 // Один форматер часу на весь застосунок. До зведення однакова функція жила
 // в ШЕСТИ місцях (orders/labels.ts, jobs/display.ts, client-jobs,
@@ -79,6 +79,30 @@ describe('відносний час', () => {
     const future = new Date(NOW.getTime() + 10 * MIN).toISOString()
 
     expect(formatRelative(future)).toBe('щойно')
+  })
+})
+
+// День прибирання в списку заявок: календарний день, а не «скільки годин».
+describe('день прибирання', () => {
+  it('сьогодні, завтра, учора — словом', () => {
+    expect(formatDay('2026-03-15')).toBe('Сьогодні')
+    expect(formatDay('2026-03-16')).toBe('Завтра')
+    expect(formatDay('2026-03-14')).toBe('Учора')
+  })
+
+  it('далі — день тижня й дата', () => {
+    expect(formatDay('2026-03-19')).toBe('Чт, 19 бер.')
+  })
+
+  // Сервер живе в UTC: о 00:30 за Києвом там ще вчорашній день, і
+  // «Сьогодні» вказувало б на вчора.
+  it('день рахується за Києвом, а не за годинником сервера', () => {
+    const afterMidnightKyiv = new Date('2026-03-15T22:30:00Z')
+    expect(formatDay('2026-03-16', afterMidnightKyiv)).toBe('Сьогодні')
+  })
+
+  it('невалідна дата — порожній рядок', () => {
+    expect(formatDay('завтра')).toBe('')
   })
 })
 

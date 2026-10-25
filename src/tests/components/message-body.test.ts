@@ -122,6 +122,15 @@ describe('«Назва — опис» у пункті', () => {
     )
   })
 
+  // Пробіли перед {/if} Svelte обрізає — так уже злипалось «Тварини —чи є».
+  it('після тире між назвою й описом є пробіл', () => {
+    const { container } = body('— Тварини — кіт чи собака')
+
+    expect(container.querySelector('li')?.textContent?.trim()).toBe(
+      'Тварини — кіт чи собака',
+    )
+  })
+
   // Довгий лівий бік — це вже речення з тире посередині, а не термін.
   it('назва довша за чотири слова не жирниться', () => {
     const { container } = body(
@@ -147,6 +156,32 @@ describe('«Назва — опис» у пункті', () => {
     const { container } = body('—  — опис')
 
     expect(container.querySelector('li .font-medium')).toBeNull()
+  })
+})
+
+describe('форматування', () => {
+  it('**жирне** малюється <strong> без зірочок', () => {
+    const { container } = body('Прибирання **завтра**')
+
+    expect(container.querySelector('strong')?.textContent).toBe('завтра')
+    expect(container.textContent).not.toContain('**')
+  })
+
+  it('нумерований список — це <ol> з номерами від компонента', () => {
+    const { container } = body('1. Кімнати\n1. Дата')
+
+    const ol = container.querySelector('ol')
+    expect(ol?.querySelectorAll('li')).toHaveLength(2)
+    // Номери — маркери, а не текст пункту: «1.» у тексті не лишається.
+    const numbers = [...container.querySelectorAll('li [aria-hidden="true"]')]
+    expect(numbers.map((n) => n.textContent)).toEqual(['1', '2'])
+  })
+
+  it('курсор друку стоїть у пункті нумерованого списку', () => {
+    const { container } = body('1. A\n2. B', true)
+
+    const items = container.querySelectorAll('li')
+    expect(items[1].querySelector('.animate-pulse')).not.toBeNull()
   })
 })
 

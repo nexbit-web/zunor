@@ -77,6 +77,37 @@ describe('dialog-storage', () => {
     expect(msg.typing).toBe(false)
   })
 
+  // Зірваний хід переживає F5 разом із кнопкою «Повторити»: інакше людина
+  // після перезавантаження бачила б свою репліку без відповіді й без виходу.
+  it('зберігає службову примітку разом із можливістю повтору', () => {
+    const base = dialog()
+    saveDialog(
+      'user-1',
+      dialog({
+        messages: [
+          ...base.messages,
+          {
+            id: 2,
+            role: 'notice' as const,
+            text: 'Збій',
+            tone: 'error' as const,
+            retry: true,
+          },
+        ],
+        nextMsgId: 3,
+      }),
+    )
+    const notice = loadDialog('user-1')!.messages[2]
+
+    expect(notice).toEqual({
+      id: 2,
+      role: 'notice',
+      text: 'Збій',
+      tone: 'error',
+      retry: true,
+    })
+  })
+
   // Головна вимога приватності: спільний комп'ютер.
   it('не віддає діалог іншому користувачу', () => {
     saveDialog('user-1', dialog())

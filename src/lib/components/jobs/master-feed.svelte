@@ -3,31 +3,24 @@
   import * as Alert from '$lib/components/ui/alert'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
   import PageHead from '$lib/components/dashboard/page-head.svelte'
+  import JobRow from './job-row.svelte'
   import JobCardSkeleton from './job-card-skeleton.svelte'
   import { onMount } from 'svelte'
   import { invalidate } from '$app/navigation'
   import { notifications } from '$lib/notifications'
-  import { fly } from 'svelte/transition'
-  import { quintOut } from 'svelte/easing'
   import {
     Star,
     ChevronDown,
     Check,
     AlertCircle,
     Search,
-    Sparkles,
     MapPin,
+    Calendar,
   } from 'lucide-svelte'
 
-  import { formatRelative } from '$lib/utils/time'
+  import { formatDay, formatRelative } from '$lib/utils/time'
   import { formatDistance } from '$lib/geo/districts'
-
-  // serviceName, а не serviceLabel: локальна змінна з такою назвою вже
-  // тримає підпис кнопки фільтра.
-  import {
-    SERVICES,
-    serviceLabel as serviceName,
-  } from '$lib/categories/cleaning/presets'
+  import { SERVICES, resolveWhen } from '$lib/categories/cleaning/presets'
 
   let {
     initialJobs,
@@ -51,7 +44,7 @@
   const ALL = 'all'
   let activeService = $state<string>(ALL)
 
-  const serviceLabel = $derived(
+  const filterLabel = $derived(
     activeService === ALL
       ? 'Усі послуги'
       : (SERVICES.find((s) => s.key === activeService)?.label ?? 'Усі послуги'),
@@ -109,17 +102,16 @@
       : jobs,
   )
 
-  /** Тип послуги з metadata — те, чим заявка є. Фолбек на назву
-      категорії: старі заявки metadata.service могли не мати. */
-  function serviceOf(job: any) {
-    const key = (job.metadata as Record<string, unknown> | null)?.service
-    return typeof key === 'string' ? serviceName(key) : 'Прибирання'
-  }
-
   /** Заявка, на яку ще реально встигнути: дві години з публікації.
       Для майстра це єдине, що варте кольору в рядку. */
   function isFresh(iso: string) {
     return Date.now() - new Date(iso).getTime() < 2 * 60 * 60_000
+  }
+
+  /** День прибирання з урахуванням «today/tomorrow» від дня створення. */
+  function dayOf(job: any): string {
+    const iso = resolveWhen(job.metadata?.when, job.createdAt)
+    return iso ? formatDay(iso) : ''
   }
 </script>
 
@@ -129,10 +121,9 @@
       Заявки поруч
     </h1>
 
-    <!-- Фільтр — звичайна приглушена кнопка, на місці головної дії: у
-         майстра на цьому екрані іншої дії немає. Смуга пілюль замість
-         неї їхала в горизонтальний скрол і ховала останні послуги за
-         краєм екрана без жодного натяку, що вони є.
+    <!-- Фільтр — як у «Замовленнях»: приглушена кнопка «Показати: …».
+         Смуга пілюль замість неї їхала в горизонтальний скрол і ховала
+         останні послуги за краєм екрана без жодного натяку, що вони є.
 
          Показуємо по `jobs`, а не по `visibleJobs`: коли під обраний
          фільтр нічого не підпало, кнопка мусить лишитись — інакше з
@@ -145,10 +136,11 @@
               {...props}
               variant="secondary"
               size="sm"
-              class="shrink-0 rounded-full"
+              class="shrink-0 font-normal text-muted-foreground"
             >
-              {serviceLabel}
-              <ChevronDown />
+              <span class="hidden sm:inline">Показати:</span>
+              <span class="font-medium text-foreground">{filterLabel}</span>
+              <ChevronDown class="size-3.5 opacity-60" />
             </Button>
           {/snippet}
         </DropdownMenu.Trigger>
@@ -161,7 +153,7 @@
             >
               <span class="truncate">{option.label}</span>
               {#if activeService === option.key}
-                <Check class="size-4 shrink-0 text-primary" />
+                <Check class="size-4 shrink-0 text-ring" />
               {/if}
             </DropdownMenu.Item>
           {/each}
@@ -198,7 +190,7 @@
     <p class="mt-2 max-w-90 text-sm leading-relaxed text-muted-foreground">
       {activeService !== ALL
         ? 'Спробуйте інший фільтр.'
-        : 'Зайдіть пізніше — нові заявки зʼявляються щодня.'}
+        : 'Щойно поруч зʼявиться заявка, ми надішлемо сповіщення.'}
     </p>
     {#if activeService !== ALL}
       <Button
@@ -212,87 +204,75 @@
     {/if}
   </div>
 {:else}
-  <!-- key-блок перемонтує список при зміні фільтра → повтор анімації -->
-  {#key activeService}
-    <div class="mt-4 space-y-3">
-      {#each visibleJobs as job, i (job.id)}
-        <a
-          href={`/dashboard/jobs/${job.id}`}
-          in:fly={{
-            y: 8,
-            duration: 220,
-            delay: Math.min(i, 6) * 30,
-            easing: quintOut,
-          }}
-          class="block rounded-2xl border border-border/60 bg-card p-4 transition-colors hover:border-border hover:bg-accent/30 sm:p-5"
-        >
-          <div class="flex items-center gap-2">
-            <Sparkles class="size-4 shrink-0 text-primary" />
+  <ul class="mt-1 border-t border-border/60">
+    {#each visibleJobs as job (job.id)}
+      {@const fresh = isFresh(job.createdAt)}
+      {@const day = dayOf(job)}
+      <JobRow
+        href={`/dashboard/jobs/${job.id}`}
+        service={job.metadata?.service}
+        title={job.title}
+        description={job.description}
+      >
+        {#snippet status()}
+          <!-- Колір дістається тільки свіжим заявкам: на них ще реально
+               встигнути, і саме це майстер шукає очима. -->
+          {#if fresh}
             <span
-              class="rounded-full bg-muted px-2.5 py-0.5 text-[12.5px] font-medium text-muted-foreground"
+              class="inline-flex h-6 items-center gap-1.5 rounded-full bg-primary/10 px-2.5 text-[12.5px] font-medium whitespace-nowrap text-primary"
             >
-              {serviceOf(job)}
+              <span class="live-dot size-1.5 rounded-full bg-primary"></span>
+              {formatRelative(job.createdAt)}
             </span>
-
-            {#if isFresh(job.createdAt)}
-              <!-- Колір дістається тільки свіжим заявкам: на них ще
-                   реально встигнути, і саме це майстер шукає очима. -->
-              <span
-                class="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-primary"
-              >
-                <span class="live-dot size-1.5 rounded-full bg-primary"></span>
-                Щойно
-              </span>
-            {/if}
-          </div>
-
-          <h3
-            class="mt-3 text-[17px] leading-snug font-semibold text-pretty text-foreground"
-          >
-            {job.title}
-          </h3>
-
-          {#if job.description}
-            <p
-              class="mt-1.5 line-clamp-2 text-[15px] leading-relaxed text-muted-foreground"
+          {:else}
+            <span
+              class="inline-flex h-6 items-center text-[13px] whitespace-nowrap text-muted-foreground"
             >
-              {job.description}
-            </p>
+              {formatRelative(job.createdAt)}
+            </span>
+          {/if}
+        {/snippet}
+        {#snippet meta()}
+          {#if day}
+            <span class="inline-flex items-center gap-1.5">
+              <Calendar class="size-3.5" aria-hidden="true" />
+              <span class="text-foreground/80">{day}</span>
+            </span>
           {/if}
 
-          <div
-            class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[13px] text-muted-foreground"
-          >
-            {#if job.client}
-              <span class="inline-flex min-w-0 items-center gap-1.5">
-                <span class="truncate">{job.client.name ?? 'Замовник'}</span>
-                {#if job.client.reviewsCount > 0}
-                  <Star class="size-3 shrink-0 fill-amber-400 text-amber-400" />
-                  <span class="font-medium text-foreground">
-                    {job.client.avgRating.toFixed(1)}
-                  </span>
-                {/if}
+          <!-- Район, а не адреса: точну адресу клієнт дає в чаті вже
+               після угоди. Відстань — від району самого майстра. -->
+          {#if job.place?.district}
+            <span class="inline-flex min-w-0 items-center gap-1.5">
+              <MapPin class="size-3.5 shrink-0" aria-hidden="true" />
+              <!-- {' · '} явно: пробіл на початку {#if} Svelte зрізає. -->
+              <span class="truncate">
+                {job.place
+                  .district}{#if job.place.distanceKm !== null}{' · '}{formatDistance(
+                    job.place.distanceKm,
+                  )}{/if}
               </span>
-            {/if}
+            </span>
+          {/if}
 
-            <!-- Район, а не адреса: точну адресу клієнт дає в чаті вже
-                 після угоди. Відстань — від району самого майстра. -->
-            {#if job.place?.district}
-              <span class="inline-flex min-w-0 items-center gap-1">
-                <MapPin class="size-3 shrink-0" aria-hidden="true" />
-                <span class="truncate">
-                  {job.place.district}{#if job.place.distanceKm !== null}
-                    · {formatDistance(job.place.distanceKm)}{/if}
+          {#if job.client}
+            <span class="inline-flex min-w-0 items-center gap-1">
+              <span class="truncate">{job.client.name ?? 'Замовник'}</span>
+              {#if job.client.reviewsCount > 0}
+                <Star
+                  class="size-3 shrink-0 fill-amber-400 text-amber-400"
+                  aria-hidden="true"
+                />
+                <span class="font-medium text-foreground/80">
+                  {job.client.avgRating.toFixed(1)}
                 </span>
-              </span>
-            {/if}
-
-            <span class="ms-auto">{formatRelative(job.createdAt)}</span>
-          </div>
-        </a>
-      {/each}
-    </div>
-  {/key}
+              {/if}
+            </span>
+          {/if}
+        {/snippet}
+      </JobRow>
+    {/each}
+  </ul>
 
   <div bind:this={sentinelEl} class="h-1"></div>
   {#if loadingMore}

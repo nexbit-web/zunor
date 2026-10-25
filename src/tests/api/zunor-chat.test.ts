@@ -10,7 +10,11 @@ const runZunorTurnStream = vi.fn(
     _city: string | null,
     _onDelta: (delta: string) => void,
     _aiProfile: unknown,
-  ) => ({ kind: 'message', reply: 'Готово' }),
+    _signal?: AbortSignal,
+  ): Promise<{ kind: string; reply: string }> => ({
+    kind: 'message',
+    reply: 'Готово',
+  }),
 )
 const runZunorTurn = vi.fn(
   async (
@@ -231,5 +235,28 @@ describe('відповідь', () => {
 
     expect(res.status).toBe(200)
     expect(text).toContain('тимчасово недоступний')
+  })
+})
+
+describe('кнопка «Стоп»', () => {
+  // Клієнт обриває fetch → сервер скасовує потік. Хід моделі мусить
+  // зупинитись разом із ним, а фолбек — НЕ стартувати: інакше «Стоп»
+  // коштував би другий платний запит, відповідь на який ніхто не прочитає.
+  it('скасований потік обриває хід моделі й не запускає фолбек', async () => {
+    let signal: AbortSignal | undefined
+    runZunorTurnStream.mockImplementationOnce(
+      (_h, _c, _d, _p, s) =>
+        new Promise((_, reject) => {
+          signal = s
+          s?.addEventListener('abort', () => reject(new Error('aborted')))
+        }),
+    )
+
+    const res = (await POST(chatEvent(freshUser(), [userTurn]))) as Response
+    await res.body!.cancel()
+    await new Promise((r) => setTimeout(r, 0))
+
+    expect(signal?.aborted).toBe(true)
+    expect(runZunorTurn).not.toHaveBeenCalled()
   })
 })

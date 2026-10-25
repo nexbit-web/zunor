@@ -12,6 +12,7 @@ import {
   trashLabel,
   frequencyLabel,
   whenLabel,
+  resolveWhen,
   itemLabel,
   itemVariantLabel,
 } from './presets'
@@ -33,8 +34,15 @@ export interface JobDetail {
 /**
  * Будує список характеристик заявки з metadata.
  * Повертає [] якщо metadata порожня або не з прибирання.
+ *
+ * createdAt — для «today»/«tomorrow»: вони відносні до дня створення
+ * заявки (resolveWhen). Драфт у чаті ще не створений, тож його звідти
+ * кличуть без дати й показують «Завтра» як є.
  */
-export function describeJob(metadata: unknown): JobDetail[] {
+export function describeJob(
+  metadata: unknown,
+  createdAt?: string | Date,
+): JobDetail[] {
   if (!metadata || typeof metadata !== 'object') return []
 
   const m = metadata as Record<string, unknown>
@@ -142,9 +150,10 @@ export function describeJob(metadata: unknown): JobDetail[] {
 
   // Коли
   if (m.when) {
+    const day = createdAt ? resolveWhen(m.when, createdAt) : null
     details.push({
       label: 'Коли',
-      value: whenLabel(String(m.when)),
+      value: whenLabel(day ?? String(m.when)),
       icon: 'Calendar',
     })
   }

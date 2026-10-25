@@ -37,7 +37,7 @@
 
   let { data }: { data: PageData } = $props()
 
-  const details = $derived(describeJob(data.job.metadata))
+  const details = $derived(describeJob(data.job.metadata, data.job.createdAt))
 
   // ─── Форма відгуку ───
   let formOpen = $state(false)

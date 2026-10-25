@@ -46,7 +46,7 @@
   let acceptDialogOpen = $state(false)
   let pendingAcceptId = $state<string | null>(null)
 
-  const details = $derived(describeJob(data.job.metadata))
+  const details = $derived(describeJob(data.job.metadata, data.job.createdAt))
 
   // статуси → семантичні кольори (emerald/amber — статус, не акцент бренду)
   function statusBadge(status: string): string {
