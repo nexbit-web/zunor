@@ -1,8 +1,7 @@
 <script lang="ts">
-  import * as Field from '$lib/components/ui/field/index.js'
   import * as InputOTP from '$lib/components/ui/input-otp/index.js'
-  import { Button } from '$lib/components/ui/button/index.js'
   import { Spinner } from '$lib/components/ui/spinner/index.js'
+  import { CircleAlert } from 'lucide-svelte'
   import { emailOtp } from '$lib/auth-client'
   import { goto, invalidateAll } from '$app/navigation'
   import { cn } from '$lib/utils.js'
@@ -25,8 +24,6 @@
   let serverError = $state('')
   let cooldown = $state(RESEND_COOLDOWN_SEC)
 
-  const complete = $derived(code.length === CODE_LENGTH)
-
   // Таймер «надіслати ще раз». Чистимо при розмонтуванні, інакше
   // інтервал переживе перехід і смикатиме state мертвого компонента.
   $effect(() => {
@@ -37,9 +34,11 @@
     return () => clearInterval(timer)
   })
 
-  async function handleVerify(e: SubmitEvent) {
-    e.preventDefault()
-    if (verifying || !complete) return
+  // Кнопки «Підтвердити» немає навмисно: код має рівно шість цифр, тож
+  // момент «готово» система знає сама. Кнопка тут була б проханням
+  // підтвердити те, що людина вже й так дописала до кінця.
+  async function verify() {
+    if (verifying || code.length !== CODE_LENGTH) return
 
     verifying = true
     serverError = ''
@@ -73,6 +72,11 @@
     }
   }
 
+  function handleSubmit(e: SubmitEvent) {
+    e.preventDefault()
+    void verify()
+  }
+
   async function handleResend() {
     if (resending || cooldown > 0) return
 
@@ -101,84 +105,87 @@
   }
 </script>
 
-<div class={cn('flex flex-col gap-6', className)}>
-  <form onsubmit={handleVerify} novalidate>
-    <Field.Group>
-      <div class="flex flex-col items-center gap-1 text-center">
-        <h1 class="text-2xl font-bold">Підтвердіть пошту</h1>
-        <p class="text-sm text-balance text-muted-foreground">
-          Ми надіслали 6-значний код на <span
-            class="font-medium text-foreground">{email}</span
-          >
-        </p>
-      </div>
+<div class={cn('flex flex-col gap-7', className)}>
+  <div class="flex flex-col gap-3 text-center">
+    <h1 class="text-2xl font-semibold">Підтвердіть пошту</h1>
+    <p class="text-[15px] leading-relaxed text-balance text-muted-foreground">
+      Ми надіслали код підтвердження на
+      <span class="text-foreground">{email}</span>. Щоб продовжити, введіть
+      його.
+    </p>
+  </div>
 
-      <Field.Field>
-        <Field.Label for="otp" class="sr-only">Код підтвердження</Field.Label>
-        <InputOTP.Root
-          maxlength={CODE_LENGTH}
-          id="otp"
-          bind:value={code}
-          disabled={verifying}
-          aria-invalid={!!serverError}
-          aria-describedby={serverError ? 'otp-err' : undefined}
-          required
-        >
-          {#snippet children({ cells })}
-            <InputOTP.Group
-              class="gap-2 *:data-[slot=input-otp-slot]:rounded-md *:data-[slot=input-otp-slot]:border"
-            >
-              {#each cells.slice(0, 3) as cell (cell)}
-                <InputOTP.Slot {cell} />
-              {/each}
-            </InputOTP.Group>
-            <InputOTP.Separator />
-            <InputOTP.Group
-              class="gap-2 *:data-[slot=input-otp-slot]:rounded-md *:data-[slot=input-otp-slot]:border"
-            >
-              {#each cells.slice(3, 6) as cell (cell)}
-                <InputOTP.Slot {cell} />
-              {/each}
-            </InputOTP.Group>
-          {/snippet}
-        </InputOTP.Root>
-
-        {#if serverError}
-          <Field.Error id="otp-err" role="alert">{serverError}</Field.Error>
-        {:else}
-          <Field.Description class="text-center">
-            Код дійсний 10 хвилин.
-          </Field.Description>
-        {/if}
-      </Field.Field>
-
-      <Button
-        class="relative py-6"
-        type="submit"
-        disabled={verifying || !complete}
-        aria-busy={verifying}
-      >
-        <span>{verifying ? 'Перевіряємо...' : 'Підтвердити'}</span>
-        {#if verifying}
-          <Spinner class="absolute right-4 animate-spin" aria-hidden="true" />
-        {/if}
-      </Button>
-
-      <Field.Description class="text-center">
-        {#if cooldown > 0}
-          Надіслати ще раз можна через {cooldown} с
-        {:else}
-          Не отримали код?
-          <button
-            type="button"
-            onclick={handleResend}
-            disabled={resending}
-            class="underline underline-offset-4 hover:text-foreground disabled:opacity-50"
-          >
-            {resending ? 'Надсилаємо...' : 'Надіслати ще раз'}
-          </button>
-        {/if}
-      </Field.Description>
-    </Field.Group>
+  <form onsubmit={handleSubmit} novalidate>
+    <label for="otp" class="sr-only">Код підтвердження</label>
+    <InputOTP.Root
+      maxlength={CODE_LENGTH}
+      id="otp"
+      bind:value={code}
+      disabled={verifying}
+      onComplete={() => void verify()}
+      aria-invalid={!!serverError}
+      aria-describedby={serverError ? 'otp-err' : undefined}
+      class="justify-center"
+      required
+    >
+      {#snippet children({ cells })}
+        <!-- Одна група без роздільника: рисочка посередині ділила код на
+             «3 + 3», хоча сервер шле шість цифр підряд. -->
+        <InputOTP.Group class="gap-2 sm:gap-2.5">
+          {#each cells as cell (cell)}
+            <InputOTP.Slot
+              {cell}
+              class="size-11 rounded-[10px]! border! text-xl shadow-none sm:size-14"
+            />
+          {/each}
+        </InputOTP.Group>
+      {/snippet}
+    </InputOTP.Root>
   </form>
+
+  <!-- Місце під статус зарезервоване завжди: інакше поява помилки
+       підкидає посилання під нею на рядок вниз, і палець промахується. -->
+  <div class="-mt-3 min-h-5 text-center">
+    {#if verifying}
+      <p
+        class="flex items-center justify-center gap-2 text-[13px] text-muted-foreground"
+      >
+        <Spinner class="size-3.5 animate-spin" aria-hidden="true" />
+        Перевіряємо...
+      </p>
+    {:else if serverError}
+      <p
+        id="otp-err"
+        role="alert"
+        class="flex items-center justify-center gap-1.5 text-[13px] text-destructive"
+      >
+        <CircleAlert class="size-3.5 shrink-0" aria-hidden="true" />
+        {serverError}
+      </p>
+    {/if}
+  </div>
+
+  <div class="flex flex-col items-center gap-2 text-[15px]">
+    {#if cooldown > 0}
+      <span class="text-muted-foreground">
+        Надіслати код ще раз можна через {cooldown} с
+      </span>
+    {:else}
+      <button
+        type="button"
+        onclick={handleResend}
+        disabled={resending}
+        class="rounded-sm text-primary underline-offset-4 transition-colors hover:text-primary-hover hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50"
+      >
+        {resending ? 'Надсилаємо...' : 'Надіслати код ще раз'}
+      </button>
+    {/if}
+
+    <a
+      href="/user/login"
+      class="text-primary underline-offset-4 transition-colors hover:text-primary-hover hover:underline"
+    >
+      Ввести іншу пошту
+    </a>
+  </div>
 </div>

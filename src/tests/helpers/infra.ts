@@ -53,7 +53,6 @@ export const events = {
 // ─── $lib/server/notifications ───
 
 export const Notify = {
-  newJob: vi.fn(async () => {}),
   newProposal: vi.fn(async () => {}),
   proposalAccepted: vi.fn(async () => {}),
   orderStarted: vi.fn(async () => {}),
@@ -65,16 +64,29 @@ export const Notify = {
 export const notify = vi.fn(async () => {})
 
 // ─── $lib/server/dispatch ───
+// Мок усього публічного API мозку: роути імпортують лише з index.ts.
+// Конфіг — справжній: це числа, а не інфраструктура. Береться з підмодулів,
+// а не з бареля: цей файл і є моком бареля, і імпорт із нього замкнувся б.
 
-export const dispatchJob = vi.fn(async () => ({ notified: 0, wave: 1 }))
+export { DISPATCH_CONFIG } from '$lib/server/dispatch/config'
+export { WAVES_DONE_MIN } from '$lib/server/dispatch/core/waves'
+
+export const startWaves = vi.fn(
+  async (_job: { id: string; createdAt: Date }) => {},
+)
+export const resumeDispatch = vi.fn(async () => ({ checked: 0, caughtUp: 0 }))
 export const markOpened = vi.fn(async () => {})
 export const markResponded = vi.fn(async () => {})
-
-// ─── $lib/server/dispatch/scheduler ───
-
-export const scheduleWaves = vi.fn()
 export const cancelWaves = vi.fn()
 export const scheduledCount = vi.fn(() => 0)
+export const recommendForJob = vi.fn(async () => ({
+  recommended: new Set<string>(),
+  newbies: new Set<string>(),
+}))
+export const masterFeedScope = vi.fn(async () => ({
+  declinedIds: [] as string[],
+  where: [],
+}))
 
 // ─── $lib/server/cloudinary ───
 
@@ -100,12 +112,14 @@ export function resetInfra(): void {
     pusherServer.trigger,
     pusherServer.authorizeChannel,
     notify,
-    dispatchJob,
+    startWaves,
+    resumeDispatch,
     markOpened,
     markResponded,
-    scheduleWaves,
     cancelWaves,
     scheduledCount,
+    recommendForJob,
+    masterFeedScope,
     cloudinary.uploader.destroy,
     signUploadParams,
     ...Object.values(Notify),

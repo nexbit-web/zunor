@@ -3,13 +3,26 @@ import { prisma, resetPrisma } from '../helpers/prisma-mock'
 import { markOpened, resetInfra } from '../helpers/infra'
 import { makeEvent, sessionUser, anonymous, failure } from '../helpers/event'
 
-const getRecommendedIds = vi.fn(async () => [] as string[])
-
 vi.mock('$lib/server/prisma', async () => ({
   prisma: (await import('../helpers/prisma-mock')).prisma,
 }))
+vi.mock('$lib/server/reference', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('$lib/server/reference')>()),
+  getDistricts: (await import('../helpers/districts')).getDistricts,
+  getCities: async () => [
+    { id: 'c1', slug: 'odesa', name: 'Одеса', region: null, isCapital: false },
+  ],
+  getCategories: async () => [
+    {
+      id: 'k1',
+      slug: 'cleaning',
+      name: 'Прибирання',
+      description: null,
+      icon: null,
+    },
+  ],
+}))
 vi.mock('$lib/server/dispatch', async () => await import('../helpers/infra'))
-vi.mock('$lib/server/ranking', () => ({ getRecommendedIds }))
 
 const jobPage =
   await import('../../routes/(auth)/dashboard/jobs/[id]/+page.server')
@@ -47,7 +60,6 @@ async function redirectOf(run: () => unknown): Promise<string> {
 beforeEach(() => {
   resetPrisma()
   resetInfra()
-  getRecommendedIds.mockClear()
 })
 
 describe('сторінка заявки /dashboard/jobs/[id]', () => {
@@ -501,10 +513,28 @@ describe('публічний профіль /@handle', () => {
   beforeEach(() => {
     prisma.user.findUnique.mockResolvedValue(master)
     prisma.review.findMany.mockResolvedValue([])
-    prisma.city.findUnique.mockResolvedValue({ name: 'Одеса' })
-    prisma.category.findMany.mockResolvedValue([
-      { slug: 'cleaning', name: 'Прибирання' },
-    ])
+  })
+
+  // Сторінку читають боти — назви міста й послуг беруться з кешу
+  // довідників, а не окремими запитами на кожен перегляд.
+  it('назви міста й послуг — із довідників, без запитів у базу', async () => {
+    const data = (await handlePage.load(handleEvent('@ivan'))) as {
+      user: { city?: string; categories: string[] }
+    }
+
+    expect(data.user.city).toBe('Одеса')
+    expect(data.user.categories).toEqual(['Прибирання'])
+    expect(prisma.city.findUnique).not.toHaveBeenCalled()
+    expect(prisma.category.findMany).not.toHaveBeenCalled()
+  })
+
+  // Перейменований майстер: дані під старим username уже з новим — сторінка
+  // за старим посиланням зникає одразу, а не після TTL кешу.
+  it('username у даних інший, ніж у посиланні, — 404', async () => {
+    prisma.user.findUnique.mockResolvedValue({ ...master, username: 'petro' })
+    expect(
+      (await failure(() => handlePage.load(handleEvent('@ivan')))).status,
+    ).toBe(404)
   })
 
   it('username поза форматом — 404 без запиту в базу', async () => {

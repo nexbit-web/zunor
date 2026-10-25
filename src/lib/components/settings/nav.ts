@@ -1,32 +1,48 @@
-import { Palette, Sparkles, Bell, Shield, LogOut } from 'lucide-svelte'
+import { Palette, Sparkles, Bell, Shield, UserRound } from 'lucide-svelte'
+
+export type SettingsGroupId = 'account' | 'app'
 
 export interface SettingsSection {
   slug: string
   label: string
   icon: typeof Bell
-  tile: string
+  /** Підзаголовок у меню налаштувань, під яким стоїть пункт. */
+  group: SettingsGroupId
   /** Кому показувати. Порожньо — усім. */
   roles?: readonly ('CLIENT' | 'MASTER')[]
 }
 
+// Порядок груп у меню. Іконки одноколірні, без кольорових плиток: плитки
+// перетягували увагу з назв, а колір у застосунку тепер означає одне —
+// обраний акцент.
+export const SETTINGS_GROUPS: readonly {
+  id: SettingsGroupId
+  label: string
+}[] = [
+  { id: 'account', label: 'Акаунт' },
+  { id: 'app', label: 'Застосунок' },
+]
+
+// «Вийти» тут немає: це дія, а не розділ, і вона стоїть унизу меню
+// налаштувань окремо від решти пунктів.
 export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
-  { slug: 'appearance', label: 'Вигляд', icon: Palette, tile: 'bg-violet-500' },
-  {
-    slug: 'assistant',
-    label: 'AI асистент',
-    icon: Sparkles,
-    tile: 'bg-primary',
-    // Анкета впливає на діалог створення заявки — майстер їх не створює.
-    roles: ['CLIENT'],
-  },
+  { slug: 'profile', label: 'Профіль', icon: UserRound, group: 'account' },
+  { slug: 'security', label: 'Безпека', icon: Shield, group: 'account' },
   {
     slug: 'notifications',
     label: 'Сповіщення',
     icon: Bell,
-    tile: 'bg-red-500',
+    group: 'account',
   },
-  { slug: 'security', label: 'Безпека', icon: Shield, tile: 'bg-emerald-600' },
-  { slug: 'account', label: 'Акаунт', icon: LogOut, tile: 'bg-zinc-500' },
+  { slug: 'appearance', label: 'Вигляд', icon: Palette, group: 'app' },
+  {
+    slug: 'assistant',
+    label: 'AI асистент',
+    icon: Sparkles,
+    group: 'app',
+    // Анкета впливає на діалог створення заявки — майстер їх не створює.
+    roles: ['CLIENT'],
+  },
 ]
 
 export function sectionsForRole(

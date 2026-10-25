@@ -1,20 +1,9 @@
 <script lang="ts">
   import { Button } from '$lib/components/ui/button'
-  import * as Card from '$lib/components/ui/card'
-  import {
-    FieldGroup,
-    Field,
-    FieldLabel,
-    FieldDescription,
-  } from '$lib/components/ui/field'
   import { Input } from '$lib/components/ui/input'
-  import {
-    LoaderCircle,
-    AlertCircle,
-    CheckCircle2,
-    Mail,
-    ArrowLeft,
-  } from 'lucide-svelte'
+  import { Spinner } from '$lib/components/ui/spinner'
+  import AuthShell from '$lib/components/auth/auth-shell.svelte'
+  import FieldError from '$lib/components/forms/field-error.svelte'
   import { onDestroy } from 'svelte'
 
   // ═══════════════════════════════════════════════════════════
@@ -89,12 +78,10 @@
     e.preventDefault()
     if (loading) return
 
+    // Перевірка на натиск, а не на blur: кнопка лишається активною, і
+    // причину видно під полем, а не в сірій незатискуваній кнопці.
     touched = true
-
-    if (!formValid) {
-      serverError = 'Введіть коректний email'
-      return
-    }
+    if (!formValid) return
 
     loading = true
     serverError = ''
@@ -168,181 +155,101 @@
   <meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 
-<div
-  class="min-h-screen flex items-center justify-center px-4 py-12"
-  style="background-color: var(--background)"
->
-  <div class="w-full max-w-md flex flex-col gap-6">
-    <Card.Root class="overflow-hidden">
-      {#if !sent}
-        <!-- ─── Form ─── -->
-        <Card.Header class="text-center space-y-2">
-          <div
-            class="size-12 rounded-2xl mx-auto flex items-center justify-center"
-            style="background-color: color-mix(in oklch, var(--primary) 10%, transparent)"
-          >
-            <Mail class="size-5" style="color: var(--primary)" />
-          </div>
-          <Card.Title class="text-2xl font-bold tracking-tight">
-            Забули пароль?
-          </Card.Title>
-          <Card.Description class="text-sm">
-            Введіть email і ми надішлемо посилання для відновлення
-          </Card.Description>
-        </Card.Header>
+<!-- Та сама рамка, що на вході й реєстрації, і той самий склад, що в
+     ClickUp: знак, «Забули пароль?», посилання на вхід, одне поле й
+     кнопка. Окремого «Повернутись до входу» під формою немає — це вже
+     посилання «Увійти» під заголовком. -->
+<AuthShell title={sent ? 'Перевірте пошту' : 'Забули пароль?'}>
+  {#snippet subtitle()}
+    {#if sent}
+      Якщо обліковий запис з адресою
+      <span class="text-foreground">{email.trim()}</span>
+      існує, ми надіслали посилання для відновлення. Лист міг потрапити в
+      «Спам».
+    {:else}
+      Пам'ятаєте пароль?
+      <a
+        href="/user/login"
+        class="text-primary underline-offset-4 transition-colors hover:text-primary-hover hover:underline"
+      >
+        Увійти
+      </a>
+    {/if}
+  {/snippet}
 
-        <Card.Content>
-          <form onsubmit={handleSubmit} novalidate autocomplete="on">
-            <FieldGroup>
-              <Field>
-                <FieldLabel for="forgot-email">Email</FieldLabel>
-                <div class="relative">
-                  <Input
-                    id="forgot-email"
-                    type="email"
-                    placeholder="ivan@example.com"
-                    bind:value={email}
-                    onblur={() => (touched = true)}
-                    autocomplete="email"
-                    inputmode="email"
-                    maxlength={EMAIL_MAX_LENGTH}
-                    aria-invalid={!!emailError}
-                    aria-describedby={emailError
-                      ? 'forgot-email-error'
-                      : undefined}
-                    class="h-11 rounded-lg pr-9"
-                    required
-                  />
-                  {#if touched && isValidEmail(email)}
-                    <CheckCircle2
-                      class="absolute right-3 top-1/2 -translate-y-1/2 size-4"
-                      style="color: var(--primary)"
-                      aria-hidden="true"
-                    />
-                  {:else if emailError}
-                    <AlertCircle
-                      class="absolute right-3 top-1/2 -translate-y-1/2 size-4"
-                      style="color: var(--destructive)"
-                      aria-hidden="true"
-                    />
-                  {/if}
-                </div>
-                {#if emailError}
-                  <FieldDescription
-                    id="forgot-email-error"
-                    class="text-destructive"
-                  >
-                    {emailError}
-                  </FieldDescription>
-                {/if}
-              </Field>
+  {#if !sent}
+    <form
+      onsubmit={handleSubmit}
+      novalidate
+      autocomplete="on"
+      class="flex flex-col gap-3"
+    >
+      <div>
+        <Input
+          id="forgot-email"
+          type="email"
+          placeholder="Робоча електронна пошта"
+          aria-label="Робоча електронна пошта"
+          bind:value={email}
+          autocomplete="email"
+          inputmode="email"
+          autocapitalize="none"
+          spellcheck="false"
+          maxlength={EMAIL_MAX_LENGTH}
+          aria-invalid={!!emailError}
+          aria-describedby={emailError ? 'forgot-email-error' : undefined}
+          class="h-9 rounded-[8px]"
+          required
+        />
+        <FieldError id="forgot-email-error" text={emailError} />
+      </div>
 
-              {#if serverError}
-                <div
-                  class="flex items-start gap-2 p-3 rounded-lg text-sm"
-                  style="background-color: color-mix(in oklch, var(--destructive) 8%, transparent);
-                         color: var(--destructive);
-                         border: 1px solid color-mix(in oklch, var(--destructive) 25%, transparent)"
-                  role="alert"
-                >
-                  <AlertCircle
-                    class="size-4 shrink-0 mt-0.5"
-                    aria-hidden="true"
-                  />
-                  <span>{serverError}</span>
-                </div>
-              {/if}
-
-              <Field>
-                <Button
-                  type="submit"
-                  disabled={loading || !formValid}
-                  class="w-full h-11 rounded-lg cursor-pointer disabled:cursor-not-allowed"
-                >
-                  {#if loading}
-                    <LoaderCircle
-                      class="size-4 animate-spin mr-2"
-                      aria-hidden="true"
-                    />
-                    Надсилаємо…
-                  {:else}
-                    Надіслати посилання
-                  {/if}
-                </Button>
-              </Field>
-
-              <a
-                href="/user/login"
-                class="text-xs text-center cursor-pointer hover:opacity-70 inline-flex items-center justify-center gap-1 w-full"
-                style="color: var(--muted-foreground)"
-              >
-                <ArrowLeft class="size-3" aria-hidden="true" />
-                Повернутись до входу
-              </a>
-            </FieldGroup>
-          </form>
-        </Card.Content>
-      {:else}
-        <!-- ─── Success ─── -->
-        <Card.Header class="text-center space-y-3">
-          <div
-            class="size-14 rounded-2xl mx-auto flex items-center justify-center"
-            style="background-color: color-mix(in oklch, var(--primary) 12%, transparent)"
-          >
-            <CheckCircle2
-              class="size-6"
-              style="color: var(--primary)"
-              aria-hidden="true"
-            />
-          </div>
-          <Card.Title class="text-2xl font-bold tracking-tight">
-            Перевірте пошту
-          </Card.Title>
-          <Card.Description class="text-sm leading-relaxed">
-            Якщо акаунт з адресою
-            <span class="font-medium" style="color: var(--foreground)"
-              >{email}</span
-            >
-            існує, ми надіслали інструкції для відновлення паролю.
-          </Card.Description>
-        </Card.Header>
-
-        <Card.Content>
-          <FieldGroup>
-            <p
-              class="text-xs text-center leading-relaxed px-2"
-              style="color: var(--muted-foreground)"
-            >
-              Не отримали лист? Перевірте папку «Спам»
-              {#if cooldown > 0}
-                <br />
-                <span class="opacity-70">
-                  Можна спробувати ще раз через {cooldown}с
-                </span>
-              {:else}
-                або
-                <button
-                  type="button"
-                  onclick={tryAgain}
-                  class="cursor-pointer hover:underline font-medium"
-                  style="color: var(--primary)"
-                >
-                  спробуйте ще раз
-                </button>
-              {/if}
-            </p>
-
-            <a
-              href="/user/login"
-              class="text-xs text-center cursor-pointer hover:opacity-70 inline-flex items-center justify-center gap-1 w-full mt-2"
-              style="color: var(--muted-foreground)"
-            >
-              <ArrowLeft class="size-3" aria-hidden="true" />
-              Повернутись до входу
-            </a>
-          </FieldGroup>
-        </Card.Content>
+      {#if serverError}
+        <div class="flex justify-center">
+          <FieldError text={serverError} />
+        </div>
       {/if}
-    </Card.Root>
-  </div>
-</div>
+
+      <Button
+        variant="primary"
+        size="lg"
+        class="relative w-full"
+        type="submit"
+        disabled={loading}
+        aria-busy={loading}
+      >
+        {#if loading}
+          <Spinner class="animate-spin" aria-hidden="true" />
+          <span class="sr-only">Надсилаємо...</span>
+        {:else}
+          <span>Надіслати мені посилання</span>
+        {/if}
+      </Button>
+    </form>
+  {:else}
+    <!-- ─── Лист відправлено ───
+         Повтор — та сама кнопка, що й надіслала лист; доки йде відлік,
+         вона сіра й показує, скільки чекати. -->
+    <div class="flex flex-col gap-3">
+      <Button
+        variant="primary"
+        size="lg"
+        class="w-full"
+        type="button"
+        onclick={tryAgain}
+        disabled={cooldown > 0}
+      >
+        {cooldown > 0
+          ? `Надіслати ще раз через ${cooldown} с`
+          : 'Надіслати ще раз'}
+      </Button>
+
+      <a
+        href="/user/login"
+        class="mx-auto rounded-sm text-[14px] text-primary underline-offset-4 transition-colors hover:text-primary-hover hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      >
+        Повернутися до входу
+      </a>
+    </div>
+  {/if}
+</AuthShell>

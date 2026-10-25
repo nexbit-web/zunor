@@ -11,6 +11,8 @@ import {
   GOOGLE_CLIENT_SECRET,
 } from '$env/static/private'
 import { prisma } from './prisma'
+import { authStorage } from './auth-storage'
+import { invalidateAccount } from './account-cache'
 import { sendResetPasswordEmail } from './email'
 import { sendOtpEmail } from './email/otp-email'
 
@@ -21,6 +23,10 @@ export const auth = betterAuth({
   secret: BETTER_AUTH_SECRET,
 
   database: prismaAdapter(prisma, { provider: 'postgresql' }),
+
+  // Сесії й одноразові коди — у Redis (auth-storage.ts): перевірка сесії
+  // на кожен запит не будить Neon. Без Redis — undefined, усе в базі.
+  secondaryStorage: authStorage,
 
   // ─── Google OAuth ───
   socialProviders: {
@@ -90,6 +96,21 @@ export const auth = betterAuth({
     expiresIn: 60 * 60 * 24 * 30,
     updateAge: 60 * 60 * 24,
     cookieCache: { enabled: true, maxAge: 60 * 5 },
+    // Сесія пишеться і в базу: Redis — копія, а не єдине місце. Сесії,
+    // створені до Redis, і промах у ньому читаються з бази.
+    storeSessionInDatabase: true,
+  },
+
+  // Поле користувача змінив сам better-auth (підтвердження пошти тощо) —
+  // guard має перечитати стан акаунта, а не тримати кеш.
+  databaseHooks: {
+    user: {
+      update: {
+        after: async (user) => {
+          await invalidateAccount(user.id)
+        },
+      },
+    },
   },
 
   advanced: {

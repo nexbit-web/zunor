@@ -9,7 +9,7 @@ import {
 } from '$lib/server/order-state-machine'
 import { channels, events, safeTrigger } from '$lib/server/pusher'
 import { Notify } from '$lib/server/notifications'
-import { dispatchJob } from '$lib/server/dispatch'
+import { startWaves } from '$lib/server/dispatch'
 import type { RequestHandler } from './$types'
 
 /**
@@ -55,7 +55,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
       clientId: true,
       masterId: true,
       chatId: true,
-      fromJob: { select: { id: true, title: true } },
+      fromJob: { select: { id: true, createdAt: true } },
     },
   })
   if (!order) throw error(404, 'Замовлення не знайдено')
@@ -192,9 +192,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 
   // Майстер відмовився → перезапускаємо диспатч (мозок шукає заміну)
   if (transition === 'CANCEL' && actor === 'MASTER' && order.fromJob) {
-    dispatchJob(order.fromJob.id, order.fromJob.title).catch((err) =>
-      console.error('[order-action] redispatch failed', err),
-    )
+    void startWaves(order.fromJob)
   }
 
   try {

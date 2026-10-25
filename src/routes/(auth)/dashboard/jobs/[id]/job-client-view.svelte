@@ -113,7 +113,7 @@
     'inline-flex h-[22px] items-center gap-1 rounded-full px-2.5 text-[10px] font-bold tracking-[0.06em] uppercase'
 </script>
 
-<div class="  min-h-svh px-1 py-1">
+<div class="  min-h-(--app-h) px-1 py-1">
   <div class="mx-auto w-full max-w-135">
     <!-- Back -->
     <button

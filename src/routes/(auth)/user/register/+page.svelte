@@ -1,31 +1,60 @@
-<script>
-  import GalleryVerticalEndIcon from '@lucide/svelte/icons/gallery-vertical-end'
+<script lang="ts">
+  import AuthShell from '$lib/components/auth/auth-shell.svelte'
   import SignupForm from '$lib/components/signup-form.svelte'
-  import { ArrowLeft } from 'lucide-svelte'
+  import { COMPANY } from '$lib/legal/company-info'
 </script>
 
-<div class="grid min-h-svh lg:grid-cols-2">
-  <div class="flex flex-col gap-4 p-6 md:p-10">
-    <div class="flex gap-2 md:justify-start">
+<svelte:head>
+  <title>Реєстрація — Zunor</title>
+</svelte:head>
+
+<!-- Та сама рамка, що й на вході: знак, заголовок із посиланням на вхід,
+     під ним форма. Тексти — переклад ClickUp у стилі їхньої української
+     сторінки входу («обліковий запис», «Робоча електронна пошта»). -->
+<AuthShell title="Реєстрація за лічені секунди!" mark="password">
+  {#snippet subtitle()}
+    Вже маєте обліковий запис?
+    <a
+      href="/user/login"
+      class="text-primary underline-offset-4 transition-colors hover:text-primary-hover hover:underline"
+    >
+      Увійти
+    </a>
+  {/snippet}
+
+  <!-- Юридичний рядок унизу сторінки, як у ClickUp: саме тут людина
+       приймає умови, і другого такого екрана немає. Сірий текст, а
+       посилання — кольору тексту, з підкресленням під курсором. -->
+  {#snippet footer()}
+    <p
+      class="text-center text-[13px] leading-normal text-balance text-muted-foreground/75"
+    >
+      Продовжуючи, ви погоджуєтеся з нашими
       <a
-        href="/user/login"
-        class="flex items-center gap-2 font-medium hover:text-gray-400"
+        href="/terms"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="text-foreground/80 underline-offset-4 transition-colors hover:text-foreground hover:underline"
       >
-        <ArrowLeft size={20} />
-        Назад
+        Умовами використання
       </a>
-    </div>
-    <div class="flex flex-1 items-center justify-center">
-      <div class="w-full max-w-xs">
-        <SignupForm />
-      </div>
-    </div>
-  </div>
-  <div class="relative hidden bg-muted lg:block">
-    <img
-      src="/register.png"
-      alt=""
-      class="absolute inset-0 h-full w-full object-cover dark:brightness-[0.2] dark:grayscale"
-    />
-  </div>
-</div>
+      і
+      <a
+        href="/privacy"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="text-foreground/80 underline-offset-4 transition-colors hover:text-foreground hover:underline"
+      >
+        Політикою конфіденційності</a
+      >.
+      <a
+        href="mailto:{COMPANY.supportEmail}"
+        class="text-foreground/80 underline-offset-4 transition-colors hover:text-foreground hover:underline"
+      >
+        Потрібна допомога?
+      </a>
+    </p>
+  {/snippet}
+
+  <SignupForm />
+</AuthShell>

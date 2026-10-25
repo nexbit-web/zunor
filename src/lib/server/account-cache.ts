@@ -1,4 +1,5 @@
 import { prisma } from './prisma'
+import { cached, forget } from './cache'
 import type { Role } from '../../generated/prisma/client'
 import Pusher from 'pusher-js'
 import { PUBLIC_PUSHER_KEY, PUBLIC_PUSHER_CLUSTER } from '$env/static/public'
@@ -20,6 +21,15 @@ export interface AccountState {
  */
 const TTL_MS = 5 * 60_000
 
+/**
+ * Другий рівень — Redis: стан переживає рестарт процесу, і після спливу
+ * памʼяті запит іде туди, а не в базу. Це ж і межа затримки для змін
+ * руками в БД повз застосунок і CRM.
+ */
+const REDIS_TTL_SEC = 30 * 60
+
+const redisKeyOf = (userId: string) => `account:${userId}`
+
 /** Стеля записів. Кожен ~200 байт, тож 5000 ≈ 1 МБ — стільки одночасних
  *  активних сесій на інстанс не буде. Захист від необмеженого росту. */
 const MAX_ENTRIES = 5_000
@@ -39,7 +49,7 @@ function evictIfNeeded(): void {
 }
 
 /**
- * Стан акаунта. Спершу кеш, при промаху — БД.
+ * Стан акаунта. Спершу памʼять процесу, далі Redis, при промаху — БД.
  *
  * null означає «користувача немає» і теж кешується: інакше запит із
  * видаленим акаунтом бив би в базу на кожній навігації.
@@ -52,16 +62,18 @@ export async function getAccountState(
 
   if (hit && hit.expiresAt > now) return hit.state
 
-  const state = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      id: true,
-      role: true,
-      banned: true,
-      emailVerified: true,
-      onboarded: true,
-    },
-  })
+  const state = await cached(redisKeyOf(userId), REDIS_TTL_SEC, () =>
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        role: true,
+        banned: true,
+        emailVerified: true,
+        onboarded: true,
+      },
+    }),
+  )
 
   cache.set(userId, { state, expiresAt: now + TTL_MS })
   evictIfNeeded()
@@ -70,14 +82,14 @@ export async function getAccountState(
 }
 
 /**
- * Скидає кеш для користувача. Викликати ПІСЛЯ будь-якого запису,
- * що змінює ці поля: онбординг, апгрейд ролі, бан, верифікація пошти.
- *
- * Без цього людина після завершення онбордингу до 30 секунд поверталася б
- * на форму — guard бачив би застаріле onboarded: false.
+ * Скидає кеш для користувача — і в памʼяті, і в Redis. Викликати ПІСЛЯ
+ * будь-якого запису, що змінює ці поля: онбординг, апгрейд ролі, бан,
+ * верифікація пошти. І ЧЕКАТИ: інакше наступний запит встигне прочитати
+ * з Redis застаріле onboarded: false і поверне людину на форму.
  */
-export function invalidateAccount(userId: string): void {
+export async function invalidateAccount(userId: string): Promise<void> {
   cache.delete(userId)
+  await forget(redisKeyOf(userId))
 }
 
 /** Повне скидання. Потрібне хіба що в тестах. */
@@ -108,10 +120,11 @@ function subscribeToInvalidations(): void {
     pusher
       .subscribe('account-updates')
       .bind('invalidate', (data: { userId?: string }) => {
-        if (typeof data?.userId === 'string') invalidateAccount(data.userId)
+        if (typeof data?.userId === 'string')
+          void invalidateAccount(data.userId)
       })
   } catch (err) {
-    // Не падаємо: без підписки кеш просто протухне за TTL (30 с).
+    // Не падаємо: без підписки кеш просто протухне за TTL.
     console.error('[account-cache] pusher subscribe failed:', err)
   }
 }

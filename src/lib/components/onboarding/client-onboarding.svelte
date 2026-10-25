@@ -1,6 +1,15 @@
 <!--
-  Профіль замовника. Згруповані картки — як у System Settings:
-  підпис ліворуч, контрол праворуч, роздільники з відступами.
+  Профіль замовника — у двох подачах з одним станом:
+
+  • onboarding — покроковий майстер (OnboardingWizard): імʼя, місто з
+    районом, телефон і необовʼязкове «ще трохи про вас». Замовника ведуть за
+    руку (MANIFESTO.md, розділ 7): він не професіонал, і чотири коротких
+    питання для нього легші за анкету одним екраном;
+  • edit — та сама форма одним екраном на сторінці налаштувань.
+
+  Поля описані сніпетами один раз і збираються в обидві подачі. Профіль
+  зберігається ОДНИМ запитом у кінці: сервер ставить onboarded лише після
+  повної перевірки.
 
   Валідація тут — виключно UX. Авторитет за сервером:
   saveClientProfile() у $lib/server/profile.ts перевіряє все повторно.
@@ -21,11 +30,18 @@
   import * as Popover from '$lib/components/ui/popover'
   import * as Command from '$lib/components/ui/command'
   import AvatarUploader from '$lib/components/avatar-uploader.svelte'
+  import OnboardingWizard from './onboarding-wizard.svelte'
+  import DistrictSelect from './district-select.svelte'
+  import { cityDistricts, findDistrict } from '$lib/geo/districts'
   import { cn } from '$lib/utils'
   import toast from 'svelte-hot-french-toast'
   import CheckIcon from '@lucide/svelte/icons/check'
   import ChevronsUpDownIcon from '@lucide/svelte/icons/chevrons-up-down'
-  import type { OnboardingData } from '$lib/components/onboarding/types'
+  import { UserRound, Phone, MapPin } from 'lucide-svelte'
+  import type {
+    OnboardingData,
+    WizardStep,
+  } from '$lib/components/onboarding/types'
 
   interface Props {
     data: OnboardingData
@@ -39,6 +55,34 @@
   const NAME_MIN = 2
   const NAME_MAX = 80
   const BIO_MAX = 922
+
+  // Обовʼязкове — спершу, необовʼязкове — одним кроком наприкінці, який
+  // можна пропустити: до заявки людину не тримає ніщо зайве.
+  const STEPS: readonly WizardStep[] = [
+    {
+      id: 'name',
+      title: 'Як вас звати?',
+      subtitle: 'Так до вас звертатиметься майстер.',
+    },
+    {
+      id: 'city',
+      title: 'Де ви живете?',
+      subtitle:
+        'Заявку спершу побачать майстри з вашого району й сусідніх — вони приїдуть швидше. Точну адресу ви повідомите в чаті.',
+    },
+    {
+      id: 'phone',
+      title: 'Ваш номер телефону',
+      subtitle:
+        'Його побачить лише майстер, якого ви оберете, — і лише після підтвердження замовлення.',
+    },
+    {
+      id: 'extras',
+      title: 'Ще трохи про вас',
+      subtitle: 'Необовʼязково, але так майстру простіше підготуватися.',
+      optional: true,
+    },
+  ]
 
   // untrack: початкові значення беремо один раз, інакше оновлення data
   // затирало б те, що людина щойно набрала.
@@ -55,12 +99,19 @@
   let city = $state(initial.city ?? '')
   let cityOpen = $state(false)
   let cityTriggerRef = $state<HTMLButtonElement>(null!)
+  let district = $state(initial.district ?? '')
 
   let submitting = $state(false)
+  let step = $state(0)
 
-  // Помилку показуємо лише після виходу з поля: червоне під порожнім
-  // полем, якого ще не торкались, — це грубо.
-  let touched = $state({ name: false, phone: false, city: false })
+  // Помилку показуємо лише після виходу з поля (або спроби піти далі):
+  // червоне під порожнім полем, якого ще не торкались, — це грубо.
+  let touched = $state({
+    name: false,
+    phone: false,
+    city: false,
+    district: false,
+  })
 
   // ─── Телефон ───
   // Тримаємо лише 9 значущих цифр; +380 додаємо при сабміті.
@@ -122,8 +173,41 @@
   )
   const cityError = $derived(touched.city && !city ? 'Оберіть місто' : '')
 
-  const formValid = $derived(nameValid && phoneValid && !!city)
+  // Район питаємо лише там, де для міста є райони в БД (зараз — Одеса).
+  const districts = $derived(cityDistricts(data.districts, city))
+  const needsDistrict = $derived(districts.length > 0)
+  const districtValid = $derived(
+    !needsDistrict || !!findDistrict(districts, district),
+  )
+  const districtError = $derived(
+    touched.district && !districtValid ? 'Оберіть район' : '',
+  )
+
+  const formValid = $derived(nameValid && phoneValid && !!city && districtValid)
   const busy = $derived(submitting || avatarUploading)
+  const busyNote = $derived(avatarUploading ? 'Фото ще завантажується...' : '')
+
+  // ─── Кроки ───
+  /**
+   * Перевірка перед «Далі»: поле кроку стає «торкнутим», тож якщо
+   * чогось бракує, підпис під полем зʼявляється саме зараз.
+   */
+  function validateStep(id: string): boolean {
+    switch (id) {
+      case 'name':
+        touched.name = true
+        return nameValid
+      case 'city':
+        touched.city = true
+        touched.district = true
+        return !!city && districtValid
+      case 'phone':
+        touched.phone = true
+        return phoneValid
+      default:
+        return true
+    }
+  }
 
   // ─── Дії ───
   function closeAndFocusTrigger(): void {
@@ -132,11 +216,10 @@
     tick().then(() => cityTriggerRef?.focus())
   }
 
-  async function submit(e: SubmitEvent): Promise<void> {
-    e.preventDefault()
+  async function save(): Promise<void> {
     if (busy) return
 
-    touched = { name: true, phone: true, city: true }
+    touched = { name: true, phone: true, city: true, district: true }
     if (!formValid) {
       toast.error('Перевірте заповнені поля')
       return
@@ -153,6 +236,7 @@
           name: nameTrim,
           phone: '+380' + phoneDigits,
           city,
+          district: needsDistrict ? district : null,
           bio: bioTrim,
           avatar: avatarUrl || null,
           avatarPublicId: avatarUrl ? avatarPublicId || null : null,
@@ -166,7 +250,11 @@
       }
 
       await invalidateAll()
-      toast.success(mode === 'edit' ? 'Зміни збережено' : 'Профіль заповнено!')
+      toast.success(
+        mode === 'edit'
+          ? 'Зміни збережено'
+          : 'Готово! Тепер можна замовити прибирання',
+      )
       await goto('/dashboard')
     } catch {
       toast.error("Помилка з'єднання. Перевірте інтернет.")
@@ -176,199 +264,307 @@
   }
 </script>
 
-<!-- Локальний сніпет row прибрано: це був той самий рядок, що й
-     SettingsField у налаштуваннях, скопійований сюди разом із класами.
-     Форма профілю і /settings/profile — той самий екран, тож і рядок
-     у них має бути один. -->
+<!-- ═══════════════ Поля ═══════════════
+     Кожне поле — один сніпет, спільний для майстра кроків і форми
+     редагування. Підписи й помилки дає обгортка (SettingsField). -->
 
-<div class="mx-auto w-full max-w-2xl">
-  <header class="mb-7">
-    <h1 class="text-xl font-semibold tracking-[-0.02em]">
-      {mode === 'edit' ? 'Профіль' : 'Знайомство'}
-    </h1>
-    <p class="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
-      {mode === 'edit'
-        ? 'Ці дані бачить виконавець після підтвердження замовлення.'
-        : 'Кілька полів — і можна оформлювати заявку.'}
-    </p>
-  </header>
+{#snippet photoControl()}
+  <AvatarUploader
+    bind:value={avatarUrl}
+    bind:publicId={avatarPublicId}
+    bind:uploading={avatarUploading}
+    fallback={nameTrim.charAt(0).toUpperCase() || 'U'}
+    onError={(msg) => toast.error(msg)}
+  />
+{/snippet}
 
-  <form onsubmit={submit} novalidate>
-    <!-- ═══ Основне ═══ -->
-    <SettingsGroup title="Основне">
-      <SettingsField label="Фото" hint="Необов'язково">
-        {#snippet control()}
-          <AvatarUploader
-            bind:value={avatarUrl}
-            bind:publicId={avatarPublicId}
-            bind:uploading={avatarUploading}
-            fallback={nameTrim.charAt(0).toUpperCase() || 'U'}
-            onError={(msg) => toast.error(msg)}
-          />
-        {/snippet}
-      </SettingsField>
+{#snippet nameControl()}
+  <Input
+    id="name"
+    icon={UserRound}
+    bind:value={name}
+    onblur={() => (touched.name = true)}
+    placeholder="Олена Коваленко"
+    maxlength={NAME_MAX}
+    autocomplete="name"
+    aria-invalid={!!nameError}
+    class="bg-background"
+    required
+  />
+{/snippet}
 
-      <SettingsField label="Ім'я" for="name" error={nameError}>
-        {#snippet control()}
-          <Input
-            id="name"
-            bind:value={name}
-            onblur={() => (touched.name = true)}
-            placeholder="Олена Коваленко"
-            maxlength={NAME_MAX}
-            autocomplete="name"
-            aria-invalid={!!nameError}
-            class="bg-background"
-            required
-          />
-        {/snippet}
-      </SettingsField>
+{#snippet phoneControl()}
+  <!-- +380 стоїть у самому полі й не стирається: у value лише 9 цифр
+       номера, код країни додається при збереженні. -->
+  <Input
+    id="phone"
+    icon={Phone}
+    prefixText="+380"
+    value={phoneDisplay}
+    oninput={onPhoneInput}
+    onblur={() => (touched.phone = true)}
+    placeholder="67 123 45 67"
+    inputmode="tel"
+    autocomplete="tel-national"
+    aria-invalid={!!phoneError}
+    class="bg-background"
+    required
+  />
+{/snippet}
 
-      <SettingsField
-        label="Телефон"
-        for="phone"
-        hint="Видно виконавцю після підтвердження"
-        error={phoneError}
-      >
-        {#snippet control()}
-          <div class="flex items-center gap-2">
-            <span
-              class="flex h-9 shrink-0 items-center rounded-md bg-background px-2.5 text-sm text-muted-foreground"
-            >
-              +380
-            </span>
-            <Input
-              id="phone"
-              value={phoneDisplay}
-              oninput={onPhoneInput}
-              onblur={() => (touched.phone = true)}
-              placeholder="67 123 45 67"
-              inputmode="tel"
-              autocomplete="tel-national"
-              aria-invalid={!!phoneError}
-              class="bg-background"
-              required
+{#snippet cityControl()}
+  <!-- Combobox: Popover + Command, як у документації shadcn-svelte -->
+  <Popover.Root bind:open={cityOpen}>
+    <Popover.Trigger bind:ref={cityTriggerRef}>
+      {#snippet child({ props })}
+        <Button
+          {...props}
+          variant="outline"
+          role="combobox"
+          aria-expanded={cityOpen}
+          aria-invalid={!!cityError}
+          class="w-full cursor-pointer justify-between rounded-[10px] bg-background pl-3 font-normal focus-visible:border-input focus-visible:ring-0 aria-invalid:ring-0"
+        >
+          <span class="flex min-w-0 items-center gap-2">
+            <MapPin
+              class="size-4 shrink-0 text-muted-foreground"
+              aria-hidden="true"
             />
-          </div>
-        {/snippet}
-      </SettingsField>
-
-      <SettingsField
-        label="Місто"
-        hint="Заявки надходитимуть виконавцям звідси"
-        error={cityError}
-      >
-        {#snippet control()}
-          <!-- Combobox: Popover + Command, як у документації shadcn-svelte -->
-          <Popover.Root bind:open={cityOpen}>
-            <Popover.Trigger bind:ref={cityTriggerRef}>
-              {#snippet child({ props })}
-                <Button
-                  {...props}
-                  variant="outline"
-                  role="combobox"
-                  aria-expanded={cityOpen}
-                  aria-invalid={!!cityError}
-                  class="w-full justify-between bg-background font-normal"
-                >
-                  <span class={cn(!cityName && 'text-muted-foreground')}>
-                    {cityName || 'Оберіть місто'}
-                  </span>
-                  <ChevronsUpDownIcon class="opacity-50" />
-                </Button>
-              {/snippet}
-            </Popover.Trigger>
-            <Popover.Content class="w-[--bits-popover-anchor-width] p-0">
-              <Command.Root>
-                <Command.Input placeholder="Пошук міста..." />
-                <Command.List>
-                  <Command.Empty>Місто не знайдено</Command.Empty>
-                  <Command.Group>
-                    {#each data.cities as c (c.slug)}
-                      <!-- value = назва, щоб пошук працював по тому,
-                         що людина бачить, а не по slug -->
-                      <Command.Item
-                        value={c.name}
-                        onSelect={() => {
-                          city = c.slug
-                          touched.city = true
-                          closeAndFocusTrigger()
-                        }}
-                      >
-                        <CheckIcon
-                          class={cn(city !== c.slug && 'text-transparent')}
-                        />
-                        {c.name}
-                      </Command.Item>
-                    {/each}
-                  </Command.Group>
-                </Command.List>
-              </Command.Root>
-            </Popover.Content>
-          </Popover.Root>
-        {/snippet}
-      </SettingsField>
-    </SettingsGroup>
-
-    <!-- ═══ Додатково ═══ -->
-    <SettingsGroup title="Додатково">
-      <SettingsBlock>
-        <Label for="bio" class="text-sm font-normal">Про себе</Label>
-        <p class="mt-0.5 text-[12px] text-muted-foreground">
-          Необов'язково. Наприклад: є кіт, під'їзд із кодом, зручніше зранку.
-        </p>
-        <Textarea
-          id="bio"
-          bind:value={bio}
-          placeholder="Що виконавцю варто знати заздалегідь."
-          rows={4}
-          maxlength={BIO_MAX}
-          class="mt-2 resize-none bg-background"
-        />
-        <!-- Лічильник лише коли є що рахувати: «0/922» під порожнім полем
-             читається як помилка. Так само зроблено в анкеті асистента. -->
-        {#if bioTrim.length > 0}
-          <div class="mt-1.5 flex justify-end">
-            <span class="text-[12px] tabular-nums text-muted-foreground">
-              {bioTrim.length}/{BIO_MAX}
+            <span class={cn('truncate', !cityName && 'text-muted-foreground')}>
+              {cityName || 'Оберіть місто'}
             </span>
-          </div>
-        {/if}
-      </SettingsBlock>
-    </SettingsGroup>
+          </span>
+          <ChevronsUpDownIcon class="opacity-50" />
+        </Button>
+      {/snippet}
+    </Popover.Trigger>
+    <!-- w-(--var), а не w-[--var]: у Tailwind 4 квадратні дужки — це
+         довільне ЗНАЧЕННЯ, і `[--bits-popover-anchor-width]` не давало
+         жодної валідної ширини. Список через це вирівнювався по
+         власному вмісту й був вужчий за кнопку. -->
+    <Popover.Content class="w-(--bits-popover-anchor-width) p-0">
+      <Command.Root>
+        <Command.Input placeholder="Пошук міста..." />
+        <Command.List>
+          <Command.Empty>Місто не знайдено</Command.Empty>
+          <Command.Group>
+            {#each data.cities as c (c.slug)}
+              <!-- value = назва, щоб пошук працював по тому, що людина
+                   бачить, а не по slug -->
+              <Command.Item
+                value={c.name}
+                class="cursor-pointer [&_.cn-command-item-indicator]:hidden"
+                onSelect={() => {
+                  city = c.slug
+                  touched.city = true
+                  // Район іншого міста тут нічого не означає.
+                  if (
+                    !findDistrict(
+                      cityDistricts(data.districts, c.slug),
+                      district,
+                    )
+                  ) {
+                    district = ''
+                  }
+                  closeAndFocusTrigger()
+                }}
+              >
+                {c.name}
+                <!-- Галочка праворуч, назва притиснута ліворуч: усі міста
+                     починаються з однієї вертикалі, інакше рядок із
+                     галочкою зсунутий відносно решти. ! — бо підсвічений
+                     рядок перефарбовує свої іконки (data-selected:*:[svg]). -->
+                <CheckIcon
+                  class={cn(
+                    'ms-auto text-primary!',
+                    city !== c.slug && 'text-transparent!',
+                  )}
+                />
+              </Command.Item>
+            {/each}
+          </Command.Group>
+        </Command.List>
+      </Command.Root>
+    </Popover.Content>
+  </Popover.Root>
+{/snippet}
 
-    <!-- ═══ Дії ═══
-         У кінці форми, праворуч — як у діалогах macOS.
-         Підтверджувальна дія остання: погляд іде зліва направо
-         й закінчується на тому, що людина хоче натиснути. -->
-    <div class="mt-7 flex items-center justify-end gap-2">
-      {#if avatarUploading}
-        <span class="mr-auto text-[12px] text-muted-foreground">
-          Фото ще завантажується...
-        </span>
-      {/if}
+{#snippet districtControl()}
+  <DistrictSelect
+    {districts}
+    bind:value={district}
+    invalid={!!districtError}
+    onpick={() => (touched.district = true)}
+  />
+{/snippet}
 
-      <Button type="button" variant="ghost" onclick={onBack} disabled={busy}>
-        Скасувати
-      </Button>
-
-      <Button
-        type="submit"
-        disabled={busy || !formValid}
-        aria-busy={submitting}
-        class="relative min-w-[130px]"
-      >
-        <span>
-          {submitting
-            ? 'Зберігаємо...'
-            : mode === 'edit'
-              ? 'Зберегти'
-              : 'Продовжити'}
-        </span>
-        {#if submitting}
-          <Spinner class="absolute right-3 animate-spin" aria-hidden="true" />
-        {/if}
-      </Button>
+{#snippet bioControl()}
+  <!-- Пояснення живе в плейсхолдері: окремий абзац під підписом казав би
+       те саме, що й приклад усередині поля. -->
+  <Textarea
+    id="bio"
+    bind:value={bio}
+    placeholder="Необов'язково: є кіт, під'їзд із кодом, зручніше зранку."
+    rows={3}
+    maxlength={BIO_MAX}
+    class="resize-none bg-background"
+  />
+  <!-- Лічильник зʼявляється лише біля стелі: доки до неї далеко, він
+       відповідає на питання, якого ніхто не ставив. -->
+  {#if bioTrim.length > BIO_MAX * 0.8}
+    <div class="mt-1.5 flex justify-end">
+      <span class="text-[12px] tabular-nums text-muted-foreground">
+        {bioTrim.length}/{BIO_MAX}
+      </span>
     </div>
-  </form>
-</div>
+  {/if}
+{/snippet}
+
+<!-- ═══════════════ Майстер кроків ═══════════════ -->
+
+{#snippet stepContent(id: string)}
+  {#if id === 'name'}
+    <SettingsField
+      label="Ім'я"
+      for="name"
+      error={nameError}
+      control={nameControl}
+    />
+  {:else if id === 'city'}
+    <SettingsField label="Місто" error={cityError} control={cityControl} />
+    {#if needsDistrict}
+      <SettingsField
+        label="Район"
+        for="district"
+        error={districtError}
+        control={districtControl}
+      />
+    {/if}
+  {:else if id === 'phone'}
+    <SettingsField
+      label="Телефон"
+      for="phone"
+      error={phoneError}
+      control={phoneControl}
+    />
+  {:else if id === 'extras'}
+    <SettingsField label="Фото" control={photoControl} />
+    <SettingsBlock>
+      <Label for="bio" class="mb-2 text-[14px] font-medium">Про себе</Label>
+      {@render bioControl()}
+    </SettingsBlock>
+  {/if}
+{/snippet}
+
+{#if mode === 'onboarding'}
+  <OnboardingWizard
+    steps={STEPS}
+    bind:current={step}
+    validate={validateStep}
+    onExit={onBack}
+    onSubmit={save}
+    submitLabel="Готово"
+    {busy}
+    {submitting}
+    {busyNote}
+    step={stepContent}
+  />
+{:else}
+  <!-- ═══════════════ Форма редагування ═══════════════
+       На сторінці налаштувань: заголовок «Профіль» там уже стоїть над
+       розділом, а ширину задає сторінка. -->
+  <div class="w-full">
+    <form
+      onsubmit={(e) => {
+        e.preventDefault()
+        void save()
+      }}
+      novalidate
+    >
+      <SettingsGroup
+        title="Особисті дані"
+        footnote="Ці дані бачить виконавець після підтвердження замовлення."
+      >
+        <SettingsField
+          label="Фото"
+          hint="Необов'язково"
+          control={photoControl}
+        />
+
+        <SettingsField
+          label="Ім'я"
+          for="name"
+          error={nameError}
+          control={nameControl}
+        />
+
+        <SettingsField
+          label="Телефон"
+          for="phone"
+          hint="Видно виконавцю після підтвердження"
+          error={phoneError}
+          control={phoneControl}
+        />
+
+        <SettingsField label="Місто" error={cityError} control={cityControl} />
+
+        {#if needsDistrict}
+          <SettingsField
+            label="Район"
+            for="district"
+            hint="Майстри бачать лише район заявки — точну адресу ви повідомите в чаті"
+            error={districtError}
+            control={districtControl}
+          />
+        {/if}
+
+        <SettingsBlock>
+          <Label for="bio" class="mb-2 text-sm font-normal">Про себе</Label>
+          {@render bioControl()}
+        </SettingsBlock>
+      </SettingsGroup>
+
+      <!-- ═══ Дії ═══
+           У кінці форми, праворуч — як у діалогах macOS. Підтверджувальна
+           дія остання: погляд іде зліва направо й закінчується на тому,
+           що людина хоче натиснути. -->
+      <div class="mt-7 flex items-center justify-end gap-2">
+        {#if busyNote}
+          <span class="mr-auto text-[12px] text-muted-foreground">
+            {busyNote}
+          </span>
+        {/if}
+
+        <!-- «Скасувати» — рамка кольору primary на прозорому тлі, заливка
+             приходить лише під курсором: дві однаково залиті кнопки поруч
+             змусили б вибирати очима, яка з них головна. -->
+        <Button
+          type="button"
+          onclick={onBack}
+          disabled={busy}
+          variant="primary-outline"
+        >
+          Скасувати
+        </Button>
+
+        <!-- Кнопка активна, доки форма не в роботі: заблокована вона не
+             каже, ЧОГО бракує. Перевірка спрацьовує на натиск і підписує
+             конкретне поле (див. save). -->
+        <Button
+          type="submit"
+          disabled={busy}
+          aria-busy={submitting}
+          variant="primary"
+          class="relative min-w-27.5"
+        >
+          {#if submitting}
+            <Spinner class="animate-spin" aria-hidden="true" />
+            <span class="sr-only">Зберігаємо...</span>
+          {:else}
+            <span>Зберегти</span>
+          {/if}
+        </Button>
+      </div>
+    </form>
+  </div>
+{/if}

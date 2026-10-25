@@ -140,7 +140,7 @@ describe('активний пункт', () => {
   })
 
   it('налаштування активні на будь-якій вкладеній сторінці', () => {
-    renderSidebar({ pathname: '/dashboard/settings/account' })
+    renderSidebar({ pathname: '/dashboard/settings/security' })
 
     expect(activeHrefs()).toContain('/dashboard/settings')
   })

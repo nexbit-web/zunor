@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { prisma, resetPrisma } from '../helpers/prisma-mock'
 import { makeEvent, sessionUser, anonymous } from '../helpers/event'
+import { conditions, districtsIn } from '../helpers/where'
 
 const getCategories = vi.fn(async () => [
   { slug: 'cleaning', name: 'Прибирання' },
@@ -12,7 +13,11 @@ const getCities = vi.fn(async () => [
 vi.mock('$lib/server/prisma', async () => ({
   prisma: (await import('../helpers/prisma-mock')).prisma,
 }))
-vi.mock('$lib/server/reference', () => ({ getCategories, getCities }))
+vi.mock('$lib/server/reference', async () => ({
+  getCategories,
+  getCities,
+  getDistricts: (await import('../helpers/districts')).getDistricts,
+}))
 
 const dashboardPage = await import('../../routes/(auth)/dashboard/+page.server')
 const jobsPage = await import('../../routes/(auth)/dashboard/jobs/+page.server')
@@ -161,6 +166,34 @@ describe('сторінка заявок', () => {
     expect(prisma.job.findMany.mock.calls[0][0].where.clientId).toBe(USER)
   })
 
+  // Перша сторінка з SSR і догрузка — одне правило видимості: інакше після
+  // F5 майстер бачив би те, чого не бачить, гортаючи вниз.
+  it('стрічка майстра на сторінці не обганяє розсилку', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      role: 'MASTER',
+      city: 'odesa',
+      district: 'center',
+      masterProfile: {
+        isActive: true,
+        verificationStatus: 'VERIFIED',
+        categories: ['cleaning'],
+        travelRadiusKm: 5,
+      },
+    })
+    prisma.dispatchEvent.findMany.mockResolvedValue([])
+    prisma.job.findMany.mockResolvedValue([])
+
+    await jobsPage.load(
+      makeEvent({ url: '/dashboard/jobs', locals: sessionUser(USER) }),
+    )
+
+    const where = prisma.job.findMany.mock.calls[0][0].where
+    expect(conditions(where, (c) => 'createdAt' in c)).toContainEqual({
+      createdAt: { lte: expect.any(Date) },
+    })
+    expect(districtsIn(where)).toContain('center')
+  })
+
   // Довідники — з кеша в пам'яті процесу: на Neon зайвий SELECT у лоадері,
   // що спрацьовує на кожен вхід, тримає базу розбудженою даремно.
   it('довідники беруться з кеша, а не з бази', async () => {
@@ -172,6 +205,8 @@ describe('сторінка заявок', () => {
     expect(getCities).toHaveBeenCalled()
     expect(prisma.category.findMany).not.toHaveBeenCalled()
     expect(prisma.city.findMany).not.toHaveBeenCalled()
+    // Райони — так само: стрічка майстра читає їх на кожен вхід.
+    expect(prisma.district.findMany).not.toHaveBeenCalled()
   })
 })
 

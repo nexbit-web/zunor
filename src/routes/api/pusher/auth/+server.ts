@@ -1,6 +1,6 @@
 import { error } from '@sveltejs/kit'
 import { requireApiUser } from '$lib/server/guards'
-import { prisma } from '$lib/server/prisma'
+import { isChatMember } from '$lib/server/chat-members'
 import { pusherServer } from '$lib/server/pusher'
 import type { RequestHandler } from './$types'
 
@@ -51,26 +51,18 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     throw error(400, 'Unknown channel type')
   }
 
-  // Перевіряємо, що юзер — член цього чату
-  const membership = await prisma.chatMember.findUnique({
-    where: {
-      chatId_userId: { chatId, userId },
-    },
-    select: {
-      user: {
-        select: { id: true, name: true, avatar: true },
-      },
-    },
-  })
-
-  if (!membership) throw error(403, 'Not a member of this chat')
+  // Перевіряємо, що юзер — член цього чату (з кешу, chat-members.ts).
+  if (!(await isChatMember(chatId, userId))) {
+    throw error(403, 'Not a member of this chat')
+  }
 
   if (isPresence) {
+    // Імʼя й аватар — із сесії: окремий запит до бази заради них зайвий.
     const presenceData = {
-      user_id: membership.user.id,
+      user_id: userId,
       user_info: {
-        name: membership.user.name ?? 'Користувач',
-        avatar: membership.user.avatar ?? '',
+        name: user.name || 'Користувач',
+        avatar: user.image ?? '',
       },
     }
     const authResponse = pusherServer.authorizeChannel(

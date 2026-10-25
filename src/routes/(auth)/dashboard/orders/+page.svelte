@@ -94,10 +94,12 @@
 
 <!--
   max-w-230 — та сама колонка, що в заявках, відгуках і сповіщеннях.
-  min-h-svh + flex-col потрібні порожньому стану: він бере flex-1 і стає
+  min-h-(--app-h) + flex-col потрібні порожньому стану: він бере flex-1 і стає
   по центру сторінки, а не одразу під заголовком.
 -->
-<div class="mx-auto flex min-h-svh w-full max-w-230 flex-col px-4 py-8 sm:px-6">
+<div
+  class="mx-auto flex min-h-(--app-h) w-full max-w-230 flex-col px-4 py-8 sm:px-6"
+>
   <header class="mb-6 flex items-center justify-between gap-3 sm:mb-8">
     <div class="flex min-w-0 items-center gap-2.5">
       <h1 class="truncate text-2xl font-semibold tracking-tight sm:text-3xl">

@@ -7,12 +7,16 @@
 
 import { error } from '@sveltejs/kit'
 import { prisma } from './prisma'
-import { getCategories, getCities } from './reference'
+import { getCategories, getCities, getDistricts } from './reference'
 import { cloudinary } from './cloudinary'
 import { safeTrigger, channels, events } from './pusher'
 import { validateUsername } from '$lib/username'
+import { cityDistricts, findDistrict, type District } from '$lib/geo/districts'
+import { isTravelRadius } from '$lib/geo/travel'
 import type { Role } from '../../generated/prisma/client'
 import { invalidateAccount } from './account-cache'
+import { forgetMasterPage } from './master-page'
+import { refreshSessionUser } from './sessions'
 
 // ═══════════════════ Обмеження ═══════════════════
 
@@ -35,6 +39,21 @@ function sanitizeAvatar(raw: unknown): string | null {
 }
 
 const asString = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
+
+/**
+ * Район — обовʼязковий там, де для міста є райони в БД (зараз це Одеса):
+ * з нього рахуються кільця розсилки, і без нього заявка йде всім підряд.
+ * Для міста без районів — null, питати нема про що.
+ */
+function parseDistrict(
+  districts: readonly District[],
+  raw: unknown,
+): string | null {
+  if (districts.length === 0) return null
+  const district = findDistrict(districts, asString(raw))
+  if (!district) throw error(400, 'Оберіть район зі списку')
+  return district.slug
+}
 
 // ═══════════════════ Правило переходу ролей ═══════════════════
 
@@ -71,7 +90,7 @@ function assertRoleTransition(
 
 /** Все, що потрібно обом формам: і на онбордингу, і на редагуванні. */
 export async function loadProfileData(userId: string) {
-  const [user, categories, cities] = await Promise.all([
+  const [user, categories, cities, districts] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -83,12 +102,14 @@ export async function loadProfileData(userId: string) {
         avatar: true,
         avatarPublicId: true,
         city: true,
+        district: true,
         bio: true,
         role: true,
         onboarded: true,
         masterProfile: {
           select: {
             categories: true,
+            travelRadiusKm: true,
             description: true,
             portfolioImages: true,
             portfolioImagesPublicIds: true,
@@ -104,6 +125,7 @@ export async function loadProfileData(userId: string) {
     // запитами щоразу. Див. $lib/server/reference.
     getCategories(),
     getCities(),
+    getDistricts(),
   ])
 
   if (!user) throw error(401, 'Unauthorized')
@@ -123,6 +145,9 @@ export async function loadProfileData(userId: string) {
       region: c.region,
       isCapital: c.isCapital,
     })),
+    // Райони всіх міст разом: форма сама бере райони обраного міста, і
+    // зміна міста не потребує нового запиту.
+    districts,
     prefill: {
       name: user.name ?? '',
       phone: user.phone ?? '',
@@ -168,6 +193,11 @@ export async function saveClientProfile(
     : null
   if (!city) throw error(400, 'Оберіть місто зі списку')
 
+  const district = parseDistrict(
+    cityDistricts(await getDistricts(), city.slug),
+    input.district,
+  )
+
   const bio = asString(input.bio)
   if (bio.length > BIO_MAX) throw error(400, 'Опис занадто довгий')
 
@@ -188,6 +218,7 @@ export async function saveClientProfile(
       name,
       phone,
       city: city.slug,
+      district,
       bio,
       avatar,
       avatarPublicId: avatar ? avatarPublicId : null,
@@ -197,9 +228,7 @@ export async function saveClientProfile(
     },
   })
 
-  // Скидаємо кеш guard: інакше людина після онбордингу до 30 секунд
-  // поверталася б на форму — guard бачив би застаріле onboarded: false.
-  invalidateAccount(userId)
+  await afterProfileSaved(userId)
 }
 
 // ═══════════════════ Майстер ═══════════════════
@@ -246,6 +275,17 @@ export async function saveMasterProfile(
 
   const citySlug = asString(input.city)
   if (!citySlug) throw error(400, 'Оберіть місто')
+
+  const district = parseDistrict(
+    cityDistricts(await getDistricts(), citySlug),
+    input.district,
+  )
+
+  // Не передали зовсім — «будь-де»: так поводився профіль до появи радіуса.
+  const travelRadiusKm = input.travelRadiusKm ?? null
+  if (!isTravelRadius(travelRadiusKm)) {
+    throw error(400, 'Оберіть, як далеко готові їздити')
+  }
 
   const categories = Array.isArray(input.categories)
     ? (input.categories as unknown[])
@@ -326,6 +366,7 @@ export async function saveMasterProfile(
         username,
         phone,
         city: citySlug,
+        district,
         avatar,
         avatarPublicId: avatar ? avatarPublicId : null,
         bio: description,
@@ -337,6 +378,7 @@ export async function saveMasterProfile(
       create: {
         userId,
         categories,
+        travelRadiusKm,
         description,
         portfolioImages,
         portfolioImagesPublicIds,
@@ -345,6 +387,7 @@ export async function saveMasterProfile(
       },
       update: {
         categories,
+        travelRadiusKm,
         description,
         portfolioImages,
         portfolioImagesPublicIds,
@@ -361,7 +404,20 @@ export async function saveMasterProfile(
     resubmission: Boolean(me.masterProfile),
   })
 
-  // Тут змінюється і onboarded, і ROLE — без скидання кеша клієнт,
-  // який щойно став майстром, до 30 секунд бачив би вкладки замовника.
-  invalidateAccount(userId)
+  await afterProfileSaved(userId)
+}
+
+/**
+ * Профіль записано повз better-auth — скидаємо все, що його кешує:
+ *   • стан акаунта для guard (onboarded і роль) — інакше людина
+ *     поверталась би на форму або бачила вкладки старої ролі;
+ *   • копію користувача в сесіях — імʼя й аватар у меню;
+ *   • публічну сторінку майстра.
+ */
+async function afterProfileSaved(userId: string): Promise<void> {
+  await Promise.all([
+    invalidateAccount(userId),
+    refreshSessionUser(userId),
+    forgetMasterPage(userId),
+  ])
 }

@@ -8,12 +8,18 @@
     publicId = $bindable(''),
     fallback = '?',
     uploading = $bindable(false),
+    large = false,
     onError,
   }: {
     value?: string
     publicId?: string
     fallback?: string
     uploading?: boolean
+    /**
+     * Велике фото по центру — для окремого кроку «Фото» в онбордингу, де
+     * воно єдиний вміст екрана. У формі профілю — звичайний розмір.
+     */
+    large?: boolean
     onError?: (msg: string) => void
   } = $props()
 
@@ -92,7 +98,11 @@
   }
 </script>
 
-<div class="inline-flex flex-col items-start gap-2">
+<div
+  class="inline-flex flex-col gap-2 {large
+    ? 'items-center gap-3'
+    : 'items-start'}"
+>
   <button
     type="button"
     onclick={() => fileInput?.click()}
@@ -100,12 +110,14 @@
     class="group relative cursor-pointer rounded-full transition-transform focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring active:scale-[0.98] disabled:cursor-not-allowed"
     aria-label={value ? 'Змінити фото' : 'Завантажити фото'}
   >
-    <Avatar.Root class="size-20">
+    <Avatar.Root class={large ? 'size-32' : 'size-20'}>
       {#if value}
         <Avatar.Image src={value} alt="" class="object-cover" />
       {/if}
       <Avatar.Fallback
-        class="bg-muted text-xl font-medium text-muted-foreground"
+        class="bg-muted font-medium text-muted-foreground {large
+          ? 'text-4xl'
+          : 'text-xl'}"
       >
         {fallback}
       </Avatar.Fallback>
@@ -116,13 +128,15 @@
          що сюди можна натиснути. На ховері він темнішає.
          ring кольором фону відділяє значок від фото. -->
     <span
-      class="absolute -right-0.5 -bottom-0.5 flex size-7 items-center justify-center rounded-full bg-foreground text-background ring-2 ring-background transition-colors group-hover:bg-foreground/85"
+      class="absolute flex items-center justify-center rounded-full bg-foreground text-background ring-2 ring-background transition-colors group-hover:bg-foreground/85 {large
+        ? 'right-1 bottom-1 size-9'
+        : '-right-0.5 -bottom-0.5 size-7'}"
       aria-hidden="true"
     >
       {#if uploading}
-        <Spinner class="size-3.5 animate-spin" />
+        <Spinner class="{large ? 'size-4' : 'size-3.5'} animate-spin" />
       {:else}
-        <Camera class="size-3.5" strokeWidth={2} />
+        <Camera class={large ? 'size-4' : 'size-3.5'} strokeWidth={2} />
       {/if}
     </span>
 
@@ -135,7 +149,7 @@
     {/if}
   </button>
 
-  <span class="text-[12px] text-muted-foreground">
+  <span class="text-muted-foreground {large ? 'text-[13px]' : 'text-[12px]'}">
     {#if uploading}
       Завантажуємо...
     {:else if value}

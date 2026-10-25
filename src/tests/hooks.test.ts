@@ -4,11 +4,15 @@ import { makeEvent } from './helpers/event'
 import type { RequestEvent } from '@sveltejs/kit'
 
 const getSession = vi.fn()
+const revokeSessions = vi.fn(async (_userId: string) => {})
 
 vi.mock('$lib/server/prisma', async () => ({
   prisma: (await import('./helpers/prisma-mock')).prisma,
 }))
 vi.mock('$lib/server/auth', () => ({ auth: { api: { getSession } } }))
+vi.mock('$lib/server/sessions', () => ({ revokeSessions }))
+// init підхоплює хвилі розсилки — сам мозок тут ні до чого.
+vi.mock('$lib/server/dispatch', async () => await import('./helpers/infra'))
 // better-auth сам обробляє /api/auth/* — у тестах він має просто пропускати
 // запит далі, інакше ми тестували б чужу бібліотеку, а не свої замки.
 vi.mock('better-auth/svelte-kit', () => ({
@@ -137,10 +141,10 @@ describe('замок 1: бан', () => {
     const r = await redirectOf('/dashboard')
 
     expect(r.location).toBe('/user/login?error=banned')
-    // Видалення сесій із БД — щоб доступ зник і після протухання cookie-кешу.
-    expect(prisma.session.deleteMany).toHaveBeenCalledWith({
-      where: { userId: 'u1' },
-    })
+    // Сесії геть і з Redis, і з БД — щоб доступ зник і після протухання
+    // cookie-кешу. Пряме видалення з БД лишило б живу копію в Redis.
+    expect(revokeSessions).toHaveBeenCalledWith('u1')
+    expect(prisma.session.deleteMany).not.toHaveBeenCalled()
   })
 
   // Бан має бити раніше за все інше: інакше забанений із непідтвердженою

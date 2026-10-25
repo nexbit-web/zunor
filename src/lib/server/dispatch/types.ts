@@ -1,89 +1,114 @@
-// Типи «мозку-диспетчера». Чисті дані, без залежностей.
+// Типи мозку підбору — лише дані, без логіки.
 
-/** Кандидат на уведомлення — майстер з усім, що потрібно для scoring. */
-export interface Candidate {
-  id: string
-  isOnline: boolean
-  lastSeen: Date
-  avgRating: number
-  isVerified: boolean
-  activeOrders: number
-  /** Коли майстер створив профіль — для boost новачка. */
-  masterSince: Date
-  completedOrders: number
-  /**
-   * Відзивчивість: частка розісланих заявок, на які майстер реально відгукнувся
-   * (0..1, зі згладжуванням). Підіймає тих, хто справді бере роботу.
-   */
-  responseRate: number
-  /**
-   * Скільки заявок майстру розіслали за останнє вікно (RECENT_LOAD_WINDOW_MIN).
-   * Чим більше — тим нижче score: розкидаємо навантаження, а не бомбимо «зірок».
-   */
-  recentNotifications: number
+import type { JobStatus } from '../../../generated/prisma/client'
+
+/** Усе, з чого складається бал майстра. */
+export interface MasterSignals {
+  readonly lastSeen: Date
+  readonly avgRating: number
+  readonly isVerified: boolean
+  readonly activeOrders: number
+  /** Коли створено профіль майстра. */
+  readonly masterSince: Date
+  readonly completedOrders: number
+  /** Згладжена частка заявок, на які майстер відгукнувся, 0–1. */
+  readonly responseRate: number
+  /** Від району майстра до району заявки, км; null — невідомо. */
+  readonly distanceKm: number | null
 }
 
-/** Контекст заявки на момент прийняття рішення. */
-export interface JobContext {
-  jobId: string
-  proposalsCount: number
-  createdAt: Date
-  /** ID майстрів, яких вже уведомили (щоб не дублювати). */
-  alreadyNotified: Set<string>
+/** Майстер, якого можна покликати в хвилю. */
+export interface Candidate extends MasterSignals {
+  readonly id: string
+  /** Скільки заявок йому слали за RECENT_LOAD_WINDOW_MIN. */
+  readonly recentNotifications: number
+  /** Заявка в межах його власного радіуса виїзду (або межі немає). */
+  readonly withinReach: boolean
 }
 
-/** Рішення мозку: кого уведомити в цій хвилі. */
-export interface DispatchDecision {
-  /** Чи треба взагалі щось робити. */
-  shouldDispatch: boolean
-  /** Причина зупинки (для логів), якщо shouldDispatch = false. */
-  stopReason?: 'enough-proposals' | 'job-closed' | 'no-candidates'
-  /** Номер поточної хвилі. */
-  wave: number
-  /** Кандидати для уведомлення в цій хвилі (вже відсортовані, обрізані). */
-  toNotify: ScoredCandidate[]
-}
-
-/** Кандидат з порахованим score. */
 export interface ScoredCandidate {
-  id: string
-  score: number
+  readonly id: string
+  readonly score: number
+  readonly distanceKm: number | null
+  /**
+   * Кличемо з-за його межі виїзду (останній дзвінок). Сповіщення — не «нова
+   * заявка», а пропозиція, і мовчання на неї не знижує відзивчивість.
+   */
+  readonly beyondReach: boolean
 }
 
-/** Конфіг мозку — всі магічні числа в одному місці. */
-export const DISPATCH_CONFIG = {
-  /** Досить відгуків — припиняємо розсилку. */
-  ENOUGH_PROPOSALS: 5,
+/** Заявка на момент рішення. */
+export interface JobSnapshot {
+  readonly id: string
+  readonly title: string
+  readonly category: string
+  readonly city: string
+  /** Район із довідника; null — невідомий, і тоді кілець немає. */
+  readonly district: string | null
+  readonly clientId: string
+  readonly status: JobStatus
+  readonly proposalsCount: number
+  readonly createdAt: Date
+  /** Остання відпрацьована хвиля; 0 — ще жодної. */
+  readonly dispatchWave: number
+  /** Кого по цій заявці вже покликали. */
+  readonly notified: ReadonlySet<string>
+}
 
-  /** Перевантажений майстер (активних замовлень). */
-  MAX_ACTIVE_ORDERS: 3,
+/** Достатньо, щоб планувати хвилі заявки. */
+export interface JobRef {
+  readonly id: string
+  readonly createdAt: Date
+}
 
-  /** Boost новачка: скільки днів від реєстрації профілю. */
-  NEW_MASTER_DAYS: 14,
-  /** Boost новачка: до скількох виконаних замовлень. */
-  NEW_MASTER_ORDERS: 5,
+export type StopReason = 'job-closed' | 'enough-proposals'
 
-  /** Вікно «недавньої» розсилки для балансування навантаження (хв). */
-  RECENT_LOAD_WINDOW_MIN: 15,
+export interface StopPlan {
+  readonly kind: 'stop'
+  readonly reason: StopReason
+}
 
-  /** Розміри хвиль (скільки майстрів уведомити). */
-  WAVES: [
-    { afterMinutes: 0, batchSize: 20 }, // хвиля 1 — одразу
-    { afterMinutes: 2, batchSize: 30 }, // хвиля 2 — через 2 хв
-    { afterMinutes: 10, batchSize: 9999 }, // хвиля 3 — всі решта
-  ],
+/** Рішення хвилі. Порожній toNotify — хвиля відпрацювала, кликати нікого. */
+export interface WavePlan {
+  readonly kind: 'wave'
+  readonly wave: number
+  readonly jobTitle: string
+  /** До якого радіуса дійшла хвиля, км; null — усе місто. */
+  readonly radiusKm: number | null
+  /** Покликала й тих, кому за межею виїзду: остання хвиля, а майстрів мало. */
+  readonly lastCall: boolean
+  readonly toNotify: readonly ScoredCandidate[]
+}
 
-  /** Бали scoring. */
-  SCORE: {
-    ONLINE: 1000,
-    SEEN_5MIN: 500,
-    SEEN_1HOUR: 300,
-    SEEN_24HOUR: 100,
-    RATING_MULTIPLIER: 50, // avgRating (0-5) × 50
-    VERIFIED: 150,
-    NEW_MASTER_BOOST: 400, // boost новачкам, щоб мали шанс
-    OVERLOADED_PENALTY: -800, // прийнятих замовлень >= MAX_ACTIVE_ORDERS
-    RESPONSIVENESS_MULTIPLIER: 600, // responseRate (0-1) × 600
-    RECENT_LOAD_PENALTY: 150, // × кількість недавніх розсилок (без стелі)
-  },
-} as const
+export type DispatchDecision = WavePlan | StopPlan
+
+export type DispatchResult =
+  | StopPlan
+  | {
+      readonly kind: 'wave'
+      readonly wave: number
+      readonly notified: number
+      readonly lastCall: boolean
+    }
+
+/** Що зробило одне відновлення розсилки. */
+export interface ResumeReport {
+  /** Скільки незавершених заявок переглянуто. */
+  readonly checked: number
+  /** Скільком запущено хвилю, яку таймер не встиг. */
+  readonly caughtUp: number
+}
+
+/** Відгук на заявку — для рекомендацій клієнту. */
+export interface RankableProposal {
+  readonly id: string
+  readonly createdAt: Date
+  readonly master: MasterSignals
+}
+
+export interface Recommendation {
+  /** Топ, який клієнт бачить першим. */
+  readonly recommended: ReadonlySet<string>
+  /** Новачки — для мітки «✨ Новачок». */
+  readonly newbies: ReadonlySet<string>
+}

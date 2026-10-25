@@ -11,28 +11,22 @@
   <meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 
-<div class="grid min-h-svh lg:grid-cols-2">
-  <div class="flex flex-col gap-4 p-6 md:p-10">
-    <div class="flex gap-2 md:justify-start">
-      <a
-        href="/user/login"
-        class="flex items-center gap-2 font-medium hover:text-muted-foreground"
-      >
-        <ArrowLeft size={20} aria-hidden="true" />
-        Назад
-      </a>
-    </div>
-    <div class="flex flex-1 items-center justify-center">
-      <div class="w-full max-w-xs">
-        <OtpForm email={data.email} />
-      </div>
-    </div>
-  </div>
-  <div class="relative hidden bg-muted lg:block">
-    <img
-      src="/otp.png"
-      alt=""
-      class="absolute inset-0 h-full w-full object-cover dark:brightness-[0.2] dark:grayscale"
-    />
+<!--
+  Та сама розкладка, що на вході й реєстрації: одна колонка по центру,
+  без картинки збоку.
+-->
+<div
+  class="relative flex min-h-svh flex-col items-center justify-center px-5 py-16"
+>
+  <a
+    href="/"
+    class="absolute start-5 top-5 inline-flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground sm:start-8 sm:top-8"
+  >
+    <ArrowLeft size={18} aria-hidden="true" />
+    Головна
+  </a>
+
+  <div class="w-full max-w-[480px]">
+    <OtpForm email={data.email} />
   </div>
 </div>

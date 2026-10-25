@@ -12,9 +12,15 @@
   }: CommandPrimitive.InputProps = $props()
 </script>
 
-<div data-slot="command-input-wrapper" class="p-1 pb-0">
+<!--
+  Рядок пошуку всередині списку — не окреме поле вводу: власна рамка,
+  заливка й синє кільце на фокусі малювали «поле в полі» просто під
+  кнопкою, яка це поле й відкрила. Лишаємо саму стрічку з лупою, а від
+  списку її відділяє лінія знизу — фокус тут і так завжди в ній.
+-->
+<div data-slot="command-input-wrapper" class="border-b border-border/60 px-1">
   <InputGroup.Root
-    class="bg-input/30 border-input/30 h-8! rounded-lg! shadow-none! *:data-[slot=input-group-addon]:pl-2!"
+    class="h-10! rounded-none! border-0! bg-transparent! shadow-none! ring-0! *:data-[slot=input-group-addon]:pl-2!"
   >
     <CommandPrimitive.Input
       {value}

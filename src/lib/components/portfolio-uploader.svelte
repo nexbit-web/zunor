@@ -3,7 +3,6 @@
   import { Spinner } from '$lib/components/ui/spinner'
   import PlusIcon from '@lucide/svelte/icons/plus'
   import XIcon from '@lucide/svelte/icons/x'
-  import ImageIcon from '@lucide/svelte/icons/image'
 
   let {
     images = $bindable<string[]>([]),
@@ -118,85 +117,62 @@
   }
 </script>
 
-<div class="space-y-4">
+<div class="space-y-3">
   <div class="grid grid-cols-3 gap-2.5">
     {#each images as img, i (img)}
+      <!-- Ні градієнта, ні порядкового бейджа: градієнт існував тільки
+           щоб бейдж читався, а бейдж нумерував фотографії, які людина й
+           так бачить очима. Лічильник лишився один — у підвалі. -->
       <div
-        class="group relative aspect-square overflow-hidden rounded-[18px] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.05)]"
+        class="group relative aspect-square overflow-hidden rounded-[8px] bg-muted"
       >
         <img
           src={img}
           alt="Робота {i + 1}"
-          class="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+          class="h-full w-full object-cover"
           loading="lazy"
           decoding="async"
           draggable="false"
         />
 
-        <!-- легкий градієнт для контрасту бейджа (декоративний) -->
-        <div
-          class="pointer-events-none absolute inset-0 bg-linear-to-t from-black/35 via-transparent to-transparent"
-          aria-hidden="true"
-        ></div>
-
-        <!-- видалення — завжди видиме (тач без hover) -->
+        <!-- Видалення видиме завжди: на тачі ховера немає. -->
         <button
           type="button"
           onclick={() => remove(i)}
           disabled={removingIdx === i}
-          class="absolute top-2 right-2 flex size-7 cursor-pointer items-center justify-center rounded-xl border border-white/20 bg-black/60 backdrop-blur-md transition-transform duration-200 hover:scale-110 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-60"
+          class="absolute top-1.5 right-1.5 flex size-6 cursor-pointer items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-md transition-colors hover:bg-black/75 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-60"
           aria-label="Видалити фото {i + 1}"
         >
-          {#if removingIdx === i}
-            <Spinner class=" text-white" />
-          {:else}
-            <XIcon class="size-3.5 text-white" aria-hidden="true" />
-          {/if}
+          <!-- Спінер під час видалення один — на оверлеї. Другий, у самій
+               кнопці, крутився поруч і показував те саме. -->
+          <XIcon class="size-3.5" aria-hidden="true" />
         </button>
 
-        <!-- оверлей під час видалення -->
         {#if removingIdx === i}
           <div
-            class="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-[2px]"
+            class="absolute inset-0 flex items-center justify-center bg-black/45"
           >
-            <Spinner class="text-white" />
+            <Spinner class="animate-spin text-white" />
           </div>
         {/if}
-
-        <!-- порядковий бейдж — завжди видимий -->
-        <span
-          class="absolute bottom-2 left-2 rounded-xl bg-black/55 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-white/90 backdrop-blur-sm"
-        >
-          {i + 1} / {maxItems}
-        </span>
       </div>
     {/each}
 
-    <!-- слот завантаження -->
+    <!-- Слот завантаження -->
     {#if images.length < maxItems}
       <label
         class={[
-          'group flex aspect-square cursor-pointer flex-col items-center justify-center gap-2.25 rounded-[18px] border-[1.5px] border-dashed border-border bg-muted transition-colors duration-200 hover:border-muted-foreground hover:bg-card focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring',
+          'flex aspect-square cursor-pointer flex-col items-center justify-center gap-2 rounded-[8px] border border-input bg-muted/40 transition-colors outline-none hover:bg-muted focus-within:border-primary focus-within:shadow-[0_0_0_1px_var(--primary)]',
           uploading && 'pointer-events-none',
         ]}
         aria-label="Додати фото"
       >
         {#if uploading}
-          <span
-            class="size-5.5 animate-spin rounded-xl border-[2.5px] border-foreground/15 border-t-foreground"
-          ></span>
-          <span class="text-[11.5px] font-medium text-muted-foreground"
-            >Завантаження...</span
-          >
+          <Spinner class="animate-spin text-muted-foreground" />
+          <span class="text-[12px] text-muted-foreground">Завантаження...</span>
         {:else}
-          <span
-            class="flex size-10.5 items-center justify-center rounded-xl bg-card text-muted-foreground shadow-sm transition-transform duration-200 group-hover:scale-110"
-          >
-            <PlusIcon class="size-5" aria-hidden="true" />
-          </span>
-          <span class="text-[11.5px] font-medium text-muted-foreground"
-            >Додати</span
-          >
+          <PlusIcon class="size-5 text-muted-foreground" aria-hidden="true" />
+          <span class="text-[12px] text-muted-foreground">Додати</span>
         {/if}
 
         <input
@@ -209,43 +185,14 @@
         />
       </label>
     {/if}
-
-    <!-- порожні плейсхолдери, щоб тримати 3 колонки -->
-    {#if images.length === 0 && !uploading}
-      {#each Array(2) as _, i (i)}
-        <div
-          class="flex aspect-square items-center justify-center rounded-[18px] border-[1.5px] border-dashed border-border bg-muted/40 text-muted-foreground/40"
-          aria-hidden="true"
-        >
-          <ImageIcon class="size-5.5" />
-        </div>
-      {/each}
-    {/if}
   </div>
 
-  <!-- футер -->
-  <div class="flex items-center justify-between px-0.5">
-    <div class="flex items-center gap-2.5">
-      <div class="flex gap-0.75" aria-hidden="true">
-        {#each Array(maxItems) as _, i (i)}
-          <div
-            class={[
-              'h-1 rounded-xl transition-all duration-300',
-              i < images.length ? 'bg-foreground' : 'bg-foreground/15',
-            ]}
-            style:width={i < images.length ? '16px' : '6px'}
-          ></div>
-        {/each}
-      </div>
-      <span class="text-[11.5px] tabular-nums text-muted-foreground"
-        >{images.length} з {maxItems}</span
-      >
-    </div>
-
-    {#if images.length > 0}
-      <span class="text-[11.5px] text-muted-foreground"
-        >JPG, PNG до {MAX_MB} МБ</span
-      >
-    {/if}
+  <!-- Підвал: скільки завантажено і що приймаємо. Смужок-індикатора
+       більше немає — він показував те саме число, що й цифри поруч. -->
+  <div
+    class="flex items-center justify-between px-0.5 text-[12px] text-muted-foreground"
+  >
+    <span class="tabular-nums">{images.length} з {maxItems}</span>
+    <span>JPG, PNG до {MAX_MB} МБ</span>
   </div>
 </div>

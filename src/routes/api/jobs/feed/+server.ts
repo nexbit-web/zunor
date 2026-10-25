@@ -3,6 +3,9 @@ import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
 import { clientRatingSelect, flattenClientRating } from '$lib/server/user-dto'
 import { moneyParam } from '$lib/server/query'
+import { getDistricts } from '$lib/server/reference'
+import { cityDistricts, jobPlace } from '$lib/geo/districts'
+import { masterFeedScope } from '$lib/server/dispatch'
 import type { RequestHandler } from './$types'
 
 const PAGE_SIZE = 20
@@ -42,11 +45,13 @@ export const GET: RequestHandler = async ({ locals, url }) => {
     select: {
       role: true,
       city: true,
+      district: true,
       masterProfile: {
         select: {
           isActive: true,
           verificationStatus: true,
           categories: true,
+          travelRadiusKm: true,
         },
       },
     },
@@ -121,12 +126,16 @@ export const GET: RequestHandler = async ({ locals, url }) => {
     ]
   }
 
-  // Заявки, від яких майстер відмовився (чорна мітка) — приховуємо
-  const declined = await prisma.dispatchEvent.findMany({
-    where: { masterId: userId, declined: true },
-    select: { jobId: true },
+  // Відмови (чорна мітка), хвилі розсилки й межа виїзду — тим самим
+  // правилом, що й перша сторінка з SSR: стрічка не обганяє розсилку.
+  const allDistricts = await getDistricts()
+  const scope = await masterFeedScope({
+    masterId: userId,
+    masterDistrict: user.district,
+    travelRadiusKm: mp.travelRadiusKm,
+    districts: cityDistricts(allDistricts, user.city),
   })
-  const declinedJobIds = declined.map((d) => d.jobId)
+  const declinedJobIds = scope.declinedIds
 
   const jobs = await prisma.job.findMany({
     where: {
@@ -142,16 +151,19 @@ export const GET: RequestHandler = async ({ locals, url }) => {
           { budgetMinCents: null },
         ],
       }),
-      ...(minPriceCents !== null && {
-        AND: [
-          {
-            OR: [
-              { budgetMaxCents: { gte: minPriceCents } },
-              { budgetMaxCents: null },
-            ],
-          },
-        ],
-      }),
+      AND: [
+        ...scope.where,
+        ...(minPriceCents !== null
+          ? [
+              {
+                OR: [
+                  { budgetMaxCents: { gte: minPriceCents } },
+                  { budgetMaxCents: null },
+                ],
+              },
+            ]
+          : []),
+      ],
     },
     orderBy: { createdAt: 'desc' },
     ...(cursor && { skip: 1, cursor: { id: cursor } }),
@@ -163,6 +175,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
       metadata: true,
       category: true,
       city: true,
+      district: true,
       status: true,
       budgetMinCents: true,
       budgetMaxCents: true,
@@ -192,6 +205,13 @@ export const GET: RequestHandler = async ({ locals, url }) => {
       ...j,
       // Автор заявки — це замовник, тому показуємо його клієнтський рейтинг.
       client: flattenClientRating(j.client),
+      // Той самий район і відстань, що в першій сторінці з SSR. Фільтр
+      // ?cities= може дати заявку з чужого міста — тоді без відстані.
+      place: jobPlace(
+        cityDistricts(allDistricts, j.city),
+        j.district,
+        j.city === user.city ? user.district : null,
+      ),
       createdAt: j.createdAt.toISOString(),
       expiresAt: j.expiresAt.toISOString(),
     })),

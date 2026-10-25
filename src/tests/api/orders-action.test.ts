@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { prisma, resetPrisma } from '../helpers/prisma-mock'
-import { Notify, safeTrigger, dispatchJob, resetInfra } from '../helpers/infra'
+import { Notify, safeTrigger, startWaves, resetInfra } from '../helpers/infra'
 import {
   makeEvent,
   sessionUser,
@@ -28,6 +28,7 @@ const { POST } = await import('../../routes/api/orders/[id]/[action]/+server')
 
 const CLIENT = 'client-1'
 const MASTER = 'master-1'
+const JOB_CREATED = new Date('2026-10-20T10:00:00Z')
 
 function order(patch: Record<string, unknown> = {}) {
   return {
@@ -36,7 +37,7 @@ function order(patch: Record<string, unknown> = {}) {
     clientId: CLIENT,
     masterId: MASTER,
     chatId: 'chat-1',
-    fromJob: { id: 'job-1', title: 'Прибирання' },
+    fromJob: { id: 'job-1', createdAt: JOB_CREATED },
     ...patch,
   }
 }
@@ -253,7 +254,10 @@ describe('CANCEL', () => {
   it('після відмови майстра диспетчер шукає заміну, клієнту — тепле сповіщення', async () => {
     await POST(actionEvent(MASTER, 'cancel'))
 
-    expect(dispatchJob).toHaveBeenCalledWith('job-1', 'Прибирання')
+    expect(startWaves).toHaveBeenCalledWith({
+      id: 'job-1',
+      createdAt: JOB_CREATED,
+    })
     expect(Notify.jobReopened).toHaveBeenCalledWith(CLIENT, 'job-1')
     expect(Notify.orderCancelled).not.toHaveBeenCalled()
   })
@@ -264,7 +268,7 @@ describe('CANCEL', () => {
     await POST(actionEvent(MASTER, 'cancel'))
 
     expect(prisma.job.update).not.toHaveBeenCalled()
-    expect(dispatchJob).not.toHaveBeenCalled()
+    expect(startWaves).not.toHaveBeenCalled()
     expect(Notify.orderCancelled).toHaveBeenCalled()
   })
 })

@@ -1,16 +1,16 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { prisma, resetPrisma } from '../helpers/prisma-mock'
-import { dispatchJob, scheduleWaves, resetInfra } from '../helpers/infra'
+import { startWaves, resetInfra } from '../helpers/infra'
 import { makeEvent, sessionUser, anonymous, failure } from '../helpers/event'
 
 vi.mock('$lib/server/prisma', async () => ({
   prisma: (await import('../helpers/prisma-mock')).prisma,
 }))
+vi.mock('$lib/server/reference', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('$lib/server/reference')>()),
+  getDistricts: (await import('../helpers/districts')).getDistricts,
+}))
 vi.mock('$lib/server/dispatch', async () => await import('../helpers/infra'))
-vi.mock(
-  '$lib/server/dispatch/scheduler',
-  async () => await import('../helpers/infra'),
-)
 
 const { POST } = await import('../../routes/api/jobs/+server')
 
@@ -215,14 +215,16 @@ describe('вкладення', () => {
 })
 
 describe('успішне створення', () => {
-  it('повертає 201 і запускає першу хвилю + планує наступні', async () => {
+  // Хвилі рахуються від createdAt заявки — тож саме її мозок і отримує.
+  it('повертає 201 і запускає розсилку від часу створення заявки', async () => {
     const res = (await POST(
       createEvent(freshUser(), { metadata: validMetadata }),
     )) as Response
 
     expect(res.status).toBe(201)
-    expect(dispatchJob).toHaveBeenCalledWith('job-1', 'Прибирання квартири')
-    expect(scheduleWaves).toHaveBeenCalledWith('job-1', 'Прибирання квартири')
+    expect(startWaves).toHaveBeenCalledTimes(1)
+    expect(startWaves.mock.calls[0][0]).toMatchObject({ id: 'job-1' })
+    expect(startWaves.mock.calls[0][0].createdAt).toBeInstanceOf(Date)
   })
 
   it('заявка створюється зі статусом OPEN і терміном придатності', async () => {
@@ -234,15 +236,46 @@ describe('успішне створення', () => {
     expect(data.city).toBe('odesa')
   })
 
-  // Диспетчер — не критичний шлях: заявка вже в базі, клієнту не можна
-  // показувати помилку.
-  it('падіння диспетчера не валить створення заявки', async () => {
-    dispatchJob.mockRejectedValueOnce(new Error('neon timeout'))
+  // Район — як і місто — з профілю: з нього рахуються кільця розсилки, і
+  // підставлений у тіло чужий район покликав би не тих майстрів.
+  it('район заявки береться з профілю клієнта, а не з тіла', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      city: 'odesa',
+      district: 'tairova',
+    })
 
-    const res = (await POST(
-      createEvent(freshUser(), { metadata: validMetadata }),
-    )) as Response
-    expect(res.status).toBe(201)
+    await POST(
+      createEvent(freshUser(), { metadata: validMetadata, district: 'center' }),
+    )
+
+    const select = prisma.user.findUnique.mock.calls[0][0].select
+    expect(select.district).toBe(true)
+    expect(prisma.job.create.mock.calls[0][0].data.district).toBe('tairova')
+  })
+
+  it('профіль без району — заявка без району, але створюється', async () => {
+    for (const district of [null, 'зниклий-район']) {
+      resetPrisma()
+      prisma.user.findUnique.mockResolvedValue({ city: 'odesa', district })
+      prisma.category.findUnique.mockResolvedValue({ id: 'cat-1' })
+      prisma.city.findUnique.mockResolvedValue({ id: 'city-1' })
+      prisma.job.create.mockResolvedValue({ id: 'job-1', title: 'Т' })
+
+      const res = (await POST(
+        createEvent(freshUser(), { metadata: validMetadata }),
+      )) as Response
+      expect(res.status).toBe(201)
+      expect(prisma.job.create.mock.calls[0][0].data.district).toBeNull()
+    }
+  })
+
+  it('строк життя заявки — тиждень від створення', async () => {
+    await POST(createEvent(freshUser(), { metadata: validMetadata }))
+
+    const { expiresAt } = prisma.job.create.mock.calls[0][0].data
+    const days = (expiresAt.getTime() - Date.now()) / 86_400_000
+    expect(days).toBeGreaterThan(6.99)
+    expect(days).toBeLessThanOrEqual(7)
   })
 })
 

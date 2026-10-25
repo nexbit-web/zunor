@@ -5,11 +5,12 @@
     SettingsGroup,
     SettingsRow,
     SettingsField,
+    SettingsBlock,
   } from '$lib/components/settings'
   import { Button } from '$lib/components/ui/button'
   import { Input } from '$lib/components/ui/input'
   import { Spinner } from '$lib/components/ui/spinner'
-  import { Eye, EyeOff, Check } from 'lucide-svelte'
+  import { Eye, EyeOff, Check, CircleAlert, Lock } from 'lucide-svelte'
   import toast from 'svelte-hot-french-toast'
   import type { PageData } from './$types'
 
@@ -123,6 +124,7 @@
             <Input
               id="current-pw"
               type="password"
+              icon={Lock}
               bind:value={current}
               autocomplete="current-password"
               placeholder="••••••••"
@@ -143,6 +145,7 @@
               <Input
                 id="new-pw"
                 type={showNext ? 'text' : 'password'}
+                icon={Lock}
                 bind:value={next}
                 onblur={() => (touched.next = true)}
                 autocomplete="new-password"
@@ -168,12 +171,17 @@
           {/snippet}
         </SettingsField>
 
-        <SettingsField label="Ще раз" for="confirm-pw" error={confirmError}>
+        <SettingsField
+          label="Повторіть пароль"
+          for="confirm-pw"
+          error={confirmError}
+        >
           {#snippet control()}
             <div class="relative">
               <Input
                 id="confirm-pw"
                 type={showNext ? 'text' : 'password'}
+                icon={Lock}
                 bind:value={confirm}
                 onblur={() => (touched.confirm = true)}
                 autocomplete="new-password"
@@ -191,30 +199,36 @@
             </div>
           {/snippet}
         </SettingsField>
-      </SettingsGroup>
 
-      {#if serverError}
-        <p class="-mt-4 mb-4 px-1 text-[12.5px] text-destructive" role="alert">
-          {serverError}
-        </p>
-      {/if}
-
-      <div class="-mt-2 mb-7 flex justify-end">
-        <Button
-          type="submit"
-          disabled={saving || !formValid}
-          aria-busy={saving}
-          class="relative min-w-[150px]"
-        >
-          <span>{saving ? 'Зберігаємо...' : 'Змінити пароль'}</span>
-          {#if saving}
-            <Spinner
-              class="absolute right-3 size-3 animate-spin"
-              aria-hidden="true"
-            />
+        <!-- Кнопка всередині розділу, під полями: у дві колонки вона
+             інакше опинялась би під лінією, вже в наступному розділі. -->
+        <SettingsBlock>
+          {#if serverError}
+            <p
+              class="mb-3 flex items-center gap-1.5 text-[12px] text-destructive"
+              role="alert"
+            >
+              <CircleAlert class="size-3.5 shrink-0" aria-hidden="true" />
+              {serverError}
+            </p>
           {/if}
-        </Button>
-      </div>
+
+          <Button
+            type="submit"
+            disabled={saving || !formValid}
+            aria-busy={saving}
+            variant="primary"
+            class="relative min-w-35"
+          >
+            {#if saving}
+              <Spinner class="animate-spin" aria-hidden="true" />
+              <span class="sr-only">Зберігаємо...</span>
+            {:else}
+              <span>Змінити пароль</span>
+            {/if}
+          </Button>
+        </SettingsBlock>
+      </SettingsGroup>
     </form>
   {:else}
     <!-- Акаунт створено через Google — пароля не існує.
@@ -227,11 +241,10 @@
       >
         {#snippet control()}
           <Button
-            variant="outline"
             onclick={sendSetPasswordLink}
             disabled={sendingReset}
             aria-busy={sendingReset}
-            class="bg-background"
+            variant="primary-outline"
           >
             {sendingReset ? 'Надсилаємо...' : 'Задати пароль'}
           </Button>

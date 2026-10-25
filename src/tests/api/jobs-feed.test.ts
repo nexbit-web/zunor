@@ -7,9 +7,14 @@ import {
   failure,
   okJson,
 } from '../helpers/event'
+import { conditions, districtsIn } from '../helpers/where'
 
 vi.mock('$lib/server/prisma', async () => ({
   prisma: (await import('../helpers/prisma-mock')).prisma,
+}))
+vi.mock('$lib/server/reference', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('$lib/server/reference')>()),
+  getDistricts: (await import('../helpers/districts')).getDistricts,
 }))
 
 const { GET } = await import('../../routes/api/jobs/feed/+server')
@@ -150,8 +155,8 @@ describe('фільтр не можна розширити з клієнта', ()
   // диспетчера нічого не варта: заявка повернулась би у стрічку.
   it('заявки з чорною міткою виключаються', async () => {
     prisma.dispatchEvent.findMany.mockResolvedValue([
-      { jobId: 'job-9' },
-      { jobId: 'job-10' },
+      { jobId: 'job-9', declined: true },
+      { jobId: 'job-10', declined: true },
     ])
 
     await GET(feedEvent('m1'))
@@ -171,6 +176,13 @@ describe('фільтр не можна розширити з клієнта', ()
 // Math.max не є валідацією числа. Тепер обидва — через moneyParam
 // ($lib/server/query), і сміття означає «фільтра немає».
 describe('нечислові фільтри ціни', () => {
+  // AND стрічки містить і правило видимості (dispatch/feed.ts), тож нижню межу
+  // ціни шукаємо за змістом, а не за позицією.
+  type Cond = { OR?: { budgetMaxCents?: { gte?: number } }[] }
+  const minPriceOf = (where: { AND?: Cond[] }) =>
+    where.AND?.find((c) => c.OR?.[0]?.budgetMaxCents)?.OR?.[0]?.budgetMaxCents
+      ?.gte
+
   beforeEach(() => {
     prisma.user.findUnique.mockResolvedValue(activeMaster)
     prisma.dispatchEvent.findMany.mockResolvedValue([])
@@ -183,8 +195,7 @@ describe('нечислові фільтри ціни', () => {
       await GET(feedEvent('m1', `&minPrice=${raw}`))
 
       const where = prisma.job.findMany.mock.calls[0][0].where
-      const gte = where.AND?.[0]?.OR?.[0]?.budgetMaxCents?.gte
-      expect(gte, raw).toBeUndefined()
+      expect(minPriceOf(where), raw).toBeUndefined()
     }
   })
 
@@ -205,8 +216,7 @@ describe('нечислові фільтри ціни', () => {
     await GET(feedEvent('m1', '&minPrice=-500'))
 
     const where = prisma.job.findMany.mock.calls[0][0].where
-    const gte = where.AND?.[0]?.OR?.[0]?.budgetMaxCents?.gte
-    expect(gte).toBe(0)
+    expect(minPriceOf(where)).toBe(0)
   })
 
   it('коректна ціна перетворюється на копійки', async () => {
@@ -260,6 +270,133 @@ describe('сторінка має стелю', () => {
 
     expect(body.jobs[0].client.avgRating).toBe(4.5)
     expect(body.jobs[0].client).not.toHaveProperty('avgRatingAsClient')
+  })
+})
+
+describe('стрічка не обганяє розсилку', () => {
+  beforeEach(() => {
+    prisma.job.findMany.mockResolvedValue([])
+  })
+
+  const whereOf = () => prisma.job.findMany.mock.calls[0][0].where
+
+  // Поки кільця ширшають, дальній майстер у стрічці побачив би заявку
+  // раніше за ближнього — тому свіжа заявка видна лише покликаному. Саме
+  // правило перевіряє dispatch-feed.test.ts; тут — що воно доїхало до запиту.
+  it('свіжу заявку бачить лише той, кого розсилка вже покликала', async () => {
+    prisma.user.findUnique.mockResolvedValue(activeMaster)
+    prisma.dispatchEvent.findMany.mockResolvedValue([
+      { jobId: 'job-called', declined: false },
+    ])
+
+    await GET(feedEvent('m1'))
+
+    expect(conditions(whereOf(), (c) => 'id' in c)).toContainEqual({
+      id: { in: ['job-called'] },
+    })
+    // Межа «старої» заявки — кінець хвиль, а не «зараз».
+    const [byAge] = conditions(whereOf(), (c) => 'createdAt' in c)
+    const lte = (byAge.createdAt as { lte: Date }).lte
+    expect(Date.now() - lte.getTime()).toBeGreaterThanOrEqual(9 * 60_000)
+  })
+
+  it('один запит і на відмови, і на тих, кого покликали', async () => {
+    prisma.user.findUnique.mockResolvedValue(activeMaster)
+    prisma.dispatchEvent.findMany.mockResolvedValue([])
+
+    await GET(feedEvent('m1'))
+
+    expect(prisma.dispatchEvent.findMany).toHaveBeenCalledTimes(1)
+    const where = prisma.dispatchEvent.findMany.mock.calls[0][0].where
+    expect(where.masterId).toBe('m1')
+    expect(where.OR).toEqual([
+      { declined: true },
+      { notifiedAt: { gte: expect.any(Date) } },
+    ])
+  })
+
+  // Межа майстра діє і в стрічці: сказав «до 5 км» — заявки з іншого
+  // кінця міста не бачить і там.
+  it('межа виїзду фільтрує стрічку за районами', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      ...activeMaster,
+      district: 'center',
+      masterProfile: { ...activeMaster.masterProfile, travelRadiusKm: 5 },
+    })
+    prisma.dispatchEvent.findMany.mockResolvedValue([])
+
+    await GET(feedEvent('m1'))
+
+    const reach = districtsIn(whereOf())!
+    expect(reach).toContain('center')
+    expect(reach).toContain('moldavanka')
+    expect(reach).not.toContain('kotovskoho')
+    // Заявку без району не ховаємо: відстань не перевірити, як і в розсилці.
+    expect(conditions(whereOf(), (c) => c.district === null)).toHaveLength(1)
+  })
+
+  it('«будь-де» — без фільтра районів', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      ...activeMaster,
+      district: 'center',
+      masterProfile: { ...activeMaster.masterProfile, travelRadiusKm: null },
+    })
+    prisma.dispatchEvent.findMany.mockResolvedValue([])
+
+    await GET(feedEvent('m1'))
+
+    expect(districtsIn(whereOf())).toBeNull()
+  })
+})
+
+describe('район і відстань у картці', () => {
+  beforeEach(() => {
+    prisma.dispatchEvent.findMany.mockResolvedValue([])
+  })
+
+  type Place = { district: string | null; distanceKm: number | null }
+  const placeOf = async () =>
+    (await okJson<{ jobs: { place: Place }[] }>(() => GET(feedEvent('m1'))))
+      .jobs[0].place
+
+  it('відстань рахується від району самого майстра', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      ...activeMaster,
+      district: 'center',
+    })
+    prisma.job.findMany.mockResolvedValue([
+      { ...jobRow(0), district: 'tairova' },
+    ])
+
+    const place = await placeOf()
+    expect(place.district).toBe('Таїрова')
+    // Центр → Таїрова — кілька кілометрів, а не нуль і не пів України.
+    expect(place.distanceKm).toBeGreaterThan(3)
+    expect(place.distanceKm).toBeLessThan(15)
+
+    expect(prisma.job.findMany.mock.calls[0][0].select.district).toBe(true)
+  })
+
+  it('майстер без району бачить район заявки, але не відстань', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      ...activeMaster,
+      district: null,
+    })
+    prisma.job.findMany.mockResolvedValue([
+      { ...jobRow(0), district: 'tairova' },
+    ])
+
+    expect(await placeOf()).toEqual({ district: 'Таїрова', distanceKm: null })
+  })
+
+  it('заявка без району — нічого не вигадуємо', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      ...activeMaster,
+      district: 'center',
+    })
+    prisma.job.findMany.mockResolvedValue([{ ...jobRow(0), district: null }])
+
+    expect(await placeOf()).toEqual({ district: null, distanceKm: null })
   })
 })
 

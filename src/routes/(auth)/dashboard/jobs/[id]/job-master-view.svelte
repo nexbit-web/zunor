@@ -20,6 +20,7 @@
     ChevronRight,
   } from 'lucide-svelte'
   import { describeJob } from '$lib/categories/cleaning/describe'
+  import { formatDistance } from '$lib/geo/districts'
   import PhotoGallery from '$lib/components/photo-gallery.svelte'
   import {
     formatMoney,
@@ -139,7 +140,7 @@
     'inline-flex h-[22px] items-center rounded-full px-2.5 text-[10px] font-bold tracking-[0.06em] uppercase'
 </script>
 
-<div class="jobview-scope min-h-svh px-1 py-1">
+<div class="jobview-scope min-h-(--app-h) px-1 py-1">
   <div class="mx-auto flex w-full max-w-135 flex-col gap-3">
     <!-- Back -->
     <button
@@ -232,11 +233,18 @@
           </div>
         {/if}
 
-        <!-- Місто -->
+        <!-- Місто й район; відстань — від району самого майстра -->
         <div
           class="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground"
         >
-          <MapPin class="size-3.75" aria-hidden="true" />{data.job.city}
+          <MapPin class="size-3.75" aria-hidden="true" />
+          <span>
+            {data.job.city}{#if data.job.place?.district},
+              {data.job.place.district}{/if}
+            {#if data.job.place?.distanceKm != null}
+              · {formatDistance(data.job.place.distanceKm)}
+            {/if}
+          </span>
         </div>
 
         <hr class="my-4 border-border" />

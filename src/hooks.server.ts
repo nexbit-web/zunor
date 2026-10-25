@@ -7,13 +7,14 @@
 // Єдине джерело правди про сесію на запит — locals.
 
 import { auth } from '$lib/server/auth'
-import { prisma } from '$lib/server/prisma'
 import { svelteKitHandler } from 'better-auth/svelte-kit'
 import { building, dev } from '$app/environment'
 import { sequence } from '@sveltejs/kit/hooks'
-import { redirect, type Handle } from '@sveltejs/kit'
+import { redirect, type Handle, type ServerInit } from '@sveltejs/kit'
 import { touchPresence } from '$lib/server/presence'
 import { getAccountState, invalidateAccount } from '$lib/server/account-cache'
+import { resumeDispatch } from '$lib/server/dispatch'
+import { revokeSessions } from '$lib/server/sessions'
 // ═══════════════════ Маршрути ═══════════════════
 
 const LOGIN_PATH = '/user/login'
@@ -99,12 +100,11 @@ const guardHandle: Handle = async ({ event, resolve }) => {
   if (!account) redirect(303, LOGIN_PATH)
 
   // ─── Замок 1: бан ───
-  // Убиваємо сесії в БД, щоб доступ зник і після протухання cookie-кешу.
+  // Убиваємо сесії і в Redis, і в БД, щоб доступ зник і після протухання
+  // cookie-кешу.
   if (account.banned) {
-    await prisma.session
-      .deleteMany({ where: { userId: account.id } })
-      .catch(() => {})
-    invalidateAccount(account.id)
+    await revokeSessions(account.id).catch(() => {})
+    await invalidateAccount(account.id)
     redirect(303, `${LOGIN_PATH}?error=banned`)
   }
 
@@ -199,6 +199,26 @@ const securityHeaders: Handle = async ({ event, resolve }) => {
   response.headers.set('Cross-Origin-Resource-Policy', 'same-origin')
 
   return response
+}
+
+// ═══════════════════ Старт процесу ═══════════════════
+
+/**
+ * Хвилі розсилки, чиї таймери загинули разом із попереднім процесом
+ * (деплой, падіння, рестарт dev-сервера), підхоплюються одразу на старті.
+ * Не чекаємо: сервер приймає запити, поки відновлення йде фоном.
+ */
+export const init: ServerInit = () => {
+  if (building) return
+  void resumeDispatch()
+    .then(({ checked, caughtUp }) => {
+      if (checked > 0) {
+        console.log(
+          `[dispatch] resumed: checked=${checked} caughtUp=${caughtUp}`,
+        )
+      }
+    })
+    .catch((err) => console.error('[dispatch] resume failed:', err))
 }
 
 export const handle = sequence(

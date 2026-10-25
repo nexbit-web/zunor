@@ -1,39 +1,63 @@
 <script lang="ts">
+  // Сторінка помилки — у тій самій подачі, що вхід і вибір ролі: відсвіт
+  // угорі, колонка по центру, заголовок 18px і рядок 14px сірим. Шапку й
+  // підвал лендингу кореневий лейаут тут ховає.
+  //
+  // 404 — знак, що тягне табличку «404»; будь-яка інша помилка — знак зі
+  // знаками питання: «404» на табличці там була б неправдою.
   import { page } from '$app/state'
-  import Ant404 from '$lib/components/Ant404.svelte'
-  import { ArrowLeft } from 'lucide-svelte'
+  import { ZunorMarkAnimated } from '$lib/components/icons'
+  import LottiePlayer from '$lib/components/lottie-player.svelte'
+  import PastelGlow from '$lib/components/pastel-glow.svelte'
+  import { Button } from '$lib/components/ui/button'
 
   const isNotFound = $derived(page.status === 404)
 
+  const title = $derived(
+    isNotFound ? 'Такої сторінки немає' : 'Щось пішло не так',
+  )
+
   const message = $derived(
     isNotFound
-      ? 'Такої сторінки не існує або її було переміщено.'
-      : 'Щось пішло не так. Оновіть сторінку або поверніться пізніше.',
+      ? 'Можливо, посилання застаріло або в адресі закралась помилка.'
+      : 'Спробуйте оновити сторінку за хвилину або поверніться на головну.',
   )
 </script>
 
 <svelte:head>
-  <title
-    >{page.status} — {isNotFound ? 'Сторінку не знайдено' : 'Помилка'}</title
-  >
+  <title>{title} · Zunor</title>
   <meta name="robots" content="noindex" />
 </svelte:head>
 
-<main
-  class="mx-auto flex min-h-svh max-w-md flex-col items-center justify-center gap-4 px-6 py-8 text-center lg:max-w-lg"
->
-  <Ant404 class="w-51 sm:w-68 md:w-85" />
+<div class="relative flex min-h-svh flex-col bg-background">
+  <PastelGlow />
 
-  <h1 class="sr-only">
-    {page.status} — {isNotFound ? 'Сторінку не знайдено' : 'Помилка'}
-  </h1>
-
-  <p class="text-(--color-text-500) dark:text-gray-400">{message}</p>
-  <a
-    href="/"
-    class="flex items-center gap-1 mt-2 rounded-xl bg-primary px-4 py-2 font-medium text-white transition-colors hover:bg-primary-hover"
+  <main
+    class="relative flex flex-1 flex-col items-center justify-center px-5 pt-12 pb-8 text-center"
   >
-    <ArrowLeft size={15} />
-    На головну
-  </a>
-</main>
+    {#if isNotFound}
+      <LottiePlayer
+        src="/animations/zunor-404-lift.json"
+        monochrome
+        class="aspect-1100/1110 w-60 text-foreground sm:w-72"
+      />
+    {:else}
+      <!-- mt-10 — місце під знаки питання: вони виходять за межі знака. -->
+      <ZunorMarkAnimated
+        animation="puzzled"
+        class="mt-10 h-16 text-foreground"
+      />
+    {/if}
+
+    <h1 class="mt-5 mb-1 text-[18px] leading-tight font-semibold">
+      {title}
+    </h1>
+    <p class="max-w-80 text-[14px] leading-normal text-muted-foreground">
+      {message}
+    </p>
+
+    <Button href="/" variant="primary" size="lg" class="mt-6 min-w-40">
+      На головну
+    </Button>
+  </main>
+</div>

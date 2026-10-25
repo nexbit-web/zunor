@@ -13,12 +13,18 @@
     '/user/login',
     '/user/register',
     '/user/verify-email',
+    '/user/forgot',
+    '/user/reset-password',
   ]
+  // Сторінка помилки — окремий екран із відсвітом угорі: шапка лендингу
+  // відрізала б смугу посередині, а підвал ставив би під неї ще екран.
   const hideHeader = $derived(
-    hiddenLayoutRoutes.some((route) => page.url.pathname.startsWith(route)),
+    page.error !== null ||
+      hiddenLayoutRoutes.some((route) => page.url.pathname.startsWith(route)),
   )
   const hideFooter = $derived(
-    hiddenLayoutRoutes.some((route) => page.url.pathname.startsWith(route)),
+    page.error !== null ||
+      hiddenLayoutRoutes.some((route) => page.url.pathname.startsWith(route)),
   )
 
   import NProgress from 'nprogress'

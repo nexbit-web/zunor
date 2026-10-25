@@ -1,5 +1,60 @@
 import { prisma } from './prisma'
 import { safeTrigger } from './pusher'
+import { formatDistance } from '$lib/geo/districts'
+import type { Notification, Prisma } from '../../generated/prisma/client'
+
+/**
+ * «Є нова заявка» для майстра. Лише дані: розсилка записує їх у ТІЙ САМІЙ
+ * транзакції, що й журнал покликаних (покликаний без сповіщення
+ * неможливий), а подію шле pushNotification уже після коміту.
+ */
+export function newJobNotice(
+  masterId: string,
+  jobId: string,
+  jobTitle: string,
+): Prisma.NotificationCreateManyInput {
+  return {
+    userId: masterId,
+    type: 'NEW_JOB',
+    title: 'Є нова заявка для тебе',
+    body: jobTitle,
+    jobId,
+  }
+}
+
+/**
+ * Пропозиція з-за меж виїзду (останній дзвінок: поруч із заявкою майстрів
+ * замало). Не «нова заявка для тебе», а запрошення без зобовʼязань: майстер
+ * сам обрав радіус, і ми це визнаємо прямо. Тип той самий — NEW_JOB: веде
+ * туди ж, на заявку.
+ */
+export function jobOfferNotice(
+  masterId: string,
+  jobId: string,
+  jobTitle: string,
+  distanceKm: number | null,
+): Prisma.NotificationCreateManyInput {
+  const far = distanceKm === null ? 'Це' : `Це ${formatDistance(distanceKm)} —`
+  return {
+    userId: masterId,
+    type: 'NEW_JOB',
+    title: 'Можливо, тобі буде цікава ця заявка',
+    body:
+      `${jobTitle}. ${far} далі, ніж ти зазвичай їздиш, але поруч поки ` +
+      'немає вільних майстрів. Не підходить — просто пропусти, на рейтинг ' +
+      'це не вплине.',
+    jobId,
+  }
+}
+
+/** Подія в особистий канал. Лише для сповіщення, яке вже в базі. */
+export function pushNotification(notification: Notification): Promise<void> {
+  return safeTrigger(
+    `private-user-${notification.userId}`,
+    'notification:new',
+    { notification },
+  )
+}
 
 /**
  * Створює сповіщення й одразу шле подію в особистий канал користувача.
@@ -33,20 +88,10 @@ export async function notify(params: {
     },
   })
 
-  await safeTrigger(`private-user-${params.userId}`, 'notification:new', {
-    notification,
-  })
+  await pushNotification(notification)
 }
 
 export const Notify = {
-  newJob: (masterId: string, jobId: string, jobTitle: string) =>
-    notify({
-      userId: masterId,
-      type: 'NEW_JOB',
-      title: 'Є нова заявка для тебе',
-      body: jobTitle,
-      jobId,
-    }),
   newProposal: (clientId: string, jobId: string, proposalId: string) =>
     notify({
       userId: clientId,

@@ -1,25 +1,11 @@
 <script lang="ts">
   import { Button } from '$lib/components/ui/button'
-  import * as Card from '$lib/components/ui/card'
-  import {
-    FieldGroup,
-    Field,
-    FieldLabel,
-    FieldDescription,
-  } from '$lib/components/ui/field'
-  import { Input } from '$lib/components/ui/input'
+  import FloatingInput from '$lib/components/forms/floating-input.svelte'
+  import { Spinner } from '$lib/components/ui/spinner'
   import { authClient } from '$lib/auth-client'
   import { goto } from '$app/navigation'
   import { page } from '$app/state'
-  import {
-    LoaderCircle,
-    AlertCircle,
-    CheckCircle2,
-    Lock,
-    Eye,
-    EyeOff,
-    ArrowLeft,
-  } from 'lucide-svelte'
+  import { CircleAlert, Eye, EyeOff, ArrowLeft } from 'lucide-svelte'
 
   // ─── Token з URL ───
   const token = $derived(page.url.searchParams.get('token') ?? '')
@@ -33,23 +19,6 @@
   let serverError = $state('')
   let success = $state(false)
   let touched = $state({ password: false, confirm: false })
-
-  // ─── Password strength (як у register) ───
-  function passwordStrength(pw: string): {
-    score: 0 | 1 | 2 | 3
-    label: string
-  } {
-    if (pw.length < 8) return { score: 0, label: 'Закороткий' }
-    let score = 0
-    if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) score++
-    if (/\d/.test(pw)) score++
-    if (/[^a-zA-Z0-9]/.test(pw) || pw.length >= 12) score++
-    if (score <= 1) return { score: 1, label: 'Слабкий' }
-    if (score === 2) return { score: 2, label: 'Середній' }
-    return { score: 3, label: 'Надійний' }
-  }
-
-  const pwStrength = $derived(passwordStrength(password))
 
   // ─── Derived validation ───
   const passwordError = $derived(
@@ -67,17 +36,10 @@
     e.preventDefault()
     if (loading) return
 
+    // Перевірка на натиск, а не на blur: кнопка лишається активною, і
+    // причину видно під конкретним полем.
     touched = { password: true, confirm: true }
-
-    if (!tokenValid) {
-      serverError = 'Невірне посилання. Запросіть нове у формі відновлення.'
-      return
-    }
-
-    if (!formValid) {
-      serverError = 'Перевірте правильність полів'
-      return
-    }
+    if (!formValid) return
 
     loading = true
     serverError = ''
@@ -114,213 +76,142 @@
   <meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 
+<!-- Та сама розкладка, що на решті екранів входу: одна колонка по центру,
+     без картки навколо форми. -->
 <div
-  class="min-h-screen flex items-center justify-center px-4 py-12"
-  style="background-color: var(--background)"
+  class="relative flex min-h-svh flex-col items-center justify-center px-5 py-16"
 >
-  <div class="w-full max-w-md flex flex-col gap-6">
-    <Card.Root class="overflow-hidden">
-      {#if !tokenValid}
-        <!-- ─── Invalid token ─── -->
-        <Card.Header class="text-center space-y-3">
-          <div
-            class="size-14 rounded-2xl mx-auto flex items-center justify-center"
-            style="background-color: color-mix(in oklch, var(--destructive) 12%, transparent)"
-          >
-            <AlertCircle class="size-6" style="color: var(--destructive)" />
-          </div>
-          <Card.Title class="text-2xl font-bold tracking-tight">
-            Посилання недійсне
-          </Card.Title>
-          <Card.Description class="text-sm">
-            Це посилання не містить валідного токена. Запросіть нове у формі
-            відновлення паролю.
-          </Card.Description>
-        </Card.Header>
+  <a
+    href="/"
+    class="absolute start-5 top-5 inline-flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground sm:start-8 sm:top-8"
+  >
+    <ArrowLeft size={18} aria-hidden="true" />
+    Головна
+  </a>
 
-        <Card.Content>
-          <Button
-            href="/user/forgot"
-            class="w-full h-11 rounded-lg cursor-pointer"
-          >
-            Запросити нове посилання
-          </Button>
-        </Card.Content>
-      {:else if success}
-        <!-- ─── Success ─── -->
-        <Card.Header class="text-center space-y-3">
-          <div
-            class="size-14 rounded-2xl mx-auto flex items-center justify-center"
-            style="background-color: color-mix(in oklch, var(--primary) 12%, transparent)"
-          >
-            <CheckCircle2 class="size-6" style="color: var(--primary)" />
-          </div>
-          <Card.Title class="text-2xl font-bold tracking-tight">
-            Пароль змінено
-          </Card.Title>
-          <Card.Description class="text-sm">
-            Перенаправляємо на сторінку входу…
-          </Card.Description>
-        </Card.Header>
+  <div class="w-full max-w-[480px]">
+    {#if !tokenValid}
+      <!-- ─── Посилання без токена ─── -->
+      <div class="flex flex-col gap-4 text-center">
+        <h1 class="text-2xl font-semibold">Посилання недійсне</h1>
+        <p
+          class="text-[15px] leading-relaxed text-balance text-muted-foreground"
+        >
+          Це посилання не містить валідного токена. Запросіть нове у формі
+          відновлення паролю.
+        </p>
 
-        <Card.Content>
-          <div class="flex justify-center py-2">
-            <LoaderCircle
-              class="size-5 animate-spin"
-              style="color: var(--primary)"
-            />
-          </div>
-        </Card.Content>
-      {:else}
-        <!-- ─── Form ─── -->
-        <Card.Header class="text-center space-y-2">
-          <div
-            class="size-12 rounded-2xl mx-auto flex items-center justify-center"
-            style="background-color: color-mix(in oklch, var(--primary) 10%, transparent)"
+        <Button
+          href="/user/forgot"
+          variant="primary"
+          size="lg"
+          class="mt-2 w-3/4 self-center"
+        >
+          Запросити нове посилання
+        </Button>
+      </div>
+    {:else if success}
+      <!-- ─── Пароль змінено ─── -->
+      <div class="flex flex-col items-center gap-4 text-center">
+        <h1 class="text-2xl font-semibold">Пароль змінено</h1>
+        <p class="text-[15px] text-muted-foreground">
+          Перенаправляємо на сторінку входу…
+        </p>
+        <Spinner class="size-5 animate-spin text-primary" aria-hidden="true" />
+      </div>
+    {:else}
+      <!-- ─── Форма ─── -->
+      <form
+        onsubmit={handleSubmit}
+        novalidate
+        autocomplete="off"
+        class="flex flex-col gap-4"
+      >
+        <div class="mb-1 flex flex-col gap-3 text-center">
+          <h1 class="text-2xl font-semibold">Новий пароль</h1>
+          <p
+            class="text-[15px] leading-relaxed text-balance text-muted-foreground"
           >
-            <Lock class="size-5" style="color: var(--primary)" />
-          </div>
-          <Card.Title class="text-2xl font-bold tracking-tight">
-            Новий пароль
-          </Card.Title>
-          <Card.Description class="text-sm">
-            Введіть новий пароль для свого акаунту
-          </Card.Description>
-        </Card.Header>
+            Придумайте пароль від восьми символів.
+          </p>
+        </div>
 
-        <Card.Content>
-          <form onsubmit={handleSubmit} novalidate autocomplete="off">
-            <FieldGroup>
-              <!-- New password -->
-              <Field>
-                <FieldLabel for="new-password">Новий пароль</FieldLabel>
-                <div class="relative">
-                  <Input
-                    id="new-password"
-                    type={showPassword ? 'text' : 'password'}
-                    bind:value={password}
-                    onblur={() => (touched.password = true)}
-                    autocomplete="new-password"
-                    minlength={8}
-                    maxlength={128}
-                    aria-invalid={!!passwordError}
-                    aria-describedby={passwordError ? 'new-pw-err' : undefined}
-                    class="h-11 rounded-lg pr-9"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onclick={() => (showPassword = !showPassword)}
-                    class="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded cursor-pointer hover:opacity-70"
-                    aria-label={showPassword ? 'Сховати' : 'Показати'}
-                    tabindex={-1}
-                  >
-                    {#if showPassword}
-                      <EyeOff class="size-4 opacity-60" />
-                    {:else}
-                      <Eye class="size-4 opacity-60" />
-                    {/if}
-                  </button>
-                </div>
-                {#if passwordError}
-                  <FieldDescription id="new-pw-err" class="text-destructive">
-                    {passwordError}
-                  </FieldDescription>
-                {/if}
-              </Field>
-
-              <!-- Strength bar -->
-              {#if password.length > 0}
-                <div class="flex items-center gap-2 -mt-2">
-                  <div
-                    class="flex-1 h-1 rounded-full overflow-hidden"
-                    style="background-color: color-mix(in oklch, var(--foreground) 8%, transparent)"
-                  >
-                    <div
-                      class="h-full transition-all duration-300"
-                      style="width: {(pwStrength.score / 3) * 100}%;
-                             background-color: {pwStrength.score === 0
-                        ? 'var(--destructive)'
-                        : pwStrength.score === 1
-                          ? '#f59e0b'
-                          : pwStrength.score === 2
-                            ? '#eab308'
-                            : '#10b981'}"
-                    ></div>
-                  </div>
-                  <span
-                    class="text-xs font-medium tabular-nums"
-                    style="color: {pwStrength.score >= 2
-                      ? 'var(--foreground)'
-                      : 'var(--muted-foreground)'}"
-                  >
-                    {pwStrength.label}
-                  </span>
-                </div>
+        <FloatingInput
+          id="new-password"
+          label="Новий пароль"
+          type={showPassword ? 'text' : 'password'}
+          bind:value={password}
+          autocomplete="new-password"
+          minlength={8}
+          maxlength={128}
+          error={passwordError}
+          required
+        >
+          {#snippet trailing()}
+            <button
+              type="button"
+              onclick={() => (showPassword = !showPassword)}
+              class="flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              aria-label={showPassword ? 'Сховати пароль' : 'Показати пароль'}
+              aria-pressed={showPassword}
+              tabindex={-1}
+            >
+              {#if showPassword}
+                <EyeOff class="size-4.5" aria-hidden="true" />
+              {:else}
+                <Eye class="size-4.5" aria-hidden="true" />
               {/if}
+            </button>
+          {/snippet}
+        </FloatingInput>
 
-              <!-- Confirm -->
-              <Field>
-                <FieldLabel for="confirm-password">Повторіть пароль</FieldLabel>
-                <Input
-                  id="confirm-password"
-                  type={showPassword ? 'text' : 'password'}
-                  bind:value={confirm}
-                  onblur={() => (touched.confirm = true)}
-                  autocomplete="new-password"
-                  minlength={8}
-                  maxlength={128}
-                  aria-invalid={!!confirmError}
-                  class="h-11 rounded-lg"
-                  required
-                />
-                {#if confirmError}
-                  <FieldDescription class="text-destructive">
-                    {confirmError}
-                  </FieldDescription>
-                {/if}
-              </Field>
+        <!-- Перемикача «показати» в другому полі немає: він один на обидва,
+             інакше поруч стояли б дві кнопки з однаковою дією. -->
+        <FloatingInput
+          id="confirm-password"
+          label="Повторіть пароль"
+          type={showPassword ? 'text' : 'password'}
+          bind:value={confirm}
+          autocomplete="new-password"
+          minlength={8}
+          maxlength={128}
+          error={confirmError}
+          required
+        />
 
-              {#if serverError}
-                <div
-                  class="flex items-start gap-2 p-3 rounded-lg text-sm"
-                  style="background-color: color-mix(in oklch, var(--destructive) 8%, transparent);
-                         color: var(--destructive);
-                         border: 1px solid color-mix(in oklch, var(--destructive) 25%, transparent)"
-                  role="alert"
-                >
-                  <AlertCircle class="size-4 shrink-0 mt-0.5" />
-                  <span>{serverError}</span>
-                </div>
-              {/if}
+        {#if serverError}
+          <p
+            role="alert"
+            class="flex items-center justify-center gap-1.5 text-[13px] text-destructive"
+          >
+            <CircleAlert class="size-3.5 shrink-0" aria-hidden="true" />
+            {serverError}
+          </p>
+        {/if}
 
-              <Field>
-                <Button
-                  type="submit"
-                  disabled={loading || !formValid}
-                  class="w-full h-11 rounded-lg cursor-pointer disabled:cursor-not-allowed"
-                >
-                  {#if loading}
-                    <LoaderCircle class="size-4 animate-spin mr-2" />
-                    Зберігаємо…
-                  {:else}
-                    Зберегти пароль
-                  {/if}
-                </Button>
-              </Field>
+        <Button
+          variant="primary"
+          size="lg"
+          class="relative w-3/4 self-center"
+          type="submit"
+          disabled={loading}
+          aria-busy={loading}
+        >
+          {#if loading}
+            <Spinner class="animate-spin" aria-hidden="true" />
+            <span class="sr-only">Зберігаємо...</span>
+          {:else}
+            <span>Зберегти пароль</span>
+          {/if}
+        </Button>
 
-              <a
-                href="/user/login"
-                class="text-xs text-center cursor-pointer hover:opacity-70 inline-flex items-center justify-center gap-1 w-full"
-                style="color: var(--muted-foreground)"
-              >
-                <ArrowLeft class="size-3" />
-                Повернутись до входу
-              </a>
-            </FieldGroup>
-          </form>
-        </Card.Content>
-      {/if}
-    </Card.Root>
+        <a
+          href="/user/login"
+          class="mt-1 text-center text-[15px] text-primary underline-offset-4 transition-colors hover:text-primary-hover hover:underline"
+        >
+          Повернутись до входу
+        </a>
+      </form>
+    {/if}
   </div>
 </div>

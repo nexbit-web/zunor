@@ -15,6 +15,21 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
 
+    <!-- Акцент і контраст — до першого кадру, інакше сторінка спершу
+         малюється синьою. Ключі ті самі, що в stores/appearance.svelte.ts.
+         Значення перевіряється: у сховищі може лежати що завгодно. -->
+    <script>
+      try {
+        var accent = localStorage.getItem('zunor-accent')
+        if (accent && /^[a-z]{2,16}$/.test(accent)) {
+          document.documentElement.dataset.accent = accent
+        }
+        if (localStorage.getItem('zunor-contrast') === 'more') {
+          document.documentElement.dataset.contrast = 'more'
+        }
+      } catch (e) {}
+    </script>
+
     %sveltekit.head%
   </head>
 

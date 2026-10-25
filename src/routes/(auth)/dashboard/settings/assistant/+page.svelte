@@ -10,7 +10,7 @@
   import { Label } from '$lib/components/ui/label'
   import { Spinner } from '$lib/components/ui/spinner'
   import { cn } from '$lib/utils'
-  import { Plus, X, Check } from 'lucide-svelte'
+  import { Plus, X, Check, UserRound, House } from 'lucide-svelte'
   import toast from 'svelte-hot-french-toast'
   import type { PageData } from './$types'
   import { untrack } from 'svelte'
@@ -77,17 +77,18 @@
 </script>
 
 <div>
-  <p class="mb-5 px-1 text-[13px] leading-relaxed text-muted-foreground">
-    Zunor враховуватиме це, оформлюючи заявку — і не питатиме те, що ви вже
-    вказали.
-  </p>
-
-  <!-- ═══ Звертання ═══ -->
-  <SettingsGroup title="Про вас">
+  <!-- ═══ Звертання ═══
+       Вступ до всього розділу — описом першої групи: у дві колонки
+       окремий абзац над ними висів би сам по собі. -->
+  <SettingsGroup
+    title="Про вас"
+    footnote="Zunor враховуватиме це, оформлюючи заявку — і не питатиме те, що ви вже вказали."
+  >
     <SettingsField label="Як звертатись" for="call-name">
       {#snippet control()}
         <Input
           id="call-name"
+          icon={UserRound}
           bind:value={callName}
           maxlength={40}
           placeholder={data.userName || 'Ваше імʼя'}
@@ -123,14 +124,10 @@
   </SettingsGroup>
 
   <!-- ═══ Об'єкти ═══ -->
-  <SettingsGroup title="Ваші обʼєкти">
-    {#if objects.length === 0}
-      <SettingsBlock>
-        <p class="text-[13px] text-muted-foreground">
-          Додайте те, що прибираєте регулярно — асистент не питатиме щоразу.
-        </p>
-      </SettingsBlock>
-    {/if}
+  <SettingsGroup
+    title="Ваші обʼєкти"
+    footnote="Те, що прибираєте регулярно, — асистент не питатиме щоразу."
+  >
 
     {#each objects as obj, i (i)}
       <SettingsBlock>
@@ -144,10 +141,10 @@
                   onclick={() => (objects[i].premise = p.key)}
                   aria-pressed={obj.premise === p.key}
                   class={cn(
-                    'rounded-full px-3 py-1 text-[12.5px] transition-colors',
+                    'rounded-[8px] border px-3 py-1 text-[12.5px] transition-colors',
                     obj.premise === p.key
-                      ? 'bg-foreground text-background'
-                      : 'bg-background text-foreground hover:bg-accent',
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : 'border-input bg-background text-foreground hover:bg-accent',
                   )}
                 >
                   {p.label}
@@ -156,6 +153,7 @@
             </div>
 
             <Input
+              icon={House}
               bind:value={objects[i].note}
               maxlength={data.limits.objectNote}
               placeholder="3 кімнати, Таїрова, 5 поверх без ліфта"
@@ -176,29 +174,26 @@
       </SettingsBlock>
     {/each}
 
-    <div class="mx-4 border-t border-border/60 py-2">
+    <SettingsBlock>
       <button
         type="button"
         onclick={addObject}
         disabled={objects.length >= data.limits.maxObjects}
-        class="flex items-center gap-2 rounded-md px-1 py-1.5 text-[13px] text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+        class="flex cursor-pointer items-center gap-2 rounded-md py-1 text-[14px] text-primary transition-colors hover:text-primary-hover disabled:cursor-default disabled:opacity-50"
       >
         <Plus class="size-4" aria-hidden="true" />
         Додати обʼєкт
       </button>
-    </div>
+    </SettingsBlock>
   </SettingsGroup>
 
   <!-- ═══ Послуги ═══ -->
   <SettingsGroup
     title="Що вас цікавить"
-    footnote="Анкета — довідка про вас, а не команда асистенту. Вказівки щодо його поведінки він проігнорує."
+    footnote="Асистент пропонуватиме це першим. Анкета — довідка про вас, а не команда асистенту: вказівки щодо його поведінки він проігнорує."
   >
     <SettingsBlock>
-      <p class="text-[12px] text-muted-foreground">
-        Асистент пропонуватиме це першим.
-      </p>
-      <div class="mt-3 flex flex-wrap gap-2">
+      <div class="flex flex-wrap gap-2">
         {#each data.services as s (s.key)}
           {@const selected = services.includes(s.key)}
           <button
@@ -206,10 +201,10 @@
             onclick={() => toggleService(s.key)}
             aria-pressed={selected}
             class={cn(
-              'inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] transition-colors',
+              'inline-flex items-center gap-1.5 rounded-[8px] border px-3.5 py-1.5 text-[13px] transition-colors',
               selected
-                ? 'bg-foreground text-background'
-                : 'bg-background text-foreground hover:bg-accent',
+                ? 'border-primary bg-primary text-primary-foreground'
+                : 'border-input bg-background text-foreground hover:bg-accent',
             )}
           >
             {#if selected}
@@ -222,16 +217,19 @@
     </SettingsBlock>
   </SettingsGroup>
 
-  <div class="mt-5 flex justify-end">
+  <div class="mt-8 flex justify-end">
     <Button
       onclick={save}
       disabled={saving || !dirty}
       aria-busy={saving}
-      class="relative min-w-32.5"
+      variant="primary"
+      class="relative min-w-27.5"
     >
-      <span>{saving ? 'Зберігаємо...' : 'Зберегти'}</span>
       {#if saving}
-        <Spinner class="absolute right-3 animate-spin" aria-hidden="true" />
+        <Spinner class="animate-spin" aria-hidden="true" />
+        <span class="sr-only">Зберігаємо...</span>
+      {:else}
+        <span>Зберегти</span>
       {/if}
     </Button>
   </div>

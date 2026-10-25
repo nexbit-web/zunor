@@ -5,6 +5,10 @@ import { cloudinary, safeTrigger, resetInfra } from './helpers/infra'
 vi.mock('$lib/server/prisma', async () => ({
   prisma: (await import('./helpers/prisma-mock')).prisma,
 }))
+vi.mock('$lib/server/reference', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('$lib/server/reference')>()),
+  getDistricts: (await import('./helpers/districts')).getDistricts,
+}))
 vi.mock('$lib/server/cloudinary', async () => await import('./helpers/infra'))
 vi.mock('$lib/server/pusher', async () => await import('./helpers/infra'))
 
@@ -18,7 +22,9 @@ const { saveClientProfile, saveMasterProfile } =
 //   • MASTER → CLIENT заборонено назавжди (інакше репутацію можна «скинути»,
 //     ставши клієнтом і повернувшись майстром із чистим профілем);
 //   • onboarded виставляється ЛИШЕ після повної валідації;
-//   • кеш акаунта скидається одразу, інакше guard до 5 хвилин бачить старе.
+//   • кеш акаунта скидається одразу, інакше guard до 5 хвилин бачить старе;
+//   • район і радіус виїзду — тільки зі списку: з них рахуються кільця
+//     розсилки, і сміття тут означало б покликати не тих майстрів.
 
 const USER = 'user-1'
 
@@ -26,6 +32,7 @@ const validClient = {
   name: 'Оля Петренко',
   phone: '+380671234567',
   city: 'odesa',
+  district: 'center',
   bio: 'Люблю чистоту',
 }
 
@@ -34,6 +41,7 @@ const validMaster = {
   username: 'ivan_k',
   phone: '+380671234567',
   city: 'odesa',
+  district: 'tairova',
   categories: ['cleaning'],
   description: 'я'.repeat(60),
 }
@@ -320,5 +328,94 @@ describe('майстер: запис', () => {
     expect(cloudinary.uploader.destroy).not.toHaveBeenCalledWith('keep', {
       resource_type: 'image',
     })
+  })
+})
+
+describe('район і радіус виїзду', () => {
+  // Без району заявка клієнта пішла б усім підряд, а майстра не було б у
+  // жодному кільці, крім останнього. Для міста зі списком — обовʼязковий.
+  it('клієнт без району в Одесі — 400', async () => {
+    const { district: _, ...noDistrict } = validClient
+    expect(await failsWith(() => saveClientProfile(USER, noDistrict))).toBe(400)
+    expect(prisma.user.update).not.toHaveBeenCalled()
+  })
+
+  it('вигаданий район не приймається як є', async () => {
+    for (const district of ['nowhere', 'CENTER', ' ', 42, null]) {
+      resetPrisma()
+      prisma.user.findUnique.mockResolvedValue({
+        role: 'CLIENT',
+        avatarPublicId: null,
+      })
+      prisma.city.findFirst.mockResolvedValue({ slug: 'odesa' })
+
+      expect(
+        await failsWith(() =>
+          saveClientProfile(USER, { ...validClient, district }),
+        ),
+      ).toBe(400)
+    }
+  })
+
+  it('район клієнта пишеться в профіль', async () => {
+    await saveClientProfile(USER, validClient)
+    expect(prisma.user.update.mock.calls[0][0].data.district).toBe('center')
+  })
+
+  // Місто без списку районів працює як раніше: питати нема про що, а
+  // район з іншого міста там нічого не означає.
+  it('місто без списку районів — район не питаємо і пишемо null', async () => {
+    prisma.city.findFirst.mockResolvedValue({ slug: 'mykolaiv' })
+
+    await saveClientProfile(USER, {
+      ...validClient,
+      city: 'mykolaiv',
+      district: 'center',
+    })
+    expect(prisma.user.update.mock.calls[0][0].data.district).toBeNull()
+  })
+
+  it('майстер без району в Одесі — 400', async () => {
+    const { district: _, ...noDistrict } = validMaster
+    expect(await failsWith(() => saveMasterProfile(USER, noDistrict))).toBe(400)
+    expect(prisma.$transaction).not.toHaveBeenCalled()
+  })
+
+  it('район майстра пишеться в профіль', async () => {
+    await saveMasterProfile(USER, validMaster)
+    expect(prisma.user.update.mock.calls[0][0].data.district).toBe('tairova')
+  })
+
+  it('радіус — лише з фіксованих варіантів', async () => {
+    for (const travelRadiusKm of [7, '5', -1, 0, 1000, 'будь-де']) {
+      resetPrisma()
+      prisma.user.findUnique.mockResolvedValue({
+        role: 'CLIENT',
+        avatarPublicId: null,
+        masterProfile: null,
+      })
+
+      expect(
+        await failsWith(() =>
+          saveMasterProfile(USER, { ...validMaster, travelRadiusKm }),
+        ),
+      ).toBe(400)
+    }
+  })
+
+  it('обраний радіус іде і в новий профіль, і в оновлення', async () => {
+    await saveMasterProfile(USER, { ...validMaster, travelRadiusKm: 5 })
+
+    const upsert = prisma.masterProfile.upsert.mock.calls[0][0]
+    expect(upsert.create.travelRadiusKm).toBe(5)
+    expect(upsert.update.travelRadiusKm).toBe(5)
+  })
+
+  // Старий клієнт форми радіуса не шле — це «будь-де», а не помилка.
+  it('радіус не передали — будь-де (null)', async () => {
+    await saveMasterProfile(USER, validMaster)
+    expect(
+      prisma.masterProfile.upsert.mock.calls[0][0].update.travelRadiusKm,
+    ).toBeNull()
   })
 })

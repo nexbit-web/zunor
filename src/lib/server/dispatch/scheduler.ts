@@ -1,90 +1,99 @@
-// Планувальник хвиль у пам'яті процесу.
-//
-// Чому не крон щохвилини: Neon тарифікує ЧАС РОБОТИ вичислювача, а не
-// запити. Тік раз на хвилину не давав базі заснути ніколи й випалював
-// місячну квоту за тиждень при нульовому трафіку. Таймери в процесі будять
-// базу лише коли є справжня робота.
-//
-// Працює саме тому, що процес один і довгоживучий (adapter-node). Втрачені
-// при рестарті таймери підбирає рідкісний страхувальний крон (/api/cron).
+// Таймери хвиль у памʼяті процесу — швидкий шлях: база прокидається лише
+// тоді, коли є робота (крон щохвилини не давав би Neon заснути). Надійність
+// дає не таймер: номер відпрацьованої хвилі пишеться в заявку, і все, що
+// таймер не встиг, підбирає відновлення (recovery.ts).
 
-import { DISPATCH_CONFIG } from './types'
-import { dispatchJob } from './index'
+import { DISPATCH_CONFIG } from './config'
+import { FINAL_WAVE, waveStartsAt } from './core/waves'
+import { dispatchJob } from './dispatch'
+import type { JobRef } from './types'
 
-interface Scheduled {
-  handles: ReturnType<typeof setTimeout>[]
-  /** Скільки хвиль ще не відпрацювало. Дійде до нуля — запис прибираємо. */
-  pending: number
+type Timer = ReturnType<typeof setTimeout>
+
+interface Watch {
+  /** Таймери хвиль уже стоять — повторне планування нічого не додає. */
+  planned: boolean
+  readonly timers: Set<Timer>
 }
 
-const timers = new Map<string, Scheduled>()
+const watches = new Map<string, Watch>()
 
-/**
- * Планує хвилі 2..N для щойно створеної заявки.
- * Хвилю 1 запускає POST /api/jobs синхронно — вона має піти негайно.
- *
- * Номер хвилі НЕ передається в таймер: `decide()` рахує його з віку
- * заявки, тож планувальнику достатньо розбудити диспетчер вчасно.
- */
-export function scheduleWaves(jobId: string, jobTitle: string): void {
-  if (timers.has(jobId)) return
+/** Нова чи перевідкрита заявка: хвиля, що настала, — зараз, решта — за розкладом. */
+export async function startWaves(job: JobRef): Promise<void> {
+  scheduleWaves(job)
+  await runWave(job.id)
+}
 
-  const delayed = DISPATCH_CONFIG.WAVES.filter((w) => w.afterMinutes > 0)
-  if (delayed.length === 0) return
+/** Ставить таймери на хвилі заявки, що ще попереду. */
+export function scheduleWaves(job: JobRef, now: number = Date.now()): void {
+  const watch = watchOf(job.id)
+  if (watch.planned) return
+  watch.planned = true
 
-  const entry: Scheduled = { handles: [], pending: delayed.length }
-
-  for (const wave of delayed) {
-    const handle = setTimeout(() => {
-      void runWave(jobId, jobTitle)
-    }, wave.afterMinutes * 60_000)
-
-    // unref: незавершений таймер не має тримати процес живим при зупинці
-    // сервера. Поки процес працює — таймер спрацює як звичайно.
-    handle.unref?.()
-    entry.handles.push(handle)
+  for (let wave = 2; wave <= FINAL_WAVE; wave++) {
+    const delay = waveStartsAt(job.createdAt, wave).getTime() - now
+    if (delay > 0) after(job.id, delay, () => runWave(job.id))
   }
+  release(job.id)
+}
 
-  timers.set(jobId, entry)
+/** Знімає хвилі й повтори: заявку закрили, скасували або обрали майстра. */
+export function cancelWaves(jobId: string): void {
+  const watch = watches.get(jobId)
+  if (!watch) return
+  for (const timer of watch.timers) clearTimeout(timer)
+  watches.delete(jobId)
+}
+
+/** Скільки заявок зараз під наглядом планувальника. */
+export function scheduledCount(): number {
+  return watches.size
 }
 
 /**
- * Скасовує заплановані хвилі: заявку закрили, скасували або на неї вже
- * обрали майстра. Без цього таймер розбудив би базу заради заявки, для
- * якої `decide()` однаково поверне 'job-closed'.
+ * Хвиля зараз. Не кидає: збій повторюється за RETRY_DELAYS_SEC, а коли
+ * повтори скінчились — хвилю підбере відновлення.
  */
-export function cancelWaves(jobId: string): void {
-  const entry = timers.get(jobId)
-  if (!entry) return
-
-  for (const h of entry.handles) clearTimeout(h)
-  timers.delete(jobId)
-}
-
-/** Скільки заявок зараз під наглядом планувальника (для діагностики). */
-export function scheduledCount(): number {
-  return timers.size
-}
-
-async function runWave(jobId: string, jobTitle: string): Promise<void> {
-  const entry = timers.get(jobId)
-  if (entry) entry.pending--
-
+export async function runWave(jobId: string, attempt = 0): Promise<void> {
   try {
-    const res = await dispatchJob(jobId, jobTitle)
-
-    // Заявка закрита або відгуків уже досить — решту хвиль знімаємо, щоб
-    // таймери не будили базу даремно. 'no-candidates' не рахуємо: майстри
-    // можуть зареєструватися до наступної хвилі.
-    if (res.stopped === 'job-closed' || res.stopped === 'enough-proposals') {
-      cancelWaves(jobId)
+    const result = await dispatchJob(jobId)
+    if (result.kind === 'stop') cancelWaves(jobId)
+  } catch (err) {
+    const delaySec = DISPATCH_CONFIG.RETRY_DELAYS_SEC[attempt]
+    if (delaySec === undefined) {
+      console.error(
+        `[dispatch] job=${jobId} wave failed, left to recovery:`,
+        err,
+      )
       return
     }
-  } catch (err) {
-    console.error(`[dispatch:scheduler] job=${jobId} wave failed:`, err)
+    console.warn(`[dispatch] job=${jobId} wave failed, retry in ${delaySec}s`)
+    after(jobId, delaySec * 1000, () => runWave(jobId, attempt + 1))
   }
+}
 
-  // Остання хвиля відпрацювала — заявці більше нічого не заплановано.
-  const current = timers.get(jobId)
-  if (current && current.pending <= 0) timers.delete(jobId)
+function watchOf(jobId: string): Watch {
+  let watch = watches.get(jobId)
+  if (!watch) {
+    watch = { planned: false, timers: new Set() }
+    watches.set(jobId, watch)
+  }
+  return watch
+}
+
+function after(jobId: string, ms: number, run: () => Promise<void>): void {
+  const watch = watchOf(jobId)
+  const timer = setTimeout(() => {
+    watch.timers.delete(timer)
+    release(jobId)
+    void run()
+  }, ms)
+  // Незавершений таймер не тримає процес живим при зупинці сервера.
+  timer.unref?.()
+  watch.timers.add(timer)
+}
+
+/** Заявка без жодного таймера більше не під наглядом — Map не росте. */
+function release(jobId: string): void {
+  if (watches.get(jobId)?.timers.size === 0) watches.delete(jobId)
 }

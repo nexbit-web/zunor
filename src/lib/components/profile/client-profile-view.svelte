@@ -1,13 +1,13 @@
 <!--
-  Профіль клієнта — Zunor. Преміум-картки, повністю на токенах теми.
-  Production-grade:
-  • Кольори лише через семантичні токени → коректна світла й темна теми.
-  • Жодного inline style= → строга CSP. Стилі — Tailwind + одна .card.
-  • Навігація — семантичні <a href> (prefetch, працює без JS), не <button onclick=goto>.
-  • Валідний HTML: усередині інтерактивних елементів — лише дозволений контент.
-  • Приватність (манифест): клієнт — не вітрина. Сторінка noindex, мікророзмітка мінімальна.
-  • Надійність: усі гард-функції (formatDate/fmtRating/starCount/reviewsLabel/initials) 1:1.
-  Залежності: lucide-svelte, $lib/components/ui/{avatar,skeleton}.
+  Профіль замовника.
+
+  Карток більше немає. Раніше кожен розділ жив у власній рамці зі
+  скругленням 28px, і сторінка читалась як три різні віджети, складені
+  один під одним. Розділи тут ідуть у природному порядку — хто це, про
+  себе, відгуки — і їх достатньо відокремити повітрям та волосяною
+  лінією: рамка навколо єдиної колонки не відділяє її ні від чого.
+
+  Приватність (маніфест): клієнт — не вітрина. Сторінка noindex.
 -->
 <script lang="ts">
   import {
@@ -16,17 +16,7 @@
     AvatarImage,
   } from '$lib/components/ui/avatar'
   import { Skeleton } from '$lib/components/ui/skeleton'
-  import {
-    MapPin,
-    Calendar,
-    Star,
-    MessageSquare,
-    User,
-    Pencil,
-    Repeat,
-    Sparkles,
-    ArrowRight,
-  } from 'lucide-svelte'
+  import { Star, ChevronRight } from 'lucide-svelte'
   import type { ClientProfileData } from '$lib/components/profile/types'
 
   interface Props {
@@ -72,15 +62,21 @@
     return 'відгуків'
   }
 
+  /** Українське відмінювання слова «замовлення». */
+  function ordersLabel(n: number): string {
+    const mod10 = n % 10
+    const mod100 = n % 100
+    if (mod10 === 1 && mod100 !== 11) return 'замовлення'
+    if ([2, 3, 4].includes(mod10) && ![12, 13, 14].includes(mod100))
+      return 'замовлення'
+    return 'замовлень'
+  }
+
   const created = $derived(
-    formatDate(user.createdAt, {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    }),
+    formatDate(user.createdAt, { month: 'long', year: 'numeric' }),
   )
+  const hasReviews = $derived(user.reviews.length > 0)
   const avgRatingLabel = $derived(fmtRating(user.avgRating))
-  const reviewsLabelStr = $derived(reviewsLabel(user.reviews.length))
   const initials = $derived(
     (user.name ?? '?')
       .split(/\s+/)
@@ -94,295 +90,204 @@
 </script>
 
 <svelte:head>
-  <!-- Клієнт — приватний профіль, не вітрина (манифест). Не індексуємо. -->
   <meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 
-<article
-  class="min-h-svh p-2 pt-4 md:pb-12"
-  itemscope
-  itemtype="https://schema.org/Person"
->
-  <div class="mx-auto flex max-w-150 flex-col gap-4">
-    <!-- ═══ HEADER CARD ═══ -->
-    <header class="card p-7">
-      <div class="mb-4.5 flex items-start justify-between gap-4">
-        <div class="relative">
-          {#if user.avatar && !avatarLoaded}
-            <div
-              class="absolute inset-0 z-10 size-23 overflow-hidden rounded-full"
-            >
-              <Skeleton class="size-full rounded-full" />
-            </div>
-          {/if}
-          <Avatar class="size-23 shadow-md ring-1 ring-border">
-            {#if user.avatar}
-              <AvatarImage
-                src={user.avatar}
-                alt="Аватар {user.name}"
-                loading="eager"
-                fetchpriority="high"
-                decoding="async"
-                onload={() => (avatarLoaded = true)}
-                onerror={() => (avatarLoaded = true)}
-              />
-              <meta itemprop="image" content={user.avatar} />
-            {/if}
-            <AvatarFallback
-              class="cursor-default bg-secondary text-[34px] font-bold text-secondary-foreground"
-            >
-              {initials}
-            </AvatarFallback>
-          </Avatar>
-        </div>
-
-        {#if isOwner}
-          <a
-            href="dashboard/settings/profile"
-            class="inline-flex h-10.5 items-center gap-1.75 rounded-full bg-primary hover:bg-primary-hover px-4.5 text-[13.5px] font-semibold text-white transition-transform hover:-translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground/40 motion-reduce:transition-none"
-          >
-            <Pencil class="size-3.75 text-white" aria-hidden="true" /> Редагувати
-          </a>
-        {/if}
-      </div>
-
-      <h1
-        class="mb-2 truncate text-[25px] font-bold tracking-[-0.03em] text-foreground"
-        itemprop="name"
-      >
-        {user.name || 'Без імені'}
-      </h1>
-
-      <div class="mb-4 flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
-        <span
-          class="inline-flex items-center gap-1.5 text-[13px] font-medium text-muted-foreground"
-        >
-          <Calendar class="size-3.25" aria-hidden="true" />
-          <time datetime={created.iso}>З нами з {created.display}</time>
-        </span>
-        {#if user.city}
-          <span class="text-muted-foreground/50" aria-hidden="true">·</span>
-          <span
-            class="inline-flex items-center gap-1.5 text-[13px] font-medium text-muted-foreground"
-            itemprop="address"
-            itemscope
-            itemtype="https://schema.org/PostalAddress"
-          >
-            <MapPin class="size-3.25" aria-hidden="true" />
-            <span itemprop="addressLocality">{user.city}</span>
-          </span>
-        {/if}
-      </div>
-
-      <!-- stat pills -->
-      <div class="flex gap-2.5">
-        <div class="flex-1 rounded-2xl bg-muted px-4 py-3.5">
-          <div
-            class="text-[20px] font-bold tracking-[-0.03em] text-foreground tabular-nums"
-          >
-            {user.totalOrders}
-          </div>
-          <div class="mt-0.5 text-xs text-muted-foreground">замовлень</div>
-        </div>
-        <div class="flex-1 rounded-2xl bg-muted px-4 py-3.5">
-          <div
-            class="text-[20px] font-bold tracking-[-0.03em] text-foreground tabular-nums"
-          >
-            {user.reviews.length}
-          </div>
-          <div class="mt-0.5 text-xs text-muted-foreground">
-            {reviewsLabelStr}
-          </div>
-        </div>
-        <div class="flex-1 rounded-2xl bg-muted px-4 py-3.5">
-          <div
-            class="inline-flex items-center gap-1.5 text-[20px] font-bold tracking-[-0.03em] text-foreground tabular-nums"
-          >
-            <Star
-              class="size-3.75 fill-amber-400 text-amber-400"
-              aria-hidden="true"
-            />
-            {avgRatingLabel}
-          </div>
-          <div class="mt-0.5 text-xs text-muted-foreground">рейтинг</div>
-        </div>
-      </div>
-
-      <!-- badges -->
-      <div class="mt-4 flex flex-wrap gap-2">
-        <span
-          class="inline-flex h-7.5 items-center rounded-full bg-secondary px-3.25 text-[12.5px] font-semibold text-secondary-foreground"
-        >
-          Клієнт
-        </span>
-        {#if user.completedOrders >= 10}
-          <span
-            class="inline-flex h-7.5 items-center gap-1.5 rounded-full bg-emerald-500/10 px-3.25 text-[12.5px] font-semibold text-emerald-700 dark:text-emerald-400"
-          >
-            <Repeat class="size-3" aria-hidden="true" /> Постійний клієнт
-          </span>
-        {/if}
-      </div>
-
-      {#if isOwner}
-        <a
-          href="/welcome"
-          class="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground text-[14.5px] font-semibold text-background transition-transform hover:-translate-y-px active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground/40 motion-reduce:transition-none sm:hidden"
-        >
-          <Pencil class="size-4" aria-hidden="true" /> Редагувати профіль
-        </a>
-      {/if}
-    </header>
-
-    <!-- ═══ ABOUT ═══ -->
-    {#if user.bio || isOwner}
-      <section aria-labelledby="about-heading" class="card p-7">
-        <h2
-          id="about-heading"
-          class="mb-4 inline-flex items-center gap-1.75 text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase"
-        >
-          <User class="size-3.5" aria-hidden="true" /> Про себе
-        </h2>
-        {#if user.bio}
-          <p
-            class="text-[14.5px] leading-relaxed text-muted-foreground wrap-anywhere"
-            itemprop="description"
-          >
-            {user.bio}
-          </p>
-        {:else}
-          <p class="text-[14.5px] text-muted-foreground/60 italic">
-            Ви ще не додали опис.
-          </p>
-        {/if}
-      </section>
-    {/if}
-
-    <!-- ═══ REVIEWS ═══ -->
-    <section aria-labelledby="reviews-heading" class="card p-7">
-      <div class="mb-4.5 flex items-center justify-between">
-        <h2
-          id="reviews-heading"
-          class="inline-flex items-center gap-1.75 text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase"
-        >
-          <MessageSquare class="size-3.5" aria-hidden="true" /> Відгуки від майстрів
-        </h2>
-        {#if user.reviews.length > 0}
-          <span
-            class="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-muted-foreground"
-          >
-            <Star
-              class="size-3 fill-amber-400 text-amber-400"
-              aria-hidden="true"
-            />
-            <b class="font-semibold text-foreground">{avgRatingLabel}</b>
-            · {user.reviews.length}
-            {reviewsLabelStr}
-          </span>
-        {/if}
-      </div>
-
-      {#if user.reviews.length > 0}
-        <ul class="m-0 list-none p-0">
-          {#each user.reviews as review, i (review.id ?? i)}
-            {@const stars = starCount(review.rating)}
-            {@const reviewDate = formatDate(review.createdAt, {
-              day: 'numeric',
-              month: 'long',
-              year: 'numeric',
-            })}
-            <li
-              class="border-t border-border py-4.5 first:border-t-0 first:pt-0"
-            >
-              <div class="mb-2.5 flex items-center gap-2.5">
-                <div
-                  class="flex size-8.5 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground"
-                  aria-hidden="true"
-                >
-                  {review.authorInitials}
-                </div>
-                <p
-                  class="min-w-0 flex-1 truncate text-sm font-semibold text-foreground"
-                >
-                  {review.authorName}
-                </p>
-                <div
-                  class="flex shrink-0 gap-0.5"
-                  aria-label={`Рейтинг: ${stars} з 5`}
-                >
-                  {#each Array(stars) as _, j (j)}
-                    <Star
-                      class="size-3 fill-amber-400 text-amber-400"
-                      aria-hidden="true"
-                    />
-                  {/each}
-                </div>
-              </div>
-              <p
-                class="pl-11 text-sm leading-relaxed text-muted-foreground wrap-anywhere"
-              >
-                {review.text}
-              </p>
-              <p class="mt-2 pl-11 text-[11.5px] text-muted-foreground/70">
-                <time datetime={reviewDate.iso}>{reviewDate.display}</time>
-              </p>
-            </li>
-          {/each}
-        </ul>
-      {:else}
-        <div class="rounded-2xl bg-muted py-8 text-center">
-          <p class="text-sm text-muted-foreground">
-            {isOwner
-              ? 'Поки ще немає відгуків. Створіть першу заявку — і майстри почнуть лишати відгуки.'
-              : 'Ще немає відгуків'}
-          </p>
-          {#if isOwner}
-            <a
-              href="/jobs/new"
-              class="mt-2 inline-block rounded-sm text-xs font-semibold text-foreground transition-opacity hover:opacity-70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground/40"
-            >
-              Створити заявку →
-            </a>
-          {/if}
+<article class="mx-auto w-full max-w-150 px-5 pt-10 pb-16">
+  <!-- ═══ Хто це ═══ -->
+  <header class="flex flex-col items-center text-center">
+    <div class="relative">
+      {#if user.avatar && !avatarLoaded}
+        <div class="absolute inset-0 z-10 size-20 overflow-hidden rounded-full">
+          <Skeleton class="size-full rounded-full" />
         </div>
       {/if}
-    </section>
+      <Avatar class="size-20">
+        {#if user.avatar}
+          <AvatarImage
+            src={user.avatar}
+            alt="Аватар {user.name}"
+            loading="eager"
+            fetchpriority="high"
+            decoding="async"
+            onload={() => (avatarLoaded = true)}
+            onerror={() => (avatarLoaded = true)}
+          />
+        {/if}
+        <AvatarFallback
+          class="cursor-default bg-muted text-2xl font-medium text-muted-foreground"
+        >
+          {initials}
+        </AvatarFallback>
+      </Avatar>
+    </div>
 
-    <!-- ═══ BECOME MASTER (тільки owner) ═══ -->
+    <h1 class="mt-4 text-2xl font-semibold">
+      {user.name || 'Без імені'}
+    </h1>
+
+    <!-- Один рядок замість значка «Клієнт» і двох рядків з іконками:
+         на власному профілі роль і так відома, а місто з датою —
+         це підпис, а не дані, заради яких потрібні піктограми. -->
+    <p class="mt-1 text-[15px] text-muted-foreground">
+      {#if user.city}{user.city} ·
+      {/if}з {created.display}
+    </p>
+
     {#if isOwner}
       <a
-        href="/dashboard/onboarding/master"
-        class="group flex w-full items-center justify-between gap-4 rounded-[28px] bg-primary p-5.5 text-left text-white shadow-[0_16px_40px_-16px_rgba(0,0,0,0.5)] transition hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground/40 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+        href="/dashboard/settings/profile"
+        class="mt-5 inline-flex h-9 items-center rounded-[8px] border border-primary px-4 text-[14px] text-primary transition-colors hover:bg-primary hover:text-primary-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       >
-        <span class="flex min-w-0 items-center gap-3.75">
-          <span
-            class="flex size-11.5 shrink-0 items-center justify-center rounded-[14px] bg-background/10"
-          >
-            <Sparkles class="size-5" strokeWidth={1.7} aria-hidden="true" />
-          </span>
-          <span class="min-w-0">
-            <span class="block text-[15px] font-semibold"
-              >Хочете заробляти?</span
-            >
-            <span class="mt-0.5 block text-[13px] text-white/90">
-              Створіть профіль майстра і пропонуйте свої послуги.
-            </span>
-          </span>
-        </span>
-        <ArrowRight
-          class="size-5 shrink-0 text-white/80 transition-transform group-hover:translate-x-1 motion-reduce:transition-none"
-          aria-hidden="true"
-        />
+        Редагувати профіль
       </a>
     {/if}
-  </div>
-</article>
+  </header>
 
-<style>
-  /* Єдине джерело правди для картки. Тінь — alpha-чорний (працює в обох темах). */
-  .card {
-    border-radius: 28px;
-    border: 1px solid var(--border);
-    background-color: var(--card);
-  }
-</style>
+  <!-- ═══ Цифри ═══
+       Без плашок: три числа в ряд самі читаються як таблиця, а сірі
+       прямокутники навколо них лише додавали ваги там, де її не треба.
+       Рейтинг показуємо тільки коли є з чого його рахувати — «0.0» під
+       порожнім списком відгуків виглядає як погана оцінка. -->
+  <div
+    class="mt-8 grid grid-cols-3 divide-x divide-border/60 border-y border-border/60 py-5 text-center"
+  >
+    <div>
+      <div class="text-[22px] font-semibold tabular-nums">
+        {user.totalOrders}
+      </div>
+      <div class="mt-0.5 text-[13px] text-muted-foreground">
+        {ordersLabel(user.totalOrders)}
+      </div>
+    </div>
+    <div>
+      <div class="text-[22px] font-semibold tabular-nums">
+        {user.reviews.length}
+      </div>
+      <div class="mt-0.5 text-[13px] text-muted-foreground">
+        {reviewsLabel(user.reviews.length)}
+      </div>
+    </div>
+    <div>
+      <div
+        class="inline-flex items-center gap-1.5 text-[22px] font-semibold tabular-nums"
+      >
+        {#if hasReviews}
+          <Star
+            class="size-4 fill-amber-400 text-amber-400"
+            aria-hidden="true"
+          />
+          {avgRatingLabel}
+        {:else}
+          <span class="text-muted-foreground">—</span>
+        {/if}
+      </div>
+      <div class="mt-0.5 text-[13px] text-muted-foreground">рейтинг</div>
+    </div>
+  </div>
+
+  <!-- ═══ Про себе ═══ -->
+  {#if user.bio}
+    <section aria-labelledby="about-heading" class="mt-8">
+      <h2 id="about-heading" class="text-[15px] font-semibold">Про себе</h2>
+      <p class="mt-2 leading-relaxed text-muted-foreground wrap-anywhere">
+        {user.bio}
+      </p>
+    </section>
+  {:else if isOwner}
+    <section aria-labelledby="about-heading" class="mt-8">
+      <h2 id="about-heading" class="text-[15px] font-semibold">Про себе</h2>
+      <p class="mt-2 text-muted-foreground">
+        Порожньо. Тут можна написати те, що майстру корисно знати заздалегідь.
+      </p>
+    </section>
+  {/if}
+
+  <!-- ═══ Відгуки ═══ -->
+  <section aria-labelledby="reviews-heading" class="mt-8">
+    <h2 id="reviews-heading" class="text-[15px] font-semibold">
+      Відгуки від майстрів
+    </h2>
+
+    {#if hasReviews}
+      <ul class="mt-1 list-none p-0">
+        {#each user.reviews as review, i (review.id ?? i)}
+          {@const stars = starCount(review.rating)}
+          {@const reviewDate = formatDate(review.createdAt, {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+          })}
+          <li class="border-b border-border/60 py-5">
+            <div class="flex items-center gap-3">
+              <div
+                class="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground"
+                aria-hidden="true"
+              >
+                {review.authorInitials}
+              </div>
+              <p class="min-w-0 flex-1 truncate text-[15px]">
+                {review.authorName}
+              </p>
+              <div
+                class="flex shrink-0 gap-0.5"
+                aria-label={`Рейтинг: ${stars} з 5`}
+              >
+                {#each Array(stars) as _, j (j)}
+                  <Star
+                    class="size-3 fill-amber-400 text-amber-400"
+                    aria-hidden="true"
+                  />
+                {/each}
+              </div>
+            </div>
+
+            <p class="mt-2 leading-relaxed text-muted-foreground wrap-anywhere">
+              {review.text}
+            </p>
+            <p class="mt-2 text-[13px] text-muted-foreground/70">
+              <time datetime={reviewDate.iso}>{reviewDate.display}</time>
+            </p>
+          </li>
+        {/each}
+      </ul>
+    {:else}
+      <!-- Без сірої плашки: порожній список — це не помилка й не подія,
+           на яку треба дивитись. -->
+      <p class="mt-2 text-muted-foreground">
+        {isOwner
+          ? 'Майстри лишають відгук після виконаного замовлення.'
+          : 'Ще немає відгуків'}
+      </p>
+      {#if isOwner}
+        <a
+          href="/dashboard/jobs/new"
+          class="mt-2 inline-block text-primary underline-offset-4 transition-colors hover:text-primary-hover hover:underline"
+        >
+          Створити заявку
+        </a>
+      {/if}
+    {/if}
+  </section>
+
+  <!-- ═══ Стати майстром ═══
+       Рядок, а не синій банер: це пропозиція, а не головна дія екрана.
+       Банер кольору primary перетягував на себе увагу з профілю. -->
+  {#if isOwner}
+    <a
+      href="/dashboard/onboarding/master"
+      class="mt-8 flex items-center justify-between gap-4 border-t border-border/60 pt-6 transition-colors hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+    >
+      <span class="min-w-0">
+        <span class="block text-[15px] font-semibold">Хочете заробляти?</span>
+        <span class="mt-0.5 block text-[14px] text-muted-foreground">
+          Створіть профіль майстра і пропонуйте свої послуги.
+        </span>
+      </span>
+      <ChevronRight
+        class="size-5 shrink-0 text-muted-foreground"
+        aria-hidden="true"
+      />
+    </a>
+  {/if}
+</article>

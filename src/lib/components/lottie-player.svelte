@@ -1,59 +1,34 @@
 <!--
-  Легкий Lottie-плеєр: lottie-web вантажиться ЛІНИВО (динамічний import),
-  JSON анімації тягнеться з static/ за URL (не роздуває бандл).
+  Lottie-плеєр. Ліниве завантаження — у $lib/utils/lottie.
   Поважає prefers-reduced-motion: анімація стоїть на першому кадрі.
 -->
 <script lang="ts">
-  import type { AnimationItem } from 'lottie-web'
-  import type { Attachment } from 'svelte/attachments'
+  import { prefersReducedMotion } from 'svelte/motion'
+  import { cn } from '$lib/utils.js'
+  import { lottie } from '$lib/utils/lottie'
 
   let {
     src,
-    size = 140,
+    size,
     loop = true,
+    monochrome = false,
+    class: className = '',
   }: {
     /** URL JSON-файлу анімації, напр. '/animations/photo-upload.json' */
     src: string
-    /** Ширина/висота у px */
+    /** Ширина/висота у px. Без нього розмір задає клас. */
     size?: number
     loop?: boolean
+    /** Одним кольором — кольором тексту, а не кольорами з JSON. */
+    monochrome?: boolean
+    class?: string
   } = $props()
-
-  const lottie: Attachment<HTMLElement> = (node) => {
-    let anim: AnimationItem | undefined
-    let destroyed = false
-
-    const reduced =
-      typeof window !== 'undefined' &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches
-
-    ;(async () => {
-      try {
-        const mod = await import('lottie-web')
-        if (destroyed) return
-        anim = mod.default.loadAnimation({
-          container: node,
-          renderer: 'svg',
-          loop,
-          autoplay: !reduced,
-          path: src,
-        })
-        if (reduced) anim.goToAndStop(0, true)
-      } catch {
-        // Анімація — прикраса: якщо не завантажилась, просто нічого не показуємо
-      }
-    })()
-
-    return () => {
-      destroyed = true
-      anim?.destroy()
-    }
-  }
 </script>
 
 <div
-  style:width="{size}px"
-  style:height="{size}px"
-  {@attach lottie}
+  class={cn(monochrome && 'lottie-mono', className)}
+  style:width={size && `${size}px`}
+  style:height={size && `${size}px`}
+  {@attach lottie({ src, loop, autoplay: !prefersReducedMotion.current })}
   aria-hidden="true"
 ></div>

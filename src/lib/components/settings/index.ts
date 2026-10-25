@@ -5,8 +5,16 @@ export { default as SettingsBlock } from './settings-block.svelte'
 
 export {
   SETTINGS_SECTIONS,
+  SETTINGS_GROUPS,
   DEFAULT_SECTION,
   sectionsForRole,
   type SettingsSection,
+  type SettingsGroupId,
 } from './nav'
+export {
+  setSettingsLayout,
+  getSettingsLayout,
+  type SettingsLayout,
+} from './layout'
 export { default as ThemePicker } from './theme-picker.svelte'
+export { default as AccentPicker } from './accent-picker.svelte'

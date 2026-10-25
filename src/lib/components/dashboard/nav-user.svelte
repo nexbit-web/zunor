@@ -3,9 +3,9 @@
   //
   // Це посилання, а не меню. Вигляд лишився від блоку sidebar-07 (той
   // самий великий рядок з аватаром), але випадне меню прибрано: усе, що
-  // в ньому було, і так є на своїх сторінках — профіль тут, вихід у
-  // /dashboard/settings/account. Меню, яке дублює навігацію, змушує
-  // здогадуватись, де саме шукати дію.
+  // в ньому було, і так є на своїх місцях — профіль тут, вихід унизу
+  // меню налаштувань. Меню, яке дублює навігацію, змушує здогадуватись,
+  // де саме шукати дію.
 
   import { page } from '$app/state'
   import * as Avatar from '$lib/components/ui/avatar/index.js'
@@ -34,8 +34,14 @@
 
 <Sidebar.Menu>
   <Sidebar.MenuItem>
-    <!-- Без тултипа: імʼя й пошта написані в самому рядку. -->
-    <Sidebar.MenuButton size="lg" isActive={active}>
+    <!-- Тултип лише в рейці, де від рядка лишається сам аватар; у
+         розгорнутій панелі імʼя й пошта написані поруч. -->
+    <Sidebar.MenuButton
+      size="lg"
+      isActive={active}
+      tooltipContent={user.name}
+      tooltipContentProps={{ sideOffset: 8, arrowClasses: 'hidden' }}
+    >
       {#snippet child({ props })}
         <a
           {...props}
@@ -51,7 +57,9 @@
               {user.initials}
             </Avatar.Fallback>
           </Avatar.Root>
-          <div class="grid flex-1 text-start text-sm leading-tight">
+          <div
+            class="grid flex-1 text-start text-sm leading-tight group-data-[collapsible=icon]:hidden"
+          >
             <span class="truncate font-medium">{user.name}</span>
             {#if user.email}
               <span class="truncate text-xs text-muted-foreground">

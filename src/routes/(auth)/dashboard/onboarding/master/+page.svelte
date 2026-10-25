@@ -7,10 +7,10 @@
 </script>
 
 <svelte:head><title>Профіль виконавця · Zunor</title></svelte:head>
-<div class="py-5">
-  <MasterOnboarding
-    {data}
-    mode="onboarding"
-    onBack={() => goto('/dashboard/onboarding')}
-  />
-</div>
+<!-- Покроковий майстер займає весь екран сам: шапка з прогресом угорі,
+     кнопки прибиті до низу. Зовнішніх відступів тут не треба. -->
+<MasterOnboarding
+  {data}
+  mode="onboarding"
+  onBack={() => goto('/dashboard/onboarding')}
+/>

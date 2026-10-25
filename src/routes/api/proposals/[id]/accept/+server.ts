@@ -2,7 +2,7 @@ import { json, error } from '@sveltejs/kit'
 import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
 import { Notify } from '$lib/server/notifications'
-import { cancelWaves } from '$lib/server/dispatch/scheduler'
+import { cancelWaves } from '$lib/server/dispatch'
 import type { RequestHandler } from './$types'
 
 /**

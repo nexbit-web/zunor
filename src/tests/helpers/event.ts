@@ -92,6 +92,7 @@ export function makeEvent(init: EventInit = {}): AnyRequestEvent {
     locals: init.locals ?? anonymous,
     getClientAddress: () => init.clientAddress ?? '203.0.113.7',
     setHeaders: () => {},
+    depends: () => {},
     cookies: {
       get: () => undefined,
       getAll: () => [],

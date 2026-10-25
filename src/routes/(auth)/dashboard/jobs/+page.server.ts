@@ -1,13 +1,19 @@
 import { prisma } from '$lib/server/prisma'
 import { requireUser } from '$lib/server/guards'
-import { getCities, getCategories } from '$lib/server/reference'
+import { getCities, getCategories, getDistricts } from '$lib/server/reference'
+import { cityDistricts, jobPlace } from '$lib/geo/districts'
+import { masterFeedScope } from '$lib/server/dispatch'
 import { redirect } from '@sveltejs/kit'
 import type { PageServerLoad } from './$types'
 
 const PAGE_SIZE = 20
 type ViewMode = 'mine' | 'feed'
 
-export const load: PageServerLoad = async ({ locals, url }) => {
+export const load: PageServerLoad = async ({ locals, url, depends }) => {
+  // Стрічка майстра перезапитується, коли приходить сповіщення про нову
+  // заявку (master-feed.svelte, invalidate).
+  depends('app:jobs-feed')
+
   // Гостя сюди не пускає guardHandle (hooks.server.ts) — цей виклик і
   // звужує тип, і лишається страховкою, якщо роут винесуть з /dashboard.
   const userId = requireUser(locals).id
@@ -15,23 +21,26 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   // Профіль і довідники не залежать одне від одного — беремо разом.
   // Довідники йдуть з кешу в пам'яті (reference.ts), тож у штатному випадку
   // це один запит до БД на всю сторінку, а не три.
-  const [user, categoryRows, cityRows] = await Promise.all([
+  const [user, categoryRows, cityRows, districtRows] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       select: {
         role: true,
         city: true,
+        district: true,
         masterProfile: {
           select: {
             isActive: true,
             verificationStatus: true,
             categories: true,
+            travelRadiusKm: true,
           },
         },
       },
     }),
     getCategories(),
     getCities(),
+    getDistricts(),
   ])
   if (!user) throw redirect(302, '/user/login')
 
@@ -156,12 +165,18 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     }
   }
 
-  // Заявки, від яких майстер відмовився, ховаємо зі стрічки.
-  const declined = await prisma.dispatchEvent.findMany({
-    where: { masterId: userId, declined: true },
-    select: { jobId: true },
+  // Стрічка тут — лише місто майстра, тож і райони одного міста.
+  const districts = cityDistricts(districtRows, user.city)
+
+  // Відмови, хвилі розсилки й межа виїзду — тим самим правилом, що й
+  // догрузка в API: стрічка не обганяє розсилку.
+  const scope = await masterFeedScope({
+    masterId: userId,
+    masterDistrict: user.district,
+    travelRadiusKm: mp.travelRadiusKm,
+    districts,
   })
-  const declinedJobIds = declined.map((d) => d.jobId)
+  const declinedJobIds = scope.declinedIds
 
   const jobs = await prisma.job.findMany({
     where: {
@@ -171,6 +186,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
       clientId: { not: userId }, // власні заявки майстру не показуємо
       expiresAt: { gt: new Date() },
       ...(declinedJobIds.length > 0 ? { id: { notIn: declinedJobIds } } : {}),
+      AND: scope.where,
     },
     orderBy: { createdAt: 'desc' },
     take: PAGE_SIZE + 1,
@@ -181,6 +197,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
       metadata: true,
       category: true,
       city: true,
+      district: true,
       status: true,
       budgetMinCents: true,
       budgetMaxCents: true,
@@ -217,6 +234,9 @@ export const load: PageServerLoad = async ({ locals, url }) => {
       ...j,
       createdAt: j.createdAt.toISOString(),
       expiresAt: j.expiresAt.toISOString(),
+      // Район заявки й відстань від району майстра — щоб «чи по дорозі»
+      // було видно ще до того, як відкрити заявку.
+      place: jobPlace(districts, j.district, user.district),
       // Рейтинг клієнта віддаємо під єдиним імʼям (avgRating/reviewsCount),
       // щоб картка заявки не залежала від ролі автора.
       client: {

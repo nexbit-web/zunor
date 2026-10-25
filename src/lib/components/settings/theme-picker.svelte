@@ -1,13 +1,19 @@
 <script lang="ts">
-  // Вибір теми картками, як у системних налаштуваннях: превʼю → підпис →
-  // кружечок вибору. Три варіанти замість двох плюс тумблер «Авто»:
-  // «Системна» — це третій режим, а не модифікатор до перших двох.
+  // Вибір теми картками-мініатюрами застосунку: рамка, рейка, блок
+  // контенту. Три варіанти замість двох плюс тумблер «Авто»: «Системна» —
+  // це третій режим, а не модифікатор до перших двох.
+  //
+  // Мініатюри намальовані тут, а не картинками: акцентні деталі в них
+  // беруть поточний --primary, тож зміна кольору в палітрі поруч одразу
+  // видна і в превʼю теми.
 
   import { userPrefersMode, setMode } from 'mode-watcher'
-  import { Check } from 'lucide-svelte'
   import { cn } from '$lib/utils'
+  import { appearance } from '$lib/stores/appearance.svelte'
+  import { nextRadioIndex } from './radio-keys'
 
   type Mode = 'light' | 'dark' | 'system'
+  type Tone = 'light' | 'dark'
 
   interface Option {
     value: Mode
@@ -27,6 +33,26 @@
     },
   ]
 
+  // Кольори мініатюр сталі, а не токени: превʼю світлої теми мусить
+  // лишатись світлим і тоді, коли зараз увімкнена темна. Значення — ті
+  // самі, що в layout.css для відповідної теми.
+  const TONES = {
+    light: {
+      frame: '#e9ebf0',
+      panel: '#ffffff',
+      rail: '#d4d4d4',
+      line: '#e8e8e8',
+      strong: '#d4d4d4',
+    },
+    dark: {
+      frame: '#000000',
+      panel: '#191919',
+      rail: '#2a2a2a',
+      line: '#2a2a2a',
+      strong: '#3a3a3a',
+    },
+  } as const
+
   // userPrefersMode — це вибір КОРИСТУВАЧА ('light' | 'dark' | 'system'),
   // на відміну від mode, який віддає вже обчислену тему. Потрібен саме
   // вибір, інакше при 'system' підсвічувалась би не та картка.
@@ -35,35 +61,11 @@
   // Посилання на кнопки — щоб стрілки могли переносити фокус.
   let buttons = $state<(HTMLButtonElement | undefined)[]>([])
 
-  /**
-   * Клавіатура радіогрупи за APG: стрілки одразу ПЕРЕМИКАЮТЬ і переносять
-   * фокус, Home/End — на краї, рух по колу.
-   *
-   * Без цього role="radio" був обіцянкою, якої компонент не виконував:
-   * скрінрідер оголошував радіогрупу, а стрілки не робили нічого.
-   */
+  // Без цього role="radio" був обіцянкою, якої компонент не виконував:
+  // скрінрідер оголошував радіогрупу, а стрілки не робили нічого.
   function handleKeydown(e: KeyboardEvent, index: number): void {
-    const last = OPTIONS.length - 1
-    let next: number
-
-    switch (e.key) {
-      case 'ArrowRight':
-      case 'ArrowDown':
-        next = index === last ? 0 : index + 1
-        break
-      case 'ArrowLeft':
-      case 'ArrowUp':
-        next = index === 0 ? last : index - 1
-        break
-      case 'Home':
-        next = 0
-        break
-      case 'End':
-        next = last
-        break
-      default:
-        return
-    }
+    const next = nextRadioIndex(e.key, index, OPTIONS.length)
+    if (next === null) return
 
     e.preventDefault()
     setMode(OPTIONS[next].value)
@@ -71,9 +73,41 @@
   }
 </script>
 
+<!-- Мініатюра застосунку: рамка, рейка з трьома пунктами (перший —
+     активний), блок контенту з двома рядками. fill-primary — поточний
+     акцент; data-tone дає йому тон самої мініатюри (для чорно-білого
+     акценту це чорний на світлій і білий на темній, див. layout.css). -->
+{#snippet mock(tone: Tone)}
+  {@const c = TONES[tone]}
+  <svg
+    viewBox="0 0 160 90"
+    class="block size-full"
+    data-accent={appearance.accent}
+    data-tone={tone}
+    aria-hidden="true"
+  >
+    <rect width="160" height="90" fill={c.frame} />
+    <rect x="8" y="10" width="8" height="8" rx="2" class="fill-primary" />
+    <rect x="8" y="23" width="8" height="8" rx="2" fill={c.rail} />
+    <rect x="8" y="36" width="8" height="8" rx="2" fill={c.rail} />
+    <rect x="24" y="6" width="130" height="90" rx="6" fill={c.panel} />
+    <rect x="34" y="18" width="24" height="5" rx="2.5" fill={c.strong} />
+    <rect x="62" y="18" width="18" height="5" rx="2.5" class="fill-primary" />
+    <rect x="138" y="18" width="6" height="5" rx="2" fill={c.line} />
+    <circle cx="37" cy="37.5" r="2.5" class="fill-primary" />
+    <rect x="44" y="35" width="28" height="5" rx="2.5" fill={c.line} />
+    <rect x="76" y="35" width="28" height="5" rx="2.5" fill={c.line} />
+    <rect x="34" y="50" width="70" height="5" rx="2.5" fill={c.line} />
+  </svg>
+{/snippet}
+
 <!-- Roving tabindex: у групу один вхід табом, далі стрілками. Інакше три
      кнопки поспіль змушували б тричі тиснути Tab, щоб проминути блок. -->
-<div role="radiogroup" aria-label="Тема оформлення" class="flex gap-3 sm:gap-5">
+<div
+  role="radiogroup"
+  aria-label="Тема оформлення"
+  class="grid max-w-[540px] grid-cols-3 gap-3 sm:gap-4"
+>
   {#each OPTIONS as opt, i (opt.value)}
     {@const selected = current === opt.value}
     <button
@@ -85,53 +119,44 @@
       tabindex={selected ? 0 : -1}
       onclick={() => setMode(opt.value)}
       onkeydown={(e) => handleKeydown(e, i)}
-      class="group flex flex-1 cursor-pointer flex-col items-center gap-2 rounded-lg p-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      class="group flex min-w-0 cursor-pointer flex-col items-center gap-2 rounded-[10px] outline-none"
     >
-      <!-- Превʼю. ring на вибраній картці читається як «обрано»
-           швидше, ніж колір підпису. Власна рамка на картинці — щоб
-           світле превʼю не зливалося з фоном у світлій темі. -->
+      <!-- Обрана — рамка акцентного кольору з проміжком, як у ClickUp.
+           Невибрані мають тонку межу: світле превʼю на білому тлі без неї
+           зливалося б зі сторінкою. -->
       <span
         class={cn(
-          'w-full overflow-hidden rounded-lg ring-2 ring-offset-2 ring-offset-background transition-all',
+          'relative block aspect-[16/9] w-full overflow-hidden rounded-[8px] ring-offset-2 ring-offset-background transition-shadow',
           selected
-            ? 'ring-foreground'
-            : 'ring-transparent group-hover:ring-border',
+            ? 'ring-2 ring-primary'
+            : 'ring-1 ring-border group-hover:ring-input group-focus-visible:ring-2 group-focus-visible:ring-primary',
         )}
       >
-        <img
-          src="/theme/{opt.value}.svg"
-          alt=""
-          class="block aspect-[68/35] w-full rounded-lg border border-border/60"
-        />
+        {#if opt.value === 'system'}
+          <!-- «Системна» — дві теми навпіл: ліва половина світла,
+               права темна. -->
+          <span class="absolute inset-0 [clip-path:inset(0_50%_0_0)]">
+            {@render mock('light')}
+          </span>
+          <span class="absolute inset-0 [clip-path:inset(0_0_0_50%)]">
+            {@render mock('dark')}
+          </span>
+        {:else}
+          {@render mock(opt.value)}
+        {/if}
       </span>
 
       <!-- Невибрані підписи приглушені: інакше всі три виглядають
-           однаково активними, і оком доводиться шукати кружечок. -->
+           однаково активними. -->
       <span
         class={cn(
-          'text-[13px] transition-colors',
+          'text-[14px] transition-colors',
           selected
-            ? 'font-medium text-foreground'
+            ? 'font-semibold text-foreground'
             : 'text-muted-foreground group-hover:text-foreground',
         )}
       >
         {opt.label}
-      </span>
-
-      <!-- Кружечок дублює ring навмисно: саме він каже, що це
-           перемикач, а не просто картинка. -->
-      <span
-        class={cn(
-          'flex size-5 items-center justify-center rounded-full border transition-colors',
-          selected
-            ? 'border-foreground bg-foreground text-background'
-            : 'border-border group-hover:border-foreground/40',
-        )}
-        aria-hidden="true"
-      >
-        {#if selected}
-          <Check class="size-3" strokeWidth={3} />
-        {/if}
       </span>
     </button>
   {/each}

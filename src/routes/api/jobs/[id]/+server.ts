@@ -2,7 +2,7 @@ import { json, error } from '@sveltejs/kit'
 import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
 import { clientRatingSelect, flattenClientRating } from '$lib/server/user-dto'
-import { cancelWaves } from '$lib/server/dispatch/scheduler'
+import { cancelWaves } from '$lib/server/dispatch'
 import { checkJobAccess, jobViewerSelect } from '$lib/server/job-access'
 import type { RequestHandler } from './$types'
 

@@ -1,106 +1,179 @@
 <script lang="ts">
-  // Роутер онбордингу: вибір ролі → перехід на окремий роут.
-  // Роль живе в URL, а не в $state: перезавантаження не скидає вибір,
-  // працює кнопка «назад», форму можна відкрити прямим лінком.
-  import { UserRound, Hammer, ChevronRight, BrushCleaning } from 'lucide-svelte'
+  // Вибір ролі — у тій самій рамці, що вхід і реєстрація (AuthShell):
+  // знак, заголовок, рядок пояснення, під ним дві картки й кнопка «Далі»
+  // на всю ширину колонки 400px.
+  //
+  // Раніше кожна картка була посиланням і клік одразу кидав на наступний
+  // крок — вибрати, подивитись на другий варіант і лише потім піти далі
+  // було неможливо. Тепер картка лише позначає вибір, а крок робить кнопка.
+  import { goto } from '$app/navigation'
+  import AuthShell from '$lib/components/auth/auth-shell.svelte'
+  import FieldError from '$lib/components/forms/field-error.svelte'
+  import { Button } from '$lib/components/ui/button'
+  import { Spinner } from '$lib/components/ui/spinner'
+  import { UserRound, BrushCleaning } from 'lucide-svelte'
+
+  type Role = 'client' | 'master'
+
+  const ROLES = [
+    {
+      value: 'client' as Role,
+      icon: UserRound,
+      title: 'Я замовник',
+      desc: 'Хочу замовити прибирання',
+    },
+    {
+      value: 'master' as Role,
+      icon: BrushCleaning,
+      title: 'Я майстер',
+      desc: 'Хочу отримувати заявки та заробляти',
+    },
+  ]
+
+  let role = $state<Role | ''>('')
+  let going = $state(false)
+  let hint = $state('')
+
+  function next() {
+    if (going) return
+    // Кнопка активна завжди: заблокована вона не пояснює, чого від
+    // людини чекають, а мовчки не натискається.
+    if (!role) {
+      hint = 'Оберіть, хто ви'
+      return
+    }
+    going = true
+    hint = ''
+    void goto(`/dashboard/onboarding/${role}`)
+  }
+
+  function pick(value: Role) {
+    role = value
+    hint = ''
+  }
 </script>
 
 <svelte:head><title>Ласкаво просимо · Zunor</title></svelte:head>
 
-<div
-  class="mx-auto flex min-h-[80vh] w-full max-w-md flex-col justify-center px-4 py-10"
->
-  <h1 class="mb-10 text-center text-3xl font-semibold tracking-[-0.02em]">
-    Оберіть дію
-  </h1>
+<AuthShell title="Хто ви?" as="div" mark="puzzled">
+  {#snippet subtitle()}
+    Від цього залежить, що ви побачите далі.
+  {/snippet}
 
-  <div class="flex flex-col gap-2.5">
-    <a
-      href="/dashboard/onboarding/client"
-      class="card-tile group flex items-center gap-4 rounded-2xl border-[1.5px] border-border bg-card p-5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+  <div class="flex flex-col gap-3" role="radiogroup" aria-label="Хто ви">
+    {#each ROLES as item (item.value)}
+      {@const Icon = item.icon}
+      <label class="tile" class:selected={role === item.value}>
+        <input
+          type="radio"
+          name="role"
+          value={item.value}
+          checked={role === item.value}
+          onchange={() => pick(item.value)}
+          class="sr-only"
+        />
+
+        <span class="tile-icon">
+          <Icon size={20} strokeWidth={1.75} aria-hidden="true" />
+        </span>
+
+        <span class="tile-text">
+          <span class="tile-title">{item.title}</span>
+          <span class="tile-desc">{item.desc}</span>
+        </span>
+      </label>
+    {/each}
+
+    {#if hint}
+      <div class="flex justify-center">
+        <FieldError text={hint} />
+      </div>
+    {/if}
+
+    <Button
+      variant="primary"
+      size="lg"
+      class="relative w-full"
+      type="button"
+      onclick={next}
+      disabled={going}
+      aria-busy={going}
     >
-      <span
-        class="flex size-11 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-colors duration-200 group-hover:text-foreground"
-      >
-        <UserRound size={22} strokeWidth={1.75} aria-hidden="true" />
-      </span>
-
-      <span class="min-w-0 flex-1 font-medium">Замовити послугу</span>
-
-      <ChevronRight
-        size={18}
-        strokeWidth={1.75}
-        aria-hidden="true"
-        class="shrink-0 text-muted-foreground/60"
-      />
-    </a>
-
-    <a
-      href="/dashboard/onboarding/master"
-      class="card-tile group flex items-center gap-4 rounded-2xl border-[1.5px] border-border bg-card p-5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-    >
-      <span
-        class="flex size-11 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-colors duration-200 group-hover:text-foreground"
-      >
-        <BrushCleaning size={22} strokeWidth={1.75} aria-hidden="true" />
-      </span>
-
-      <span class="min-w-0 flex-1 font-medium">Почати заробляти</span>
-
-      <ChevronRight
-        size={18}
-        strokeWidth={1.75}
-        aria-hidden="true"
-        class="shrink-0 text-muted-foreground/60"
-      />
-    </a>
+      {#if going}
+        <Spinner class="animate-spin" aria-hidden="true" />
+        <span class="sr-only">Переходимо...</span>
+      {:else}
+        <span>Далі</span>
+      {/if}
+    </Button>
   </div>
-</div>
+</AuthShell>
 
 <style>
-  /* Ховер-стан картки.
-     translateZ(0) + will-change виносять картку на окремий шар GPU.
-     Без цього браузер перемальовує вміст на кожному кадрі масштабування,
-     іконки й текст потрапляють на дробові пікселі — саме звідси дрижання.
-     З шаром картка растеризується один раз і масштабується цілком. */
-  .card-tile {
-    transform: scale(1) translateZ(0);
-    will-change: transform;
-    backface-visibility: hidden;
+  /* Картка — тих самих пропорцій, що поля на вході: рамка кольору поля,
+     заокруглення 8px, текст 14px. Між картками й кнопкою — ті самі 12px. */
+  .tile {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--input);
+    border-radius: 8px;
+    background: var(--background);
+    cursor: pointer;
     transition:
-      transform 260ms cubic-bezier(0.32, 0.72, 0, 1),
-      background-color 260ms ease-out,
-      border-color 260ms ease-out;
+      border-color 180ms ease,
+      box-shadow 180ms ease,
+      color 180ms ease;
   }
 
-  .card-tile:hover {
-    /* 1.2% замість 1.5%: на широкій картці різниця в русі майже
-       непомітна, а дрібних артефактів по краях менше. */
-    transform: scale(1.012) translateZ(0);
-    background-color: color-mix(in oklab, var(--accent) 60%, transparent);
-    border-color: color-mix(in oklab, var(--foreground) 15%, transparent);
+  .tile:hover {
+    border-color: var(--input-hover);
   }
 
-  .card-tile:active {
-    transform: scale(0.996) translateZ(0);
-    transition-duration: 100ms;
+  /* Обраний варіант — одна рамка кольору primary, без другого кільця
+     навколо: два обведення читаються як два різні стани. Пів пікселя
+     товщини домальовує тінь того ж кольору впритул до рамки — рухати
+     border-width означало б зсунути вміст картки й розмити текст. */
+  .tile.selected {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 0.5px var(--primary);
   }
 
-  /* Вміст успадковує згладжування шару — прибирає «плавання» тексту
-     на субпіксельних позиціях під час анімації. */
-  .card-tile > :global(*) {
-    transform: translateZ(0);
+  .tile.selected .tile-icon {
+    color: var(--primary);
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    .card-tile,
-    .card-tile:hover,
-    .card-tile:active {
-      transform: none;
-      will-change: auto;
-      transition:
-        background-color 200ms ease-out,
-        border-color 200ms ease-out;
-    }
+  /* Обведення лишаємо тільки для клавіатури: після кліку мишею картка
+     вже позначена рамкою, і системний фокус поверх неї — зайвий. */
+  .tile:has(input:focus-visible) {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  .tile-icon {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted-foreground);
+  }
+
+  .tile-text {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .tile-title {
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .tile-desc {
+    color: var(--muted-foreground);
+    font-size: 13px;
+    line-height: 1.4;
   }
 </style>

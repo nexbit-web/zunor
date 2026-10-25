@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import {
-  scoreCandidate,
+  dispatchScore,
   isNewMaster,
   responseRate,
-  scoreAll,
-} from '$lib/server/dispatch/scoring'
-import { DISPATCH_CONFIG } from '$lib/server/dispatch/types'
+  rankCandidates,
+  proximityBonus,
+} from '$lib/server/dispatch/core/score'
+import { DISPATCH_CONFIG } from '$lib/server/dispatch/config'
 import type { Candidate } from '$lib/server/dispatch/types'
 
 // Scoring — це не технічна деталь, а продуктове УТП: справедливий розподіл
@@ -19,7 +20,6 @@ const daysAgo = (d: number) => new Date(NOW.getTime() - d * 24 * 60 * 60_000)
 function candidate(over: Partial<Candidate> = {}): Candidate {
   return {
     id: 'm',
-    isOnline: false,
     lastSeen: daysAgo(30),
     avgRating: 0,
     isVerified: false,
@@ -30,32 +30,24 @@ function candidate(over: Partial<Candidate> = {}): Candidate {
     completedOrders: DISPATCH_CONFIG.NEW_MASTER_ORDERS + 1,
     responseRate: 0.5,
     recentNotifications: 0,
+    withinReach: true,
+    distanceKm: null,
     ...over,
   }
 }
 
-describe('свіжість lastSeen, а не прапорець isOnline', () => {
-  it('isOnline=false, але щойно бачили → рахується як онлайн', () => {
-    const justSeen = scoreCandidate(
-      candidate({ isOnline: false, lastSeen: minutesAgo(1) }),
-      NOW,
-    )
-    const longGone = scoreCandidate(
-      candidate({ isOnline: false, lastSeen: daysAgo(30) }),
-      NOW,
-    )
+// Онлайн визначає свіжість lastSeen: прапорець isOnline не скидається при
+// виході, тому в бал він не потрапляє взагалі.
+describe('свіжість за lastSeen', () => {
+  it('щойно бачили → рахується як онлайн', () => {
+    const justSeen = dispatchScore(candidate({ lastSeen: minutesAgo(1) }), NOW)
+    const longGone = dispatchScore(candidate({ lastSeen: daysAgo(30) }), NOW)
     expect(justSeen).toBeGreaterThan(longGone)
-  })
-
-  it('isOnline=true нічого не додає, якщо lastSeen давній', () => {
-    const stale = candidate({ isOnline: true, lastSeen: daysAgo(30) })
-    const staleOffline = candidate({ isOnline: false, lastSeen: daysAgo(30) })
-    expect(scoreCandidate(stale, NOW)).toBe(scoreCandidate(staleOffline, NOW))
   })
 
   it('що свіжіший lastSeen — то вищий бал, монотонно', () => {
     const scores = [1, 20, 45, 120, 60 * 20, 60 * 48].map((m) =>
-      scoreCandidate(candidate({ lastSeen: minutesAgo(m) }), NOW),
+      dispatchScore(candidate({ lastSeen: minutesAgo(m) }), NOW),
     )
     for (let i = 1; i < scores.length; i++) {
       expect(scores[i]).toBeLessThanOrEqual(scores[i - 1])
@@ -85,8 +77,8 @@ describe('boost новачка', () => {
   })
 
   it('новачок обходить рівного ветерана', () => {
-    const rookie = scoreCandidate(candidate({ masterSince: daysAgo(1) }), NOW)
-    expect(rookie).toBeGreaterThan(scoreCandidate(candidate(), NOW))
+    const rookie = dispatchScore(candidate({ masterSince: daysAgo(1) }), NOW)
+    expect(rookie).toBeGreaterThan(dispatchScore(candidate(), NOW))
   })
 })
 
@@ -95,8 +87,8 @@ describe('баланс навантаження', () => {
     const busy = candidate({
       activeOrders: DISPATCH_CONFIG.MAX_ACTIVE_ORDERS,
     })
-    expect(scoreCandidate(busy, NOW)).toBeLessThan(
-      scoreCandidate(candidate(), NOW),
+    expect(dispatchScore(busy, NOW)).toBeLessThan(
+      dispatchScore(candidate(), NOW),
     )
   })
 
@@ -107,8 +99,8 @@ describe('баланс навантаження', () => {
     const belowLimit = candidate({
       activeOrders: DISPATCH_CONFIG.MAX_ACTIVE_ORDERS - 1,
     })
-    expect(scoreCandidate(atLimit, NOW)).toBeLessThan(
-      scoreCandidate(belowLimit, NOW),
+    expect(dispatchScore(atLimit, NOW)).toBeLessThan(
+      dispatchScore(belowLimit, NOW),
     )
   })
 
@@ -126,13 +118,13 @@ describe('баланс навантаження', () => {
       masterSince: daysAgo(1),
       completedOrders: 0,
     })
-    expect(scoreCandidate(star, NOW)).toBeLessThan(scoreCandidate(rookie, NOW))
+    expect(dispatchScore(star, NOW)).toBeLessThan(dispatchScore(rookie, NOW))
   })
 
   it('без недавніх розсилок штрафу немає', () => {
     const a = candidate({ recentNotifications: 0 })
     const b = candidate({ recentNotifications: 1 })
-    expect(scoreCandidate(a, NOW)).toBeGreaterThan(scoreCandidate(b, NOW))
+    expect(dispatchScore(a, NOW)).toBeGreaterThan(dispatchScore(b, NOW))
   })
 })
 
@@ -169,24 +161,68 @@ describe('стійкість до порожніх полів', () => {
       recentNotifications: undefined,
     } as unknown as Candidate
 
-    expect(Number.isNaN(scoreCandidate(broken, NOW))).toBe(false)
+    expect(Number.isNaN(dispatchScore(broken, NOW))).toBe(false)
   })
 })
 
-describe('scoreAll', () => {
+describe('rankCandidates', () => {
   it('сортує за спаданням і зберігає всіх кандидатів', () => {
     const list = [
       candidate({ id: 'cold', lastSeen: daysAgo(30) }),
       candidate({ id: 'hot', lastSeen: minutesAgo(1) }),
       candidate({ id: 'warm', lastSeen: minutesAgo(45) }),
     ]
-    const scored = scoreAll(list, NOW)
+    const scored = rankCandidates(list, NOW)
 
     expect(scored.map((s) => s.id)).toEqual(['hot', 'warm', 'cold'])
     expect(scored).toHaveLength(3)
   })
 
   it('порожній список → порожній результат', () => {
-    expect(scoreAll([], NOW)).toEqual([])
+    expect(rankCandidates([], NOW)).toEqual([])
+  })
+})
+
+describe('близькість', () => {
+  // Обіцянка схеми з кільцями: з двох рівних першим іде той, хто ближче.
+  it('ближчий майстер вищий за дальшого за рівних умов', () => {
+    const near = dispatchScore(candidate({ distanceKm: 1 }), NOW)
+    const far = dispatchScore(candidate({ distanceKm: 12 }), NOW)
+    expect(near).toBeGreaterThan(far)
+  })
+
+  it('що далі — то менший бонус, монотонно, і не нижче нуля', () => {
+    const bonuses = [0, 2, 5, 10, 19, 40, 500].map((km) => proximityBonus(km))
+    for (let i = 1; i < bonuses.length; i++) {
+      expect(bonuses[i]).toBeLessThanOrEqual(bonuses[i - 1])
+    }
+    expect(bonuses.at(-1)).toBe(0)
+  })
+
+  // «Невідомо» не дорівнює «далеко»: без району майстра не карають, просто
+  // не дають бонусу. Старі профілі не мають провалитися на дно.
+  it('невідома відстань — без бонусу, але й без штрафу', () => {
+    const unknown = dispatchScore(candidate({ distanceKm: null }), NOW)
+    const veryFar = dispatchScore(candidate({ distanceKm: 500 }), NOW)
+    expect(unknown).toBe(veryFar)
+    expect(proximityBonus(Number.NaN)).toBe(0)
+  })
+
+  // Близькість впорядковує, але не перекриває швидкість: майстер онлайн за
+  // 8 км важливіший за того, хто поруч, але зник тиждень тому.
+  it('онлайн за кілька кілометрів обходить зниклого сусіда', () => {
+    const onlineFar = candidate({ lastSeen: minutesAgo(1), distanceKm: 8 })
+    const goneNear = candidate({ lastSeen: daysAgo(7), distanceKm: 0 })
+    expect(dispatchScore(onlineFar, NOW)).toBeGreaterThan(
+      dispatchScore(goneNear, NOW),
+    )
+  })
+
+  it('відстань доїжджає в результат rankCandidates — для журналу розсилки', () => {
+    const [scored] = rankCandidates(
+      [candidate({ id: 'm1', distanceKm: 3.2 })],
+      NOW,
+    )
+    expect(scored.distanceKm).toBe(3.2)
   })
 })

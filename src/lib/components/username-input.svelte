@@ -1,9 +1,9 @@
 <script lang="ts">
   import { Input } from '$lib/components/ui/input'
-  import * as Field from '$lib/components/ui/field'
   import { Spinner } from '$lib/components/ui/spinner'
   import CheckIcon from '@lucide/svelte/icons/check'
-  import XCircleIcon from '@lucide/svelte/icons/x-circle'
+  import CircleAlertIcon from '@lucide/svelte/icons/circle-alert'
+  import { AtSign } from 'lucide-svelte'
   import { cn } from '$lib/utils'
   import { validateUsername } from '$lib/username'
 
@@ -11,10 +11,18 @@
     value = $bindable(''),
     isValid = $bindable<boolean | null>(null),
     currentUsername = '',
+    touched = $bindable(false),
   }: {
     value: string
     isValid?: boolean | null
     currentUsername?: string
+    /**
+     * Поле вже «чіпали»: пішли з нього або натиснули «Надіслати».
+     * Двостороннє, бо форма мусить увімкнути помилку на сабміті —
+     * інакше порожній username лишається білим, а кнопка мовчки
+     * не спрацьовує.
+     */
+    touched?: boolean
   } = $props()
 
   let checking = $state(false)
@@ -25,6 +33,24 @@
   const check = $derived(validateUsername(value))
   const formatOk = $derived(check.ok)
   const reserved = $derived(!check.ok && check.reason === 'reserved')
+
+  // Текст помилки рахуємо один раз: доки він жив двома гілками в
+  // розмітці, рамка поля й підпис під ним вмикались за різними умовами,
+  // і поле лишалось звичайним там, де підпис уже червонів.
+  // Помилку формату показуємо лише після виходу з поля: червоне на
+  // першій же набраній літері — це зауваження людині, яка ще друкує.
+  // «Вже зайнято» — інша річ: це відповідь сервера, а не докір.
+  const errorText = $derived(
+    touched && !value
+      ? 'Введіть username'
+      : touched && !formatOk
+        ? reserved
+          ? 'Цей username зарезервовано'
+          : '3-20 символів, починається з літери (a-z, 0-9, _)'
+        : available === false
+          ? 'Цей username вже зайнято'
+          : '',
+  )
 
   $effect(() => {
     void value // переобчислюємо при кожній зміні поля
@@ -66,52 +92,45 @@
   })
 </script>
 
-<Field.Field>
-  <Field.Label for="username">Username</Field.Label>
+<!-- Лише контрол, без власного підпису й опису: підпис «Username» дає
+     поле форми (SettingsField), а адреса профілю живе в його підказці.
+     Коли підпис і опис були ще й тут, форма показувала «Username» двічі
+     й двічі пояснювала, що це адреса профілю. -->
+<div>
   <div class="relative">
-    <span
-      class="absolute left-3 top-1/2 -translate-y-1/2 text-sm select-none pointer-events-none"
-      style="color: var(--muted-foreground)">@</span
-    >
     <Input
       id="username"
       type="text"
+      icon={AtSign}
       placeholder="oleksandr_master"
       bind:value
       maxlength={20}
-      class={cn(
-        'pl-7 pr-9',
-        value && !formatOk && 'border-destructive',
-        available === false && 'border-destructive',
-        available === true && 'border-green-500',
-      )}
+      onblur={() => (touched = true)}
+      aria-invalid={!!errorText}
+      class={cn('pr-9', errorText && 'border-destructive')}
       oninput={() => {
         value = value.toLowerCase().replace(/[^a-z0-9_]/g, '')
       }}
     />
-    <span class="absolute right-3 top-1/2 -translate-y-1/2">
+    <span class="absolute top-1/2 right-3 -translate-y-1/2">
       {#if checking}
-        <Spinner />
+        <Spinner class="size-4 text-muted-foreground" />
       {:else if available === true}
         <CheckIcon class="size-4" style="color: #10b981" />
-      {:else if available === false}
-        <XCircleIcon class="size-4" style="color: var(--destructive)" />
+      {:else if errorText}
+        <CircleAlertIcon class="size-4 text-destructive" />
       {/if}
     </span>
   </div>
-  {#if value && !formatOk}
-    <Field.Description class="text-destructive">
-      {reserved
-        ? 'Цей username зарезервовано'
-        : '3-20 символів, починається з літери (a-z, 0-9, _)'}
-    </Field.Description>
-  {:else if available === false}
-    <Field.Description class="text-destructive">
-      Цей username вже зайнято
-    </Field.Description>
-  {:else}
-    <Field.Description>
-      Посилання: zunor.org/@{value || 'username'}
-    </Field.Description>
+  {#if errorText}
+    <!-- Той самий рядок помилки, що й у решті полів: іконка плюс текст
+         звичайною вагою. -->
+    <p
+      class="mt-1.5 flex items-center gap-1.5 text-[12px] text-destructive"
+      role="alert"
+    >
+      <CircleAlertIcon class="size-3.5 shrink-0" aria-hidden="true" />
+      {errorText}
+    </p>
   {/if}
-</Field.Field>
+</div>

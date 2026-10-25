@@ -13,10 +13,12 @@
   max-w-230 — та сама ширина, що в «Мої заявки» й «Мої відгуки»:
   сторінки-списки в дашборді мають збігатися по колонці.
 
-  flex-col + min-h-svh потрібні лише порожньому стану: він бере flex-1
+  flex-col + min-h-(--app-h) потрібні лише порожньому стану: він бере flex-1
   і стає по центру всієї сторінки, а не одразу під заголовком.
 -->
-<div class="mx-auto flex min-h-svh w-full max-w-230 flex-col px-4 py-8 sm:px-6">
+<div
+  class="mx-auto flex min-h-(--app-h) w-full max-w-230 flex-col px-4 py-8 sm:px-6"
+>
   <NotificationList
     initialItems={data.notifications}
     initialNextCursor={data.nextCursor}

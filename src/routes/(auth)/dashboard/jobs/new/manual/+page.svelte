@@ -330,7 +330,7 @@
   <title>Замовити прибирання · Zunor</title>
 </svelte:head>
 
-<div class="job-scope flex min-h-svh flex-col items-center px-4 py-8">
+<div class="job-scope flex min-h-(--app-h) flex-col items-center px-4 py-8">
   {#if success}
     <!-- ═══ Екран успіху ═══ -->
     <div

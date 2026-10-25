@@ -162,7 +162,7 @@
   <meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 
-<div class="order-scope min-h-svh px-6 py-10">
+<div class="order-scope min-h-(--app-h) px-6 py-10">
   <div class="mx-auto max-w-250">
     <!-- Breadcrumb + ID -->
     <div class="mb-4 flex flex-wrap items-center justify-between gap-3">

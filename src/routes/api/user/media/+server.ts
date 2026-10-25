@@ -2,6 +2,8 @@ import { json } from '@sveltejs/kit'
 import { env } from '$env/dynamic/private'
 import { cloudinary } from '$lib/server/cloudinary'
 import { prisma } from '$lib/server/prisma'
+import { forgetMasterPage } from '$lib/server/master-page'
+import { refreshSessionUser } from '$lib/server/sessions'
 import { limit } from '$lib/server/rate-limit'
 import type { RequestHandler } from './$types'
 
@@ -86,6 +88,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
       where: { id: userId },
       data: { avatar: body.url, avatarPublicId: body.publicId },
     })
+    await Promise.all([refreshSessionUser(userId), forgetMasterPage(userId)])
 
     if (user?.avatarPublicId && user.avatarPublicId !== body.publicId) {
       try {
@@ -144,6 +147,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
       })
     }
 
+    await forgetMasterPage(userId)
     return json({ ok: true })
   }
 
@@ -172,6 +176,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
           ),
         },
       })
+      await forgetMasterPage(userId)
     }
 
     // видаляємо з Cloudinary завжди

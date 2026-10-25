@@ -25,6 +25,20 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Висота робочої області дашборда. На десктопі контент живе в блоці з
+   відступом 6px зверху й знизу (variant="inset"), тож він на 0.75rem нижчий
+   за вікно. Сторінки, яким потрібна «щонайменше на весь екран» (щоб
+   порожній стан став по центру), беруть цю змінну, а не 100svh — інакше
+   кожна коротка сторінка прокручувалась би рівно на ці 12px. */
+:root {
+  --app-h: 100svh;
+}
+@media (width >= 48rem) {
+  :root {
+    --app-h: calc(100svh - 0.75rem);
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════════
    Zunor — токени теми.
 
@@ -36,6 +50,11 @@
 
    Кожен токен, що є тут, має бути в ОБОХ темах: :root і .dark.
    Виняток — --radius, він не залежить від теми.
+
+   Палітра — з DESIGN.md: сірі Ink Black / Slate / Ash / Fog / Cloud /
+   Bone, синій Signal Blue для дій. DESIGN.md описує лише світлу тему;
+   темна зібрана з його ж «чорнильних» поверхонь (Dark Panel #111111,
+   Ink Surface #000000, Carbon #2a2a2a) за тією самою логікою ролей.
    ═══════════════════════════════════════════════════════════════ */
 
 :root {
@@ -44,15 +63,15 @@
      ───────────────────────────────────────────── */
 
   --background: #ffffff;
-  --foreground: #1d1d1f;
+  --foreground: #202020; /* Ink Black */
 
   --card: #ffffff;
-  --card-foreground: #1d1d1f;
+  --card-foreground: #202020;
 
-  --dashboard: #fbfbfd;
+  --dashboard: #e9ebf0; /* Plaster — рамка навколо блока */
 
-  --popover: rgb(255, 255, 255);
-  --popover-foreground: #1d1d1f;
+  --popover: #ffffff;
+  --popover-foreground: #202020;
 
   /* ─────────────────────────────────────────────
      GLASS / MATERIAL
@@ -69,32 +88,35 @@
      TEXT
      ───────────────────────────────────────────── */
 
-  --color-text: #1d1d1f;
-  --color-text-500: #86868b;
+  --color-text: #202020;
+  --color-text-500: #646464;
 
-  --muted-foreground: #86868b;
+  --muted-foreground: #646464; /* Slate */
 
   /* ─────────────────────────────────────────────
      PRIMARY
      ───────────────────────────────────────────── */
 
-  --primary: #0071e3;
+  --primary: #0091ff; /* Signal Blue */
   --primary-foreground: #ffffff;
-  --primary-hover: #0077ed;
+  /* Від --primary, а не окремим кольором: акцент користувач міняє в
+     налаштуваннях (data-accent нижче), і ховер з фокусом мають іти за
+     ним. Для Signal Blue це рівно #33a7ff. */
+  --primary-hover: color-mix(in srgb, var(--primary) 80%, white);
 
-  --ring: #0071e3;
+  --ring: var(--primary);
 
   /* ─────────────────────────────────────────────
      NEUTRALS
      ───────────────────────────────────────────── */
 
-  --secondary: #e9e9eb;
-  --secondary-foreground: #1d1d1f;
+  --secondary: #eeeeee; /* Mercury */
+  --secondary-foreground: #202020;
 
-  --muted: #e9e9eb;
+  --muted: #eeeeee;
 
-  --accent: #e9e9eb;
-  --accent-foreground: #1d1d1f;
+  --accent: #eeeeee;
+  --accent-foreground: #202020;
 
   /* ─────────────────────────────────────────────
      STATUS
@@ -106,8 +128,18 @@
      BORDERS / INPUTS
      ───────────────────────────────────────────── */
 
-  --border: rgb(0 0 0 / 0.1);
-  --input: rgb(0 0 0 / 0.08);
+  --border: #e8e8e8; /* Bone — межа за замовчуванням */
+
+  /* Рамка КОНТРОЛА (поле, textarea, select, чекбокс) — одна на весь
+     сайт. Вона свідомо помітніша за --border: --border розділяє блоки,
+     і там лінію треба ледь вгадувати, а рамка контрола показує, куди
+     можна клікнути, і має читатись сама по собі. На 0.08 її не було
+     видно взагалі — поле зливалося з полотном. */
+  --input: #b3b3b3; /* Fog — найсвітліша межа, що ще читається */
+  --input-hover: #838383; /* Ash */
+
+  /* Тло поля вводу — теж одне на весь сайт. */
+  --field: #ffffff;
 
   /* ─────────────────────────────────────────────
      SIDEBAR
@@ -116,16 +148,21 @@
   /* Панель — того ж тону, що й полотно дашборда: окремий, трохи інший
      відтінок давав ледь помітний шов по краю панелі. */
   --sidebar: var(--dashboard);
-  --sidebar-foreground: #1d1d1f;
+  --sidebar-foreground: #202020;
 
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: var(--primary-foreground);
 
-  --sidebar-accent: rgb(0 0 0 / 0.055);
-  --sidebar-accent-foreground: #1d1d1f;
+  --sidebar-accent: rgb(0 0 0 / 0.06);
+  --sidebar-accent-foreground: #202020;
 
-  --sidebar-border: rgb(0 0 0 / 0.08);
+  --sidebar-border: #d4d4d4;
   --sidebar-ring: var(--ring);
+
+  /* Межа блока з контентом на тлі рамки. Bone (#e8e8e8) тут не годиться:
+     вона майже збігається з Plaster рамки й просто зникала б. Cloud —
+     «волосяна» межа палітри, вона читається і на білому, і на рамці. */
+  --panel-border: #d4d4d4; /* Cloud */
 
   /* ─────────────────────────────────────────────
      SCROLLBAR
@@ -146,24 +183,24 @@
      BASE
      ───────────────────────────────────────────── */
 
-  --background: #1c1c1e;
-  --foreground: #f5f5f7;
+  --background: #111111; /* Dark Panel */
+  --foreground: #f8f9fa; /* Mist */
 
-  --card: #2c2c2e;
-  --card-foreground: #f5f5f7;
+  --card: #191919;
+  --card-foreground: #f8f9fa;
 
-  --dashboard: #202023;
+  --dashboard: #000000; /* Ink Surface — рамка */
 
-  --popover: rgb(44, 44, 46);
-  --popover-foreground: #f5f5f7;
+  --popover: #191919;
+  --popover-foreground: #f8f9fa;
 
   /* ─────────────────────────────────────────────
      GLASS / MATERIAL
      ───────────────────────────────────────────── */
 
-  --bg-translucent: rgb(44 44 46 / 0.72);
+  --bg-translucent: rgb(25 25 25 / 0.72);
 
-  --glass-background: rgb(44 44 46 / 0.72);
+  --glass-background: rgb(25 25 25 / 0.72);
   --glass-border: rgb(255 255 255 / 0.1);
   --glass-highlight: rgb(255 255 255 / 0.08);
   --glass-shadow: 0 16px 50px rgb(0 0 0 / 0.35);
@@ -172,32 +209,32 @@
      TEXT
      ───────────────────────────────────────────── */
 
-  --color-text: #f5f5f7;
-  --color-text-500: #98989d;
+  --color-text: #f8f9fa;
+  --color-text-500: #b3b3b3;
 
-  --muted-foreground: #98989d;
+  --muted-foreground: #b3b3b3; /* Fog */
 
   /* ─────────────────────────────────────────────
      PRIMARY
      ───────────────────────────────────────────── */
 
-  --primary: #0a84ff;
+  --primary: #0091ff; /* Signal Blue */
   --primary-foreground: #ffffff;
-  --primary-hover: #409cff;
+  --primary-hover: color-mix(in srgb, var(--primary) 80%, white);
 
-  --ring: #0a84ff;
+  --ring: var(--primary);
 
   /* ─────────────────────────────────────────────
      NEUTRALS
      ───────────────────────────────────────────── */
 
-  --secondary: #2c2c2e;
-  --secondary-foreground: #f5f5f7;
+  --secondary: #202020; /* Ink Black */
+  --secondary-foreground: #f8f9fa;
 
-  --muted: #2c2c2e;
+  --muted: #202020;
 
-  --accent: #3a3a3c;
-  --accent-foreground: #f5f5f7;
+  --accent: #2a2a2a; /* Carbon */
+  --accent-foreground: #f8f9fa;
 
   /* ─────────────────────────────────────────────
      STATUS
@@ -209,24 +246,33 @@
      BORDERS / INPUTS
      ───────────────────────────────────────────── */
 
-  --border: rgb(255 255 255 / 0.1);
-  --input: rgb(255 255 255 / 0.08);
+  --border: #2a2a2a; /* Carbon */
+
+  --input: #646464; /* Slate */
+  --input-hover: #838383; /* Ash */
+
+  --field: #262628;
 
   /* ─────────────────────────────────────────────
      SIDEBAR
      ───────────────────────────────────────────── */
 
+  /* Рамка навколо блока контенту в темній темі — чиста чорна (Ink
+     Surface): блок (#111111) мусить читатись окремим аркушем. Шторка на
+     телефоні того ж кольору — це та сама панель. */
   --sidebar: var(--dashboard);
-  --sidebar-foreground: #f5f5f7;
+  --sidebar-foreground: #f8f9fa;
 
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: var(--primary-foreground);
 
-  --sidebar-accent: rgb(255 255 255 / 0.07);
-  --sidebar-accent-foreground: #f5f5f7;
+  --sidebar-accent: rgb(255 255 255 / 0.08);
+  --sidebar-accent-foreground: #f8f9fa;
 
-  --sidebar-border: rgb(255 255 255 / 0.08);
+  --sidebar-border: #2a2a2a;
   --sidebar-ring: var(--ring);
+
+  --panel-border: #2a2a2a; /* Carbon */
 
   /* ─────────────────────────────────────────────
      SCROLLBAR
@@ -240,6 +286,94 @@
      ───────────────────────────────────────────── */
 
   --radius: 0.75rem;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Акцентний колір — вибір користувача в «Налаштування → Вигляд».
+
+   Атрибут, а не клас: значення одне з десяти, і `[data-accent]` читає
+   однаково і <html> (тема всього застосунку), і окремий елемент. Саме
+   так малюються зразки в палітрі — кнопка з data-accent="pink" сама
+   отримує рожевий --primary, тож кольори живуть ТІЛЬКИ тут, а не ще й
+   копією в TypeScript. Селектори стоять після .dark і мають ту саму
+   вагу: перемагає акцент.
+
+   Список id — у $lib/stores/appearance.svelte.ts (ACCENTS), до першого
+   кадру атрибут ставить скрипт у app.html.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Чорно-білий: чорний акцент у світлій темі й білий у темній, текст на
+   кнопках інвертується разом із ним. Друге правило ловить і <html>
+   (.dark на ньому самому), і зразок у палітрі всередині темної теми. */
+[data-accent='mono'] {
+  --primary: #202020; /* Ink Black */
+  --primary-foreground: #ffffff;
+}
+.dark[data-accent='mono'],
+.dark [data-accent='mono'] {
+  --primary: #f8f9fa; /* Mist */
+  --primary-foreground: #111111;
+}
+[data-accent='violet'] {
+  --primary: #7b68ee;
+}
+[data-accent='blue'] {
+  --primary: #0091ff;
+}
+[data-accent='pink'] {
+  --primary: #ee5e99;
+}
+[data-accent='purple'] {
+  --primary: #b660e0;
+}
+[data-accent='indigo'] {
+  --primary: #6985ff;
+}
+[data-accent='orange'] {
+  --primary: #e16b16;
+}
+[data-accent='teal'] {
+  --primary: #0f9d9f;
+}
+[data-accent='mocha'] {
+  --primary: #aa8d80;
+}
+[data-accent='green'] {
+  --primary: #3db88b;
+}
+
+/* Мініатюри тем у «Вигляді» (theme-picker): кожна у СВОЄМУ тоні, а не в
+   увімкненій темі. Інакше в темній темі світле превʼю отримало б білі
+   акценти на білому блоці. Стосується лише чорно-білого — решта кольорів
+   однакові в обох темах. */
+[data-accent='mono'][data-tone='light'] {
+  --primary: #202020;
+}
+[data-accent='mono'][data-tone='dark'] {
+  --primary: #f8f9fa;
+}
+
+/* ─── Висока контрастність ───
+   Темніший другорядний текст і помітніші рамки — для тих, кому сірий
+   на білому читається погано. Ті самі сірі з палітри DESIGN.md, лише
+   на крок-два темніші (у темній темі — світліші). */
+:root[data-contrast='more'] {
+  --muted-foreground: #424242;
+  --color-text-500: #424242;
+  --border: #b3b3b3; /* Fog */
+  --input: #646464; /* Slate */
+  --input-hover: #202020;
+  --sidebar-border: #838383;
+  --panel-border: #838383; /* Ash */
+}
+.dark[data-contrast='more'] {
+  --muted-foreground: #d4d4d4; /* Cloud */
+  --color-text-500: #d4d4d4;
+  --border: #646464;
+  --input: #b3b3b3;
+  --input-hover: #e8e8e8;
+  --sidebar-border: #646464;
+  --panel-border: #646464;
 }
 
 @theme inline {
@@ -274,6 +408,9 @@
 
   --color-border: var(--border);
   --color-input: var(--input);
+  --color-input-hover: var(--input-hover);
+  --color-field: var(--field);
+  --color-panel-border: var(--panel-border);
 
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
@@ -305,13 +442,15 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
+  /* scrollbar-gutter: stable тут більше немає. Він тримав місце під смугу
+     прокрутки завжди — і на сторінках без прокрутки праворуч стояла
+     порожня темна (чи сіра) доріжка на всю висоту, особливо помітна поверх
+     відсвіту на сторінках входу. Зсув на ширину смуги при переході між
+     довгою й короткою сторінкою — менше зло, ніж смуга, яка нічого не
+     прокручує. */
   html {
     @apply font-sans;
     scroll-behavior: smooth;
-    /* Місце під смугу резервується завжди — інакше при переході зі
-       сторінки без прокрутки на сторінку з нею весь контент стрибає
-       вбік на ширину смуги. */
-    scrollbar-gutter: stable;
   }
 
   /* ─── Смуга прокрутки ───
@@ -392,6 +531,23 @@
   background-clip: text;
   -webkit-text-fill-color: transparent;
   color: transparent;
+}
+
+/* Lottie одним кольором — кольором тексту довкола (LottiePlayer
+   monochrome, ZunorMarkAnimated, ZunorPasswordPeek). Чисто чорне в JSON —
+   «прорізи» (очі, обведення рук): вони кольору тла, як очі в ZunorMark.
+   Кольори lottie ставить атрибутами fill/stroke, а CSS атрибути
+   перекриває. */
+.lottie-mono path[fill] {
+  fill: currentColor;
+}
+
+.lottie-mono path[stroke] {
+  stroke: currentColor;
+}
+
+.lottie-mono path[fill='rgb(0,0,0)'] {
+  fill: var(--background);
 }
 
 /* ─── NProgress (смуга завантаження вгорі) ─── */

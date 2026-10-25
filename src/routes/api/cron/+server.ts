@@ -2,33 +2,21 @@ import { timingSafeEqual } from 'node:crypto'
 import { json, error } from '@sveltejs/kit'
 import { prisma } from '$lib/server/prisma'
 import { CRON_SECRET } from '$env/static/private'
-import { dispatchJob } from '$lib/server/dispatch'
-import { DISPATCH_CONFIG } from '$lib/server/dispatch/types'
+import { resumeDispatch } from '$lib/server/dispatch'
 import type { RequestHandler } from './$types'
 
 /**
  * GET /api/cron?task=auto-expire|dispatch-waves|all
  * Авторизація: CRON_SECRET в Authorization: Bearer ...
  *
- * Це СТРАХОВКА на випадок рестарту процесу, а не основний механізм: хвилі
- * планує dispatch/scheduler.ts таймерами в пам'яті.
+ * dispatch-waves — СТРАХОВКА, а не основний механізм: хвилі ведуть таймери
+ * мозку підбору, а загублене ними підхоплює відновлення на старті процесу.
+ * Крон кличе те саме відновлення — на випадок, якщо процес жив, а хвиля
+ * вичерпала повтори.
  *
  * Розклад: dispatch-waves — раз на 30 хвилин, auto-expire — раз на добу.
  * Частіше ставити не можна, причина — у scheduler.ts.
  */
-
-/** Інтервал страхувального крона — вікно сканування має його покривати. */
-const CRON_INTERVAL_MIN = 30
-
-/**
- * Скільки хвилин після створення заявку ще має сенс сканувати.
- * Рахується з конфіга хвиль плюс інтервал крона: заявка, створена одразу
- * після тіку, має потрапити в наступний. Окреме число тут тихо
- * розсинхронізувалося б із розкладом хвиль.
- */
-const SCAN_WINDOW_MIN =
-  DISPATCH_CONFIG.WAVES[DISPATCH_CONFIG.WAVES.length - 1].afterMinutes +
-  CRON_INTERVAL_MIN
 
 interface CronResult {
   task: string
@@ -105,43 +93,11 @@ async function runAutoExpire(): Promise<CronResult> {
   }
 }
 
-/**
- * Страховка для хвиль 2-3.
- *
- * У штатному режимі сюди потрапляти нічому: хвилі вже відпрацювали за
- * таймерами планувальника. Ця задача підбирає заявки, чиї таймери зникли
- * разом із перезапуском процесу.
- *
- * Ідемпотентно: мозок не задублює уведомлення (DispatchEvent з unique
- * [jobId, masterId] + advisory-лок), тож зайвий виклик безпечний.
- */
+/** Хвилі, які не встигли таймери: те саме відновлення, що й на старті. */
 async function runDispatchWaves(): Promise<CronResult> {
   try {
-    // Заявки у вікні сканування, які ще активні й потребують хвилі.
-    const since = new Date(Date.now() - SCAN_WINDOW_MIN * 60 * 1000)
-
-    const jobs = await prisma.job.findMany({
-      where: {
-        status: 'OPEN',
-        createdAt: { gte: since },
-        // Той самий поріг, за яким мозок зупиняє розсилку (stopReason:
-        // 'enough-proposals') — інакше крон дарма будив би диспетчер.
-        proposalsCount: { lt: DISPATCH_CONFIG.ENOUGH_PROPOSALS },
-      },
-      select: { id: true, title: true },
-      take: 100,
-    })
-
-    let dispatched = 0
-    for (const job of jobs) {
-      const res = await dispatchJob(job.id, job.title).catch((err) => {
-        console.error(`[cron:dispatch] job ${job.id} failed:`, err)
-        return null
-      })
-      if (res && res.notified > 0) dispatched++
-    }
-
-    return { task: 'dispatch-waves', ok: true, affected: dispatched }
+    const { caughtUp } = await resumeDispatch()
+    return { task: 'dispatch-waves', ok: true, affected: caughtUp }
   } catch (err) {
     return {
       task: 'dispatch-waves',

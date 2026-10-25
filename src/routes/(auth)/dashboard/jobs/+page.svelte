@@ -16,7 +16,7 @@
 </svelte:head>
 
 <!--
-  flex-col + min-h-svh потрібні порожньому стану: він бере flex-1 і стає
+  flex-col + min-h-(--app-h) потрібні порожньому стану: він бере flex-1 і стає
   по центру сторінки, а не одразу під заголовком.
 
   Ширина однакова для обох режимів: стрічка майстра більше не сітка
@@ -28,7 +28,7 @@
   відсунув би її від краю й зламав прилипання.
 -->
 <div
-  class="mx-auto flex min-h-svh w-full max-w-3xl flex-col px-4 pb-6 sm:px-6 sm:pb-10"
+  class="mx-auto flex min-h-(--app-h) w-full max-w-3xl flex-col px-4 pb-6 sm:px-6 sm:pb-10"
 >
   {#if data.view === 'mine'}
     <ClientJobs

@@ -10,3 +10,8 @@ export { default as BellOffIcon } from './bell-off-icon.svelte'
 export { default as WaveIcon } from './wave-icon.svelte'
 export { default as WaveHelloIcon } from './wave-hello-icon.svelte'
 export { default as ZunorMark } from './zunor-mark.svelte'
+export {
+  default as ZunorMarkAnimated,
+  type MarkAnimationName,
+} from './zunor-mark-animated.svelte'
+export { default as ZunorPasswordPeek } from './zunor-password-peek.svelte'

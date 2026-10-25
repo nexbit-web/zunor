@@ -4,7 +4,9 @@
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
   import PageHead from '$lib/components/dashboard/page-head.svelte'
   import JobCardSkeleton from './job-card-skeleton.svelte'
-  import { onMount, untrack } from 'svelte'
+  import { onMount } from 'svelte'
+  import { invalidate } from '$app/navigation'
+  import { notifications } from '$lib/notifications'
   import { fly } from 'svelte/transition'
   import { quintOut } from 'svelte/easing'
   import {
@@ -14,9 +16,11 @@
     AlertCircle,
     Search,
     Sparkles,
+    MapPin,
   } from 'lucide-svelte'
 
   import { formatRelative } from '$lib/utils/time'
+  import { formatDistance } from '$lib/geo/districts'
 
   // serviceName, а не serviceLabel: локальна змінна з такою назвою вже
   // тримає підпис кнопки фільтра.
@@ -36,10 +40,11 @@
     filters?: any
   } = $props()
 
-  // untrack: перша сторінка з SSR — це ПОЧАТКОВИЙ знімок. Далі стрічка
-  // росте догрузкою через /api/jobs/feed, і перезапис пропом стер би її.
-  let jobs = $state(untrack(() => [...initialJobs]))
-  let nextCursor = $state<string | null>(untrack(() => initialNextCursor))
+  // Перша сторінка — з load, і саме $derived, а не знімок: коли load
+  // перезапускається (нова заявка, повторний перехід), стрічка бере свіжі
+  // дані. Догрузка через /api/jobs/feed дописує в той самий масив.
+  let jobs = $derived([...initialJobs])
+  let nextCursor = $derived<string | null>(initialNextCursor)
   let loadingMore = $state(false)
   let sentinelEl = $state<HTMLDivElement | null>(null)
 
@@ -73,6 +78,14 @@
       loadingMore = false
     }
   }
+
+  // Дзвіночок каже «є нова заявка» — стрічка оновлюється сама, а не
+  // показує «поки немає» до F5.
+  onMount(() =>
+    notifications.onNotification((n) => {
+      if (n.type === 'NEW_JOB') void invalidate('app:jobs-feed')
+    }),
+  )
 
   onMount(() => {
     if (!sentinelEl) return
@@ -259,6 +272,18 @@
                     {job.client.avgRating.toFixed(1)}
                   </span>
                 {/if}
+              </span>
+            {/if}
+
+            <!-- Район, а не адреса: точну адресу клієнт дає в чаті вже
+                 після угоди. Відстань — від району самого майстра. -->
+            {#if job.place?.district}
+              <span class="inline-flex min-w-0 items-center gap-1">
+                <MapPin class="size-3 shrink-0" aria-hidden="true" />
+                <span class="truncate">
+                  {job.place.district}{#if job.place.distanceKm !== null}
+                    · {formatDistance(job.place.distanceKm)}{/if}
+                </span>
               </span>
             {/if}
 
