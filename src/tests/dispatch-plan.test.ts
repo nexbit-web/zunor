@@ -26,6 +26,8 @@ function snapshot(patch: Partial<JobSnapshot> = {}): JobSnapshot {
     status: 'OPEN',
     proposalsCount: 0,
     createdAt: CREATED,
+    metadata: null,
+    effort: null,
     dispatchWave: 0,
     notified: new Set(),
     ...patch,

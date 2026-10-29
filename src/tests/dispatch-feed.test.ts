@@ -26,6 +26,8 @@ interface FeedJob {
   id: string
   createdAt: Date
   district: string | null
+  category?: string
+  metadata?: Record<string, unknown>
 }
 
 /** Обчислює JobWhereInput на заявці — рівно ті оператори, що дає scope. */
@@ -37,8 +39,16 @@ function matches(job: FeedJob, where: Prisma.JobWhereInput): boolean {
     if (key === 'OR') {
       return (cond as Prisma.JobWhereInput[]).some((w) => matches(job, w))
     }
+    // JSON-поле: { path: [ключ], equals: значення } — як Prisma на Postgres.
+    if (key === 'metadata') {
+      const c = cond as { path: string[]; equals: unknown }
+      return job.metadata?.[c.path[0]] === c.equals
+    }
     const value = job[key as keyof FeedJob]
     if (cond === null) return value === null
+    if (cond && typeof cond === 'object' && 'not' in cond) {
+      return value !== (cond as { not: unknown }).not
+    }
     const c = cond as { in?: unknown[]; notIn?: unknown[]; lte?: Date }
     // SQL: NULL NOT IN (...) — не істина, тож null сюди не проходить.
     if (c.notIn && (value === null || c.notIn.includes(value))) return false
@@ -49,13 +59,20 @@ function matches(job: FeedJob, where: Prisma.JobWhereInput): boolean {
 }
 
 async function scopeFor(
-  opts: { district?: string | null; radius?: number | null } = {},
+  opts: {
+    district?: string | null
+    radius?: number | null
+    categories?: string[]
+    masterMeta?: unknown
+  } = {},
 ) {
   return masterFeedScope({
     masterId: 'm1',
     masterDistrict: opts.district === undefined ? 'center' : opts.district,
     travelRadiusKm: opts.radius === undefined ? 5 : opts.radius,
     districts: ODESA,
+    categories: opts.categories,
+    masterMeta: opts.masterMeta,
     now: NOW,
   })
 }
@@ -183,5 +200,68 @@ describe('reachableDistricts — межа майстра', () => {
     expect(reachableDistricts(ODESA, null, 5)).toBeNull()
     expect(reachableDistricts(ODESA, 'nowhere', 5)).toBeNull()
     expect(reachableDistricts([], 'center', 5)).toBeNull()
+  })
+})
+
+// Чого майстер не робить — у стрічці немає зовсім, як і в розсилці:
+// інакше «миє лише вікна» гортав би генеральні прибирання.
+describe('уміння майстра в стрічці', () => {
+  const CLEANING = 'prybyrannya'
+  const meta = (services: string[], premises: string[] = ['home']) => ({
+    skills: { [CLEANING]: { services, premises } },
+  })
+  const cleaningJob = (
+    id: string,
+    metadata: Record<string, unknown>,
+  ): FeedJob => ({
+    ...job(id, WAVES_DONE_MIN + 5),
+    category: CLEANING,
+    metadata,
+  })
+
+  it('бачить лише свої види прибирання', async () => {
+    const scope = await scopeFor({
+      categories: [CLEANING],
+      masterMeta: meta(['windows', 'sofa']),
+    })
+    expect(
+      sees(
+        scope,
+        cleaningJob('w', { service: 'windows', premise: 'apartment' }),
+      ),
+    ).toBe(true)
+    expect(
+      sees(scope, cleaningJob('d', { service: 'deep', premise: 'apartment' })),
+    ).toBe(false)
+  })
+
+  it('лише житло — офісів не бачить, «інше» бачить', async () => {
+    const scope = await scopeFor({
+      categories: [CLEANING],
+      masterMeta: meta(['standard'], ['home']),
+    })
+    expect(
+      sees(scope, cleaningJob('o', { service: 'standard', premise: 'office' })),
+    ).toBe(false)
+    expect(
+      sees(scope, cleaningJob('x', { service: 'standard', premise: 'other' })),
+    ).toBe(true)
+  })
+
+  it('уміння прибирання не чіпають заявок іншої категорії', async () => {
+    const scope = await scopeFor({
+      categories: [CLEANING, 'other-cat'],
+      masterMeta: meta(['windows']),
+    })
+    expect(
+      sees(scope, { ...job('z', WAVES_DONE_MIN + 5), category: 'other-cat' }),
+    ).toBe(true)
+  })
+
+  it('хто не відповідав на анкету — бачить усе, як раніше', async () => {
+    const scope = await scopeFor({ categories: [CLEANING], masterMeta: null })
+    expect(
+      sees(scope, cleaningJob('d', { service: 'deep', premise: 'office' })),
+    ).toBe(true)
   })
 })

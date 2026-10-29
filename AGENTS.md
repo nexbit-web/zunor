@@ -79,7 +79,8 @@ Vitest, конфіг — `vitest.config.ts`. Два проєкти в одном
 Покрите **чисте ядро** — модулі без БД, мережі й `$env`:
 `server/dispatch/core/*` (бал, кільця, хвилі, рішення, рекомендації),
 `geo/*`, `server/order-state-machine.ts`,
-`categories/cleaning/validate.ts`, `server/job-copy.ts`,
+`categories/cleaning/validate.ts`, `categories/cleaning/effort.ts`
+(обсяг заявки), `server/job-copy.ts`,
 `server/zunor/detect-service.ts`, `server/zunor/chips.ts`, `server/user-dto.ts`,
 `server/job-access.ts`, `orders/labels.ts`,
 `zunor/dialog-storage.ts`.
@@ -479,6 +480,44 @@ serverless. Практичні наслідки, на які спираєтьс�
 - **Район заявки — з профілю клієнта на сервері**, не з тіла запиту.
 - `slug` району — ключ у БД (`User.district`, `Job.district`). Назву міняти
   можна, slug — ні.
+
+Анкета майстра (які прибирання, де, авто, формат роботи) й обсяг заявки:
+
+- **Спільне для всіх категорій — колонки, вміння — `metadata`.** Авто й
+  формат роботи — `MasterProfile.hasVehicle`, `crew` (enum `CrewType`:
+  SOLO / TEAM / COMPANY), `companyName`. Уміння всередині категорії —
+  `MasterProfile.metadata.skills[slug]`, це контент
+  (`categories/cleaning/skills.ts`). Пише все лише `saveMasterProfile`, і
+  відповіді обовʼязкові: «не відповів» означало б «отримуй усе підряд».
+  У JSON `vehicle`/`team` більше немає — міграція
+  `20261029120000_master_crew_job_effort` перенесла їх у колонки.
+- **Обсяг заявки `Job.effort` (1–10) рахує сервер, а не модель.** Формула
+  — контент категорії (`categories/cleaning/effort.ts`: години роботи
+  однієї людини з полів заявки), шкала й рівні — `$lib/categories/effort`.
+  Асистент дає лише поправку `effortAdjust` ±1 за тим, чого немає в полях
+  («вітрини в ТЦ»): бал від моделі плаває від запуску до запуску, а
+  поправка йде через браузер клієнта (чернетка → `POST /api/jobs`), тож
+  більший крок дозволив би переписати бал руками. З названою площею −1
+  не діє: модель ставила його «лише кухні» поверх 10 м², і малий розмір
+  рахувався двічі (заборона в промпті цього не прибрала). У базі — CHECK 1–10.
+  Заявка старша за поле (`effort = null`) — розсилка рахує обсяг із
+  `metadata` тією ж формулою.
+- **Формат × обсяг — мʼяко, через чергу** (`crewFit` у `core/score.ts`,
+  ваги `CREW_FIT`): на дуже велике першими компанії й бригади, на
+  невелике — ті, хто працює сам. Нікого не відсіює: заявку бачать усі, кому
+  вона підходить.
+- **Движок питає категорію, а не знає про прибирання.** Умови на
+  `Job.metadata`, «потрібне авто», обсяг — `$lib/categories/matching`
+  (`matchingFor`). Нова категорія без запису там підходить усім і обсягу
+  не має (`effort: null` → формат роботи не впливає).
+- **Той самий відсів у трьох місцях:** розсилка (`loadCandidates`),
+  стрічка (`masterFeedScope` → `skillsWhere`, обидва виклики передають
+  `categories` і `masterMeta` — це `MasterProfile.metadata`) і
+  рекомендації (`recommendForJob`: `hasVehicle`, `crew` майстра й
+  `effort` заявки). Додаєш четвертий шлях до заявок майстра — передай те
+  саме.
+- **`null` у відповіді — «не відповідав», не «ні».** Старий профіль не
+  отримує ні переваги, ні відсіву; відсіює лише явне `hasVehicle: false`.
 
 ### 5.1. Розклад крона і чому він рідкісний
 

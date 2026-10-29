@@ -21,6 +21,7 @@ import Columns2 from '@lucide/svelte/icons/columns-2'
 import Building from '@lucide/svelte/icons/building'
 import ArrowUpDown from '@lucide/svelte/icons/arrow-up-down'
 import Calendar from '@lucide/svelte/icons/calendar'
+import Ruler from '@lucide/svelte/icons/ruler'
 
 export type DetailIcon = typeof Home
 
@@ -36,6 +37,7 @@ const DETAIL_ICONS: Record<string, DetailIcon> = {
   Building,
   ArrowUpDown,
   Calendar,
+  Ruler,
 }
 
 /**

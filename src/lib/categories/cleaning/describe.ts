@@ -75,6 +75,15 @@ export function describeJob(
     })
   }
 
+  // Площа — зі слів клієнта, тому «≈»
+  if (typeof m.areaM2 === 'number' && m.areaM2 > 0) {
+    details.push({
+      label: 'Площа',
+      value: `≈ ${m.areaM2} м²`,
+      icon: 'Ruler',
+    })
+  }
+
   // Частота (регулярне)
   if (m.frequency) {
     details.push({

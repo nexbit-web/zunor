@@ -66,6 +66,14 @@ model MasterProfile {
   isActive                 Boolean            @default(true)
   /// Як далеко майстер готовий їздити, км ($lib/geo/travel.ts). null — будь-де.
   travelRadiusKm           Int?
+  /// Їздить на замовлення своїм авто. null — не відповідав (профіль
+  /// старший за питання): підбір не дає ні переваги, ні відсіву.
+  hasVehicle               Boolean?
+  /// Формат роботи: сам, бригада чи клінінгова компанія. Від нього й
+  /// обсягу заявки (Job.effort) залежить, хто йде першим. null — не відповідав.
+  crew                     CrewType?
+  /// Назва компанії — лише для crew = COMPANY, необовʼязкова.
+  companyName              String?
   completedOrders          Int                @default(0)
   totalOrders              Int                @default(0)
   createdAt                DateTime           @default(now())
@@ -87,6 +95,10 @@ model Job {
   title                String
   description          String?
   metadata             Json?
+  /// Обсяг роботи 1–10: формула категорії за metadata плюс поправка
+  /// асистента ±1 ($lib/categories/effort). null — заявка старша за поле:
+  /// розсилка тоді рахує обсяг із metadata сама.
+  effort               Int?
   budgetMinCents       Int?
   budgetMaxCents       Int?
   currency             String     @default("UAH")
@@ -440,6 +452,13 @@ enum Role {
 enum DistrictGroup {
   CITY
   SUBURB
+}
+
+/// Формат роботи майстра ($lib/masters/meta, CREW_OPTIONS).
+enum CrewType {
+  SOLO
+  TEAM
+  COMPANY
 }
 
 enum VerificationStatus {

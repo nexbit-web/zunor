@@ -5,6 +5,9 @@ import {
   responseRate,
   rankCandidates,
   proximityBonus,
+  travelDistance,
+  busyTravelPenalty,
+  crewFit,
 } from '$lib/server/dispatch/core/score'
 import { DISPATCH_CONFIG } from '$lib/server/dispatch/config'
 import type { Candidate } from '$lib/server/dispatch/types'
@@ -224,5 +227,100 @@ describe('близькість', () => {
       NOW,
     )
     expect(scored.distanceKm).toBe(3.2)
+  })
+})
+
+// Авто, зайнятість і команда (анкета майстра → MasterProfile.metadata).
+// Обіцянки з продукту: з авто «далеко» коротше; зайнятому без авто не
+// шлемо через усе місто; на великий обʼєкт першою йде команда.
+describe('дорога, зайнятість і команда', () => {
+  it('з авто за два райони не гірший за сусіда без авто', () => {
+    const neighbour = candidate({ distanceKm: 3, travelKm: 3 })
+    const withCar = candidate({ distanceKm: 6, travelKm: 3 })
+    expect(dispatchScore(withCar, NOW)).toBe(dispatchScore(neighbour, NOW))
+  })
+
+  it('без авто дальній програє ближчому — як і раніше', () => {
+    const near = candidate({ distanceKm: 3, travelKm: 3 })
+    const far = candidate({ distanceKm: 6, travelKm: 6 })
+    expect(dispatchScore(near, NOW)).toBeGreaterThan(dispatchScore(far, NOW))
+  })
+
+  it('travelKm не задано — рахується від distanceKm, як до анкети', () => {
+    expect(travelDistance({ distanceKm: 7 })).toBe(7)
+    expect(travelDistance({ distanceKm: 7, travelKm: 3.5 })).toBe(3.5)
+    expect(travelDistance({ distanceKm: null, travelKm: undefined })).toBeNull()
+  })
+
+  it('вільному дорога нічого не коштує понад близькість', () => {
+    expect(busyTravelPenalty(0, 15)).toBe(0)
+  })
+
+  it('зайнятому далека дорога коштує більше, ніж близька', () => {
+    expect(busyTravelPenalty(2, 9)).toBeLessThan(busyTravelPenalty(2, 2))
+    expect(busyTravelPenalty(2, 2)).toBeLessThan(0)
+  })
+
+  it('що більше замовлень на руках, то дорожча дорога', () => {
+    expect(busyTravelPenalty(2, 8)).toBeLessThan(busyTravelPenalty(1, 8))
+  })
+
+  it('зайнятий без авто далеко програє такому ж зайнятому з авто', () => {
+    const noCar = candidate({ activeOrders: 2, distanceKm: 8, travelKm: 8 })
+    const car = candidate({ activeOrders: 2, distanceKm: 8, travelKm: 4 })
+    expect(dispatchScore(car, NOW)).toBeGreaterThan(dispatchScore(noCar, NOW))
+  })
+
+  it('невідома відстань — без штрафу за дорогу', () => {
+    expect(busyTravelPenalty(2, null)).toBe(0)
+  })
+})
+
+// Формат роботи під обсяг заявки: на дуже велике першими — компанії й
+// бригади, на невелике — ті, хто працює сам. Перевіряється порядок, а не
+// числа: ваги в DISPATCH_CONFIG.CREW_FIT крутити можна.
+describe('формат роботи під обсяг заявки (crewFit)', () => {
+  const score = (
+    crew: 'SOLO' | 'TEAM' | 'COMPANY' | null,
+    effort: number | null,
+  ) => dispatchScore(candidate({ crewFit: crewFit(crew, effort) }), NOW)
+
+  it('дуже велике (9–10): компанія > бригада > одинак', () => {
+    expect(score('COMPANY', 10)).toBeGreaterThan(score('TEAM', 10))
+    expect(score('TEAM', 9)).toBeGreaterThan(score('SOLO', 9))
+  })
+
+  it('велике (7–8): бригада й компанія обходять одинака', () => {
+    expect(score('TEAM', 8)).toBeGreaterThan(score('SOLO', 8))
+    expect(score('COMPANY', 7)).toBeGreaterThan(score('SOLO', 7))
+  })
+
+  it('невелике (1–3): одинак > бригада > компанія', () => {
+    expect(score('SOLO', 2)).toBeGreaterThan(score('TEAM', 2))
+    expect(score('TEAM', 3)).toBeGreaterThan(score('COMPANY', 3))
+  })
+
+  it('середнє (4–6): формат не важить', () => {
+    expect(score('SOLO', 5)).toBe(score('TEAM', 5))
+    expect(score('TEAM', 5)).toBe(score('COMPANY', 5))
+  })
+
+  it('невідомий формат (старий профіль) чи обсяг — ні штрафу, ні переваги', () => {
+    expect(crewFit(null, 10)).toBe(0)
+    expect(crewFit(undefined, 2)).toBe(0)
+    expect(crewFit('COMPANY', null)).toBe(0)
+  })
+
+  // Мʼяко, а не фільтр: живий одинак не програє бригаді, яку не бачили добу.
+  it('одинак онлайн обходить бригаду, яку давно не бачили, навіть на великому', () => {
+    const solo = candidate({
+      crewFit: crewFit('SOLO', 8),
+      lastSeen: minutesAgo(1),
+    })
+    const team = candidate({
+      crewFit: crewFit('TEAM', 8),
+      lastSeen: daysAgo(2),
+    })
+    expect(dispatchScore(solo, NOW)).toBeGreaterThan(dispatchScore(team, NOW))
   })
 })

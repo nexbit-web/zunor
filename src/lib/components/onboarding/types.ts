@@ -1,5 +1,6 @@
 // Спільний тип даних онбордингу (load віддає його обом компонентам).
 import type { District } from '$lib/geo/districts'
+import type { Crew } from '$lib/masters/meta'
 
 export interface OnboardingCity {
   slug: string
@@ -18,6 +19,13 @@ export interface OnboardingMasterProfile {
   categories: string[]
   /** Як далеко готовий їздити, км; null — будь-де. */
   travelRadiusKm: number | null
+  /** Своє авто; null — не відповідав. */
+  hasVehicle?: boolean | null
+  /** Формат роботи ($lib/masters/meta); null — не відповідав. */
+  crew?: Crew | null
+  companyName?: string | null
+  /** Уміння в межах категорій: { skills } ($lib/masters/meta). */
+  metadata?: unknown
   description: string | null
   portfolioImages: string[]
   portfolioImagesPublicIds: string[]
@@ -57,6 +65,18 @@ export interface OnboardingData {
   }
 }
 
+/**
+ * Етап онбордингу — кілька кроків під однією темою («Розкажіть про себе»).
+ * Унизу смуга прогресу ділиться саме на етапи, а перед кожним стоїть
+ * заставка: людина бачить не «крок 7 з 16», а «другий етап із трьох».
+ */
+export interface WizardPhase {
+  id: string
+  title: string
+  /** Що буде на етапі й навіщо — під заголовком заставки. */
+  lead: string
+}
+
 /** Крок покрокового онбордингу (onboarding-wizard.svelte). */
 export interface WizardStep {
   id: string
@@ -66,4 +86,11 @@ export interface WizardStep {
   subtitle: string
   /** Крок можна пропустити: на ньому зʼявляється «Пропустити». */
   optional?: boolean
+  /** Етап, до якого належить крок (WizardPhase.id). */
+  phase?: string
+  /**
+   * step — питання; intro — заставка етапу; overview — огляд усіх етапів
+   * на самому початку. Заставки нічого не питають і не перевіряються.
+   */
+  kind?: 'step' | 'intro' | 'overview'
 }

@@ -52,6 +52,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
           verificationStatus: true,
           categories: true,
           travelRadiusKm: true,
+          metadata: true,
         },
       },
     },
@@ -134,6 +135,8 @@ export const GET: RequestHandler = async ({ locals, url }) => {
     masterDistrict: user.district,
     travelRadiusKm: mp.travelRadiusKm,
     districts: cityDistricts(allDistricts, user.city),
+    categories: mp.categories,
+    masterMeta: mp.metadata,
   })
   const declinedJobIds = scope.declinedIds
 

@@ -18,6 +18,17 @@ import {
   needsTrash,
 } from './presets'
 import type { CleaningMetadata, CleaningItem } from './title-gen'
+import { parseEffortAdjust } from '../effort'
+
+/** Послуги, обсяг яких рахується від площі (effort.ts). */
+const AREA_SERVICES = new Set([
+  'standard',
+  'deep',
+  'post-renovation',
+  'regular',
+])
+/** Стеля — торговий центр, а не помилка в нулях. */
+const AREA_MAX = 100_000
 
 export interface ValidationResult {
   ok: boolean
@@ -62,6 +73,20 @@ export function validateCleaningMetadata(raw: unknown): ValidationResult {
   }
 
   const clean: CleaningMetadata = { premise, service, when }
+
+  // ─── Площа — опціонально, лише там, де від неї залежить робота ───
+  // Для вікон і хімчистки вона нічого не каже (там рахуються вікна й
+  // предмети), а в заявці лише плутала б майстра.
+  if (AREA_SERVICES.has(service) && m.areaM2 != null && m.areaM2 !== '') {
+    const area = Number(m.areaM2)
+    if (Number.isInteger(area) && area >= 1 && area <= AREA_MAX) {
+      clean.areaM2 = area
+    }
+  }
+
+  // ─── Поправка асистента до обсягу — лише ±1 (див. categories/effort) ───
+  const adjust = parseEffortAdjust(m.effortAdjust)
+  if (adjust !== 0) clean.effortAdjust = adjust
 
   // ─── Житлові послуги: кімнати + поверх + ліфт ───
   if (needsRooms(service)) {

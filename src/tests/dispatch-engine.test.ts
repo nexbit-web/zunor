@@ -537,3 +537,221 @@ describe('памʼять диспетчера', () => {
     await expect(markResponded(JOB, 'm1')).resolves.toBeUndefined()
   })
 })
+
+// Анкета майстра → підбір. Відповіді лежать у MasterProfile.metadata, а
+// що з ними робити, каже категорія (categories/matching).
+describe('уміння, авто й команда з анкети майстра', () => {
+  const CLEANING = 'prybyrannya'
+  const NEAR = 'center'
+
+  /**
+   * Майстер із відповідями анкети: авто й формат — колонки профілю,
+   * уміння — metadata.skills.
+   */
+  function skilled(
+    id: string,
+    answers: {
+      skills?: Record<string, unknown>
+      hasVehicle?: boolean | null
+      crew?: 'SOLO' | 'TEAM' | 'COMPANY' | null
+    },
+    district: string | null = NEAR,
+  ) {
+    const m = master(id, district)
+    return {
+      ...m,
+      masterProfile: {
+        ...m.masterProfile,
+        hasVehicle: answers.hasVehicle ?? null,
+        crew: answers.crew ?? null,
+        metadata: answers.skills ? { skills: answers.skills } : null,
+      },
+    }
+  }
+
+  const cleaner = (
+    services: string[],
+    premises: string[] = ['home', 'business'],
+    extra: { hasVehicle?: boolean; crew?: 'SOLO' | 'TEAM' | 'COMPANY' } = {},
+  ) => ({ skills: { [CLEANING]: { services, premises } }, ...extra })
+
+  const cleaningJob = (metadata: Record<string, unknown>, patch = {}) =>
+    aged(20, { category: CLEANING, district: NEAR, metadata, ...patch })
+
+  it('заявка й профіль читаються разом із відповідями й обсягом', async () => {
+    prisma.user.findMany.mockResolvedValue([master('m1')])
+    await decide(JOB)
+
+    const jobSelect = prisma.job.findUnique.mock.calls[0][0].select
+    expect(jobSelect.metadata).toBe(true)
+    expect(jobSelect.effort).toBe(true)
+    const select = prisma.user.findMany.mock.calls[0][0].select
+    expect(select.masterProfile.select).toMatchObject({
+      metadata: true,
+      hasVehicle: true,
+      crew: true,
+    })
+  })
+
+  // Головна скарга: «миє лише вікна» отримував генеральні прибирання.
+  it('майстер, який цього не робить, не отримує заявку навіть в останній хвилі', async () => {
+    prisma.job.findUnique.mockResolvedValue(
+      cleaningJob({ service: 'deep', premise: 'apartment' }),
+    )
+    prisma.user.findMany.mockResolvedValue([
+      skilled('windows-only', cleaner(['windows'])),
+      skilled('all-round', cleaner(['standard', 'deep', 'windows'])),
+    ])
+
+    const d = wave(await decide(JOB))
+    expect(ids(d)).toEqual(['all-round'])
+  })
+
+  it('хто не відповідав на анкету — отримує все, як до неї', async () => {
+    prisma.job.findUnique.mockResolvedValue(
+      cleaningJob({ service: 'sofa', premise: 'apartment' }),
+    )
+    prisma.user.findMany.mockResolvedValue([master('legacy', NEAR)])
+
+    expect(ids(await decide(JOB))).toEqual(['legacy'])
+  })
+
+  it('лише житло — без офісів; «інше» помешкання — усім', async () => {
+    prisma.user.findMany.mockResolvedValue([
+      skilled('homes', cleaner(['standard'], ['home'])),
+      skilled('offices', cleaner(['standard'], ['business'])),
+    ])
+
+    prisma.job.findUnique.mockResolvedValue(
+      cleaningJob({ service: 'standard', premise: 'office' }),
+    )
+    expect(ids(await decide(JOB))).toEqual(['offices'])
+
+    prisma.job.findUnique.mockResolvedValue(
+      cleaningJob({ service: 'standard', premise: 'other' }),
+    )
+    expect(ids(await decide(JOB))).toEqual(['homes', 'offices'])
+  })
+
+  // Будівельне сміття треба вивезти: без авто — лише коли інших немає.
+  describe('сміття треба вивезти', () => {
+    const trashJob = () =>
+      cleaningJob({
+        service: 'post-renovation',
+        premise: 'apartment',
+        trash: 'needs-removal',
+      })
+    const all = ['post-renovation']
+
+    it('є кому з авто — майстра без авто не кличемо', async () => {
+      prisma.job.findUnique.mockResolvedValue(trashJob())
+      prisma.user.findMany.mockResolvedValue([
+        ...['c1', 'c2', 'c3'].map((id) =>
+          skilled(id, cleaner(all, undefined, { hasVehicle: true })),
+        ),
+        skilled('on-foot', cleaner(all, undefined, { hasVehicle: false })),
+      ])
+
+      const d = wave(await decide(JOB))
+      expect(d.lastCall).toBe(false)
+      expect(ids(d)).not.toContain('on-foot')
+    })
+
+    it('з авто нікого — заявка все одно доходить (останній дзвінок)', async () => {
+      prisma.job.findUnique.mockResolvedValue(trashJob())
+      prisma.user.findMany.mockResolvedValue([
+        skilled('on-foot', cleaner(all, undefined, { hasVehicle: false })),
+      ])
+
+      const d = wave(await decide(JOB))
+      expect(d.lastCall).toBe(true)
+      expect(ids(d)).toEqual(['on-foot'])
+    })
+
+    it('не відповідав про авто — не відсіюємо', async () => {
+      prisma.job.findUnique.mockResolvedValue(trashJob())
+      prisma.user.findMany.mockResolvedValue([skilled('unknown', cleaner(all))])
+
+      const d = wave(await decide(JOB))
+      expect(d.lastCall).toBe(false)
+      expect(ids(d)).toEqual(['unknown'])
+    })
+  })
+
+  // Обсяг заявки × формат роботи: м'яко, через чергу. Видно це на першій
+  // хвилі — у ній лише BATCH місць, і хто нагорі, той їх і займає.
+  describe('формат роботи під обсяг заявки', () => {
+    const BATCH = DISPATCH_CONFIG.WAVES[0].batchSize
+    const crowd = () => [
+      ...Array.from({ length: BATCH + 5 }, (_, i) =>
+        skilled(`solo${i}`, { crew: 'SOLO' }),
+      ),
+      skilled('company', { crew: 'COMPANY' }),
+    ]
+    const fresh = (patch: Record<string, unknown>) =>
+      job({ category: CLEANING, district: NEAR, metadata: {}, ...patch })
+
+    it('дуже велике: компанія — першою в першій хвилі', async () => {
+      prisma.job.findUnique.mockResolvedValue(fresh({ effort: 10 }))
+      prisma.user.findMany.mockResolvedValue(crowd())
+
+      expect(wave(await decide(JOB)).toNotify[0].id).toBe('company')
+    })
+
+    it('невелике: місця першої хвилі — тим, хто працює сам', async () => {
+      prisma.job.findUnique.mockResolvedValue(fresh({ effort: 2 }))
+      prisma.user.findMany.mockResolvedValue(crowd())
+
+      const d = wave(await decide(JOB))
+      expect(d.toNotify).toHaveLength(BATCH)
+      expect(ids(d)).not.toContain('company')
+    })
+
+    // Мʼяко, а не фільтр: невелика заявка компанію не відсіює — коли
+    // одинаків немає, вона її отримує.
+    it('невелике, а одинаків немає — компанія все одно отримує заявку', async () => {
+      prisma.job.findUnique.mockResolvedValue(fresh({ effort: 2 }))
+      prisma.user.findMany.mockResolvedValue([
+        skilled('company', { crew: 'COMPANY' }),
+      ])
+
+      expect(ids(await decide(JOB))).toEqual(['company'])
+    })
+
+    it('заявка старша за Job.effort — обсяг рахується з metadata', async () => {
+      prisma.job.findUnique.mockResolvedValue(
+        fresh({
+          effort: null,
+          metadata: {
+            premise: 'house',
+            service: 'post-renovation',
+            rooms: '4plus',
+          },
+        }),
+      )
+      prisma.user.findMany.mockResolvedValue(crowd())
+
+      expect(wave(await decide(JOB)).toNotify[0].id).toBe('company')
+    })
+  })
+
+  // Черемушки — 6 км від Центру: без авто це друге кільце, з авто — перше.
+  it('з авто майстер із сусіднього району потрапляє в перше кільце', async () => {
+    const FIRST = DISPATCH_CONFIG.WAVES[0].radiusKm
+    prisma.job.findUnique.mockResolvedValue(
+      job({ category: CLEANING, district: NEAR, metadata: {} }),
+    )
+    prisma.user.findMany.mockResolvedValue([
+      ...Array.from({ length: DISPATCH_CONFIG.MIN_RING_CANDIDATES }, (_, i) =>
+        master(`near${i}`, NEAR),
+      ),
+      skilled('car', { hasVehicle: true }, 'cheremushky'),
+      skilled('bus', { hasVehicle: false }, 'cheremushky'),
+    ])
+
+    const d = wave(await decide(JOB))
+    expect(d.radiusKm).toBe(FIRST)
+    expect(ids(d)).toContain('car')
+    expect(ids(d)).not.toContain('bus')
+  })
+})

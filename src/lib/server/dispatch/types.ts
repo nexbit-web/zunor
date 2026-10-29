@@ -15,6 +15,17 @@ export interface MasterSignals {
   readonly responseRate: number
   /** Від району майстра до району заявки, км; null — невідомо. */
   readonly distanceKm: number | null
+  /**
+   * Та сама відстань у часі дороги: з авто — коротша
+   * (VEHICLE_DISTANCE_FACTOR). Не задано — дорівнює distanceKm.
+   */
+  readonly travelKm?: number | null
+  /**
+   * Наскільки формат роботи майстра пасує обсягу заявки — готовий бал із
+   * crewFit (core/score.ts): бригада на будинок вище, компанія на кухню
+   * нижче. Не задано — 0.
+   */
+  readonly crewFit?: number
 }
 
 /** Майстер, якого можна покликати в хвилю. */
@@ -22,7 +33,11 @@ export interface Candidate extends MasterSignals {
   readonly id: string
   /** Скільки заявок йому слали за RECENT_LOAD_WINDOW_MIN. */
   readonly recentNotifications: number
-  /** Заявка в межах його власного радіуса виїзду (або межі немає). */
+  /**
+   * Заявка йому під силу без застережень: у межах його радіуса виїзду і
+   * нічого не бракує (авто, коли сміття треба вивезти). Ні — кличе лише
+   * останній дзвінок, коли майстрів замало.
+   */
   readonly withinReach: boolean
 }
 
@@ -49,6 +64,13 @@ export interface JobSnapshot {
   readonly status: JobStatus
   readonly proposalsCount: number
   readonly createdAt: Date
+  /** Job.metadata: з неї категорія каже, кому заявка підходить. */
+  readonly metadata: unknown
+  /**
+   * Обсяг 1–10: Job.effort, а для заявок, старших за поле, — порахований
+   * з metadata категорією. null — категорія обсягу не рахує.
+   */
+  readonly effort: number | null
   /** Остання відпрацьована хвиля; 0 — ще жодної. */
   readonly dispatchWave: number
   /** Кого по цій заявці вже покликали. */

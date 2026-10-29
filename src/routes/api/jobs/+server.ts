@@ -10,6 +10,7 @@ import { generateTitle } from '$lib/categories/cleaning/title-gen'
 import { sanitizeJobTitle, sanitizeJobDescription } from '$lib/server/job-copy'
 import { getDistricts } from '$lib/server/reference'
 import { cityDistricts, findDistrict } from '$lib/geo/districts'
+import { matchingFor } from '$lib/categories/matching'
 import type { RequestHandler } from './$types'
 
 // GET тут навмисно немає: пагіновану видачу заявок (і «мої», і стрічку
@@ -102,6 +103,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
       title,
       description: aiDescription ?? (note || null),
       metadata: metadata as unknown as object,
+      // Обсяг рахує сервер із перевіреної metadata — від нього залежить,
+      // кого розсилка кличе першим (dispatch/core/score.ts, crewFit).
+      effort: matchingFor(CATEGORY_SLUG).effort(metadata),
       currency: 'UAH',
       attachments,
       attachmentsPublicIds,

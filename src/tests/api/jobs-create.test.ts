@@ -36,9 +36,9 @@ function createEvent(userId: string, body: unknown) {
   return makeEvent({ locals: sessionUser(userId), body })
 }
 
-beforeEach(() => {
+/** Чиста база з клієнтом, містом і категорією — для кожного створення. */
+function primeDb() {
   resetPrisma()
-  resetInfra()
   prisma.user.findUnique.mockResolvedValue({ city: 'odesa' })
   prisma.category.findUnique.mockResolvedValue({ id: 'cat-1' })
   prisma.city.findUnique.mockResolvedValue({ id: 'city-1' })
@@ -49,6 +49,11 @@ beforeEach(() => {
     city: 'odesa',
     createdAt: new Date(),
   })
+}
+
+beforeEach(() => {
+  primeDb()
+  resetInfra()
 })
 
 describe('доступ і передумови', () => {
@@ -121,6 +126,60 @@ describe('валідація metadata', () => {
     expect(meta).not.toHaveProperty('evil')
     // Поверх поза діапазоном мовчки відкидається, заявка лишається валідною.
     expect(meta).not.toHaveProperty('floor')
+  })
+})
+
+// Від обсягу залежить, кого розсилка кличе першим, тож його рахує сервер
+// із перевіреної metadata. Число з тіла запиту — недовірений ввід.
+describe('обсяг заявки', () => {
+  const effortOf = () =>
+    prisma.job.create.mock.calls[0][0].data.effort as number
+
+  it('рахується сервером і пишеться в заявку', async () => {
+    await POST(createEvent(freshUser(), { metadata: validMetadata }))
+    expect(effortOf()).toBeGreaterThanOrEqual(1)
+    expect(effortOf()).toBeLessThanOrEqual(10)
+  })
+
+  it('effort з тіла запиту ігнорується', async () => {
+    await POST(createEvent(freshUser(), { metadata: validMetadata }))
+    const honest = effortOf()
+
+    primeDb()
+    await POST(
+      createEvent(freshUser(), {
+        metadata: { ...validMetadata, effort: 1 },
+        effort: 1,
+      }),
+    )
+    expect(effortOf()).toBe(honest)
+  })
+
+  // Поправка асистента проходить через браузер — тому лише на крок.
+  it('поправка з чернетки — не більше ніж на одиницю', async () => {
+    await POST(createEvent(freshUser(), { metadata: validMetadata }))
+    const base = effortOf()
+
+    primeDb()
+    await POST(
+      createEvent(freshUser(), {
+        metadata: { ...validMetadata, effortAdjust: 9 },
+      }),
+    )
+    expect(effortOf()).toBe(base)
+  })
+
+  it('більша площа — більший обсяг', async () => {
+    await POST(
+      createEvent(freshUser(), { metadata: { ...validMetadata, areaM2: 30 } }),
+    )
+    const small = effortOf()
+
+    primeDb()
+    await POST(
+      createEvent(freshUser(), { metadata: { ...validMetadata, areaM2: 400 } }),
+    )
+    expect(effortOf()).toBeGreaterThan(small)
   })
 })
 

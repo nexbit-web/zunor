@@ -44,6 +44,8 @@ const validMaster = {
   district: 'tairova',
   categories: ['cleaning'],
   description: 'я'.repeat(60),
+  vehicle: false,
+  crew: 'SOLO',
 }
 
 /** Ловить кинутий error() і повертає статус. */
@@ -417,5 +419,130 @@ describe('район і радіус виїзду', () => {
     expect(
       prisma.masterProfile.upsert.mock.calls[0][0].update.travelRadiusKm,
     ).toBeNull()
+  })
+})
+
+// Відповіді для підбору: від них залежить, які заявки до майстра дійдуть.
+// «Не відповів» означало б «отримуй усе» — той самий спам, від якого ці
+// питання рятують, тож вони обовʼязкові. Авто й формат роботи — колонки
+// MasterProfile, у metadata — лише вміння в межах категорії.
+describe('майстер: відповіді для підбору', () => {
+  const cleaner = {
+    ...validMaster,
+    categories: ['prybyrannya'],
+    vehicle: true,
+    crew: 'TEAM',
+    skills: {
+      prybyrannya: { services: ['windows', 'sofa'], premises: ['home'] },
+    },
+  }
+
+  type Written = {
+    hasVehicle: unknown
+    crew: unknown
+    companyName: unknown
+    metadata: unknown
+  }
+  const written = () =>
+    prisma.masterProfile.upsert.mock.calls[0][0] as {
+      create: Written
+      update: Written
+    }
+
+  it('авто й формат — у колонки, уміння — у metadata; і в новий профіль, і в оновлення', async () => {
+    await saveMasterProfile(USER, cleaner)
+
+    for (const data of [written().create, written().update]) {
+      expect(data.hasVehicle).toBe(true)
+      expect(data.crew).toBe('TEAM')
+      expect(data.companyName).toBeNull()
+      // vehicle/team у JSON більше не пишемо: одне джерело правди.
+      expect(data.metadata).toEqual({
+        skills: {
+          prybyrannya: { services: ['windows', 'sofa'], premises: ['home'] },
+        },
+      })
+    }
+  })
+
+  it('назва компанії зберігається для компанії', async () => {
+    await saveMasterProfile(USER, {
+      ...cleaner,
+      crew: 'COMPANY',
+      companyName: '  Чисто Сервіс  ',
+    })
+    expect(written().update.crew).toBe('COMPANY')
+    expect(written().update.companyName).toBe('Чисто Сервіс')
+  })
+
+  // Перейшов із компанії в «сам» — стара вивіска не має лишитись у профілі.
+  it('не компанія — назву стираємо, навіть якщо її надіслали', async () => {
+    await saveMasterProfile(USER, { ...cleaner, companyName: 'Чужа вивіска' })
+    expect(written().update.companyName).toBeNull()
+  })
+
+  const bad: [string, unknown][] = [
+    ['без відповіді про авто', { ...cleaner, vehicle: undefined }],
+    ['авто рядком', { ...cleaner, vehicle: 'так' }],
+    ['без формату роботи', { ...cleaner, crew: null }],
+    ['вигаданий формат роботи', { ...cleaner, crew: 'ARMY' }],
+    [
+      'старе поле team замість формату',
+      { ...cleaner, crew: undefined, team: true },
+    ],
+    [
+      'задовга назва компанії',
+      { ...cleaner, crew: 'COMPANY', companyName: 'я'.repeat(81) },
+    ],
+    [
+      'прибирання без жодного виду',
+      {
+        ...cleaner,
+        skills: { prybyrannya: { services: [], premises: ['home'] } },
+      },
+    ],
+    [
+      'прибирання без обʼєктів',
+      {
+        ...cleaner,
+        skills: { prybyrannya: { services: ['deep'], premises: [] } },
+      },
+    ],
+    ['прибирання без умінь зовсім', { ...cleaner, skills: undefined }],
+  ]
+
+  for (const [label, body] of bad) {
+    it(`${label} → 400`, async () => {
+      expect(await failsWith(() => saveMasterProfile(USER, body))).toBe(400)
+      expect(prisma.$transaction).not.toHaveBeenCalled()
+    })
+  }
+
+  // Ключі з довідника, без сміття з клієнта: умова розсилки будується з
+  // них напряму, і вигадана послуга просто нікому не відповідала б.
+  it('невідомі послуги й обʼєкти відкидаються, порядок — довідника', async () => {
+    await saveMasterProfile(USER, {
+      ...cleaner,
+      skills: {
+        prybyrannya: {
+          services: ['sofa', 'hack', 'standard', 'sofa'],
+          premises: ['business', 'mars'],
+        },
+      },
+    })
+
+    expect(written().update.metadata).toMatchObject({
+      skills: {
+        prybyrannya: { services: ['standard', 'sofa'], premises: ['business'] },
+      },
+    })
+  })
+
+  it('уміння категорії, якої майстер не обрав, не пишуться', async () => {
+    await saveMasterProfile(USER, {
+      ...validMaster,
+      skills: { prybyrannya: { services: ['deep'], premises: ['home'] } },
+    })
+    expect(written().update.metadata).toMatchObject({ skills: {} })
   })
 })

@@ -2,10 +2,14 @@
   Профіль виконавця — у двох подачах з одним станом:
 
   • onboarding — покроковий майстер (OnboardingWizard): одне питання на
-    екран, від простого до складного — імʼя, фото, послуги, район, як
-    далеко їздити, телефон, опис, портфоліо — і в кінці перевірка всього
-    разом. Довга
+    екран, від простого до складного — імʼя, фото, які прибирання, де
+    (житло чи офіси), район, авто, як далеко їздити, команда, телефон,
+    опис, портфоліо — і в кінці перевірка всього разом. Довга
     анкета з восьми полів лякала ще до першого символу;
+
+  Питання «які прибирання», «де», «авто» й «команда» — для підбору: від
+  них залежить, які заявки до майстра взагалі дійдуть і яким він буде в
+  черзі (categories/matching, server/dispatch). Тому вони обовʼязкові.
   • edit — та сама форма одним екраном на сторінці налаштувань.
 
   Поля описані сніпетами один раз і збираються в обидві подачі, тож
@@ -40,6 +44,8 @@
   import OnboardingWizard from './onboarding-wizard.svelte'
   import DistrictSelect from './district-select.svelte'
   import TravelRadiusPicker from './travel-radius.svelte'
+  import ChoiceTiles from './choice-tiles.svelte'
+  import StageArt from './stage-art.svelte'
   import { cityDistricts, findDistrict } from '$lib/geo/districts'
   import {
     isTravelRadius,
@@ -48,13 +54,39 @@
   } from '$lib/geo/travel'
   import { cn } from '$lib/utils'
   import toast from 'svelte-hot-french-toast'
+  import ServiceIcon from '$lib/categories/cleaning/service-icon.svelte'
+  import { CATEGORY_SLUG, SERVICES } from '$lib/categories/cleaning/presets'
+  import {
+    PREMISE_GROUPS,
+    SERVICE_HINTS,
+    parseCleaningSkills,
+    type PremiseGroup,
+  } from '$lib/categories/cleaning/skills'
+  import {
+    COMPANY_NAME_MAX,
+    CREW_OPTIONS,
+    VEHICLE_OPTIONS,
+    crewLabel,
+    parseMasterSkills,
+    vehicleLabel,
+    type Crew,
+  } from '$lib/masters/meta'
   import CheckIcon from '@lucide/svelte/icons/check'
   import ChevronsUpDownIcon from '@lucide/svelte/icons/chevrons-up-down'
-  import { UserRound, Phone, MapPin } from 'lucide-svelte'
+  import { UserRound, Phone, MapPin, Briefcase } from 'lucide-svelte'
+  // Пер-іконні імпорти: плитки вибору чекають компонент Svelte 5, а бочка
+  // lucide-svelte віддає старі класові.
+  import Car from '@lucide/svelte/icons/car'
+  import Bus from '@lucide/svelte/icons/bus'
+  import User from '@lucide/svelte/icons/user'
+  import Users from '@lucide/svelte/icons/users'
+  import House from '@lucide/svelte/icons/house'
+  import Building2 from '@lucide/svelte/icons/building-2'
   import AlertCircleIcon from '@lucide/svelte/icons/alert-circle'
   import CircleAlertIcon from '@lucide/svelte/icons/circle-alert'
   import type {
     OnboardingData,
+    WizardPhase,
     WizardStep,
   } from '$lib/components/onboarding/types'
 
@@ -74,54 +106,119 @@
   /** Сервер приймає до 5. Змініть тут, якщо треба інакше. */
   const MAX_CATS = 3
 
-  // Порядок — від того, що людина знає напамʼять, до того, над чим треба
-  // подумати: імʼя й фото заповнюються за секунди й дають відчуття руху,
-  // опис і портфоліо — наприкінці, коли половина шляху вже позаду.
+  // Три етапи, як в анкеті господаря на Airbnb: огляд на початку,
+  // заставка перед кожним етапом і смуга прогресу по етапах. Дванадцять
+  // питань підряд втомлюють; «другий етап із трьох» — ні.
+  const PHASES: readonly WizardPhase[] = [
+    {
+      id: 'you',
+      title: 'Познайомимось',
+      lead: 'Імʼя, фото й телефон. Клієнти обирають людей, а не нікнейми, а номер побачить лише той, хто обере саме вас.',
+    },
+    {
+      id: 'work',
+      title: 'Яку роботу берете',
+      lead: 'Які прибирання робите, де живете й як добираєтесь. З цього ми підбираємо заявки — лише ті, що вам справді підходять.',
+    },
+    {
+      id: 'profile',
+      title: 'Покажіть себе клієнтам',
+      lead: 'Кілька слів про досвід і фото робіт — і профіль іде на перевірку. Після неї заявки почнуть приходити самі.',
+    },
+  ]
+
+  // Порядок усередині етапів — від того, що людина знає напамʼять, до
+  // того, над чим треба подумати: імʼя й фото заповнюються за секунди й
+  // дають відчуття руху, опис і портфоліо — наприкінці.
   const ALL_STEPS: readonly WizardStep[] = [
     {
+      id: 'overview',
+      kind: 'overview',
+      title: 'Стати майстром Zunor — просто',
+      subtitle: '',
+    },
+    { id: 'intro-you', kind: 'intro', phase: 'you', title: '', subtitle: '' },
+    {
       id: 'name',
+      phase: 'you',
       title: 'Як вас звати?',
       subtitle:
         'Справжнє імʼя — клієнти довіряють людям, а не нікнеймам. Username стане адресою вашої сторінки.',
     },
     {
       id: 'photo',
+      phase: 'you',
       title: 'Додайте своє фото',
       subtitle:
         'Майстрів із фото обличчя обирають частіше. Лише ви — без логотипів і картинок.',
       optional: true,
     },
     {
+      id: 'phone',
+      phase: 'you',
+      title: 'Ваш номер телефону',
+      subtitle:
+        'Його побачить лише клієнт, який обрав саме вас, — і лише після підтвердження замовлення.',
+    },
+    { id: 'intro-work', kind: 'intro', phase: 'work', title: '', subtitle: '' },
+    {
       id: 'services',
-      title: 'Що ви робите?',
-      subtitle: `Оберіть до ${MAX_CATS} послуг — заявки приходитимуть лише з них.`,
+      phase: 'work',
+      title: 'Які прибирання ви робите?',
+      subtitle:
+        'Заявки приходитимуть лише з обраних — без того, чим ви не займаєтесь.',
+    },
+    {
+      id: 'premises',
+      phase: 'work',
+      title: 'Де готові прибирати?',
+      subtitle:
+        'Офісні заявки не надсилатимемо тим, хто прибирає лише житло, — і навпаки.',
     },
     {
       id: 'city',
+      phase: 'work',
       title: 'Де ви живете?',
       subtitle:
         'Заявки з вашого району й сусідніх приходитимуть першими — менше часу в дорозі.',
     },
     {
+      id: 'transport',
+      phase: 'work',
+      title: 'Як добираєтесь на замовлення?',
+      subtitle: 'Підбираємо заявки так, щоб дорога не зʼїдала ваш день.',
+    },
+    {
       id: 'radius',
+      phase: 'work',
       title: 'Як далеко готові їздити?',
       subtitle:
         'Далі цієї відстані заявки не надсилатимемо. Чим ширше коло — тим більше заявок.',
     },
     {
-      id: 'phone',
-      title: 'Ваш номер телефону',
+      id: 'crew',
+      phase: 'work',
+      title: 'Як ви працюєте?',
       subtitle:
-        'Його побачить лише клієнт, який обрав саме вас, — і лише після підтвердження замовлення.',
+        'Невеликі заявки першими отримують ті, хто працює сам, а будинки, офіси й після ремонту — бригади та компанії.',
+    },
+    {
+      id: 'intro-profile',
+      kind: 'intro',
+      phase: 'profile',
+      title: '',
+      subtitle: '',
     },
     {
       id: 'about',
+      phase: 'profile',
       title: 'Розкажіть про себе',
       subtitle:
         'Досвід, що берете з собою, чим відрізняєтесь. Це перше, що читає клієнт.',
     },
     {
       id: 'portfolio',
+      phase: 'profile',
       title: 'Покажіть свою роботу',
       subtitle:
         'Фото «до / після» переконують краще за слова. Можна додати й пізніше.',
@@ -129,6 +226,7 @@
     },
     {
       id: 'review',
+      phase: 'profile',
       title: 'Усе правильно?',
       subtitle:
         'Так вас бачитимуть клієнти. Після надсилання профіль перевірить модератор.',
@@ -159,8 +257,26 @@
     mp && isTravelRadius(mp.travelRadiusKm) ? mp.travelRadiusKm : null,
   )
 
-  let categories = $state<string[]>(mp?.categories ?? [])
+  // Категорія поки одна — «Прибирання», і чіп з одним варіантом був би
+  // питанням без вибору. Її обираємо самі, а питаємо те, що в ній
+  // справді різниться: які саме прибирання.
+  const onlyCategory = untrack(() =>
+    data.categories.length === 1 ? data.categories[0].slug : null,
+  )
+  let categories = $state<string[]>(
+    mp?.categories?.length ? mp.categories : onlyCategory ? [onlyCategory] : [],
+  )
   let description = $state(mp?.description ?? '')
+
+  // ─── Відповіді для підбору ───
+  const savedSkills = parseCleaningSkills(
+    parseMasterSkills(mp?.metadata)[CATEGORY_SLUG],
+  )
+  let services = $state<string[]>(savedSkills?.services ?? [])
+  let premises = $state<PremiseGroup[]>(savedSkills?.premises ?? [])
+  let vehicle = $state<boolean | null>(mp?.hasVehicle ?? null)
+  let crew = $state<Crew | null>(mp?.crew ?? null)
+  let companyName = $state(mp?.companyName ?? '')
 
   let portfolioImages = $state<string[]>(mp?.portfolioImages ?? [])
   let portfolioImagesPublicIds = $state<string[]>(
@@ -181,6 +297,10 @@
     district: false,
     desc: false,
     categories: false,
+    services: false,
+    premises: false,
+    vehicle: false,
+    crew: false,
   })
 
   // ─── Телефон ───
@@ -266,6 +386,31 @@
       ? 'Оберіть хоча б одну послугу'
       : '',
   )
+
+  /** Прибирання серед категорій — тоді питаємо, які саме й де. */
+  const cleans = $derived(categories.includes(CATEGORY_SLUG))
+  const servicesError = $derived(
+    touched.services && cleans && services.length === 0
+      ? 'Оберіть хоча б один вид прибирання'
+      : '',
+  )
+  const premisesError = $derived(
+    touched.premises && cleans && premises.length === 0
+      ? 'Оберіть хоча б один варіант'
+      : '',
+  )
+  const vehicleError = $derived(
+    touched.vehicle && vehicle === null ? 'Оберіть один із варіантів' : '',
+  )
+  const crewError = $derived(
+    touched.crew && crew === null ? 'Оберіть один із варіантів' : '',
+  )
+  const serviceNames = $derived(
+    SERVICES.filter((s) => services.includes(s.key)).map((s) => s.label),
+  )
+  const premiseNames = $derived(
+    PREMISE_GROUPS.filter((g) => premises.includes(g.key)).map((g) => g.label),
+  )
   const descError = $derived(
     touched.desc && !descValid
       ? descTrim.length < DESC_MIN
@@ -281,6 +426,9 @@
       !!city &&
       districtValid &&
       categories.length > 0 &&
+      (!cleans || (services.length > 0 && premises.length > 0)) &&
+      vehicle !== null &&
+      crew !== null &&
       descValid,
   )
 
@@ -292,7 +440,10 @@
 
   // ─── Кроки ───
   const STEPS = $derived(
-    needsDistrict ? ALL_STEPS : ALL_STEPS.filter((s) => s.id !== 'radius'),
+    ALL_STEPS.filter(
+      (s) =>
+        (needsDistrict || s.id !== 'radius') && (cleans || s.id !== 'premises'),
+    ),
   )
   const stepIndex = (id: string) => STEPS.findIndex((s) => s.id === id)
 
@@ -302,7 +453,13 @@
       case 'name':
         return nameValid && usernameValid === true
       case 'services':
-        return categories.length > 0
+        return categories.length > 0 && (!cleans || services.length > 0)
+      case 'premises':
+        return !cleans || premises.length > 0
+      case 'transport':
+        return vehicle !== null
+      case 'crew':
+        return crew !== null
       case 'city':
         return !!city && districtValid
       case 'phone':
@@ -328,6 +485,16 @@
         break
       case 'services':
         touched.categories = true
+        touched.services = true
+        break
+      case 'premises':
+        touched.premises = true
+        break
+      case 'transport':
+        touched.vehicle = true
+        break
+      case 'crew':
+        touched.crew = true
         break
       case 'city':
         touched.city = true
@@ -357,6 +524,36 @@
     tick().then(() => cityTriggerRef?.focus())
   }
 
+  const SERVICE_OPTIONS = SERVICES.map((s) => ({
+    value: s.key as string,
+    label: s.label,
+    hint: SERVICE_HINTS[s.key],
+  }))
+  const PREMISE_ICONS = { home: House, business: Building2 }
+  const PREMISE_OPTIONS = PREMISE_GROUPS.map((g) => ({
+    value: g.key as PremiseGroup,
+    label: g.label,
+    hint: g.hint,
+    icon: PREMISE_ICONS[g.key],
+  }))
+  const TRANSPORT_OPTIONS = VEHICLE_OPTIONS.map((o) => ({
+    ...o,
+    icon: o.value ? Car : Bus,
+  }))
+  const CREW_ICONS = { SOLO: User, TEAM: Users, COMPANY: Building2 }
+  const CREW_TILES = CREW_OPTIONS.map((o) => ({
+    ...o,
+    icon: CREW_ICONS[o.value],
+  }))
+
+  const allServices = $derived(services.length === SERVICES.length)
+
+  /** Універсалів більшість — «Обрати всі» замість шести кліків. */
+  function toggleAllServices(): void {
+    services = allServices ? [] : SERVICES.map((s) => s.key)
+    touched.services = true
+  }
+
   function toggleCategory(slug: string): void {
     if (categories.includes(slug)) {
       categories = categories.filter((c) => c !== slug)
@@ -380,6 +577,10 @@
       district: true,
       desc: true,
       categories: true,
+      services: true,
+      premises: true,
+      vehicle: true,
+      crew: true,
     }
     if (!formValid) {
       toast.error('Перевірте заповнені поля')
@@ -399,6 +600,10 @@
           district: needsDistrict ? district : null,
           travelRadiusKm: travelRadius,
           categories,
+          vehicle,
+          crew,
+          companyName: crew === 'COMPANY' ? companyName.trim() : null,
+          skills: cleans ? { [CATEGORY_SLUG]: { services, premises } } : {},
           description: descTrim,
           avatar: avatarUrl || null,
           avatarPublicId: avatarUrl ? avatarPublicId || null : null,
@@ -603,6 +808,98 @@
   </div>
 {/snippet}
 
+{#snippet serviceTileIcon(key: string)}
+  <ServiceIcon service={key} class="size-6" />
+{/snippet}
+
+{#snippet stageArt(id: string, size: 'lg' | 'sm')}
+  <StageArt kind={id} {size} />
+{/snippet}
+
+{#snippet servicesControl()}
+  <div class="mb-3 flex items-center justify-between gap-3">
+    <span class="text-[13px] text-muted-foreground">
+      {services.length > 0
+        ? `Обрано ${services.length} з ${SERVICES.length}`
+        : 'Можна обрати кілька'}
+    </span>
+    <button
+      type="button"
+      onclick={toggleAllServices}
+      class="cursor-pointer rounded-sm text-[13px] font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+    >
+      {allServices ? 'Зняти всі' : 'Обрати всі'}
+    </button>
+  </div>
+  <ChoiceTiles
+    name="services"
+    label="Які прибирання ви робите"
+    multiple
+    bind:values={services}
+    options={SERVICE_OPTIONS}
+    iconFor={serviceTileIcon}
+    invalid={!!servicesError}
+    onpick={() => (touched.services = true)}
+  />
+  <FieldError text={servicesError} />
+{/snippet}
+
+{#snippet premisesControl()}
+  <ChoiceTiles
+    name="premises"
+    label="Де готові прибирати"
+    multiple
+    bind:values={premises}
+    options={PREMISE_OPTIONS}
+    invalid={!!premisesError}
+    onpick={() => (touched.premises = true)}
+  />
+  <FieldError text={premisesError} />
+{/snippet}
+
+{#snippet transportControl()}
+  <ChoiceTiles
+    name="vehicle"
+    label="Як добираєтесь на замовлення"
+    bind:value={vehicle}
+    options={TRANSPORT_OPTIONS}
+    invalid={!!vehicleError}
+    onpick={() => (touched.vehicle = true)}
+  />
+  <FieldError text={vehicleError} />
+{/snippet}
+
+{#snippet crewControl()}
+  <ChoiceTiles
+    name="crew"
+    label="Як ви працюєте"
+    bind:value={crew}
+    options={CREW_TILES}
+    invalid={!!crewError}
+    onpick={() => (touched.crew = true)}
+  />
+  <FieldError text={crewError} />
+  <!-- Назва — лише компанії й необовʼязкова: вивіска допомагає довіри, але
+       вимагати її (а тим паче ЄДРПОУ) на старті — зайве тертя. -->
+  {#if crew === 'COMPANY'}
+    <div class="mt-4">
+      <SettingsField label="Назва компанії" for="companyName">
+        {#snippet control()}
+          <Input
+            id="companyName"
+            icon={Briefcase}
+            bind:value={companyName}
+            placeholder="Необовʼязково"
+            maxlength={COMPANY_NAME_MAX}
+            autocomplete="organization"
+            class="bg-background"
+          />
+        {/snippet}
+      </SettingsField>
+    </div>
+  {/if}
+{/snippet}
+
 {#snippet descriptionControl(rows: number = 5)}
   <Textarea
     id="description"
@@ -697,8 +994,19 @@
       {@render photoControl(true)}
     </div>
   {:else if id === 'services'}
-    {@render categoriesControl()}
-    <FieldError text={categoriesError} />
+    {#if !onlyCategory}
+      {@render categoriesControl()}
+      <FieldError text={categoriesError} />
+    {/if}
+    {#if cleans}
+      <div class={onlyCategory ? '' : 'mt-6'}>{@render servicesControl()}</div>
+    {/if}
+  {:else if id === 'premises'}
+    {@render premisesControl()}
+  {:else if id === 'transport'}
+    {@render transportControl()}
+  {:else if id === 'crew'}
+    {@render crewControl()}
   {:else if id === 'city'}
     <SettingsField label="Місто" error={cityError} control={cityControl} />
     {#if needsDistrict}
@@ -757,15 +1065,34 @@
     <dl class="mt-5 divide-y divide-border border-y border-border">
       {@render reviewRow('Імʼя', 'name', `${nameTrim} · @${username}`)}
       {@render reviewRow('Фото', 'photo', avatarUrl ? 'Додано' : '')}
-      {@render reviewRow('Послуги', 'services', categoryNames.join(', '))}
+      {@render reviewRow(
+        'Послуги',
+        'services',
+        (cleans ? serviceNames : categoryNames).join(', '),
+      )}
+      {#if cleans}
+        {@render reviewRow(
+          'Де прибираєте',
+          'premises',
+          premiseNames.join(', '),
+        )}
+      {/if}
       {@render reviewRow(
         'Де живете',
         'city',
         [districtName, cityName].filter(Boolean).join(', '),
       )}
+      {@render reviewRow('Дорога', 'transport', vehicleLabel(vehicle))}
       {#if needsDistrict}
         {@render reviewRow('Виїзд', 'radius', travelLabel(travelRadius))}
       {/if}
+      {@render reviewRow(
+        'Як працюєте',
+        'crew',
+        [crewLabel(crew), crew === 'COMPANY' ? companyName.trim() : '']
+          .filter(Boolean)
+          .join(' · '),
+      )}
       {@render reviewRow('Телефон', 'phone', `+380 ${phoneDisplay}`)}
       {@render reviewRow('Про себе', 'about', descTrim)}
       {@render reviewRow(
@@ -780,6 +1107,9 @@
 {#if mode === 'onboarding'}
   <OnboardingWizard
     steps={STEPS}
+    phases={PHASES}
+    art={stageArt}
+    helpHref="/master/about"
     bind:current={step}
     validate={validateStep}
     onExit={onBack}
@@ -863,6 +1193,16 @@
             {@render radiusControl()}
           </SettingsBlock>
         {/if}
+
+        <SettingsBlock>
+          <p class="mb-2 text-sm">Як добираєтесь на замовлення</p>
+          {@render transportControl()}
+        </SettingsBlock>
+
+        <SettingsBlock>
+          <p class="mb-2 text-sm">Як ви працюєте</p>
+          {@render crewControl()}
+        </SettingsBlock>
       </SettingsGroup>
 
       <!-- Заголовок картки замінив собою підпис «Що ви виконуєте», який
@@ -870,12 +1210,26 @@
            те саме. Обмеження поїхало у виноску під карткою. -->
       <SettingsGroup
         title="Що ви виконуєте"
-        footnote="До {MAX_CATS} категорій. Заявки надходитимуть лише з них."
+        footnote="Заявки надходитимуть лише з обраних прибирань і обʼєктів."
       >
-        <SettingsBlock>
-          {@render categoriesControl()}
-          <FieldError text={categoriesError} />
-        </SettingsBlock>
+        {#if !onlyCategory}
+          <SettingsBlock>
+            {@render categoriesControl()}
+            <FieldError text={categoriesError} />
+          </SettingsBlock>
+        {/if}
+
+        {#if cleans}
+          <SettingsBlock>
+            <p class="mb-2 text-sm">Які прибирання робите</p>
+            {@render servicesControl()}
+          </SettingsBlock>
+
+          <SettingsBlock>
+            <p class="mb-2 text-sm">Де готові прибирати</p>
+            {@render premisesControl()}
+          </SettingsBlock>
+        {/if}
 
         <SettingsBlock>
           <Label for="description" class="mb-2 text-sm font-normal">

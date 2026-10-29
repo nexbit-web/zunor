@@ -1,15 +1,21 @@
 // Кільця розсилки: кого кличе хвиля залежно від відстані до заявки.
 
 import { DISPATCH_CONFIG } from '../config'
+import { travelDistance } from './score'
 import type { Candidate } from '../types'
 
-/** null-радіус — усе місто. Невідома відстань потрапляє лише туди. */
+/**
+ * null-радіус — усе місто. Невідома відстань потрапляє лише туди.
+ * Відстань — у часі дороги: майстер з авто входить у кільце раніше за
+ * сусіда без нього (travelKm).
+ */
 export function withinRadius(
-  c: Pick<Candidate, 'distanceKm'>,
+  c: Pick<Candidate, 'distanceKm' | 'travelKm'>,
   radiusKm: number | null,
 ): boolean {
   if (radiusKm === null) return true
-  return c.distanceKm !== null && c.distanceKm <= radiusKm
+  const km = travelDistance(c)
+  return km !== null && km <= radiusKm
 }
 
 /**
@@ -32,7 +38,7 @@ export function acceptsDistance(
  */
 export function ringRadius(
   wave: number,
-  candidates: readonly Pick<Candidate, 'distanceKm'>[],
+  candidates: readonly Pick<Candidate, 'distanceKm' | 'travelKm'>[],
   jobLocated: boolean,
 ): number | null {
   if (!jobLocated) return null

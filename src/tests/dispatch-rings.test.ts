@@ -114,3 +114,22 @@ describe('ringRadius', () => {
     expect(ringRadius(99, many(MIN, 0), true)).toBeNull()
   })
 })
+
+// Кільця міряють відстань у часі дороги: майстер з авто за 5 км входить
+// у перше кільце (3 км) разом із сусідами без авто.
+describe('кільця й авто', () => {
+  it('з авто в кільце за часом дороги, а не за кілометрами', () => {
+    const withCar = { ...at(5), travelKm: 2.5 }
+    expect(withinRadius(withCar, 3)).toBe(true)
+    expect(withinRadius(at(5), 3)).toBe(false)
+  })
+
+  it('travelKm не задано — кільце за кілометрами, як раніше', () => {
+    expect(withinRadius(at(2), 3)).toBe(true)
+  })
+
+  it('межа самого майстра лишається в кілометрах', () => {
+    // «До 5 км» — слово майстра; авто його не розширює.
+    expect(acceptsDistance(8, 5)).toBe(false)
+  })
+})

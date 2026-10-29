@@ -13,7 +13,9 @@ import { safeTrigger, channels, events } from './pusher'
 import { validateUsername } from '$lib/username'
 import { cityDistricts, findDistrict, type District } from '$lib/geo/districts'
 import { isTravelRadius } from '$lib/geo/travel'
-import type { Role } from '../../generated/prisma/client'
+import { matchingFor } from '$lib/categories/matching'
+import { COMPANY_NAME_MAX, isCrew } from '$lib/masters/meta'
+import type { Prisma, Role } from '../../generated/prisma/client'
 import { invalidateAccount } from './account-cache'
 import { forgetMasterPage } from './master-page'
 import { refreshSessionUser } from './sessions'
@@ -110,6 +112,10 @@ export async function loadProfileData(userId: string) {
           select: {
             categories: true,
             travelRadiusKm: true,
+            hasVehicle: true,
+            crew: true,
+            companyName: true,
+            metadata: true,
             description: true,
             portfolioImages: true,
             portfolioImagesPublicIds: true,
@@ -303,6 +309,40 @@ export async function saveMasterProfile(
     throw error(400, `Опис: ${DESC_MIN}–${DESC_MAX} символів`)
   }
 
+  // Відповіді для підбору. Обовʼязкові: від них залежить, які заявки до
+  // майстра дійдуть, і «не відповів» тут означало б «отримуй усе підряд» —
+  // той самий спам, від якого ці питання рятують.
+  if (typeof input.vehicle !== 'boolean') {
+    throw error(400, 'Вкажіть, як добираєтесь на замовлення')
+  }
+  const hasVehicle = input.vehicle
+  if (!isCrew(input.crew)) {
+    throw error(400, 'Вкажіть, як ви працюєте: самі, бригадою чи компанією')
+  }
+  const crew = input.crew
+  // Назва — лише в компанії: у решти поле мовчки чиститься, щоб зміна
+  // формату не лишала в профілі чужої вивіски.
+  const companyName =
+    crew === 'COMPANY' ? asString(input.companyName) || null : null
+  if (companyName && companyName.length > COMPANY_NAME_MAX) {
+    throw error(400, `Назва компанії: до ${COMPANY_NAME_MAX} символів`)
+  }
+  const rawSkills =
+    input.skills && typeof input.skills === 'object'
+      ? (input.skills as Record<string, unknown>)
+      : {}
+  const skills: Record<string, unknown> = {}
+  for (const category of categories) {
+    const check = matchingFor(category).validateSkills(rawSkills[category])
+    if (!check) continue
+    if (!check.ok) throw error(400, check.error)
+    skills[category] = check.value
+  }
+  // У metadata — лише вміння в межах категорії; авто й формат роботи —
+  // колонки. Уміння — вихід валідаторів категорій, тобто звичайні обʼєкти
+  // з рядків; unknown у типі лише тому, що форма умінь — справа категорії.
+  const metadata = { skills } as unknown as Prisma.InputJsonObject
+
   const avatar = sanitizeAvatar(input.avatar)
   const avatarPublicId =
     typeof input.avatarPublicId === 'string' ? input.avatarPublicId : null
@@ -379,6 +419,10 @@ export async function saveMasterProfile(
         userId,
         categories,
         travelRadiusKm,
+        hasVehicle,
+        crew,
+        companyName,
+        metadata,
         description,
         portfolioImages,
         portfolioImagesPublicIds,
@@ -388,6 +432,10 @@ export async function saveMasterProfile(
       update: {
         categories,
         travelRadiusKm,
+        hasVehicle,
+        crew,
+        companyName,
+        metadata,
         description,
         portfolioImages,
         portfolioImagesPublicIds,

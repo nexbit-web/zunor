@@ -2,8 +2,13 @@
 // розсилку: свіжу заявку бачить лише покликаний, після останньої хвилі —
 // усі, кому вона в межах виїзду. Покликаний бачить свою заявку завжди,
 // навіть якщо її привела до нього остання хвиля з-за меж.
+//
+// Чого майстер не робить (categories/matching) — у стрічці немає зовсім,
+// як і в розсилці: інакше «миє лише вікна» гортав би генеральні.
 
 import { districtsWithin, type District } from '$lib/geo/districts'
+import { matchingFor, type JobCondition } from '$lib/categories/matching'
+import { parseMasterSkills } from '$lib/masters/meta'
 import { JOB_LIFETIME_MS } from '../job-lifetime'
 import { WAVES_DONE_MIN } from './core/waves'
 import { prisma } from './data/db'
@@ -33,12 +38,47 @@ export function reachableDistricts(
   return near.length > 0 ? near.map((d) => d.slug) : null
 }
 
+/** Умова категорії → Prisma: значення поля metadata — одне з anyOf. */
+function conditionWhere(c: JobCondition): Prisma.JobWhereInput {
+  return {
+    OR: c.anyOf.map((value) => ({
+      metadata: { path: [c.field], equals: value },
+    })),
+  }
+}
+
+/**
+ * Уміння майстра як умови на заявки: для кожної його категорії з
+ * умовами — «це інша категорія АБО всі умови виконані».
+ */
+export function skillsWhere(
+  categories: readonly string[],
+  masterMeta: unknown,
+): Prisma.JobWhereInput[] {
+  const skills = parseMasterSkills(masterMeta)
+  return categories.flatMap((category) => {
+    const conditions = matchingFor(category).conditions(skills[category])
+    if (conditions.length === 0) return []
+    return [
+      {
+        OR: [
+          { category: { not: category } },
+          { AND: conditions.map(conditionWhere) },
+        ],
+      },
+    ]
+  })
+}
+
 export async function masterFeedScope(opts: {
   masterId: string
   masterDistrict: string | null
   travelRadiusKm: number | null
   /** Райони міста майстра. */
   districts: readonly District[]
+  /** Категорії майстра й MasterProfile.metadata — для умінь. */
+  categories?: readonly string[]
+  masterMeta?: unknown
   now?: Date
 }): Promise<FeedScope> {
   const now = opts.now ?? new Date()
@@ -88,6 +128,7 @@ export async function masterFeedScope(opts: {
     declinedIds,
     where: [
       calledIds.length > 0 ? { OR: [{ id: { in: calledIds } }, open] } : open,
+      ...skillsWhere(opts.categories ?? [], opts.masterMeta),
     ],
   }
 }

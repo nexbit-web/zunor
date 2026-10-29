@@ -34,6 +34,7 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
             verificationStatus: true,
             categories: true,
             travelRadiusKm: true,
+            metadata: true,
           },
         },
       },
@@ -175,6 +176,8 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
     masterDistrict: user.district,
     travelRadiusKm: mp.travelRadiusKm,
     districts,
+    categories: mp.categories,
+    masterMeta: mp.metadata,
   })
   const declinedJobIds = scope.declinedIds
 

@@ -1,9 +1,12 @@
 // Читання для рішення хвилі: сама заявка й майстри, яких можна покликати.
 
 import { districtDistanceKm, type District } from '$lib/geo/districts'
+import { matchingFor, meetsConditions } from '$lib/categories/matching'
+import { asEffort } from '$lib/categories/effort'
+import { parseMasterSkills } from '$lib/masters/meta'
 import { DISPATCH_CONFIG } from '../config'
 import { acceptsDistance } from '../core/rings'
-import { responseRate } from '../core/score'
+import { crewFit, responseRate } from '../core/score'
 import { freshest, lastSeenMany } from '../../presence'
 import { loadHistory } from './journal'
 import type { Db } from './db'
@@ -31,6 +34,8 @@ export async function loadJob(
         status: true,
         proposalsCount: true,
         createdAt: true,
+        metadata: true,
+        effort: true,
         dispatchWave: true,
       },
     }),
@@ -44,14 +49,22 @@ export async function loadJob(
   return {
     ...job,
     district: job.district ?? null,
+    // Заявка старша за Job.effort — обсяг із metadata тією ж формулою
+    // (без поправки асистента: її тоді ще не було).
+    effort:
+      asEffort(job.effort) ?? matchingFor(job.category).effort(job.metadata),
     notified: new Set(events.map((e) => e.masterId)),
   }
 }
 
 /**
- * Майстри, яких можна покликати: місто й послуга заявки, активний
- * профіль, ще не покликані й не сам клієнт. Межу виїзду не відсікаємо, а
- * позначаємо (withinReach): переступити її може остання хвиля.
+ * Майстри, яких можна покликати: місто й категорія заявки, активний
+ * профіль, ще не покликані й не сам клієнт.
+ *
+ * Чого майстер не робить (вид прибирання, тип обʼєкта — categories/
+ * matching) — відсікаємо зовсім: він сам так сказав. Межу виїзду й
+ * нестачу (немає авто, а сміття треба вивезти) не відсікаємо, а
+ * позначаємо (withinReach): їх переступає лише остання хвиля.
  */
 export async function loadCandidates(
   db: Db,
@@ -80,6 +93,9 @@ export async function loadCandidates(
           completedOrders: true,
           createdAt: true,
           travelRadiusKm: true,
+          hasVehicle: true,
+          crew: true,
+          metadata: true,
         },
       },
     },
@@ -87,9 +103,15 @@ export async function loadCandidates(
     take: POOL_LIMIT,
   })
 
+  const matching = matchingFor(job.category)
+  const needsVehicle = matching.needsVehicle(job.metadata)
+
   const pool = masters.flatMap((m) => {
     const profile = m.masterProfile
     if (!profile || job.notified.has(m.id)) return []
+    const skills = parseMasterSkills(profile.metadata)
+    const conditions = matching.conditions(skills[job.category])
+    if (!meetsConditions(job.metadata, conditions)) return []
     const distanceKm = districtDistanceKm(districts, m.district, job.district)
     return [{ ...m, profile, distanceKm }]
   })
@@ -117,10 +139,16 @@ export async function loadCandidates(
     responseRate: history.get(m.id)?.responseRate ?? responseRate(0, 0),
     recentNotifications: history.get(m.id)?.recent ?? 0,
     distanceKm: m.distanceKm,
-    withinReach: acceptsDistance(
-      m.distanceKm,
-      m.profile.travelRadiusKm ?? null,
-    ),
+    travelKm:
+      m.distanceKm !== null && m.profile.hasVehicle
+        ? m.distanceKm * DISPATCH_CONFIG.VEHICLE_DISTANCE_FACTOR
+        : m.distanceKm,
+    crewFit: crewFit(m.profile.crew, job.effort),
+    withinReach:
+      acceptsDistance(m.distanceKm, m.profile.travelRadiusKm ?? null) &&
+      // «Немає авто» — лише явна відповідь: хто не відповідав, той не
+      // втрачає заявок, яких отримував до появи питання.
+      !(needsVehicle && m.profile.hasVehicle === false),
   }))
 }
 
