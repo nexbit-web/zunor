@@ -7,17 +7,25 @@
   темна тема й акцентний колір працюють без окремих зображень.
 
   size="sm" — мініатюра 72px для огляду етапів: одна впізнавана деталь.
+  company — анкета компанії: на картках будівля замість людини.
 -->
 <script lang="ts">
   import ServiceIcon from '$lib/categories/cleaning/service-icon.svelte'
-  import UserIcon from '@lucide/svelte/icons/user'
-  import LockIcon from '@lucide/svelte/icons/lock'
-  import MapPinIcon from '@lucide/svelte/icons/map-pin'
-  import CarIcon from '@lucide/svelte/icons/car'
-  import StarIcon from '@lucide/svelte/icons/star'
-  import BadgeCheckIcon from '@lucide/svelte/icons/badge-check'
+  import UserIcon from '$lib/components/icons/set/user.svelte'
+  import Building2Icon from '$lib/components/icons/set/building-2.svelte'
+  import LockIcon from '$lib/components/icons/set/lock.svelte'
+  import MapPinIcon from '$lib/components/icons/set/map-pin.svelte'
+  import CarIcon from '$lib/components/icons/set/car.svelte'
+  import StarIcon from '$lib/components/icons/set/star.svelte'
+  import BadgeCheckIcon from '$lib/components/icons/set/badge-check.svelte'
 
-  let { kind, size = 'lg' }: { kind: string; size?: 'lg' | 'sm' } = $props()
+  let {
+    kind,
+    size = 'lg',
+    company = false,
+  }: { kind: string; size?: 'lg' | 'sm'; company?: boolean } = $props()
+
+  const Avatar = $derived(company ? Building2Icon : UserIcon)
 
   const WORK = [
     'standard',
@@ -39,7 +47,7 @@
       <span
         class="grid size-11 place-items-center rounded-full bg-primary/15 text-primary"
       >
-        <UserIcon class="size-6" />
+        <Avatar class="size-6" />
       </span>
     {:else if kind === 'work'}
       <div class="grid grid-cols-2 gap-1">
@@ -69,7 +77,7 @@
           <span
             class="grid size-16 shrink-0 place-items-center rounded-full bg-primary/15 text-primary"
           >
-            <UserIcon class="size-8" />
+            <Avatar class="size-8" />
           </span>
           <div class="min-w-0 flex-1 space-y-2">
             <div class="h-3.5 w-32 rounded-full bg-foreground/80"></div>
@@ -120,7 +128,7 @@
           <span
             class="grid size-12 shrink-0 place-items-center rounded-full bg-primary/15 text-primary"
           >
-            <UserIcon class="size-6" />
+            <Avatar class="size-6" />
           </span>
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-1.5">

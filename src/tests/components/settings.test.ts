@@ -326,3 +326,87 @@ describe('подача split', () => {
     expect(block.className).not.toContain('mx-4')
   })
 })
+
+// ─────────────── Подача stacked (сторінка налаштувань) ───────────────
+//
+// Сторінка налаштувань — одна колонка, як у GitHub. Тримаємо те, на чому
+// стоїть вигляд: підпис над полем, поле не ширше 440px, підказка текстом
+// під полем (а не тултипом), і лінія між рядками не дублює лінію під
+// заголовком розділу.
+
+const stacked = { context: new Map([[SETTINGS_LAYOUT_KEY, 'stacked']]) }
+
+describe('подача stacked', () => {
+  it('група: заголовок і пояснення над лінією, без картки', () => {
+    const { container } = render(SettingsGroup, {
+      ...stacked,
+      props: {
+        title: 'Пароль',
+        footnote: 'Інші сеанси буде завершено',
+        children: text('поля'),
+      },
+    })
+
+    const head = container.querySelector('h2')?.parentElement as HTMLElement
+    expect(head.className).toContain('border-b')
+    expect(head.textContent).toContain('Інші сеанси буде завершено')
+    expect(container.textContent).toContain('поля')
+    expect(container.innerHTML).not.toContain('bg-muted/40')
+  })
+
+  // Перший рядок розділу мусить бути first-child, інакше під лінією
+  // заголовка ставала друга — від рядка.
+  it('вміст групи — в окремій обгортці, а не поруч із заголовком', () => {
+    const { container } = render(SettingsGroup, {
+      ...stacked,
+      props: { title: 'Роль', children: text('рядок') },
+    })
+
+    const section = container.querySelector('section') as HTMLElement
+    const body = section.lastElementChild as HTMLElement
+    expect(body.querySelector('h2')).toBeNull()
+    expect(body.firstElementChild?.textContent).toBe('рядок')
+  })
+
+  it('поле: підпис над полем, ширина 440px, підказка текстом під ним', () => {
+    const { container } = render(SettingsField, {
+      ...stacked,
+      props: {
+        label: 'Телефон',
+        for: 'phone',
+        hint: 'Видно виконавцю після підтвердження',
+        control: text('i'),
+      },
+    })
+
+    expect(container.querySelector('label')?.getAttribute('for')).toBe('phone')
+    expect(container.innerHTML).toContain('max-w-110')
+    // Підказка — абзацом, а не кнопкою-тултипом.
+    expect(container.querySelector('button')).toBeNull()
+    expect(container.querySelector('p')?.textContent).toContain(
+      'Видно виконавцю після підтвердження',
+    )
+  })
+
+  it('рядок: роздільник ставить сам, без втоплення картки', () => {
+    const { container } = render(SettingsRow, {
+      ...stacked,
+      props: { label: 'x' },
+    })
+
+    const row = container.firstElementChild as HTMLElement
+    expect(row.className).toContain('first:border-t-0')
+    expect(row.className).not.toContain('mx-4')
+  })
+
+  it('блок без лінії й без mx-4', () => {
+    const { container } = render(SettingsBlock, {
+      ...stacked,
+      props: { children: text('a') },
+    })
+
+    const block = container.firstElementChild as HTMLElement
+    expect(block.className).not.toContain('border-t')
+    expect(block.className).not.toContain('mx-4')
+  })
+})

@@ -25,23 +25,22 @@
   } from '$lib/categories/cleaning/presets'
   import { generateTitle } from '$lib/categories/cleaning/title-gen'
   import type { CleaningItem } from '$lib/categories/cleaning/title-gen'
-  // Іконки поштучно — інакше в бандл потрапляє вся lucide.
-  import ArrowLeft from '@lucide/svelte/icons/arrow-left'
-  import Check from '@lucide/svelte/icons/check'
-  import Plus from '@lucide/svelte/icons/plus'
-  import Minus from '@lucide/svelte/icons/minus'
-  import Square from '@lucide/svelte/icons/square'
-  import Building2 from '@lucide/svelte/icons/building-2'
-  import Home from '@lucide/svelte/icons/home'
-  import Briefcase from '@lucide/svelte/icons/briefcase'
-  import Store from '@lucide/svelte/icons/store'
-  import Boxes from '@lucide/svelte/icons/boxes'
-  import Sparkle from '@lucide/svelte/icons/sparkle'
-  import Sparkles from '@lucide/svelte/icons/sparkles'
-  import Hammer from '@lucide/svelte/icons/hammer'
-  import GlassWater from '@lucide/svelte/icons/glass-water'
-  import Sofa from '@lucide/svelte/icons/sofa'
-  import Repeat from '@lucide/svelte/icons/repeat'
+  import ArrowLeft from '$lib/components/icons/set/arrow-left.svelte'
+  import Check from '$lib/components/icons/set/check.svelte'
+  import Plus from '$lib/components/icons/set/plus.svelte'
+  import Minus from '$lib/components/icons/set/minus.svelte'
+  import Square from '$lib/components/icons/set/square.svelte'
+  import Building2 from '$lib/components/icons/set/building-2.svelte'
+  import Home from '$lib/components/icons/set/house.svelte'
+  import Briefcase from '$lib/components/icons/set/briefcase.svelte'
+  import Store from '$lib/components/icons/set/store.svelte'
+  import Boxes from '$lib/components/icons/set/boxes.svelte'
+  import Sparkle from '$lib/components/icons/set/sparkle.svelte'
+  import Sparkles from '$lib/components/icons/set/sparkles.svelte'
+  import Hammer from '$lib/components/icons/set/hammer.svelte'
+  import GlassWater from '$lib/components/icons/set/glass-water.svelte'
+  import Sofa from '$lib/components/icons/set/sofa.svelte'
+  import Repeat from '$lib/components/icons/set/repeat.svelte'
   import {
     getLocalTimeZone,
     today,
@@ -825,15 +824,17 @@
 
 <style>
   /* Input / Textarea — на токенах. :global бо клас іде в shadcn-компонент;
-     обмежено .job-scope. padding-left/right (не shorthand), щоб py-* у textarea не конфліктував. */
+     обмежено .job-scope. padding-left/right (не shorthand), щоб py-* у textarea не конфліктував.
+     Фон і рамка — ті самі, що в усіх полів (--field, --input), лише
+     вищі й круглі під крок майстра. */
   .job-scope :global(.job-input) {
     width: 100%;
     min-height: 50px;
     padding-left: 16px;
     padding-right: 16px;
     border-radius: 14px;
-    border: 1px solid var(--border);
-    background: var(--muted);
+    border: 1px solid var(--input);
+    background: var(--field);
     color: var(--foreground);
     font-size: 14.5px;
     font-weight: 500;

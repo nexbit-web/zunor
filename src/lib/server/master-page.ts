@@ -8,8 +8,18 @@
 
 import { prisma } from './prisma'
 import { cached, forget } from './cache'
+import { parseMasterSkills } from '$lib/masters/meta'
+import { CATEGORY_SLUG } from '$lib/categories/cleaning/presets'
+import {
+  describeCleaningSkills,
+  type SkillLabel,
+} from '$lib/categories/cleaning/skills'
 import type { ProfileReview } from '$lib/components/profile/types'
-import type { Role, VerificationStatus } from '../../generated/prisma/client'
+import type {
+  CrewType,
+  Role,
+  VerificationStatus,
+} from '../../generated/prisma/client'
 
 /** Відгуки, рейтинг і лічильники оновлюються не миттєво — у межах цього. */
 const PAGE_TTL_SEC = 10 * 60
@@ -35,6 +45,14 @@ export interface MasterPage {
   reviewsCount: number
   completedOrders: number
   reviews: PageReview[]
+  /**
+   * Компанія чи людина й формат роботи. Необовʼязкові: запис у Redis,
+   * зроблений до цих полів, живе ще до PAGE_TTL_SEC — без них сторінка
+   * просто не показує ці рядки.
+   */
+  crew?: CrewType | null
+  services?: SkillLabel[]
+  premises?: SkillLabel[]
 }
 
 /** null — такого майстра немає (або username уже інший). */
@@ -90,6 +108,8 @@ async function readPage(userId: string): Promise<MasterPage | null> {
             categories: true,
             portfolioImages: true,
             completedOrders: true,
+            crew: true,
+            metadata: true,
           },
         },
       },
@@ -110,6 +130,9 @@ async function readPage(userId: string): Promise<MasterPage | null> {
   if (!user?.username) return null
 
   const mp = user.masterProfile
+  const skills = describeCleaningSkills(
+    parseMasterSkills(mp?.metadata)[CATEGORY_SLUG],
+  )
   return {
     id: user.id,
     role: user.role,
@@ -125,6 +148,9 @@ async function readPage(userId: string): Promise<MasterPage | null> {
     avgRating: user.avgRatingAsMaster,
     reviewsCount: user.reviewsCountAsMaster,
     completedOrders: mp?.completedOrders ?? 0,
+    crew: mp?.crew ?? null,
+    services: skills.services,
+    premises: skills.premises,
     reviews: reviews.map((r) => {
       const name = r.author.name ?? 'Користувач'
       return {

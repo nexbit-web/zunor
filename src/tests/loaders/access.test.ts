@@ -262,29 +262,37 @@ describe('сторінка замовлення /dashboard/orders/[id]', () => {
 })
 
 describe('сторінка чату /dashboard/messages/[chatId]', () => {
+  const MY_READ = new Date('2026-10-30T10:00:00.000Z')
+  const PEER_READ = new Date('2026-10-30T09:00:00.000Z')
+  const PEER_SEEN = new Date('2026-10-30T09:30:00.000Z')
+
   function membership() {
     return {
-      lastReadAt: null,
+      lastReadAt: MY_READ,
       chat: {
         id: 'chat-1',
         members: [
           {
+            lastReadAt: MY_READ,
             user: {
               id: 'user-1',
               name: 'Я',
               username: null,
               avatar: null,
               role: 'CLIENT',
+              lastSeen: new Date(),
               masterProfile: null,
             },
           },
           {
+            lastReadAt: PEER_READ,
             user: {
               id: 'peer-1',
               name: 'Співрозмовник',
               username: 'peer',
               avatar: null,
               role: 'MASTER',
+              lastSeen: PEER_SEEN,
               masterProfile: { verificationStatus: 'VERIFIED' },
             },
           },
@@ -371,6 +379,62 @@ describe('сторінка чату /dashboard/messages/[chatId]', () => {
 
     expect(data.initialMessages).toHaveLength(50)
     expect(data.initialNextCursor).toBe('m-49')
+  })
+
+  // ✓✓ на моїх повідомленнях означає «співрозмовник прочитав». Раніше
+  // сюди брався МІЙ lastReadAt, і після перезавантаження галочки брехали.
+  it('галочки — від lastReadAt співрозмовника, а не мого', async () => {
+    const data = (await chatPage.load(chatEvent('user-1'))) as {
+      chat: { peerLastReadAt: string | null; myLastReadAt: string | null }
+    }
+
+    expect(data.chat.peerLastReadAt).toBe(PEER_READ.toISOString())
+    expect(data.chat.myLastReadAt).toBe(MY_READ.toISOString())
+  })
+
+  it('«був у мережі» — час співрозмовника', async () => {
+    const data = (await chatPage.load(chatEvent('user-1'))) as {
+      chat: { peerLastSeen: string | null }
+    }
+
+    expect(data.chat.peerLastSeen).toBe(PEER_SEEN.toISOString())
+  })
+
+  it('реакції приходять згрупованими', async () => {
+    prisma.message.findMany.mockResolvedValue([
+      message({
+        reactions: [
+          { emoji: '❤️', userId: 'peer-1' },
+          { emoji: '❤️', userId: 'user-1' },
+        ],
+      }),
+    ])
+
+    const data = (await chatPage.load(chatEvent('user-1'))) as {
+      initialMessages: { reactions: unknown }[]
+    }
+    expect(data.initialMessages[0].reactions).toEqual([
+      { emoji: '❤️', userIds: ['peer-1', 'user-1'] },
+    ])
+  })
+
+  // Видалене не має жити далі в цитаті відповіді на нього.
+  it('цитата видаленого повідомлення приходить без тексту', async () => {
+    prisma.message.findMany.mockResolvedValue([
+      message({
+        replyToId: 'old',
+        replyTo: {
+          id: 'old',
+          text: 'секрет',
+          senderId: 'peer-1',
+          type: 'TEXT',
+          deletedAt: new Date(),
+        },
+      }),
+    ])
+
+    const data = await chatPage.load(chatEvent('user-1'))
+    expect(JSON.stringify(data)).not.toContain('секрет')
   })
 
   // У шапці чату видно ім'я й аватар — телефону там немає й бути не може:

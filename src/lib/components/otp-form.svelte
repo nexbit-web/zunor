@@ -1,7 +1,7 @@
 <script lang="ts">
   import * as InputOTP from '$lib/components/ui/input-otp/index.js'
   import { Spinner } from '$lib/components/ui/spinner/index.js'
-  import { CircleAlert } from 'lucide-svelte'
+  import CircleAlert from '$lib/components/icons/set/circle-alert.svelte'
   import { emailOtp } from '$lib/auth-client'
   import { goto, invalidateAll } from '$app/navigation'
   import { cn } from '$lib/utils.js'

@@ -1,7 +1,84 @@
 // Спільні хелпери відображення заявок і пропозицій. Раніше вони були
 // продубльовані в job-client-view та job-master-view — тепер єдине джерело.
 
+import { pluralUk } from '$lib/utils/plural'
+import { describeJob } from '$lib/categories/cleaning/describe'
+
 type BadgeVariant = 'default' | 'secondary' | 'outline'
+
+export type JobTone = 'action' | 'live' | 'progress' | 'done' | 'off'
+
+/**
+ * Стан заявки словами людини, а не статусом із бази. «Відкрита» нічого не
+ * каже клієнту: йому важливо, чи шукають ще майстра, чи вже є з кого
+ * обирати. Тому відкрита заявка з пропозиціями — окремий стан, і саме він
+ * єдиний залитий кольором: це місце, де клієнт має щось зробити.
+ *
+ * Майстрові кількість чужих пропозицій не показуємо (MANIFESTO,
+ * «Справедливий маркетплейс»): «вже 5» відлякувало б новачків, тож для
+ * нього відкрита заявка — просто та, що ще приймає пропозиції.
+ */
+export function jobState(
+  job: { status: string; proposalsCount?: number | null },
+  viewer: 'client' | 'master' = 'client',
+): { label: string; tone: JobTone } {
+  switch (job.status) {
+    case 'OPEN': {
+      if (viewer === 'master')
+        return { label: 'Приймає пропозиції', tone: 'live' }
+      const n = job.proposalsCount ?? 0
+      return n > 0
+        ? {
+            label: `${n} ${pluralUk(n, 'пропозиція', 'пропозиції', 'пропозицій')}`,
+            tone: 'action',
+          }
+        : { label: 'Шукаємо майстра', tone: 'live' }
+    }
+    case 'IN_PROGRESS':
+      return { label: 'Майстра обрано', tone: 'progress' }
+    case 'COMPLETED':
+      return { label: 'Завершена', tone: 'done' }
+    case 'EXPIRED':
+      return { label: 'Термін минув', tone: 'off' }
+    default:
+      return { label: 'Скасована', tone: 'off' }
+  }
+}
+
+/**
+ * Чому заявка «Топ для тебе» — підписи до причин із мозку підбору
+ * (server/dispatch/core/fit.ts). Невідома причина — без підпису, а не
+ * сирий ключ у картці.
+ */
+const FIT_REASONS: Record<string, string> = {
+  near: 'Поруч з тобою',
+  crew: 'Під твій формат роботи',
+  vehicle: 'Є авто для вивозу',
+}
+export function fitReasonLabels(reasons: readonly string[]): string[] {
+  return reasons.map((r) => FIT_REASONS[r]).filter(Boolean)
+}
+
+/**
+ * Сірі теги картки — значення характеристик (квартира, кімнати, площа),
+ * предмети хімчистки — кожен окремо. Без послуги й дня: вони вже в рядку
+ * фактів. Одні на картку заявки й картку замовлення.
+ */
+export function jobTags(metadata: unknown, createdAt: string): string[] {
+  return describeJob(metadata, createdAt)
+    .filter((d) => d.label !== 'Послуга' && d.label !== 'Коли')
+    .flatMap((d) =>
+      d.items
+        ? d.items.map((i) => (i.qty > 1 ? `${i.name} × ${i.qty}` : i.name))
+        : [d.value],
+    )
+    .filter(Boolean)
+}
+
+/** Термін виконання пропозиції: «1 день», «3 дні», «5 днів». */
+export function formatDays(n: number): string {
+  return `${n} ${pluralUk(n, 'день', 'дні', 'днів')}`
+}
 
 export function formatMoney(cents: number, currency = 'UAH'): string {
   return new Intl.NumberFormat('uk-UA', {

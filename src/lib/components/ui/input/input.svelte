@@ -4,7 +4,8 @@
     HTMLInputAttributes,
     HTMLInputTypeAttribute,
   } from 'svelte/elements'
-  import type { User } from 'lucide-svelte'
+  import type { Component } from 'svelte'
+  import type { IconProps } from '$lib/components/icons/stroke-icon.svelte'
 
   type InputType = Exclude<HTMLInputTypeAttribute, 'file'>
 
@@ -16,7 +17,7 @@
       )
   > & {
     /** Іконка ліворуч у полі (як у ClickUp): що саме сюди вводять. */
-    icon?: typeof User
+    icon?: Component<IconProps>
     /**
      * Незмінна частина значення перед текстом — «+380» у телефоні. Стоїть
      * у самому полі, але не входить у value: стерти її не можна, і в
@@ -40,7 +41,7 @@
   // Спільний вигляд поля. Заокруглення 10px — на крок більше за кнопки
   // (8px): поле — це «віконце», кнопка — дія, і так їх легше розрізнити.
   const base =
-    'h-9 rounded-[10px] border border-input bg-field px-2.5 py-1 text-base shadow-xs transition-[color,box-shadow] file:h-7 file:text-sm file:font-medium focus-visible:border-ring focus-visible:shadow-[0_0_0_1px_var(--color-ring)] aria-invalid:focus-visible:border-destructive aria-invalid:focus-visible:shadow-[0_0_0_1px_var(--color-destructive)] aria-invalid:border-destructive md:text-sm dark:aria-invalid:border-destructive/50 w-full min-w-0 outline-none file:inline-flex file:border-0 file:bg-transparent file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50'
+    'h-9 rounded-[10px] border border-input bg-field px-2.5 py-1 text-base shadow-xs transition-[color,background-color,box-shadow] file:h-7 file:text-sm file:font-medium focus-visible:border-ring focus-visible:bg-background focus-visible:shadow-[0_0_0_1px_var(--color-ring)] aria-invalid:focus-visible:border-destructive aria-invalid:focus-visible:shadow-[0_0_0_1px_var(--color-destructive)] aria-invalid:border-destructive md:text-sm dark:aria-invalid:border-destructive/50 w-full min-w-0 outline-none file:inline-flex file:border-0 file:bg-transparent file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50'
 
   // Відступ тексту від лівого краю, коли перед ним іконка та/або префікс.
   // Префікс міряємо в ch від шрифту самого поля (цифри — tabular-nums,

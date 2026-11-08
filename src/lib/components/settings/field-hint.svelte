@@ -10,7 +10,7 @@
   // Сам текст лежить у кнопці для скрінрідера — закритий тултип у DOM
   // відсутній, і без цього підказку не почув би ніхто.
   import * as Tooltip from '$lib/components/ui/tooltip/index.js'
-  import { Info } from 'lucide-svelte'
+  import Info from '$lib/components/icons/set/info.svelte'
 
   let { text }: { text: string } = $props()
 

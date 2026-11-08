@@ -5,9 +5,9 @@
 -->
 <script lang="ts">
   import { untrack, type Snippet } from 'svelte'
-  import ArrowLeft from '@lucide/svelte/icons/arrow-left'
-  import ChevronUp from '@lucide/svelte/icons/chevron-up'
-  import Printer from '@lucide/svelte/icons/printer'
+  import ArrowLeft from '$lib/components/icons/set/arrow-left.svelte'
+  import ChevronUp from '$lib/components/icons/set/chevron-up.svelte'
+  import Printer from '$lib/components/icons/set/printer.svelte'
 
   type Section = { id: string; label: string }
 

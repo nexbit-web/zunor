@@ -2,7 +2,7 @@ import { prisma } from '$lib/server/prisma'
 import { requireUser } from '$lib/server/guards'
 import { getCities, getCategories, getDistricts } from '$lib/server/reference'
 import { cityDistricts, jobPlace } from '$lib/geo/districts'
-import { masterFeedScope } from '$lib/server/dispatch'
+import { bestMatches, masterFeedScope } from '$lib/server/dispatch'
 import { redirect } from '@sveltejs/kit'
 import type { PageServerLoad } from './$types'
 
@@ -35,6 +35,9 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
             categories: true,
             travelRadiusKm: true,
             metadata: true,
+            // Для «Топ для тебе» (bestMatches): авто й формат роботи.
+            hasVehicle: true,
+            crew: true,
           },
         },
       },
@@ -202,6 +205,7 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
       city: true,
       district: true,
       status: true,
+      effort: true,
       budgetMinCents: true,
       budgetMaxCents: true,
       currency: true,
@@ -230,16 +234,33 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
     mp.categories.includes(c.slug),
   )
 
+  // Район заявки й відстань від району майстра — щоб «чи по дорозі»
+  // було видно ще до того, як відкрити заявку. З тієї ж відстані —
+  // «Топ для тебе» (той самий шлях, що й у догрузці).
+  const placed = items.map((j) => ({
+    job: j,
+    place: jobPlace(districts, j.district, user.district),
+  }))
+  const matches = bestMatches(
+    placed.map(({ job, place }) => ({
+      id: job.id,
+      category: job.category,
+      metadata: job.metadata,
+      effort: job.effort,
+      distanceKm: place.distanceKm,
+    })),
+    mp,
+  )
+
   return {
     view: 'feed' as const,
     userRole: user.role,
-    jobs: items.map((j) => ({
+    jobs: placed.map(({ job: j, place }) => ({
       ...j,
       createdAt: j.createdAt.toISOString(),
       expiresAt: j.expiresAt.toISOString(),
-      // Район заявки й відстань від району майстра — щоб «чи по дорозі»
-      // було видно ще до того, як відкрити заявку.
-      place: jobPlace(districts, j.district, user.district),
+      place,
+      match: matches.get(j.id) ?? null,
       // Рейтинг клієнта віддаємо під єдиним імʼям (avgRating/reviewsCount),
       // щоб картка заявки не залежала від ролі автора.
       client: {

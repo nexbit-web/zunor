@@ -25,12 +25,10 @@
   а не набір компонентів для повторного використання.
 -->
 <script lang="ts">
-  // Точкові імпорти, а не barrel 'lucide-svelte': бочка реекспортує
-  // ~1700 .svelte-іконок і поїхала б у чанк цієї сторінки цілком.
-  import MapPin from '@lucide/svelte/icons/map-pin'
-  import Check from '@lucide/svelte/icons/check'
-  import X from '@lucide/svelte/icons/x'
-  import ArrowRight from '@lucide/svelte/icons/arrow-right'
+  import MapPin from '$lib/components/icons/set/map-pin.svelte'
+  import Check from '$lib/components/icons/set/check.svelte'
+  import X from '$lib/components/icons/set/x.svelte'
+  import ArrowRight from '$lib/components/icons/set/arrow-right.svelte'
 
   const SEO = {
     title: 'Про Zunor — прибирання в Одесі, де не треба нікого шукати',
@@ -442,7 +440,7 @@
       <div class="mt-9 flex flex-wrap items-center justify-center gap-3">
         <a
           href="/user/login?redirectTo=%2Fdashboard%2Fjobs%2Fnew"
-          class="about-cta inline-flex h-13 items-center justify-center gap-2 rounded-xl bg-background px-8 text-base font-semibold tracking-[-0.01em] text-foreground transition-opacity hover:opacity-90 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-background/60"
+          class="about-cta inline-flex h-13 items-center justify-center gap-2 rounded-xl bg-primary px-8 text-base font-semibold tracking-[-0.01em] text-primary-foreground transition-colors hover:bg-[color-mix(in_srgb,var(--primary)_88%,black)] active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-background/60"
         >
           Замовити прибирання
           <ArrowRight

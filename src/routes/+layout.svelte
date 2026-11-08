@@ -1,8 +1,9 @@
 <script lang="ts">
   import './layout.css'
-  import { ModeWatcher } from 'mode-watcher'
+  import { ModeWatcher, mode } from 'mode-watcher'
+  import { isThemedPath } from '$lib/theme-scope'
   import Header from '$lib/components/header/index.svelte'
-  import { page } from '$app/state'
+  import { navigating, page } from '$app/state'
   import Footer from '$lib/components/footer/index.svelte'
   import { NotificationsListener } from '$lib/notifications'
   const hiddenLayoutRoutes = [
@@ -29,7 +30,6 @@
 
   import NProgress from 'nprogress'
   import 'nprogress/nprogress.css'
-  import { beforeNavigate, afterNavigate } from '$app/navigation'
   import { Toaster } from 'svelte-hot-french-toast'
 
   let { children } = $props()
@@ -38,12 +38,49 @@
     showSpinner: false,
   })
 
-  beforeNavigate(() => {
-    NProgress.start()
+  // Смуга вгорі — лише для ПОВІЛЬНИХ переходів. Швидкий перехід
+  // (дані з кешу, легкий лоадер) закінчується раніше за затримку, і
+  // смуги не видно взагалі: інакше вона блимала б на кожен клік. Довше
+  // ~100 мс людина вже чекає, але між 100 і 200 мс смуга встигала б лише
+  // смикнутись і зникнути — тому 200.
+  //
+  // Від navigating, а не beforeNavigate/afterNavigate: скасований перехід
+  // не кличе afterNavigate, і смуга лишалась висіти. Ефект залежить від
+  // булевого значення, тож перехід, що перебив інший, не перезапускає
+  // таймер і не «добігає» смугу посередині.
+  // Темна тема — лише в кабінеті ($lib/theme-scope). Вибір людини
+  // зберігає mode-watcher, а клас на <html> ставимо тут: поза кабінетом
+  // сторінка світла, і перехід у кабінет та назад перемикає її сам.
+  // До першого кадру те саме робить скрипт в app.html. Поки системна
+  // тема ще не відома (mode.current порожній) — не чіпаємо, інакше клас
+  // блимнув би.
+  const themed = $derived(isThemedPath(page.url.pathname))
+
+  // Палітра кабінету (клас in-app, layout.css) — за тим самим правилом.
+  $effect(() => {
+    document.documentElement.classList.toggle('in-app', themed)
   })
 
-  afterNavigate(() => {
-    NProgress.done()
+  $effect(() => {
+    const current = mode.current
+    if (current === undefined) return
+    document.documentElement.classList.toggle(
+      'dark',
+      themed && current === 'dark',
+    )
+  })
+
+  const PROGRESS_DELAY = 200
+  const isNavigating = $derived(navigating.to !== null)
+
+  $effect(() => {
+    if (!isNavigating) return
+    const timer = setTimeout(() => NProgress.start(), PROGRESS_DELAY)
+    return () => {
+      clearTimeout(timer)
+      // Не стартувала — done() нічого не робить.
+      NProgress.done()
+    }
   })
 </script>
 
@@ -60,7 +97,9 @@
   }}
 />
 <NotificationsListener />
-<ModeWatcher />
+<!-- Порожній darkClassNames: клас `dark` ставить ефект вище, а не
+     mode-watcher — інакше лендинг темнів би разом із кабінетом. -->
+<ModeWatcher darkClassNames={[]} />
 {#if !hideHeader}
   <Header />
 {/if}

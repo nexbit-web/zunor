@@ -66,6 +66,32 @@ export function parseCleaningSkills(raw: unknown): CleaningSkills | null {
   return { services, premises }
 }
 
+/** Пункт вітрини майстра: ключ (для іконки послуги) і підпис. */
+export interface SkillLabel {
+  key: string
+  label: string
+}
+
+/**
+ * Що показати клієнту на сторінці майстра: які прибирання робить і де.
+ * Порядок — довідника, як у формі. Старий профіль без анкети — порожньо:
+ * сторінка тоді просто не малює цих рядків.
+ */
+export function describeCleaningSkills(raw: unknown): {
+  services: SkillLabel[]
+  premises: SkillLabel[]
+} {
+  const skills = parseCleaningSkills(raw)
+  return {
+    services: SERVICES.filter((s) => skills?.services.includes(s.key)).map(
+      (s) => ({ key: s.key, label: s.label }),
+    ),
+    premises: PREMISE_GROUPS.filter((g) =>
+      skills?.premises.includes(g.key),
+    ).map((g) => ({ key: g.key, label: g.label })),
+  }
+}
+
 /** Запис із форми: обидва переліки обовʼязкові. */
 export function validateCleaningSkills(
   raw: unknown,

@@ -2,7 +2,7 @@
   import { SettingsGroup, SettingsRow } from '$lib/components/settings'
   import { Switch } from '$lib/components/ui/switch/index.js'
   import { notificationSound } from '$lib/notifications'
-  import { BellOnIcon, BellOffIcon } from '$lib/components/icons'
+  import { NotificationsIcon, BellOffIcon } from '$lib/components/icons'
   import toast from 'svelte-hot-french-toast'
 
   // Тримаємо id останнього тоста, щоб закрити його перед показом нового.
@@ -19,7 +19,7 @@
     // а вимкнення інакше лишається без жодного зворотного зв'язку.
     lastToastId = notificationSound.enabled
       ? toast('Звук сповіщень увімкнено', {
-          icon: BellOnIcon,
+          icon: NotificationsIcon,
           duration: 2000,
         })
       : toast('Звук сповіщень вимкнено', {
@@ -29,13 +29,10 @@
   }
 </script>
 
-<SettingsGroup
-  title="Звук"
-  footnote="Налаштування зберігається в цьому браузері."
->
+<SettingsGroup title="Звук" footnote="Діє лише в цьому браузері.">
   <SettingsRow
     label="Звук сповіщень"
-    description="Короткий сигнал, коли приходить новий відгук або замовлення."
+    description="Сигнал про нові відгуки й замовлення."
     for="notif-sound"
   >
     {#snippet control()}

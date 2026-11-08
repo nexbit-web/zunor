@@ -13,7 +13,7 @@
   // цілу смугу заради однієї кнопки — це мінус рядок контенту на кожному
   // екрані телефона.
 
-  import MenuIcon from '@lucide/svelte/icons/menu'
+  import MenuIcon from '$lib/components/icons/set/menu.svelte'
   import { useSidebar } from '$lib/components/ui/sidebar/index.js'
   import { chatStore } from '$lib/stores/chat-store.svelte'
   import { notifications } from '$lib/notifications'
@@ -31,7 +31,7 @@
     : 'Відкрити меню'}
   class="trigger fixed start-3 top-3 z-40 flex size-10 items-center justify-center rounded-full border border-border bg-background text-foreground md:hidden"
 >
-  <MenuIcon size={18} strokeWidth={2} aria-hidden="true" />
+  <MenuIcon size={20} strokeWidth={1.75} />
 
   {#if total > 0}
     <span
@@ -49,8 +49,10 @@
     transition: background-color 150ms ease;
   }
 
+  /* Ховер — шаром ПОВЕРХ тла, а не замість нього: у темній темі --accent
+     напівпрозорий, і кнопка просвічувала б вміст, що під нею прокручується. */
   .trigger:hover,
   .trigger:focus-visible {
-    background-color: var(--accent);
+    background-image: linear-gradient(var(--accent), var(--accent));
   }
 </style>

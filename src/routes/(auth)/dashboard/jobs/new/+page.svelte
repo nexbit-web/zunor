@@ -1,9 +1,9 @@
 <script lang="ts">
   import { onMount, onDestroy, tick } from 'svelte'
-  import ArrowUp from '@lucide/svelte/icons/arrow-up'
-  import ArrowDown from '@lucide/svelte/icons/arrow-down'
-  import Check from '@lucide/svelte/icons/check'
-  import Copy from '@lucide/svelte/icons/copy'
+  import Send from '$lib/components/icons/set/send.svelte'
+  import ArrowDown from '$lib/components/icons/set/arrow-down.svelte'
+  import Check from '$lib/components/icons/set/check.svelte'
+  import Copy from '$lib/components/icons/set/copy.svelte'
   import { fly, fade, scale } from 'svelte/transition'
   import { quintOut } from 'svelte/easing'
   import { page } from '$app/state'
@@ -13,28 +13,29 @@
   import * as Tooltip from '$lib/components/ui/tooltip'
   import * as Marker from '$lib/components/ui/marker'
   import * as Trace from '$lib/components/ui/trace'
-  import CircleAlert from '@lucide/svelte/icons/circle-alert'
-  import RotateCcw from '@lucide/svelte/icons/rotate-ccw'
-  import Images from '@lucide/svelte/icons/images'
-  import ClipboardCheck from '@lucide/svelte/icons/clipboard-check'
-  import Home from '@lucide/svelte/icons/home'
-  import Building from '@lucide/svelte/icons/building'
-  import Sparkles from '@lucide/svelte/icons/sparkles'
-  import Calendar from '@lucide/svelte/icons/calendar'
-  import DoorOpen from '@lucide/svelte/icons/door-open'
-  import ArrowUpDown from '@lucide/svelte/icons/arrow-up-down'
-  import ArrowLeftRight from '@lucide/svelte/icons/arrow-left-right'
-  import Trash2 from '@lucide/svelte/icons/trash-2'
-  import Repeat from '@lucide/svelte/icons/repeat'
-  import AppWindow from '@lucide/svelte/icons/app-window'
-  import Columns2 from '@lucide/svelte/icons/columns-2'
-  import Plus from '@lucide/svelte/icons/plus'
-  import Mic from '@lucide/svelte/icons/mic'
-  import Square from '@lucide/svelte/icons/square'
-  import X from '@lucide/svelte/icons/x'
-  import RefreshCw from '@lucide/svelte/icons/refresh-cw'
-  import ImagePlus from '@lucide/svelte/icons/image-plus'
-  import Sofa from '@lucide/svelte/icons/sofa'
+  import CircleAlert from '$lib/components/icons/set/circle-alert.svelte'
+  import RotateCcw from '$lib/components/icons/set/rotate-ccw.svelte'
+  import Images from '$lib/components/icons/set/images.svelte'
+  import ClipboardCheck from '$lib/components/icons/set/clipboard-check.svelte'
+  import Home from '$lib/components/icons/set/house.svelte'
+  import Building from '$lib/components/icons/set/building.svelte'
+  import Sparkles from '$lib/components/icons/set/sparkles.svelte'
+  import Calendar from '$lib/components/icons/set/calendar.svelte'
+  import DoorOpen from '$lib/components/icons/set/door-open.svelte'
+  import ArrowUpDown from '$lib/components/icons/set/arrow-up-down.svelte'
+  import ArrowLeftRight from '$lib/components/icons/set/arrow-left-right.svelte'
+  import Trash2 from '$lib/components/icons/set/trash-2.svelte'
+  import Repeat from '$lib/components/icons/set/repeat.svelte'
+  import AppWindow from '$lib/components/icons/set/app-window.svelte'
+  import Columns2 from '$lib/components/icons/set/columns-2.svelte'
+  import Plus from '$lib/components/icons/set/plus.svelte'
+  import Mic from '$lib/components/icons/set/mic.svelte'
+  import Square from '$lib/components/icons/set/square.svelte'
+  import X from '$lib/components/icons/set/x.svelte'
+  import RefreshCw from '$lib/components/icons/set/refresh-cw.svelte'
+  import ImagePlus from '$lib/components/icons/set/image-plus.svelte'
+  import MessageSquareText from '$lib/components/icons/set/message-square-text.svelte'
+  import ClipboardList from '$lib/components/icons/set/clipboard-list.svelte'
   import { dev } from '$app/environment'
   import { playSuccessSound, unlockAudio } from '$lib/sound/notification'
   import type {
@@ -44,6 +45,7 @@
   } from '$lib/types/zunor'
   import { ZunorMark } from '$lib/components/icons'
   import toast from 'svelte-hot-french-toast'
+  import { copyToClipboard } from '$lib/utils/clipboard'
   import MessageBody from '$lib/components/zunor/MessageBody.svelte'
   import ChatHeader from '$lib/components/zunor/chat-header.svelte'
   import ThinkingIndicator from '$lib/components/zunor/thinking-indicator.svelte'
@@ -217,13 +219,6 @@
   let fadeZone = $derived(inputPanelHeight + SAFE_GAP)
 
   let msgId = 0
-
-  const HERO_CHIPS = [
-    { label: 'Прибрати квартиру', icon: Home },
-    { label: 'Хімчистка', icon: Sofa },
-    { label: 'Генеральне прибирання', icon: Sparkles },
-    { label: 'Помити вікна', icon: AppWindow },
-  ]
 
   // ─── Анімований плейсхолдер на hero-інпуті ───
   const HERO_PREFIX = 'Треба '
@@ -826,12 +821,7 @@
       }
       return []
     })
-    try {
-      await navigator.clipboard.writeText(parts.join('\n\n'))
-      toast.success('Розмову скопійовано', { duration: 1500 })
-    } catch {
-      toast.error('Не вдалося скопіювати')
-    }
+    await copyToClipboard(parts.join('\n\n'), 'Розмову скопійовано')
   }
 
   function send() {
@@ -960,10 +950,6 @@
     started = true
     await tick()
     await advance(text)
-  }
-
-  function heroPick(label: string) {
-    startChat(label)
   }
 
   // ─── Одна панель вводу на обидва екрани ───
@@ -1136,14 +1122,9 @@
   }
 
   async function copyText(id: number, text: string) {
-    try {
-      await navigator.clipboard.writeText(text)
-      copiedId = id
-      setTimeout(() => (copiedId = null), 1500)
-      toast.success('Скопійовано', { duration: 1500 })
-    } catch {
-      /* clipboard недоступний — не критично */
-    }
+    if (!(await copyToClipboard(text, 'Повідомлення скопійовано'))) return
+    copiedId = id
+    setTimeout(() => (copiedId = null), 1500)
   }
 
   onMount(() => {
@@ -1244,7 +1225,7 @@
               'flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full transition-[background-color,color,transform] duration-150 active:scale-[0.96]',
               dictation.listening
                 ? 'job-mic-live bg-destructive/10 text-destructive'
-                : 'text-foreground hover:bg-accent',
+                : 'text-(--composer-icon) hover:bg-accent hover:text-foreground',
             ]}
           >
             {#if dictation.listening}
@@ -1271,7 +1252,7 @@
           class={[
             'flex size-8 shrink-0 items-center justify-center rounded-full transition-[background-color,color,transform] duration-150 active:scale-[0.96]',
             photosAllowed && !uploading
-              ? 'cursor-pointer text-foreground hover:bg-accent'
+              ? 'cursor-pointer text-(--composer-icon) hover:bg-accent hover:text-foreground'
               : 'cursor-not-allowed text-muted-foreground/40',
           ]}
         >
@@ -1371,7 +1352,7 @@
   {#snippet composer()}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
-      class="job-input-shell flex cursor-text flex-col border border-border bg-card transition-[border-radius] duration-150 {expanded
+      class="job-input-shell flex cursor-text flex-col transition-[border-radius] duration-150 {expanded
         ? 'rounded-[20px]'
         : 'rounded-full'}"
       onmousedown={focusFromShell}
@@ -1448,9 +1429,9 @@
                     onclick={submit}
                     aria-disabled={submitting || uploading}
                     aria-label="Надіслати"
-                    class="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-primary hover:primary-hover text-white transition-[transform,opacity] duration-150 active:scale-[0.96] aria-disabled:cursor-not-allowed aria-disabled:opacity-30"
+                    class="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-foreground text-background transition-[transform,opacity] duration-150 hover:opacity-85 active:scale-[0.96] aria-disabled:cursor-not-allowed aria-disabled:opacity-30"
                   >
-                    <ArrowUp size={18} aria-hidden="true" />
+                    <Send size={18} strokeWidth={2} />
                   </Tooltip.Trigger>
                   <Tooltip.Content
                     side="bottom"
@@ -1545,31 +1526,40 @@
       >
         {@render composer()}
 
-        <div class="flex flex-wrap justify-center gap-2">
-          {#each HERO_CHIPS as c, i (c.label)}
-            <button
-              type="button"
-              onclick={() => heroPick(c.label)}
-              class="suggestion-chip"
-              in:fly={{
-                y: 6,
-                duration: 450,
-                delay: 160 + i * 60,
-                easing: quintOut,
-              }}
-            >
-              <c.icon size={15} aria-hidden="true" />
-              {c.label}
-            </button>
-          {/each}
-        </div>
-
-        <a
-          href="/dashboard/jobs/new/manual"
-          class="mt-1 text-center text-[12.5px] text-muted-foreground underline-offset-2 transition-opacity hover:opacity-70 hover:underline"
+        <!-- Два способи створити заявку — картками, як режими під полем
+             у Perplexity і їхніми ж кольорами: розмова (бірюзова, вона ж
+             поле вище) і форма без чату (глибока, майже чорна бірюза).
+             Приклади послуг тепер у самому полі — плейсхолдер перебирає
+             їх по черзі. -->
+        <div
+          class="mt-3 grid gap-3 sm:grid-cols-2"
+          in:fly={{ y: 8, duration: 450, delay: 160, easing: quintOut }}
         >
-          Заповнити форму вручну
-        </a>
+          <button
+            type="button"
+            onclick={() => textareaEl?.focus()}
+            class="hero-card hero-card-accent"
+          >
+            <span class="hero-card-title">
+              <MessageSquareText size={20} strokeWidth={1.75} />
+              Розкажи своїми словами
+            </span>
+            <span class="hero-card-text">
+              Опиши задачу в чаті — Zunor уточнить деталі й сам знайде
+              клінера.
+            </span>
+          </button>
+
+          <a href="/dashboard/jobs/new/manual" class="hero-card hero-card-deep">
+            <span class="hero-card-title">
+              <ClipboardList size={20} strokeWidth={1.75} />
+              Заповнити заявку самому
+            </span>
+            <span class="hero-card-text">
+              Без розмови: кілька полів — і заявка готова.
+            </span>
+          </a>
+        </div>
       </div>
     </div>
   {:else}
@@ -1879,7 +1869,7 @@
             <p
               class="pt-2 text-center text-[12px] leading-4 text-balance text-muted-foreground"
             >
-              Zunor — це ШІ, і він може помилятися. Перевіряй деталі заявки.
+              Zunor — це AI, і він може помилятися. Перевіряй деталі заявки.
             </p>
           </div>
         </div>
@@ -1978,7 +1968,7 @@
   }
 
   .job-scope :global(.job-input-plain::placeholder) {
-    color: var(--muted-foreground);
+    color: var(--composer-hint, var(--muted-foreground));
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -1988,32 +1978,102 @@
     }
   }
 
-  /* Оболонка інпута: рамки НЕМАЄ — волосяний ring 0.5px через box-shadow.
-     Тіні під панеллю теж немає навмисно: ambient-тінь відривала панель
-     від полотна, а вона тут не спливає над сторінкою — вона і є
-     сторінка. Стан (ховер, фокус) показує сам контур. */
+  /* Оболонка інпута — кольори поля вводу Perplexity, зняті піпеткою зі
+     скриншота: сіра заливка, а не біла (світла тема — #f0f0f0,
+     odin-light-300; темна — --field #1f2125, на тон світліше за
+     сторінку), контур border-base (--input, ті самі 14%) і в темній —
+     мʼяка темна тінь назовні, від якої поле ледь піднімається над
+     сторінкою. Контур — box-shadow, а не border: так він не змінює
+     розмір капсули, коли та розкривається.
+
+     Іконки в спокої — не колір тексту, а приглушені: 65% тексту поверх
+     поля (у Perplexity це рівно #999ca1 на #1f2125), підказка в полі —
+     50%. Формулою, а не hex-ом: так само лягає й на світле поле. */
   .job-input-shell {
-    --shell-ring: color-mix(in srgb, var(--border) 60%, transparent);
-    box-shadow: 0 0 0 0.5px var(--shell-ring);
-    transition: box-shadow 200ms ease;
+    --shell-bg: #f0f0f0;
+    --shell-ring: var(--input);
+    --shell-shadow: 0 0 #0000;
+    --composer-icon: color-mix(in srgb, var(--foreground) 65%, var(--shell-bg));
+    --composer-hint: color-mix(in srgb, var(--foreground) 50%, var(--shell-bg));
+    background: var(--shell-bg);
+    box-shadow:
+      0 0 0 1px var(--shell-ring),
+      var(--shell-shadow);
+    transition:
+      box-shadow 200ms ease,
+      border-radius 150ms ease;
   }
   .job-input-shell:hover {
-    --shell-ring: var(--border);
+    --shell-ring: var(--input-hover);
   }
   .job-input-shell:focus-within {
-    --shell-ring: color-mix(in srgb, var(--border) 100%, var(--foreground) 15%);
+    --shell-ring: color-mix(in srgb, var(--foreground) 28%, transparent);
+  }
+  :global(.dark) .job-input-shell {
+    --shell-bg: var(--field);
+    --shell-shadow: 0 1px 3px rgb(0 0 0 / 0.35);
   }
 
-  /* У темній темі контур несе всю роботу сам, тож робимо його
-     контрастнішим. */
-  :global(.dark) .job-input-shell {
-    --shell-ring: color-mix(in srgb, var(--border) 90%, transparent);
+  /* ─── Картки під полем (як режими в Perplexity) ───
+     Кольори — бірюза Perplexity, знята піпеткою з їхніх карток і звірена
+     рендером (розходження ≤ 4 з 255): світла пляма в правому верхньому
+     куті розходиться еліпсом, удвічі ширшим за висоту, і лінійно гасне в
+     основний тон. Стала, не від акценту, однакова в обох темах — як
+     смуга «Топ для тебе» в стрічці. */
+  .hero-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-height: 8.5rem;
+    padding: 1.25rem 1.5rem;
+    border-radius: 0.75rem;
+    text-align: left;
+    cursor: pointer;
+    transition:
+      filter 200ms ease,
+      transform 150ms ease;
   }
-  :global(.dark) .job-input-shell:hover {
-    --shell-ring: color-mix(in srgb, var(--border) 100%, white 8%);
+  .hero-card:hover {
+    filter: brightness(1.06);
   }
-  :global(.dark) .job-input-shell:focus-within {
-    --shell-ring: color-mix(in srgb, var(--border) 100%, white 18%);
+  .hero-card:active {
+    transform: scale(0.99);
+  }
+  .hero-card:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  .hero-card-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 17px;
+    font-weight: 500;
+    line-height: 1.3;
+  }
+  .hero-card-text {
+    font-size: 14.5px;
+    line-height: 1.45;
+    opacity: 0.72;
+  }
+
+  /* Бірюзова: #016a71 зі світлою плямою #37949a. */
+  .hero-card-accent {
+    color: #ffffff;
+    background: radial-gradient(65% 91% at 100% 0%, #37949a 0%, #016a71 100%);
+  }
+
+  /* Глибока: майже чорна бірюза #081f22 з плямою #0f454b. */
+  .hero-card-deep {
+    color: #ffffff;
+    background: radial-gradient(56% 75% at 100% 0%, #0f454b 0%, #081f22 100%);
+  }
+
+  @media (width < 40rem) {
+    .hero-card {
+      min-height: 0;
+      padding: 1rem 1.125rem;
+    }
   }
 
   /* Підказки hero й швидкі відповіді — пігулка з DESIGN.md: повне

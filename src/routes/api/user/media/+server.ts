@@ -101,6 +101,40 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     return json({ ok: true })
   }
 
+  // ── AVATAR REMOVE ─────────────────────────────────────────────────────
+  // Фото зникає і з профілю, і з хмари. Що видаляти, вирішує СЕРВЕР за
+  // userId із сесії, а не тіло запиту: чужий файл так не зачепити.
+  if (body.kind === 'avatar-remove') {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { avatarPublicId: true },
+    })
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { avatar: null, avatarPublicId: null },
+    })
+    await Promise.all([refreshSessionUser(userId), forgetMasterPage(userId)])
+
+    // Завантажувач пише аватар у фіксований publicId (upload/signature),
+    // і файл там уже може бути, навіть якщо в базу він не потрапив
+    // (завантажили на онбордингу й не зберегли). Плюс старий id із бази,
+    // якщо він наш. invalidate — щоб CDN перестав віддавати копію.
+    const ids = new Set([`zunor/users/${userId}/avatar/profile`])
+    if (user?.avatarPublicId?.startsWith(`zunor/users/${userId}/`)) {
+      ids.add(user.avatarPublicId)
+    }
+    await Promise.all(
+      [...ids].map((id) =>
+        cloudinary.uploader
+          .destroy(id, { resource_type: 'image', invalidate: true })
+          .catch((err) => console.error('[media:delete-avatar]', err)),
+      ),
+    )
+
+    return json({ ok: true })
+  }
+
   // ── PORTFOLIO ADD ─────────────────────────────────────────────────────
   if (body.kind === 'portfolio-add') {
     if (!body.url || !body.publicId)

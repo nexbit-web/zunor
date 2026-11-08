@@ -20,20 +20,20 @@
 
   <!-- Перехід у виконавці — окрема усвідомлена дія, а не побічний ефект
        відкриття форми. Назад дороги немає, тому попереджаємо явно.
-       Лінія зверху — та сама, що між рештою розділів сторінки. -->
-  <div class="mt-8 border-t border-border pt-8">
+       Окремої лінії зверху немає: її дає заголовок розділу. -->
+  <div class="mt-10">
     <SettingsGroup
       title="Роль"
       footnote="Повернутися до ролі замовника буде неможливо."
     >
       <SettingsRow
         label="Стати виконавцем"
-        description="Заповніть профіль виконавця — і почнете отримувати заявки."
+        description="Отримуйте заявки як майстер."
       >
         {#snippet control()}
           <Button
             onclick={() => goto('/dashboard/onboarding/master')}
-            variant="primary-outline"
+            variant="secondary"
           >
             Почати
           </Button>

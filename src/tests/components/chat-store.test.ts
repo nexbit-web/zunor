@@ -91,6 +91,8 @@ function messagePayload(
       senderId: over.senderId ?? 'peer-1',
       replyToId: null,
       replyTo: null,
+      reactions: [],
+      linkPreview: null,
     },
   }
 }

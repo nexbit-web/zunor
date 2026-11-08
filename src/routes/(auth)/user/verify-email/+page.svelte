@@ -1,6 +1,6 @@
 <script lang="ts">
   import OtpForm from '$lib/components/otp-form.svelte'
-  import { ArrowLeft } from 'lucide-svelte'
+  import ArrowLeft from '$lib/components/icons/set/arrow-left.svelte'
   import type { PageData } from './$types'
 
   let { data }: { data: PageData } = $props()

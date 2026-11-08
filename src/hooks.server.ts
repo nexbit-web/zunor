@@ -137,7 +137,7 @@ const guardHandle: Handle = async ({ event, resolve }) => {
   // лишається доступним онбордженому КЛІЄНТУ — це апгрейд ролі,
   // і його власний load сам розвертає мастера на /dashboard/profile.
   if (account.onboarded && pathname === ONBOARDING_PATH) {
-    redirect(303, '/dashboard/profile')
+    redirect(303, '/dashboard ')
   }
 
   // Віддаємо стан далі — load-функції не роблять той самий SELECT удруге.

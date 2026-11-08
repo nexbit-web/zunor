@@ -1,7 +1,7 @@
 // Що майстер розповів про себе для підбору.
 //
 // Спільне для будь-якої категорії — авто й формат роботи — це колонки
-// MasterProfile (hasVehicle, crew, companyName) з типами в базі. Уміння в
+// MasterProfile (hasVehicle, crew) з типами в базі. Уміння в
 // межах категорії («які прибирання робите») — контент категорії, тож
 // лежать у MasterProfile.metadata.skills: нова категорія принесе свої
 // (AGENTS.md, «Движок vs контент»).
@@ -20,7 +20,37 @@ export function isCrew(v: unknown): v is Crew {
   return v === 'SOLO' || v === 'TEAM' || v === 'COMPANY'
 }
 
-export const COMPANY_NAME_MAX = 80
+/**
+ * Хто реєструється — людина чи компанія. Окремого поля немає: компанія —
+ * це crew = COMPANY, людина — SOLO або TEAM. Від відповіді залежить сама
+ * анкета: імʼя чи назва (обидва — User.name), фото чи логотип.
+ */
+export type MasterKind = 'person' | 'company'
+
+/** «Сам чи з напарником» питаємо лише людину: компанія — завжди команда. */
+export type PersonCrew = Exclude<Crew, 'COMPANY'>
+
+export function kindOfCrew(crew: Crew | null | undefined): MasterKind | null {
+  if (crew === 'COMPANY') return 'company'
+  return crew ? 'person' : null
+}
+
+export const KIND_OPTIONS = [
+  {
+    value: 'person',
+    label: 'Приватний майстер',
+    hint: 'Працюю сам(а) або з напарником',
+  },
+  {
+    value: 'company',
+    label: 'Клінінгова компанія',
+    hint: 'Працюємо командою під назвою компанії',
+  },
+] as const satisfies readonly {
+  value: MasterKind
+  label: string
+  hint: string
+}[]
 
 /**
  * Уміння за категоріями з MasterProfile.metadata: { [Category.slug]: дані
@@ -70,10 +100,20 @@ export const CREW_OPTIONS = [
   },
 ] as const satisfies readonly { value: Crew; label: string; hint: string }[]
 
+/** Варіанти для людини — без компанії: її обирають першим питанням. */
+export const PERSON_CREW_OPTIONS = CREW_OPTIONS.filter(
+  (o): o is Extract<(typeof CREW_OPTIONS)[number], { value: PersonCrew }> =>
+    o.value !== 'COMPANY',
+)
+
 export function vehicleLabel(v: boolean | null): string {
   return VEHICLE_OPTIONS.find((o) => o.value === v)?.label ?? ''
 }
 
 export function crewLabel(v: Crew | null): string {
   return CREW_OPTIONS.find((o) => o.value === v)?.label ?? ''
+}
+
+export function kindLabel(v: MasterKind | null): string {
+  return KIND_OPTIONS.find((o) => o.value === v)?.label ?? ''
 }

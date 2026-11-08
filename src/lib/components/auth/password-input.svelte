@@ -2,7 +2,8 @@
   // Поле пароля з перемикачем «показати» — спільне для входу й реєстрації.
   // Значення й видимість віддає стану рамки (password-field.svelte.ts): з
   // нього знак над формою знає, коли закрити очі руками, а коли підглянути.
-  import { Eye, EyeOff } from 'lucide-svelte'
+  import Eye from '$lib/components/icons/set/eye.svelte'
+  import EyeOff from '$lib/components/icons/set/eye-off.svelte'
   import { Input } from '$lib/components/ui/input'
   import { usePasswordField } from './password-field.svelte'
 

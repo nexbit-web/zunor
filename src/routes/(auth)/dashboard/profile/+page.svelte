@@ -3,7 +3,7 @@
   import ClientOnboarding from '$lib/components/onboarding/client-onboarding.svelte'
   import MasterOnboarding from '$lib/components/onboarding/master-onboarding.svelte'
   import { Button } from '$lib/components/ui/button'
-  import { Hammer } from 'lucide-svelte'
+  import Hammer from '$lib/components/icons/set/hammer.svelte'
   import type { PageData } from './$types'
 
   let { data }: { data: PageData } = $props()

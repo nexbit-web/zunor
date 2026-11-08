@@ -21,9 +21,11 @@ export interface OnboardingMasterProfile {
   travelRadiusKm: number | null
   /** Своє авто; null — не відповідав. */
   hasVehicle?: boolean | null
-  /** Формат роботи ($lib/masters/meta); null — не відповідав. */
+  /**
+   * Формат роботи ($lib/masters/meta); null — не відповідав. COMPANY —
+   * акаунт компанії: тоді user.name — це її назва.
+   */
   crew?: Crew | null
-  companyName?: string | null
   /** Уміння в межах категорій: { skills } ($lib/masters/meta). */
   metadata?: unknown
   description: string | null

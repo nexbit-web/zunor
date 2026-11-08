@@ -1,9 +1,9 @@
 <script lang="ts">
   import { Input } from '$lib/components/ui/input'
   import { Spinner } from '$lib/components/ui/spinner'
-  import CheckIcon from '@lucide/svelte/icons/check'
-  import CircleAlertIcon from '@lucide/svelte/icons/circle-alert'
-  import { AtSign } from 'lucide-svelte'
+  import CheckIcon from '$lib/components/icons/set/check.svelte'
+  import CircleAlertIcon from '$lib/components/icons/set/circle-alert.svelte'
+  import AtSign from '$lib/components/icons/set/at-sign.svelte'
   import { cn } from '$lib/utils'
   import { validateUsername } from '$lib/username'
 

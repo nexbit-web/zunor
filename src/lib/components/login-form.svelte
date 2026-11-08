@@ -19,7 +19,7 @@
   import toast from 'svelte-hot-french-toast'
   import { page } from '$app/state'
   import { safeRedirectTarget } from '$lib/utils/redirect'
-  import { WaveHelloIcon } from '$lib/components/icons'
+  import { WaveIcon } from '$lib/components/icons'
   let { class: className, ...restProps }: HTMLFormAttributes = $props()
   const id = $props.id()
 
@@ -94,7 +94,7 @@
       // Тост ДО навігації: invalidateAll перемонтовує кореневий layout
       // разом із <Toaster>, і черга тостів обнуляється.
       const name = data?.user?.name ?? ''
-      toast(name ? `Вітаємо, ${name}!` : 'Вітаємо!', { icon: WaveHelloIcon })
+      toast(name ? `Вітаємо, ${name}!` : 'Вітаємо!', { icon: WaveIcon })
 
       await invalidateAll()
       await goto(safeRedirectTarget(page.url.searchParams.get('redirectTo')))

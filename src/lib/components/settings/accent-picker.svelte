@@ -6,7 +6,7 @@
   // немає: колір зразка й колір, який отримає застосунок, — одне й те
   // саме правило, а не дві копії.
 
-  import { Check } from 'lucide-svelte'
+  import Check from '$lib/components/icons/set/check.svelte'
   import { cn } from '$lib/utils'
   import { ACCENTS, appearance } from '$lib/stores/appearance.svelte'
   import { nextRadioIndex } from './radio-keys'

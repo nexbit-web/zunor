@@ -8,44 +8,45 @@ datasource db {
 }
 
 model User {
-  id                   String         @id @default(cuid())
-  email                String         @unique
-  emailVerified        Boolean        @default(false)
+  id                   String            @id @default(cuid())
+  email                String            @unique
+  emailVerified        Boolean           @default(false)
   name                 String?
-  username             String?        @unique
+  username             String?           @unique
   phone                String?
   avatar               String?
   avatarPublicId       String?
   bio                  String?
-  role                 Role           @default(CLIENT)
+  role                 Role              @default(CLIENT)
   city                 String?
   /// Район міста (District.slug). Майстру — звідки він їде, клієнту — куди
   /// їхати; з нього рахуються кільця розсилки.
   district             String?
-  onboarded            Boolean        @default(false)
-  avgRatingAsMaster    Float          @default(0)
-  reviewsCountAsMaster Int            @default(0)
-  avgRatingAsClient    Float          @default(0)
-  reviewsCountAsClient Int            @default(0)
-  isOnline             Boolean        @default(false)
-  lastSeen             DateTime       @default(now())
-  createdAt            DateTime       @default(now())
-  updatedAt            DateTime       @updatedAt
-  banned               Boolean        @default(false)
+  onboarded            Boolean           @default(false)
+  avgRatingAsMaster    Float             @default(0)
+  reviewsCountAsMaster Int               @default(0)
+  avgRatingAsClient    Float             @default(0)
+  reviewsCountAsClient Int               @default(0)
+  isOnline             Boolean           @default(false)
+  lastSeen             DateTime          @default(now())
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  banned               Boolean           @default(false)
   banReason            String?
   banExpires           DateTime?
   aiProfile            Json?
   accounts             Account[]
   chats                ChatMember[]
-  jobs                 Job[]          @relation("ClientJobs")
+  jobs                 Job[]             @relation("ClientJobs")
   masterProfile        MasterProfile?
-  sentMessages         Message[]      @relation("SentMessages")
+  sentMessages         Message[]         @relation("SentMessages")
+  messageReactions     MessageReaction[]
   notifications        Notification[]
-  clientOrders         Order[]        @relation("ClientOrders")
-  masterOrders         Order[]        @relation("MasterOrders")
+  clientOrders         Order[]           @relation("ClientOrders")
+  masterOrders         Order[]           @relation("MasterOrders")
   orderEvents          OrderEvent[]
-  proposals            Proposal[]     @relation("MasterProposals")
-  authoredReviews      Review[]       @relation("AuthorReviews")
+  proposals            Proposal[]        @relation("MasterProposals")
+  authoredReviews      Review[]          @relation("AuthorReviews")
   sessions             Session[]
 
   @@index([username])
@@ -71,9 +72,8 @@ model MasterProfile {
   hasVehicle               Boolean?
   /// Формат роботи: сам, бригада чи клінінгова компанія. Від нього й
   /// обсягу заявки (Job.effort) залежить, хто йде першим. null — не відповідав.
+  /// COMPANY — акаунт компанії: її назва лежить у User.name, як імʼя в людини.
   crew                     CrewType?
-  /// Назва компанії — лише для crew = COMPANY, необовʼязкова.
-  companyName              String?
   completedOrders          Int                @default(0)
   totalOrders              Int                @default(0)
   createdAt                DateTime           @default(now())
@@ -247,27 +247,45 @@ model ChatMember {
 }
 
 model Message {
-  id                 String      @id @default(cuid())
-  type               MessageType @default(TEXT)
-  text               String      @default("")
+  id                 String            @id @default(cuid())
+  type               MessageType       @default(TEXT)
+  text               String            @default("")
   attachmentUrl      String?
   attachmentPublicId String?
   attachmentMimeType String?
   attachmentSize     Int?
   attachmentName     String?
-  isRead             Boolean     @default(false)
+  isRead             Boolean           @default(false)
   editedAt           DateTime?
   deletedAt          DateTime?
   chatId             String
   senderId           String
   replyToId          String?
-  createdAt          DateTime    @default(now())
-  chat               Chat        @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  replyTo            Message?    @relation("MessageReply", fields: [replyToId], references: [id])
-  replies            Message[]   @relation("MessageReply")
-  sender             User        @relation("SentMessages", fields: [senderId], references: [id])
+  /// Картка першого посилання в тексті ($lib/server/link-preview):
+  /// { url, siteName, title, description }. Дописується після відправки.
+  linkPreview        Json?
+  createdAt          DateTime          @default(now())
+  chat               Chat              @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  replyTo            Message?          @relation("MessageReply", fields: [replyToId], references: [id])
+  replies            Message[]         @relation("MessageReply")
+  sender             User              @relation("SentMessages", fields: [senderId], references: [id])
+  reactions          MessageReaction[]
 
   @@index([chatId, createdAt])
+}
+
+/// Реакція на повідомлення — одна на людину, як у Telegram без Premium:
+/// нова замінює стару. Набір емодзі закритий ($lib/components/chat/reactions),
+/// тож довільний рядок сюди не потрапить.
+model MessageReaction {
+  messageId String
+  userId    String
+  emoji     String
+  createdAt DateTime @default(now())
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([messageId, userId])
 }
 
 model Review {

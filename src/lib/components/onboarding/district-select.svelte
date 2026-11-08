@@ -13,9 +13,9 @@
   import * as Command from '$lib/components/ui/command'
   import { cn } from '$lib/utils'
   import { findDistrict, type District } from '$lib/geo/districts'
-  import CheckIcon from '@lucide/svelte/icons/check'
-  import ChevronsUpDownIcon from '@lucide/svelte/icons/chevrons-up-down'
-  import { House } from 'lucide-svelte'
+  import CheckIcon from '$lib/components/icons/set/check.svelte'
+  import ChevronsUpDownIcon from '$lib/components/icons/set/chevrons-up-down.svelte'
+  import House from '$lib/components/icons/set/house.svelte'
 
   interface Props {
     /** Райони обраного міста. */
@@ -69,7 +69,7 @@
         role="combobox"
         aria-expanded={open}
         aria-invalid={invalid}
-        class="w-full cursor-pointer justify-between rounded-[10px] bg-background pl-3 font-normal focus-visible:border-input focus-visible:ring-0 aria-invalid:ring-0"
+        class="w-full cursor-pointer justify-between rounded-[10px] border-input bg-field pl-3 font-normal hover:bg-field aria-expanded:bg-background focus-visible:border-input focus-visible:ring-0 aria-invalid:ring-0 dark:bg-field dark:hover:bg-field dark:aria-expanded:bg-background"
       >
         <span class="flex min-w-0 items-center gap-2">
           <House

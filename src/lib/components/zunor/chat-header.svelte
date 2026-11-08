@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Верхня смуга діалогу: місто й меню «⋯». Місто — обставина розмови, а не
+  // Верхня смуга діалогу: місто й меню (три смужки). Місто — обставина розмови, а не
   // контрол: воно з профілю й не міняється від репліки до репліки, тож
   // живе тут, а не в панелі вводу.
   //
@@ -9,13 +9,13 @@
   import { onMount } from 'svelte'
   import { goto } from '$app/navigation'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
-  import Ellipsis from '@lucide/svelte/icons/ellipsis'
-  import MapPin from '@lucide/svelte/icons/map-pin'
-  import SquarePen from '@lucide/svelte/icons/square-pen'
-  import Copy from '@lucide/svelte/icons/copy'
-  import Volume2 from '@lucide/svelte/icons/volume-2'
-  import FileText from '@lucide/svelte/icons/file-text'
-  import Settings2 from '@lucide/svelte/icons/settings-2'
+  import MenuIcon from '$lib/components/icons/set/menu.svelte'
+  import MapPin from '$lib/components/icons/set/map-pin.svelte'
+  import SquarePen from '$lib/components/icons/set/square-pen.svelte'
+  import Copy from '$lib/components/icons/set/copy.svelte'
+  import Volume2 from '$lib/components/icons/set/volume-2.svelte'
+  import FileText from '$lib/components/icons/set/file-text.svelte'
+  import Settings2 from '$lib/components/icons/set/settings-2.svelte'
   import {
     isMuted,
     loadMutePreference,
@@ -66,7 +66,7 @@
       aria-label="Дії з розмовою"
       class="pointer-events-auto flex size-8 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none data-[state=open]:bg-accent data-[state=open]:text-foreground"
     >
-      <Ellipsis size={18} aria-hidden="true" />
+      <MenuIcon size={18} strokeWidth={1.75} />
     </DropdownMenu.Trigger>
     <DropdownMenu.Content
       align="end"

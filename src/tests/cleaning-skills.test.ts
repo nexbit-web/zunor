@@ -2,14 +2,19 @@ import { describe, it, expect } from 'vitest'
 import {
   cleaningConditions,
   cleaningNeedsVehicle,
+  describeCleaningSkills,
   parseCleaningSkills,
   validateCleaningSkills,
 } from '$lib/categories/cleaning/skills'
 import { matchingFor, meetsConditions } from '$lib/categories/matching'
 import {
   CREW_OPTIONS,
+  KIND_OPTIONS,
+  PERSON_CREW_OPTIONS,
   crewLabel,
   isCrew,
+  kindLabel,
+  kindOfCrew,
   parseMasterSkills,
 } from '$lib/masters/meta'
 
@@ -105,6 +110,30 @@ describe('реєстр категорій', () => {
   })
 })
 
+describe('вітрина: що показати клієнту', () => {
+  it('підписи послуг і обʼєктів — у порядку довідника, без сміття', () => {
+    const shown = describeCleaningSkills({
+      services: ['windows', 'deep', 'хімія'],
+      premises: ['business'],
+    })
+    expect(shown.services).toEqual([
+      { key: 'deep', label: 'Генеральне' },
+      { key: 'windows', label: 'Миття вікон' },
+    ])
+    expect(shown.premises).toEqual([
+      { key: 'business', label: 'Офіси й комерція' },
+    ])
+  })
+
+  // Старий профіль без анкети — сторінка просто не малює цих рядків.
+  it('без анкети — порожньо, а не падіння', () => {
+    expect(describeCleaningSkills(undefined)).toEqual({
+      services: [],
+      premises: [],
+    })
+  })
+})
+
 describe('відповіді майстра', () => {
   it('уміння з metadata читаються як є', () => {
     expect(parseMasterSkills({ skills: { a: 1 } })).toEqual({ a: 1 })
@@ -131,5 +160,23 @@ describe('відповіді майстра', () => {
     ])
     expect(crewLabel('COMPANY')).toBe('Клінінгова компанія')
     expect(crewLabel(null)).toBe('')
+  })
+
+  // Перше питання анкети — «людина чи компанія»; окремого поля в базі
+  // немає, відповідь читається з формату роботи.
+  it('людина чи компанія — з формату роботи', () => {
+    expect(kindOfCrew('COMPANY')).toBe('company')
+    expect(kindOfCrew('SOLO')).toBe('person')
+    expect(kindOfCrew('TEAM')).toBe('person')
+    // Старий профіль без відповіді — питаємо заново, а не вгадуємо.
+    expect(kindOfCrew(null)).toBeNull()
+    expect(kindOfCrew(undefined)).toBeNull()
+    expect(KIND_OPTIONS.map((o) => o.value)).toEqual(['person', 'company'])
+    expect(kindLabel('company')).toBe('Клінінгова компанія')
+    expect(kindLabel(null)).toBe('')
+  })
+
+  it('«сам чи з напарником» — без компанії: її обирають першим питанням', () => {
+    expect(PERSON_CREW_OPTIONS.map((o) => o.value)).toEqual(['SOLO', 'TEAM'])
   })
 })

@@ -2,13 +2,15 @@
   import { Button } from '$lib/components/ui/button'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
   import PageHead from '$lib/components/dashboard/page-head.svelte'
-  import JobRow from './job-row.svelte'
+  import JobCard from './job-card.svelte'
+  import JobState from './job-state.svelte'
+  import { jobState } from './display'
   import JobCardSkeleton from './job-card-skeleton.svelte'
-  import { Plus, Briefcase, ChevronDown, Check, Calendar } from 'lucide-svelte'
+  import Plus from '$lib/components/icons/set/plus.svelte'
+  import Briefcase from '$lib/components/icons/set/briefcase.svelte'
+  import ChevronDown from '$lib/components/icons/set/chevron-down.svelte'
+  import Check from '$lib/components/icons/set/check.svelte'
   import { onMount, untrack } from 'svelte'
-  import { formatDay } from '$lib/utils/time'
-  import { pluralUk } from '$lib/utils/plural'
-  import { resolveWhen } from '$lib/categories/cleaning/presets'
 
   let {
     initialJobs,
@@ -71,50 +73,6 @@
 
   /** Живі заявки — те, що ще чекає на клієнта чи майстра. */
   const activeCount = $derived(counts.open + counts.inProgress)
-
-  /**
-   * Стан словами клієнта, а не статусом із бази. «Відкрита» нічого не
-   * каже людині: їй важливо, чи шукають ще майстра, чи вже є з кого
-   * обирати. Тому відкрита заявка з пропозиціями — окремий стан, і саме
-   * він єдиний залитий кольором: це місце, де клієнт має щось зробити.
-   */
-  type Tone = 'action' | 'live' | 'progress' | 'done' | 'off'
-
-  function stateOf(job: any): { label: string; tone: Tone } {
-    switch (job.status) {
-      case 'OPEN': {
-        const n = job.proposalsCount ?? 0
-        return n > 0
-          ? {
-              label: `${n} ${pluralUk(n, 'пропозиція', 'пропозиції', 'пропозицій')}`,
-              tone: 'action',
-            }
-          : { label: 'Шукаємо майстра', tone: 'live' }
-      }
-      case 'IN_PROGRESS':
-        return { label: 'Майстра обрано', tone: 'progress' }
-      case 'COMPLETED':
-        return { label: 'Завершена', tone: 'done' }
-      case 'EXPIRED':
-        return { label: 'Термін минув', tone: 'off' }
-      default:
-        return { label: 'Скасована', tone: 'off' }
-    }
-  }
-
-  const TONE: Record<Tone, string> = {
-    action: 'bg-primary text-primary-foreground',
-    live: 'bg-primary/10 text-primary',
-    progress: 'bg-amber-500/12 text-amber-700 dark:text-amber-400',
-    done: 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-400',
-    off: 'bg-muted text-muted-foreground',
-  }
-
-  /** День прибирання з урахуванням «today/tomorrow» від дня створення. */
-  function dayOf(job: any): string {
-    const iso = resolveWhen(job.metadata?.when, job.createdAt)
-    return iso ? formatDay(iso) : ''
-  }
 
   async function loadMore() {
     if (loadingMore || !nextCursor) return
@@ -183,22 +141,30 @@
             {/snippet}
           </DropdownMenu.Trigger>
 
-          <DropdownMenu.Content align="end" class="w-60 rounded-2xl p-1.5">
+          <!-- Вигляд меню й пунктів — зі спільного ui/dropdown-menu (як у
+               референсі в docs/); тут лише ширина. -->
+          <DropdownMenu.Content align="end" class="w-auto min-w-56">
             {#each STATUS_OPTIONS as option (option.value)}
               <DropdownMenu.Item
-                class="flex cursor-pointer items-center justify-between gap-3 rounded-xl px-3 py-2 text-sm outline-none data-highlighted:bg-accent"
+                class="cursor-pointer"
                 onclick={() => (statusFilter = option.value)}
               >
-                <span class="flex min-w-0 items-center gap-2">
-                  <span class="truncate">{option.label}</span>
-                  <span class="text-xs tabular-nums text-muted-foreground">
-                    {option.count}
-                  </span>
+                <span class="min-w-0 flex-1 truncate">{option.label}</span>
+                <span class="text-xs tabular-nums text-muted-foreground">
+                  {option.count}
                 </span>
-                {#if statusFilter === option.value}
-                  <Check class="size-4 shrink-0 text-ring" />
-                {/if}
+                <!-- Місце під галочку є завжди: інакше лічильник обраного
+                     пункту стрибав би ліворуч. -->
+                <Check
+                  class="size-4 shrink-0 text-primary {statusFilter !==
+                  option.value
+                    ? 'invisible'
+                    : ''}"
+                />
               </DropdownMenu.Item>
+              {#if option.value === 'all'}
+                <DropdownMenu.Separator />
+              {/if}
             {/each}
           </DropdownMenu.Content>
         </DropdownMenu.Root>
@@ -244,41 +210,24 @@
     {/if}
   </div>
 {:else}
-  <ul class="mt-1 border-t border-border/60">
+  <ul class="mt-2 flex flex-col gap-3">
     {#each filtered as job (job.id)}
-      {@const state = stateOf(job)}
-      {@const day = dayOf(job)}
-      <JobRow
+      {@const state = jobState(job)}
+      <JobCard
         href={`/dashboard/jobs/${job.id}`}
-        service={job.metadata?.service}
         title={job.title}
         description={job.description}
+        metadata={job.metadata}
+        createdAt={job.createdAt}
+        budgetMinCents={job.budgetMinCents}
+        budgetMaxCents={job.budgetMaxCents}
+        currency={job.currency}
         dimmed={state.tone === 'off'}
       >
-        {#snippet status()}
-          <span
-            class={[
-              'inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-[12.5px] font-medium whitespace-nowrap',
-              TONE[state.tone],
-            ]}
-          >
-            {#if state.tone === 'live'}
-              <!-- Пульс — «пошук іде просто зараз». Рівно один на рядок:
-                   якби дихало все, не казало б нічого. -->
-              <span class="live-dot size-1.5 rounded-full bg-primary"></span>
-            {/if}
-            {state.label}
-          </span>
+        {#snippet aside()}
+          <JobState status={job.status} proposalsCount={job.proposalsCount} />
         {/snippet}
-        {#snippet meta()}
-          {#if day}
-            <span class="inline-flex items-center gap-1.5">
-              <Calendar class="size-3.5" aria-hidden="true" />
-              <span class="text-foreground/80">{day}</span>
-            </span>
-          {/if}
-        {/snippet}
-      </JobRow>
+      </JobCard>
     {/each}
   </ul>
 
@@ -291,23 +240,3 @@
     <p class="py-8 text-center text-xs text-muted-foreground">Кінець списку</p>
   {/if}
 {/if}
-
-<style>
-  .live-dot {
-    animation: live-pulse 2s ease-in-out infinite;
-  }
-  @keyframes live-pulse {
-    0%,
-    100% {
-      opacity: 1;
-    }
-    50% {
-      opacity: 0.35;
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .live-dot {
-      animation: none;
-    }
-  }
-</style>

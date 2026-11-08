@@ -1,14 +1,12 @@
 <script lang="ts">
   import { invalidateAll, goto } from '$app/navigation'
   import toast from 'svelte-hot-french-toast'
-  import {
-    Play,
-    Check,
-    X,
-    Loader2,
-    AlertCircle,
-    MessageCircle,
-  } from 'lucide-svelte'
+  import Play from '$lib/components/icons/set/play.svelte'
+  import Check from '$lib/components/icons/set/check.svelte'
+  import X from '$lib/components/icons/set/x.svelte'
+  import Loader2 from '$lib/components/icons/set/loader-circle.svelte'
+  import AlertCircle from '$lib/components/icons/set/circle-alert.svelte'
+  import MessageCircle from '$lib/components/icons/set/message-circle.svelte'
   import { Button } from '$lib/components/ui/button'
   import { Textarea } from '$lib/components/ui/textarea'
   import * as Dialog from '$lib/components/ui/dialog'
@@ -252,7 +250,13 @@
       <Button variant="outline" onclick={() => (cancelOpen = false)}>
         Не зараз
       </Button>
-      <Button onclick={cancel} disabled={loading === 'cancel'}>
+      <!-- Незворотна дія — червона, а не акцентна: синя «Підтвердити
+           скасування» виглядала б як звичайне «Далі». -->
+      <Button
+        variant="destructive"
+        onclick={cancel}
+        disabled={loading === 'cancel'}
+      >
         {#if loading === 'cancel'}
           <Loader2 class="size-4 animate-spin" />
         {/if}

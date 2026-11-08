@@ -6,6 +6,8 @@
  * В Prisma-enum значение SYSTEM физически остаётся (drop value в Postgres
  * дорогой и бессмысленный), но ни писаться, ни читаться оно больше не будет.
  */
+import type { ReactionGroup } from './reactions'
+
 export type MessageType = 'TEXT' | 'PHOTO' | 'FILE'
 
 export type UserRole = 'CLIENT' | 'FREELANCER' | 'ADMIN'
@@ -44,6 +46,25 @@ export interface ChatMessage {
     senderId: string
     type: MessageType
   } | null
+  /** Реакції, згруповані за емодзі ($lib/components/chat/reactions). */
+  reactions: ReactionGroup[]
+  /** Картка першого посилання в тексті ($lib/server/link-preview). */
+  linkPreview: LinkPreview | null
+}
+
+/**
+ * Превʼю посилання: сайт, заголовок, опис — як у Telegram. Картинки
+ * немає навмисно (чому — у $lib/server/link-preview).
+ *
+ * `type`, а не `interface`: обʼєкт пишеться в Json-колонку, а інтерфейс
+ * Prisma як Json не приймає (немає індексної сигнатури).
+ */
+export type LinkPreview = {
+  /** Посилання з тексту повідомлення — саме воно відкривається. */
+  url: string
+  siteName: string
+  title: string
+  description: string
 }
 
 export interface ChatPreview {
@@ -53,6 +74,8 @@ export interface ChatPreview {
   lastMessageText: string | null
   lastMessageAt: string | null
   lastSenderId: string | null
+  /** До якого моменту співрозмовник прочитав — ✓✓ біля мого останнього. */
+  peerLastReadAt?: string | null
   unreadCount: number
   updatedAt: string
 }
@@ -62,6 +85,14 @@ export interface ChatDetails {
   peer: ChatUser
   members: ChatUser[]
   myLastReadAt: string | null
+  /**
+   * До якого моменту співрозмовник прочитав чат — з нього галочки ✓✓ на
+   * моїх повідомленнях. Раніше тут брався МІЙ lastReadAt, і подвійна
+   * галочка після перезавантаження означала «я прочитав», а не «він».
+   */
+  peerLastReadAt: string | null
+  /** Коли співрозмовника востаннє бачили ($lib/server/presence). */
+  peerLastSeen: string | null
   mutedUntil: string | null
 }
 
@@ -79,11 +110,26 @@ export interface MessageEditPayload {
   chatId: string
   text: string
   editedAt: string
+  /** Посилання змінилось чи зникло — картка теж (нова прийде окремо). */
+  linkPreview?: LinkPreview | null
+}
+
+export interface MessagePreviewPayload {
+  chatId: string
+  messageId: string
+  linkPreview: LinkPreview
 }
 
 export interface MessageDeletePayload {
   messageId: string
   chatId: string
+}
+
+export interface MessageReactionPayload {
+  chatId: string
+  messageId: string
+  /** Повний стан реакцій після зміни — застосовується як є. */
+  reactions: ReactionGroup[]
 }
 
 export interface MessageReadPayload {

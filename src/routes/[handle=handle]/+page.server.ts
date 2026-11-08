@@ -71,6 +71,9 @@ export const load: PageServerLoad = async ({ params, locals, setHeaders }) => {
     reviewsCount: page.reviewsCount,
     completedOrders: page.completedOrders,
     reviews: page.reviews,
+    crew: page.crew ?? null,
+    services: page.services ?? [],
+    premises: page.premises ?? [],
   }
 
   return {

@@ -5,7 +5,7 @@ import { clientRatingSelect, flattenClientRating } from '$lib/server/user-dto'
 import { moneyParam } from '$lib/server/query'
 import { getDistricts } from '$lib/server/reference'
 import { cityDistricts, jobPlace } from '$lib/geo/districts'
-import { masterFeedScope } from '$lib/server/dispatch'
+import { bestMatches, masterFeedScope } from '$lib/server/dispatch'
 import type { RequestHandler } from './$types'
 
 const PAGE_SIZE = 20
@@ -53,6 +53,9 @@ export const GET: RequestHandler = async ({ locals, url }) => {
           categories: true,
           travelRadiusKm: true,
           metadata: true,
+          // Для «Топ для тебе» (bestMatches): авто й формат роботи.
+          hasVehicle: true,
+          crew: true,
         },
       },
     },
@@ -70,6 +73,9 @@ export const GET: RequestHandler = async ({ locals, url }) => {
         id: true,
         title: true,
         description: true,
+        // Картка заявки бере з неї послугу, день і теги — без неї друга
+        // сторінка «Моїх заявок» малювалась би без них.
+        metadata: true,
         category: true,
         city: true,
         status: true,
@@ -180,6 +186,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
       city: true,
       district: true,
       status: true,
+      effort: true,
       budgetMinCents: true,
       budgetMaxCents: true,
       currency: true,
@@ -203,18 +210,35 @@ export const GET: RequestHandler = async ({ locals, url }) => {
   const items = hasMore ? jobs.slice(0, PAGE_SIZE) : jobs
   const nextCursor = hasMore ? items[items.length - 1].id : null
 
+  // Той самий район і відстань, що в першій сторінці з SSR. Фільтр
+  // ?cities= може дати заявку з чужого міста — тоді без відстані, а отже
+  // й без «Топ для тебе».
+  const placed = items.map((j) => ({
+    job: j,
+    place: jobPlace(
+      cityDistricts(allDistricts, j.city),
+      j.district,
+      j.city === user.city ? user.district : null,
+    ),
+  }))
+  const matches = bestMatches(
+    placed.map(({ job, place }) => ({
+      id: job.id,
+      category: job.category,
+      metadata: job.metadata,
+      effort: job.effort,
+      distanceKm: place.distanceKm,
+    })),
+    mp,
+  )
+
   return json({
-    jobs: items.map((j) => ({
+    jobs: placed.map(({ job: j, place }) => ({
       ...j,
       // Автор заявки — це замовник, тому показуємо його клієнтський рейтинг.
       client: flattenClientRating(j.client),
-      // Той самий район і відстань, що в першій сторінці з SSR. Фільтр
-      // ?cities= може дати заявку з чужого міста — тоді без відстані.
-      place: jobPlace(
-        cityDistricts(allDistricts, j.city),
-        j.district,
-        j.city === user.city ? user.district : null,
-      ),
+      place,
+      match: matches.get(j.id) ?? null,
       createdAt: j.createdAt.toISOString(),
       expiresAt: j.expiresAt.toISOString(),
     })),

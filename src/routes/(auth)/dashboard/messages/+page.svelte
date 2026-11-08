@@ -3,7 +3,7 @@
   import { goto } from '$app/navigation'
   import * as Resizable from '$lib/components/ui/resizable'
   import ChatListSidebar from '$lib/components/chat/chat-list-sidebar.svelte'
-  import { MessageSquare } from 'lucide-svelte'
+  import ChatBackground from '$lib/components/chat/chat-background.svelte'
   import type { PageData } from './$types'
 
   let { data }: { data: PageData } = $props()
@@ -78,17 +78,17 @@
     <Resizable.Handle withHandle={false} class="w-0 bg-transparent" />
 
     <Resizable.Pane defaultSize={100 - initialSize}>
-      <!-- Порожній стан правої колонки: знак по центру, без підкладки. -->
+      <!-- Порожній стан правої колонки — як у Telegram: ті самі шпалери,
+           що й у відкритому чаті, і службова плашка по центру. Вибір чату
+           тоді не «вмикає» інший екран, а лише наповнює вже знайомий. -->
       <div
-        class="flex h-full flex-col items-center justify-center bg-background px-6 text-center"
+        class="relative flex h-full items-center justify-center overflow-hidden bg-background px-6"
       >
-        <MessageSquare
-          class="size-14 text-muted-foreground/70"
-          strokeWidth={1}
-        />
-        <h2 class="mt-6 text-lg font-medium">Оберіть чат</h2>
-        <p class="mt-2 max-w-70 text-sm leading-relaxed text-muted-foreground">
-          Листування з клієнтами й майстрами — ліворуч.
+        <ChatBackground />
+        <p
+          class="relative rounded-full bg-chat-service px-3 py-1 text-[13.5px] font-medium text-chat-service-foreground backdrop-blur-md"
+        >
+          Оберіть чат, щоб почати спілкування
         </p>
       </div>
     </Resizable.Pane>

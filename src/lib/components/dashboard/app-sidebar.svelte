@@ -12,12 +12,17 @@
   //
   // Стан «згорнуто» приходить згори з cookie: компонент не знає, де саме
   // він зберігається, і не читає його сам.
+  //
+  // Вигляд — за референсом у docs/ (скриншоти, обидві теми): панель
+  // свого тону, відділена від сторінки лінією; пункти 40px зі
+  // скругленням 8px, іконка кольору тексту; згорнута — рейка 56px з
+  // квадратами 40px. Угорі знак Zunor і кнопка згортання, унизу —
+  // налаштування, лінія й рядок користувача зі стрілкою. У рейці
+  // розгортає сам знак: при наведенні він стає іконкою панелі.
 
   import type { Component } from 'svelte'
   import { onMount } from 'svelte'
   import { page } from '$app/state'
-  import PanelLeftIcon from '@lucide/svelte/icons/panel-left'
-  import XIcon from '@lucide/svelte/icons/x'
   import { mergeProps } from 'bits-ui'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import * as Tooltip from '$lib/components/ui/tooltip/index.js'
@@ -35,9 +40,31 @@
     NewJobIcon,
     ZunorMark,
   } from '$lib/components/icons'
+  import PanelLeftIcon from '$lib/components/icons/set/panel-left.svelte'
+  import CloseIcon from '$lib/components/icons/set/x.svelte'
+  import type { IconProps } from '$lib/components/icons/stroke-icon.svelte'
 
-  const ICON_SIZE = 19
+  const ICON_SIZE = 20
   const ICON_STROKE = 1.75
+
+  // Рядок меню 40px, підпис 15px; у рейці — квадрат 40px без падінгу,
+  // іконка по центру. Саме класами, а не правилом у стилях компонента: shadcn
+  // ставить size-8! p-2!, а Tailwind 4 кладе утиліти в @layer, і для
+  // !important шар перемагає будь-яке правило поза шаром. cn у
+  // MenuButton (tailwind-merge) заміняє їхні класи цими.
+  const MENU_BUTTON_CLASS =
+    'h-10 gap-3 rounded-lg px-3 text-[15px] group-data-[collapsible=icon]:size-10! group-data-[collapsible=icon]:p-0! group-data-[collapsible=icon]:justify-center'
+
+  interface Props {
+    /**
+     * Панель відʼїхала за лівий край (налаштування — окремий екран зі
+     * своїм меню). Стан «розгорнуто/згорнуто» і його cookie при цьому не
+     * чіпаються: повернулись — панель така, як була.
+     */
+    away?: boolean
+  }
+
+  let { away = false }: Props = $props()
 
   const sidebar = useSidebar()
 
@@ -45,6 +72,10 @@
   // порожнеча: навігація лишається під рукою, ховаються лише підписи.
   // На телефоні рейки немає взагалі — там панель шторка.
   const collapsed = $derived(sidebar.state === 'collapsed' && !sidebar.isMobile)
+
+  const toggleLabel = $derived(
+    sidebar.isMobile ? 'Закрити меню' : 'Згорнути меню',
+  )
 
   // ─── Сесія та роль ───
 
@@ -77,12 +108,6 @@
   })
 
   // ─── Навігація ───
-
-  interface IconProps {
-    size?: number
-    strokeWidth?: number
-    class?: string
-  }
 
   type NavItem = {
     href: string
@@ -166,23 +191,40 @@
     if (item.badge === 'notifications') return notifCount
     return 0
   }
+
+  // Клік по ПОРОЖНЬОМУ місцю рейки розгортає панель: ціль уся рейка, а
+  // не лише 40px кнопки. Клік по пункту чи кнопці робить своє і панель
+  // не чіпає. Клавіатурний шлях — кнопка на місці знака.
+  function expandFromRail(event: MouseEvent): void {
+    if (!collapsed || away) return
+    if ((event.target as Element).closest('a, button')) return
+    sidebar.setOpen(true)
+  }
 </script>
 
 <!-- collapsible="icon": згорнута панель лишається вузькою рейкою з
-     іконками, а не їде за край. variant="inset": панель — частина рамки
-     навколо скругленого блока з контентом. На вузькому екрані Sidebar
+     іконками, а не їде за край. variant="sidebar" (не inset): контент
+     стоїть упритул до панелі без вікна й відступів, межу тримає лінія
+     border-e кольору --sidebar-border. На вузькому екрані Sidebar
      показує себе шторкою, і жодне з цього там не діє. -->
+<!-- data-away / inert лягають на контейнер панелі: відʼїхала — з неї
+     не можна сфокусуватись Tab-ом і її не читає скрінрідер. onclick теж
+     ліг на контейнер (Sidebar.Root віддає йому решту атрибутів). -->
 <Sidebar.Root
   collapsible="icon"
-  variant="inset"
-  class={sidebar.isMobile ? 'w-full! max-w-none!' : ''}
+  variant="sidebar"
+  class="border-sidebar-border {sidebar.isMobile ? 'w-full! max-w-none!' : ''}"
+  data-away={away || undefined}
+  inert={away}
+  onclick={expandFromRail}
 >
   <Sidebar.Header>
-    <!-- overflow-hidden: поки панель розгортається, назва вже є в DOM,
-         а ширини ще немає — без обрізання текст вилазив би на контент. -->
-    <div class="flex h-9 items-center justify-between gap-2 overflow-hidden">
+    <!-- overflow-hidden: поки панель розгортається, кнопка згортання вже
+         є в DOM, а ширини ще немає — без обрізання вона вилазила б на
+         контент. -->
+    <div class="flex h-10 items-center justify-between gap-2 overflow-hidden">
       {#if collapsed}
-        <!-- У рейці на місці лого — кнопка розгортання. Наведення
+        <!-- У рейці на місці знака — кнопка розгортання. Наведення
              підміняє знак Zunor на іконку панелі: так видно, що це не
              просто логотип, а кнопка, і що саме вона зробить. -->
         <Tooltip.Root delayDuration={400}>
@@ -192,15 +234,13 @@
                 {...mergeProps(props, { onclick: () => sidebar.setOpen(true) })}
                 type="button"
                 aria-label="Розгорнути меню"
-                class="rail-toggle relative flex size-9 shrink-0 items-center justify-center rounded-lg outline-none"
+                class="rail-toggle relative flex size-10 shrink-0 items-center justify-center rounded-lg outline-none"
               >
                 <span class="rail-face rail-mark" aria-hidden="true">
-                  <span class="logo-mark flex size-6">
-                    <ZunorMark />
-                  </span>
+                  <span class="logo-mark flex size-6"><ZunorMark /></span>
                 </span>
                 <span
-                  class="rail-face rail-panel text-primary"
+                  class="rail-face rail-panel text-sidebar-foreground"
                   aria-hidden="true"
                 >
                   <PanelLeftIcon size={ICON_SIZE} strokeWidth={ICON_STROKE} />
@@ -213,59 +253,43 @@
           </Tooltip.Content>
         </Tooltip.Root>
       {:else}
-        <!-- Логотип із назвою — тільки у відкритій панелі. -->
+        <!-- Знак і назва. Знак — на тому самому місці, що й кнопка в
+             рейці (px-2 = центр квадрата 40px), тож при згортанні він не
+             стрибає, зникає лише назва. -->
         <a
           href="/dashboard"
           onclick={closeOnMobile}
           aria-label="На головну"
-          class="logo-link flex min-w-0 items-center gap-2 rounded-lg p-1 pe-2"
+          class="logo-link flex h-10 min-w-0 items-center gap-2 rounded-lg px-2 pe-3"
         >
-          <span
-            class="logo-mark flex size-6 shrink-0 items-center justify-center"
-          >
-            <ZunorMark />
-          </span>
+          <span class="logo-mark flex size-6 shrink-0"><ZunorMark /></span>
           <span class="truncate text-[19px] font-semibold tracking-[-0.02em]">
             Zunor
           </span>
         </a>
 
-        <!-- Кнопка закриття — праворуч у шапці, навпроти логотипа.
-             На телефоні шторка займає весь екран, і там це саме «закрити»,
-             а не «згорнути»: хрестик читається однозначно, іконка панелі
-             на повний екран — ні.
-
-             Тултип тут із тієї ж причини, що й на кнопці відкриття: у
-             іконки без підпису інакше нема як пояснити, що вона зробить.
-             На тачскріні він не спрацьовує — і не треба. -->
+        <!-- Кнопка згортання — праворуч навпроти знака. На телефоні
+             шторка займає весь екран, і там це саме «закрити»: хрестик
+             читається однозначно, іконка панелі на весь екран — ні. -->
         <Tooltip.Root delayDuration={400}>
           <Tooltip.Trigger>
             {#snippet child({ props })}
               <button
                 {...mergeProps(props, { onclick: () => sidebar.toggle() })}
                 type="button"
-                aria-label={sidebar.isMobile ? 'Закрити меню' : 'Згорнути меню'}
-                class="toggle-close flex size-8 shrink-0 items-center justify-center rounded-lg text-primary outline-none"
+                aria-label={toggleLabel}
+                class="panel-toggle flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground outline-none hover:text-sidebar-foreground"
               >
                 {#if sidebar.isMobile}
-                  <XIcon
-                    size={20}
-                    strokeWidth={ICON_STROKE}
-                    aria-hidden="true"
-                  />
+                  <CloseIcon size={ICON_SIZE} strokeWidth={ICON_STROKE} />
                 {:else}
-                  <PanelLeftIcon
-                    size={ICON_SIZE}
-                    strokeWidth={ICON_STROKE}
-                    aria-hidden="true"
-                  />
+                  <PanelLeftIcon size={ICON_SIZE} strokeWidth={ICON_STROKE} />
                 {/if}
               </button>
             {/snippet}
           </Tooltip.Trigger>
-
           <Tooltip.Content side="bottom" sideOffset={6} arrowClasses="hidden">
-            {sidebar.isMobile ? 'Закрити меню' : 'Згорнути меню'}
+            {toggleLabel}
           </Tooltip.Content>
         </Tooltip.Root>
       {/if}
@@ -275,9 +299,9 @@
   <Sidebar.Content>
     <Sidebar.Group>
       <Sidebar.GroupContent>
-        <!-- gap-0: рядки стоять упритул, підсвітка ховера тягнеться
-             суцільною смугою. Проміжок розривав її на клапті. -->
-        <Sidebar.Menu class="gap-0">
+        <!-- Проміжок 2px між рядками однаковий у рейці й у розгорнутій
+             панелі: при згортанні іконки не стрибають по вертикалі. -->
+        <Sidebar.Menu class="gap-0.5">
           {#each visibleItems as item (item.href)}
             {@const active = item.href === activeHref}
             {@const count = badgeCount(item)}
@@ -289,6 +313,7 @@
                    доводиться вгадувати. У розгорнутій панелі підпис
                    написаний поруч, і тултип був би повтором. -->
               <Sidebar.MenuButton
+                class={MENU_BUTTON_CLASS}
                 isActive={active}
                 tooltipContent={item.label}
                 tooltipContentProps={{ sideOffset: 8, arrowClasses: 'hidden' }}
@@ -329,10 +354,15 @@
               </Sidebar.MenuButton>
 
               {#if count > 0}
+                <!-- top-2.5 і right-2 — під рядок 40px (shadcn рахує
+                     позицію під 32px). -->
                 <Sidebar.MenuBadge
-                  class={isAlert
-                    ? 'bg-destructive text-white'
-                    : 'bg-primary text-primary-foreground'}
+                  class={[
+                    'top-2.5! right-2',
+                    isAlert
+                      ? 'bg-destructive text-white'
+                      : 'bg-primary text-primary-foreground',
+                  ]}
                 >
                   {count > 9 ? '9+' : count}
                 </Sidebar.MenuBadge>
@@ -345,9 +375,10 @@
   </Sidebar.Content>
 
   <Sidebar.Footer>
-    <Sidebar.Menu class="gap-0">
+    <Sidebar.Menu class="gap-0.5">
       <Sidebar.MenuItem>
         <Sidebar.MenuButton
+          class={MENU_BUTTON_CLASS}
           isActive={settingsActive}
           tooltipContent="Налаштування"
           tooltipContentProps={{ sideOffset: 8, arrowClasses: 'hidden' }}
@@ -359,7 +390,7 @@
               aria-current={settingsActive ? 'page' : undefined}
               onclick={closeOnMobile}
             >
-              <span class="nav-icon settings-icon-wrap flex shrink-0">
+              <span class="nav-icon flex shrink-0">
                 <SettingsIcon size={ICON_SIZE} strokeWidth={ICON_STROKE} />
               </span>
               <span class="group-data-[collapsible=icon]:hidden">
@@ -371,17 +402,22 @@
       </Sidebar.MenuItem>
     </Sidebar.Menu>
 
-    <NavUser />
+    <!-- Лінія над рядком користувача — на всю ширину панелі (-mx-2 знімає
+         падінг підвалу). У рейці її немає. -->
+    <div
+      class="-mx-2 border-t border-sidebar-border px-2 pt-2 group-data-[collapsible=icon]:border-t-0 group-data-[collapsible=icon]:pt-0"
+    >
+      <NavUser />
+    </div>
   </Sidebar.Footer>
 
   <!-- Sidebar.Rail тут свідомо НЕМАЄ.
        Це невидима смуга шириною 16px, яку блок sidebar-07 вішає ПОВЕРХ
        контенту праворуч від панелі (-right-4, z-20) і яка перемикає
-       панель по кліку. З нашим перемикачем на логотипі вона зайва, а
-       шкоду робить помітну: перехоплює кліки по лівому краю сторінки,
-       підміняє курсор на resize там, де нічого не тягнеться, і дає
-       «панель сама згорнулась» від випадкового кліку повз контент.
-       Повертати її можна лише разом із приибиранням свого перемикача. -->
+       панель по кліку. З нашими кнопками вона зайва, а шкоду робить
+       помітну: перехоплює кліки по лівому краю сторінки, підміняє курсор
+       на resize там, де нічого не тягнеться, і дає «панель сама
+       згорнулась» від випадкового кліку повз контент. -->
 </Sidebar.Root>
 
 <style>
@@ -391,87 +427,24 @@
     object-fit: contain;
   }
 
-  .logo-link {
-    transition: background-color 150ms ease;
+  .logo-link,
+  .panel-toggle,
+  .rail-toggle {
+    transition:
+      background-color 150ms ease,
+      color 150ms ease;
   }
   .logo-link:hover,
-  .logo-link:focus-visible {
-    background-color: var(--sidebar-accent);
-  }
-
-  /* Рух панелі. Крива — та сама, що в системних шторках Apple: різкий
-     старт і довге мʼяке гальмування, тож проїзд читається як рух, а не
-     як лінійне «переповзання» (ease-linear від shadcn).
-
-     Обидва шари — і розпірка, і сама панель — мусять мати ОДНАКОВІ
-     тривалість і криву, інакше контент і панель роз'їжджаються в русі. */
-  :global([data-slot='sidebar-gap']),
-  :global([data-slot='sidebar-container']) {
-    transition-duration: 260ms;
-    transition-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
-  }
-
-  /* Ховер пункту — м'якший за підсвітку активного: активний рядок має
-     лишатись помітнішим за той, над яким просто пройшла миша. Один і
-     той самий колір на обох станах (як ставить sidebar-menu-button)
-     робив наведення схожим на перехід. */
-  :global([data-slot='sidebar-menu-button']:hover:not([data-active='true'])) {
-    background-color: color-mix(
-      in srgb,
-      var(--sidebar-accent) 45%,
-      transparent
-    );
-  }
-
-  /* ─── Рейка ───
-     Пункти в згорнутій панелі — квадрати 36px з іконкою по центру.
-     Стандартні size-8 + p-2 від shadcn розраховані на іконку 16px, а в
-     нас вона 19px і обрізалась би з правого краю. */
-  /* Рамка навколо блока — 6px з усіх боків, і панель живе в ній же:
-     контейнер має той самий падінг, що й відступ блока від вікна. */
-  :global([data-variant='inset'] [data-slot='sidebar-container']) {
-    padding: 6px;
-  }
-
-  /* У розгорнутій панелі групи shadcn додають ще 8px з кожного боку
-     поверх рамки — пункти стояли далеко від краю. Лишаємо 4px. */
-  :global([data-variant='inset'] [data-slot='sidebar-header']),
-  :global([data-variant='inset'] [data-slot='sidebar-footer']),
-  :global([data-variant='inset'] [data-slot='sidebar-group']) {
-    padding-inline: 4px;
-  }
-
-  /* Рейка: один шар відступу, а не три. Рахуємо прямо в пікселях —
-     6 + кнопка 36 + 6 = 48, і від кнопки до блока контенту ті самі 6px,
-     що й зверху, знизу та праворуч від блока. Формула shadcn
-     (--sidebar-width-icon + 16px + 2px) розрахована на падінг 8px і
-     давала рейку на 20px ширшу. */
-  :global([data-collapsible='icon'] [data-slot='sidebar-gap']),
-  :global([data-collapsible='icon'] [data-slot='sidebar-container']) {
-    width: 48px !important;
-  }
-  :global([data-collapsible='icon'] [data-slot='sidebar-header']),
-  :global([data-collapsible='icon'] [data-slot='sidebar-footer']) {
-    padding: 0;
-  }
-  :global([data-collapsible='icon'] [data-slot='sidebar-group']) {
-    padding-inline: 0;
-  }
-
-  :global([data-collapsible='icon'] [data-slot='sidebar-menu-button']) {
-    width: 36px !important;
-    height: 36px !important;
-    padding: 0 !important;
-    justify-content: center;
-  }
-
-  .rail-toggle {
-    transition: background-color 150ms ease;
-  }
+  .logo-link:focus-visible,
+  .panel-toggle:hover,
+  .panel-toggle:focus-visible,
   .rail-toggle:hover,
   .rail-toggle:focus-visible {
     background-color: var(--sidebar-accent);
   }
+
+  /* Кнопка розгортання в рейці: знак і іконка панелі лежать одне на
+     одному, наведення чи фокус міняє їх місцями. */
   .rail-face {
     position: absolute;
     inset: 0;
@@ -492,8 +465,69 @@
     opacity: 1;
   }
 
+  /* Рух панелі. Крива — та сама, що в системних шторках Apple: різкий
+     старт і довге мʼяке гальмування, тож проїзд читається як рух, а не
+     як лінійне «переповзання» (ease-linear від shadcn).
+
+     Обидва шари — і розпірка, і сама панель — мусять мати ОДНАКОВІ
+     тривалість і криву, інакше контент і панель роз'їжджаються в русі. */
+  :global([data-slot='sidebar-gap']),
+  :global([data-slot='sidebar-container']) {
+    transition-duration: 260ms;
+    transition-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  /* Тло — і на контейнері, не лише на внутрішньому шарі: лінія border-e
+     напівпрозора (border-soft) і мусить лягати на тло ПАНЕЛІ, як у
+     референсі (#e3e5e6 / #282b2f), а не просвічувати сторінку. */
+  :global([data-slot='sidebar-container']) {
+    transition-property: left, right, width, transform;
+    background-color: var(--sidebar);
+  }
+
+  /* Панель відʼїхала (налаштування): контейнер їде за лівий край на
+     свою ширину — хоч розгорнутий, хоч рейка, — а розпірка стискається
+     до нуля, і сторінка займає звільнене місце в тому ж русі. */
+  /* overflow: зсув — рівно на ширину контейнера, і все, що вилазило б
+     за його правий край, лишилось би видно біля краю вікна. */
+  :global([data-slot='sidebar-container'][data-away]) {
+    transform: translateX(-100%);
+    overflow: hidden;
+  }
+  :global(
+    [data-slot='sidebar']:has(> [data-slot='sidebar-container'][data-away])
+      > [data-slot='sidebar-gap']
+  ) {
+    width: 0 !important;
+  }
+
+  /* Порожнє місце рейки клікабельне — розгортає панель (expandFromRail). */
+  :global([data-collapsible='icon'] [data-slot='sidebar-container']) {
+    cursor: pointer;
+  }
+
+  /* Активний пункт — нейтральна плашка (--sidebar-active), а не акцент:
+     синій (чи будь-який обраний акцент) у меню перетягував на себе всю
+     увагу. Вага шрифту та сама, що в решти пунктів, — «де я» видно з
+     плашки. Ховер — світліший за активний (--sidebar-accent): активний
+     рядок має лишатись помітнішим за той, над яким просто пройшла миша.
+
+     Селектор — наявність атрибута, а не `='true'`: MenuButton ставить
+     data-active порожнім рядком, і з `='true'` правило мовчки не
+     спрацьовувало — активний пункт фарбував shadcn кольором ховера. */
+  :global([data-slot='sidebar-menu-button'][data-active]:not([data-active='false'])) {
+    background-color: var(--sidebar-active);
+    color: var(--sidebar-foreground);
+    font-weight: 400;
+  }
+  :global(
+    [data-slot='sidebar-menu-button']:hover:not([data-active]:not([data-active='false']))
+  ) {
+    background-color: var(--sidebar-accent);
+  }
+
   /* Крапка непрочитаного — тільки в рейці. У розгорнутій панелі поруч
-     стоїть повноцінний бейдж із числом. */
+     стоїть повноцінний бейдж із числом. Обвідка кольору панелі відділяє
+     крапку від іконки. */
   .rail-dot {
     position: absolute;
     top: -2px;
@@ -502,18 +536,10 @@
     width: 8px;
     height: 8px;
     border-radius: 9999px;
-    box-shadow: 0 0 0 2px var(--sidebar);
+    box-shadow: 0 0 0 2px var(--sidebar-raised);
   }
   :global([data-collapsible='icon']) .rail-dot {
     display: block;
-  }
-
-  .toggle-close {
-    transition: background-color 150ms ease;
-  }
-  .toggle-close:hover,
-  .toggle-close:focus-visible {
-    background-color: var(--sidebar-accent);
   }
 
   /* Inline SVG резервує місце під «хвостики» тексту як звичайний текст,
@@ -522,166 +548,13 @@
 
      Розмір задається ТУТ, а не лише атрибутом: sidebar-menu-button з
      shadcn жорстко ставить усім вкладеним svg `size-4`, і будь-який
-     width/height на самій іконці мовчки перебивався б на 16px. */
-  /* Іконка успадковує колір рядка (currentColor) — власного кольору в
-     неї немає. Синім лишається ТІЛЬКИ активний пункт, і фарбує він
-     одразу і підпис, і іконку: так у системних панелях (Finder), і так
-     видно з першого погляду, де ти зараз. */
-  a[aria-current='page'] {
-    font-weight: 400;
-    color: var(--primary);
-  }
+     width/height на самій іконці мовчки перебивався б на 16px.
+
+     Колір іконки — той самий, що в підпису (як у референсі), а не
+     приглушений сірий. */
   .nav-icon :global(svg) {
     display: block;
-    width: 19px;
-    height: 19px;
-  }
-
-  /* ─── Анімації іконок при наведенні ───
-     Тригер на рядку меню, а не на самій іконці: курсор іде по рядку й у
-     17 пікселів іконки майже ніколи не влучає. Селектор через :global,
-     бо рядок малює Sidebar.MenuButton, а не наша розмітка. */
-
-  :global(a:hover) > .nav-icon :global(.ring) {
-    transform: rotate(90deg) scale(1.06);
-  }
-  :global(a:hover) > .nav-icon :global(.plus) {
-    transform: scale(1.28);
-  }
-
-  :global(a:hover) > .nav-icon :global(.check) {
-    animation: draw-check 380ms ease-out;
-  }
-  @keyframes draw-check {
-    from {
-      stroke-dashoffset: 1;
-      opacity: 0;
-    }
-    to {
-      stroke-dashoffset: 0;
-      opacity: 1;
-    }
-  }
-
-  :global(a:hover) > .nav-icon :global(.line) {
-    animation: draw-line 400ms ease-out;
-  }
-  :global(a:hover) > .nav-icon :global(.line-2) {
-    animation-delay: 150ms;
-    animation-fill-mode: both;
-  }
-  @keyframes draw-line {
-    from {
-      stroke-dashoffset: 1;
-      opacity: 0;
-    }
-    to {
-      stroke-dashoffset: 0;
-      opacity: 1;
-    }
-  }
-
-  :global(a:hover) > .nav-icon :global(.dot) {
-    transform-origin: center;
-    animation: pulse-dot 600ms ease-in-out;
-  }
-  :global(a:hover) > .nav-icon :global(.dot-2) {
-    animation-delay: 120ms;
-    animation-fill-mode: both;
-  }
-  :global(a:hover) > .nav-icon :global(.dot-3) {
-    animation-delay: 240ms;
-    animation-fill-mode: both;
-  }
-  @keyframes pulse-dot {
-    0%,
-    100% {
-      transform: translateY(0) scale(1);
-      opacity: 0.55;
-    }
-    40% {
-      transform: translateY(-1.5px) scale(1.15);
-      opacity: 1;
-    }
-  }
-
-  :global(a:hover) > .nav-icon :global(.bell),
-  :global(a:hover) > .nav-icon :global(.clapper) {
-    transform-origin: 12px 4px;
-  }
-  :global(a:hover) > .nav-icon :global(.bell) {
-    animation: swing-bell 700ms ease-in-out;
-  }
-  :global(a:hover) > .nav-icon :global(.clapper) {
-    animation: swing-clapper 700ms ease-in-out;
-  }
-  @keyframes swing-bell {
-    0%,
-    100% {
-      transform: rotate(0deg);
-    }
-    15% {
-      transform: rotate(10deg);
-    }
-    35% {
-      transform: rotate(-8deg);
-    }
-    55% {
-      transform: rotate(5deg);
-    }
-    75% {
-      transform: rotate(-2deg);
-    }
-  }
-  @keyframes swing-clapper {
-    0%,
-    100% {
-      transform: rotate(0deg);
-    }
-    20% {
-      transform: rotate(14deg);
-    }
-    42% {
-      transform: rotate(-11deg);
-    }
-    62% {
-      transform: rotate(7deg);
-    }
-    80% {
-      transform: rotate(-3deg);
-    }
-  }
-
-  :global(a:hover) > .nav-icon :global(.bar) {
-    transform-origin: center 17px;
-    animation: grow-bar 380ms cubic-bezier(0.32, 0.72, 0, 1);
-  }
-  :global(a:hover) > .nav-icon :global(.bar-2) {
-    animation-delay: 90ms;
-    animation-fill-mode: both;
-  }
-  :global(a:hover) > .nav-icon :global(.bar-3) {
-    animation-delay: 180ms;
-    animation-fill-mode: both;
-  }
-  @keyframes grow-bar {
-    from {
-      transform: scaleY(0);
-      opacity: 0;
-    }
-    to {
-      transform: scaleY(1);
-      opacity: 1;
-    }
-  }
-
-  :global(a:hover) > .settings-icon-wrap :global(svg) {
-    transform: rotate(180deg);
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .nav-icon :global(*) {
-      animation: none !important;
-    }
+    width: 20px;
+    height: 20px;
   }
 </style>

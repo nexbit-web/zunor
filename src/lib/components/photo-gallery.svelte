@@ -1,7 +1,9 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte'
-  import PhotoSwipeLightbox from 'photoswipe/lightbox'
-  import 'photoswipe/style.css'
+  // Сітка фото з повноекранним переглядом (портфоліо в профілі, фото
+  // заявки). Перегляд — спільний $lib/utils/photo-lightbox: справжні
+  // розміри знімка замість вигаданих 1600×1600, через які PhotoSwipe
+  // розтягував кожне фото в квадрат.
+  import { photoLightbox } from '$lib/utils/photo-lightbox'
 
   interface Props {
     images: string[]
@@ -11,42 +13,29 @@
 
   let { images, gridClass = 'grid grid-cols-3 gap-2' }: Props = $props()
 
-  // Унікальний id галереї (щоб кілька галерей на сторінці не конфліктували)
-  const galleryId = `pswp-${Math.random().toString(36).slice(2, 9)}`
+  let gallery = $state<HTMLElement | null>(null)
 
-  let lightbox: PhotoSwipeLightbox | null = null
-
-  onMount(() => {
-    lightbox = new PhotoSwipeLightbox({
-      gallery: `#${galleryId}`,
-      children: 'a',
-      pswpModule: () => import('photoswipe'),
-    })
-    lightbox.init()
-  })
-
-  onDestroy(() => {
-    lightbox?.destroy()
-    lightbox = null
+  $effect(() => {
+    if (gallery) return photoLightbox(gallery)
   })
 </script>
 
 {#if images.length > 0}
-  <div id={galleryId} class={gridClass}>
+  <div bind:this={gallery} class={gridClass}>
     {#each images as src, i (src)}
       <a
         href={src}
-        data-pswp-width="1600"
-        data-pswp-height="1600"
+        data-pswp
+        data-cropped
         target="_blank"
         rel="noopener noreferrer"
-        class="block aspect-square rounded-xl overflow-hidden border border-border hover:opacity-90 transition-opacity"
+        class="block aspect-square cursor-zoom-in overflow-hidden rounded-xl border border-border transition-opacity hover:opacity-90"
       >
         <img
           {src}
           alt="Фото {i + 1}"
           loading="lazy"
-          class="w-full h-full object-cover"
+          class="h-full w-full object-cover"
         />
       </a>
     {/each}

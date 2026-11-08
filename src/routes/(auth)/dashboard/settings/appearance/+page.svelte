@@ -14,19 +14,13 @@
   import { appearance } from '$lib/stores/appearance.svelte'
 </script>
 
-<SettingsGroup
-  title="Колір акценту"
-  footnote="Кнопки, посилання й виділення в усьому застосунку."
->
+<SettingsGroup title="Колір акценту">
   <SettingsBlock>
     <AccentPicker />
   </SettingsBlock>
 </SettingsGroup>
 
-<SettingsGroup
-  title="Тема"
-  footnote="Світла, темна або як на пристрої — «Системна» перемикається сама разом із ним."
->
+<SettingsGroup title="Тема">
   <!-- Блок, а не рядок: вибір теми — це не «підпис ліворуч, контрол
        праворуч», а три мініатюри на всю ширину. -->
   <SettingsBlock>
@@ -36,11 +30,11 @@
 
 <SettingsGroup
   title="Контрастність"
-  footnote="Вибір вигляду зберігається в цьому браузері — на іншому пристрої його треба зробити заново."
+  footnote="Вигляд зберігається лише в цьому браузері."
 >
   <SettingsRow
     label="Висока контрастність"
-    description="Темніший другорядний текст і чіткіші рамки."
+    description="Чіткіший текст і рамки."
     for="high-contrast"
   >
     {#snippet control()}

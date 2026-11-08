@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Select as SelectPrimitive } from 'bits-ui'
   import { cn, type WithoutChild } from '$lib/utils.js'
-  import ChevronDownIcon from '@lucide/svelte/icons/chevron-down'
+  import ChevronDownIcon from '$lib/components/icons/set/chevron-down.svelte'
 
   let {
     ref = $bindable(null),
@@ -19,7 +19,7 @@
   data-slot="select-trigger"
   data-size={size}
   class={cn(
-    "border-input data-placeholder:text-muted-foreground focus-visible:border-ring focus-visible:shadow-[0_0_0_1px_var(--color-ring)] aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 gap-1.5 rounded-[10px] border bg-field py-2 pr-2 pl-2.5 text-sm shadow-xs transition-[color,box-shadow] data-[size=default]:h-9 data-[size=sm]:h-8 *:data-[slot=select-value]:flex *:data-[slot=select-value]:gap-1.5 [&_svg:not([class*='size-'])]:size-4 flex w-fit items-center justify-between whitespace-nowrap outline-none disabled:cursor-not-allowed disabled:opacity-50 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    "border-input data-placeholder:text-muted-foreground focus-visible:border-ring focus-visible:bg-background data-[state=open]:bg-background focus-visible:shadow-[0_0_0_1px_var(--color-ring)] aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 gap-1.5 rounded-[10px] border bg-field py-2 pr-2 pl-2.5 text-sm shadow-xs transition-[color,background-color,box-shadow] data-[size=default]:h-9 data-[size=sm]:h-8 *:data-[slot=select-value]:flex *:data-[slot=select-value]:gap-1.5 [&_svg:not([class*='size-'])]:size-4 flex w-fit items-center justify-between whitespace-nowrap outline-none disabled:cursor-not-allowed disabled:opacity-50 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center [&_svg]:pointer-events-none [&_svg]:shrink-0",
     className,
   )}
   {...restProps}

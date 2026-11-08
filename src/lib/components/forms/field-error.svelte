@@ -3,7 +3,7 @@
   // самий вигляд, що в SettingsField і FloatingInput, — червоний колір
   // сам по собі не повідомлення для того, хто його не розрізняє.
   // id — щоб поле посилалось на помилку через aria-describedby.
-  import { CircleAlert } from 'lucide-svelte'
+  import CircleAlert from '$lib/components/icons/set/circle-alert.svelte'
 
   let { id, text }: { id?: string; text: string } = $props()
 </script>

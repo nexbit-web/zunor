@@ -1,25 +1,73 @@
 <script lang="ts">
   import { dev } from '$app/environment'
+  import { photoLightbox, type PhotoViewer } from '$lib/utils/photo-lightbox'
+  import * as AlertDialog from '$lib/components/ui/alert-dialog'
   import { Spinner } from '$lib/components/ui/spinner'
-  import PlusIcon from '@lucide/svelte/icons/plus'
-  import XIcon from '@lucide/svelte/icons/x'
+  import PlusIcon from '$lib/components/icons/set/plus.svelte'
+  import XIcon from '$lib/components/icons/set/x.svelte'
+  import CloudUploadIcon from '$lib/components/icons/set/cloud-upload.svelte'
+  import { slide } from 'svelte/transition'
 
   let {
     images = $bindable<string[]>([]),
     publicIds = $bindable<string[]>([]),
     maxItems = 6,
     uploading = $bindable(false),
+    savedIds,
     onError,
   }: {
     images: string[]
     publicIds: string[]
     maxItems?: number
     uploading?: boolean
+    /**
+     * publicId фото, що вже лежать у профілі. Решта — щойно завантажені:
+     * вони вже в хмарі й видні в сітці, але в профіль потраплять лише з
+     * кнопкою «Зберегти» форми (разом із перевіркою). Без пропа — нічого
+     * не позначаємо (онбординг, де незбережене все).
+     */
+    savedIds?: string[]
     onError?: (msg: string) => void
   } = $props()
 
+  const isNew = (i: number): boolean =>
+    !!savedIds && !savedIds.includes(publicIds[i])
+  const newCount = $derived(
+    savedIds ? publicIds.filter((id) => !savedIds.includes(id)).length : 0,
+  )
+
   const MAX_MB = 10
   let removingIdx = $state<number | null>(null)
+
+  // Натиск на фото — повноекранний перегляд з гортанням усіх робіт. У
+  // ньому є кошик: питаємо підтвердження поверх перегляду, а видаляємо
+  // вже після його закриття — щоб він стягнувся в мініатюру, поки вона
+  // ще на місці.
+  let grid = $state<HTMLElement | null>(null)
+  let pending = $state<{ index: number; viewer: PhotoViewer } | null>(null)
+
+  $effect(() => {
+    if (!grid) return
+    return photoLightbox(grid, {
+      onDelete: (index, viewer) => {
+        viewer.hold(true)
+        pending = { index, viewer }
+      },
+    })
+  })
+
+  function confirmDelete(): void {
+    if (!pending) return
+    const { index, viewer } = pending
+    pending = null
+    viewer.close()
+    remove(index)
+  }
+
+  function cancelDelete(): void {
+    pending?.viewer.hold(false)
+    pending = null
+  }
 
   async function uploadOne(
     file: File,
@@ -118,7 +166,7 @@
 </script>
 
 <div class="space-y-3">
-  <div class="grid grid-cols-3 gap-2.5">
+  <div bind:this={grid} class="grid grid-cols-3 gap-2.5">
     {#each images as img, i (img)}
       <!-- Ні градієнта, ні порядкового бейджа: градієнт існував тільки
            щоб бейдж читався, а бейдж нумерував фотографії, які людина й
@@ -126,14 +174,27 @@
       <div
         class="group relative aspect-square overflow-hidden rounded-[8px] bg-muted"
       >
-        <img
-          src={img}
-          alt="Робота {i + 1}"
-          class="h-full w-full object-cover"
-          loading="lazy"
-          decoding="async"
-          draggable="false"
-        />
+        <!-- Посилання, а не кнопка: без JS фото відкривається вкладкою.
+             Хрестик — сусід, а не нащадок, тож видалення перегляд не
+             відкриває. -->
+        <a
+          href={img}
+          data-pswp
+          data-cropped
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Переглянути фото {i + 1}"
+          class="block h-full w-full cursor-zoom-in outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+        >
+          <img
+            src={img}
+            alt="Робота {i + 1}"
+            class="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+            loading="lazy"
+            decoding="async"
+            draggable="false"
+          />
+        </a>
 
         <!-- Видалення видиме завжди: на тачі ховера немає. -->
         <button
@@ -147,6 +208,16 @@
                кнопці, крутився поруч і показував те саме. -->
           <XIcon class="size-3.5" aria-hidden="true" />
         </button>
+
+        <!-- Фото вже видно, тож без позначки воно виглядає збереженим.
+             Саме так його й втрачали: виходили, не натиснувши «Зберегти». -->
+        {#if isNew(i)}
+          <span
+            class="pointer-events-none absolute bottom-1.5 left-1.5 rounded-full bg-primary px-1.5 py-0.5 text-[11px] leading-none font-semibold text-primary-foreground"
+          >
+            Нове
+          </span>
+        {/if}
 
         {#if removingIdx === i}
           <div
@@ -187,6 +258,29 @@
     {/if}
   </div>
 
+  <!-- Підказка під сіткою, а не тост: вона має бути на місці, поки фото
+       не збережене, а не зникнути за чотири секунди. Кнопка «Зберегти» —
+       одразу під цією карткою. -->
+  {#if newCount > 0}
+    <div
+      transition:slide={{ duration: 200 }}
+      class="flex items-start gap-2.5 rounded-[8px] bg-primary/10 px-3 py-2.5 text-[13px] leading-snug"
+      role="status"
+    >
+      <CloudUploadIcon
+        class="mt-px size-4 shrink-0 text-primary"
+        aria-hidden="true"
+      />
+      <p>
+        {newCount === 1 ? 'Нове фото ще не збережене' : 'Нові фото ще не збережені'}.
+        <span class="text-muted-foreground">
+          Натисніть «Зберегти» внизу — і {newCount === 1 ? 'воно піде' : 'вони підуть'}
+          на перевірку разом із профілем.
+        </span>
+      </p>
+    </div>
+  {/if}
+
   <!-- Підвал: скільки завантажено і що приймаємо. Смужок-індикатора
        більше немає — він показував те саме число, що й цифри поруч. -->
   <div
@@ -196,3 +290,25 @@
     <span>JPG, PNG до {MAX_MB} МБ</span>
   </div>
 </div>
+
+<AlertDialog.Root
+  open={pending !== null}
+  onOpenChange={(open) => {
+    if (!open) cancelDelete()
+  }}
+>
+  <AlertDialog.Content>
+    <AlertDialog.Header>
+      <AlertDialog.Title>Видалити фото?</AlertDialog.Title>
+      <AlertDialog.Description>
+        Воно зникне з прикладів робіт і з нашого сервера.
+      </AlertDialog.Description>
+    </AlertDialog.Header>
+    <AlertDialog.Footer>
+      <AlertDialog.Cancel>Скасувати</AlertDialog.Cancel>
+      <AlertDialog.Action onclick={confirmDelete} variant="destructive">
+        Видалити
+      </AlertDialog.Action>
+    </AlertDialog.Footer>
+  </AlertDialog.Content>
+</AlertDialog.Root>

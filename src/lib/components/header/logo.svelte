@@ -3,20 +3,24 @@
 
   interface Props {
     linked?: boolean
+    /** lg — у шапці лендингу: лого там головний орієнтир смуги. */
+    size?: 'md' | 'lg'
   }
 
-  let { linked = true }: Props = $props()
+  let { linked = true, size = 'md' }: Props = $props()
 </script>
 
 <!-- Знак і напис — два окремі елементи. Раніше це був один SVG, де старий
      знак і літери були злиті в спільний контур, і замінити знак не
      перемальовуючи напис було неможливо. Літери лишились ті самі. -->
 {#snippet wordmark()}
-  <ZunorMark class="h-[21px] w-auto shrink-0" />
+  <ZunorMark
+    class="w-auto shrink-0 {size === 'lg' ? 'h-[25px]' : 'h-[21px]'}"
+  />
   <svg
     xmlns="http://www.w3.org/2000/svg"
     viewBox="356 26 878 245"
-    class="h-[16px] w-auto shrink-0"
+    class={['w-auto shrink-0', size === 'lg' ? 'h-[19px]' : 'h-[16px]']}
     aria-hidden="true"
     ><path
       fill="currentColor"

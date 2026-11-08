@@ -1,4 +1,8 @@
-import { Palette, Sparkles, Bell, Shield, UserRound } from 'lucide-svelte'
+import Palette from '$lib/components/icons/set/palette.svelte'
+import Sparkles from '$lib/components/icons/set/sparkles.svelte'
+import Bell from '$lib/components/icons/set/bell.svelte'
+import Shield from '$lib/components/icons/set/shield.svelte'
+import UserRound from '$lib/components/icons/set/user-round.svelte'
 
 export type SettingsGroupId = 'account' | 'app'
 

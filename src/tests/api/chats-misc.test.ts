@@ -17,6 +17,17 @@ vi.mock('$lib/server/prisma', async () => ({
 vi.mock('$lib/server/pusher', async () => await import('../helpers/infra'))
 vi.mock('$lib/server/chats-loader', () => ({ loadChatsForUser }))
 
+const { fetchLinkPreview, cachedLinkPreview } = vi.hoisted(() => ({
+  fetchLinkPreview: vi.fn(),
+  cachedLinkPreview: vi.fn(),
+}))
+vi.mock('$lib/server/link-preview', () => ({
+  fetchLinkPreview,
+  cachedLinkPreview,
+}))
+
+const { Prisma } = await import('../../generated/prisma/client')
+
 const chatsList = await import('../../routes/api/chats/+server')
 const chatRead = await import('../../routes/api/chats/[id]/read/+server')
 const messageItem =
@@ -50,6 +61,9 @@ beforeEach(() => {
     createdAt: new Date(),
     deletedAt: null,
   })
+  prisma.message.updateMany.mockResolvedValue({ count: 1 })
+  fetchLinkPreview.mockReset().mockResolvedValue(null)
+  cachedLinkPreview.mockReset().mockReturnValue(undefined)
 })
 
 describe('GET /api/chats', () => {
@@ -265,6 +279,71 @@ describe('PATCH повідомлення', () => {
       'message:edit',
       expect.objectContaining({ messageId: 'msg-1' }),
     )
+  })
+})
+
+// Правка міняє текст — а з ним і посилання, на яке вказує картка.
+describe('PATCH: картка посилання', () => {
+  const CARD = {
+    url: 'https://privat24.ua/',
+    siteName: 'next.privat24.ua',
+    title: 'Приват24',
+    description: '',
+  }
+
+  function withCard() {
+    prisma.message.findUnique.mockResolvedValue({
+      id: 'msg-1',
+      type: 'TEXT',
+      senderId: USER,
+      chatId: 'chat-1',
+      createdAt: new Date(),
+      deletedAt: null,
+      linkPreview: CARD,
+    })
+  }
+
+  it('посилання те саме — картка лишається, нікуди не ходимо', async () => {
+    withCard()
+    const body = await okJson<{ linkPreview: unknown }>(() =>
+      messageItem.PATCH(
+        itemEvent(USER, { text: 'Оплата ось тут: https://privat24.ua/' }),
+      ),
+    )
+
+    expect(prisma.message.update.mock.calls[0][0].data.linkPreview).toEqual(
+      CARD,
+    )
+    expect(body.linkPreview).toEqual(CARD)
+    expect(fetchLinkPreview).not.toHaveBeenCalled()
+  })
+
+  it('посилання інше — стара картка геть, по нову сходимо', async () => {
+    withCard()
+    await messageItem.PATCH(itemEvent(USER, { text: 'https://github.com/' }))
+
+    expect(prisma.message.update.mock.calls[0][0].data.linkPreview).toBe(
+      Prisma.DbNull,
+    )
+    expect(safeTrigger).toHaveBeenCalledWith(
+      'private-chat-chat-1',
+      'message:edit',
+      expect.objectContaining({ linkPreview: null }),
+    )
+    await vi.waitFor(() =>
+      expect(fetchLinkPreview).toHaveBeenCalledWith('https://github.com/'),
+    )
+  })
+
+  it('посилання прибрали — картки немає', async () => {
+    withCard()
+    await messageItem.PATCH(itemEvent(USER, { text: 'без посилань' }))
+    await new Promise((r) => setTimeout(r, 0))
+
+    expect(prisma.message.update.mock.calls[0][0].data.linkPreview).toBe(
+      Prisma.DbNull,
+    )
+    expect(fetchLinkPreview).not.toHaveBeenCalled()
   })
 })
 

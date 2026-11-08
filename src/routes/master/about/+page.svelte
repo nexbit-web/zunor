@@ -42,29 +42,27 @@
   MANIFESTO.md.
 -->
 <script lang="ts">
-  // Точкові імпорти, а не barrel 'lucide-svelte': бочка реекспортує
-  // ~1700 .svelte-іконок і поїхала б у чанк цієї сторінки цілком.
-  import ArrowRight from '@lucide/svelte/icons/arrow-right'
-  import BadgeCheck from '@lucide/svelte/icons/badge-check'
-  import Bell from '@lucide/svelte/icons/bell'
-  import Building2 from '@lucide/svelte/icons/building-2'
-  import CalendarClock from '@lucide/svelte/icons/calendar-clock'
-  import Camera from '@lucide/svelte/icons/camera'
-  import Check from '@lucide/svelte/icons/check'
-  import ChevronRight from '@lucide/svelte/icons/chevron-right'
-  import Eye from '@lucide/svelte/icons/eye'
-  import GraduationCap from '@lucide/svelte/icons/graduation-cap'
-  import House from '@lucide/svelte/icons/house'
-  import IdCard from '@lucide/svelte/icons/id-card'
-  import Inbox from '@lucide/svelte/icons/inbox'
-  import MapPin from '@lucide/svelte/icons/map-pin'
-  import MessageCircle from '@lucide/svelte/icons/message-circle'
-  import ShieldCheck from '@lucide/svelte/icons/shield-check'
-  import Sparkles from '@lucide/svelte/icons/sparkles'
-  import Tag from '@lucide/svelte/icons/tag'
-  import TrendingUp from '@lucide/svelte/icons/trending-up'
-  import UserPlus from '@lucide/svelte/icons/user-plus'
-  import Users from '@lucide/svelte/icons/users'
+  import ArrowRight from '$lib/components/icons/set/arrow-right.svelte'
+  import BadgeCheck from '$lib/components/icons/set/badge-check.svelte'
+  import Bell from '$lib/components/icons/set/bell.svelte'
+  import Building2 from '$lib/components/icons/set/building-2.svelte'
+  import CalendarClock from '$lib/components/icons/set/calendar-clock.svelte'
+  import Camera from '$lib/components/icons/set/camera.svelte'
+  import Check from '$lib/components/icons/set/check.svelte'
+  import ChevronRight from '$lib/components/icons/set/chevron-right.svelte'
+  import Eye from '$lib/components/icons/set/eye.svelte'
+  import GraduationCap from '$lib/components/icons/set/graduation-cap.svelte'
+  import House from '$lib/components/icons/set/house.svelte'
+  import IdCard from '$lib/components/icons/set/id-card.svelte'
+  import Inbox from '$lib/components/icons/set/inbox.svelte'
+  import MapPin from '$lib/components/icons/set/map-pin.svelte'
+  import MessageCircle from '$lib/components/icons/set/message-circle.svelte'
+  import ShieldCheck from '$lib/components/icons/set/shield-check.svelte'
+  import Sparkles from '$lib/components/icons/set/sparkles.svelte'
+  import Tag from '$lib/components/icons/set/tag.svelte'
+  import TrendingUp from '$lib/components/icons/set/trending-up.svelte'
+  import UserPlus from '$lib/components/icons/set/user-plus.svelte'
+  import Users from '$lib/components/icons/set/users.svelte'
   import * as Accordion from '$lib/components/ui/accordion/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
   import { reveal } from '$lib/utils/reveal'
@@ -967,7 +965,7 @@
   }
 
   /* Стрілки їдуть уперед на hover: мікрорух, який каже «це перехід».
-     :global обовʼязковий — <svg> малює компонент lucide, а кнопку —
+     :global обовʼязковий — <svg> малює компонент іконки, а кнопку —
      компонент Button, і хеша нашої області видимості на них немає. Без
      обгортки Svelte викинув би ці правила як невикористані, мовчки. */
   .master :global(.m-cta .m-cta-arrow),

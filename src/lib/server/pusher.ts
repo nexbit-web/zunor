@@ -32,6 +32,9 @@ export const events = {
   messageEdit: 'message:edit',
   messageDelete: 'message:delete',
   messageRead: 'message:read',
+  messageReaction: 'message:reaction',
+  /** Картка посилання дійшла після самого повідомлення. */
+  messagePreview: 'message:preview',
   chatUpdate: 'chat:update',
   /**
    * Зміна статусу замовлення.

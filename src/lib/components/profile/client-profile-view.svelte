@@ -16,7 +16,8 @@
     AvatarImage,
   } from '$lib/components/ui/avatar'
   import { Skeleton } from '$lib/components/ui/skeleton'
-  import { Star, ChevronRight } from 'lucide-svelte'
+  import Star from '$lib/components/icons/set/star.svelte'
+  import ChevronRight from '$lib/components/icons/set/chevron-right.svelte'
   import type { ClientProfileData } from '$lib/components/profile/types'
 
   interface Props {

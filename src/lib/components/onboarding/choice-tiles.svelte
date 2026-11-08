@@ -8,7 +8,7 @@
 -->
 <script lang="ts" generics="T extends string | boolean">
   import type { Component, Snippet } from 'svelte'
-  import CheckIcon from '@lucide/svelte/icons/check'
+  import CheckIcon from '$lib/components/icons/set/check.svelte'
 
   interface Option {
     value: T

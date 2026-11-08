@@ -2,9 +2,13 @@
   import { untrack } from 'svelte'
   import { page } from '$app/state'
   import { replaceState } from '$app/navigation'
-  import { Briefcase, Check, ChevronDown, Plus } from 'lucide-svelte'
+  import Briefcase from '$lib/components/icons/set/briefcase.svelte'
+  import Check from '$lib/components/icons/set/check.svelte'
+  import ChevronDown from '$lib/components/icons/set/chevron-down.svelte'
+  import Plus from '$lib/components/icons/set/plus.svelte'
   import { Button } from '$lib/components/ui/button'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
+  import PageHead from '$lib/components/dashboard/page-head.svelte'
   import OrderCard from '$lib/components/orders/order-card.svelte'
   import type { PageData } from './$types'
 
@@ -93,78 +97,93 @@
 </svelte:head>
 
 <!--
-  max-w-230 — та сама колонка, що в заявках, відгуках і сповіщеннях.
-  min-h-(--app-h) + flex-col потрібні порожньому стану: він бере flex-1 і стає
-  по центру сторінки, а не одразу під заголовком.
+  Та сама колонка й шапка, що в «Моїх заявках» (jobs/+page.svelte):
+  max-w-3xl і картки одна під одною. Сітка у дві колонки стискала назви
+  до двох рядків і ставила поруч замовлення, які ніщо не повʼязує.
+
+  min-h-(--app-h) + flex-col потрібні порожньому стану: він бере flex-1 і
+  стає по центру сторінки, а не одразу під заголовком. Верхнього падінгу
+  тут немає — його тримає `PageHead` (на телефоні більший, під кнопку
+  меню).
 -->
 <div
-  class="mx-auto flex min-h-(--app-h) w-full max-w-230 flex-col px-4 py-8 sm:px-6"
+  class="mx-auto flex min-h-(--app-h) w-full max-w-3xl flex-col px-4 pb-6 sm:px-6 sm:pb-10"
 >
-  <header class="mb-6 flex items-center justify-between gap-3 sm:mb-8">
-    <div class="flex min-w-0 items-center gap-2.5">
-      <h1 class="truncate text-2xl font-semibold tracking-tight sm:text-3xl">
-        Замовлення
-      </h1>
-      {#if data.counts.active > 0}
-        <span
-          class="rounded-full bg-primary/12 px-2 py-0.5 text-xs font-semibold tabular-nums text-primary"
-        >
-          {data.counts.active}
-        </span>
-      {/if}
-    </div>
+  <PageHead>
+    <div class="flex items-center justify-between gap-3">
+      <div class="flex min-w-0 items-center gap-2.5">
+        <h1 class="truncate text-2xl font-semibold tracking-tight sm:text-3xl">
+          Замовлення
+        </h1>
+        {#if data.counts.active > 0}
+          <span
+            class="rounded-full bg-primary/12 px-2 py-0.5 text-xs font-semibold tabular-nums text-primary"
+            title="Активні замовлення"
+          >
+            {data.counts.active}
+          </span>
+        {/if}
+      </div>
 
-    <div class="flex shrink-0 items-center gap-2">
-      <DropdownMenu.Root>
-        <DropdownMenu.Trigger>
-          {#snippet child({ props })}
-            <Button
-              {...props}
-              variant="secondary"
-              size="sm"
-              class="font-normal text-muted-foreground"
-            >
-              <span class="hidden sm:inline">Показати:</span>
-              <span class="font-medium text-foreground">
-                {TAB_LABELS[activeTab]}
-              </span>
-              <ChevronDown class="size-3.5 opacity-60" />
-            </Button>
-          {/snippet}
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Content align="end" class="w-52 rounded-2xl p-1.5">
-          {#each ['ACTIVE', 'COMPLETED', 'CANCELLED', 'ALL'] as const as value (value)}
-            <DropdownMenu.Item
-              class="flex cursor-pointer items-center justify-between gap-2 rounded-xl px-3 py-2 text-sm outline-none data-highlighted:bg-accent"
-              onclick={() => setTab(value)}
-            >
-              <span class="flex items-center gap-2">
-                <span>{TAB_LABELS[value]}</span>
+      <div class="flex shrink-0 items-center gap-2">
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger>
+            {#snippet child({ props })}
+              <Button
+                {...props}
+                variant="secondary"
+                size="sm"
+                class="font-normal text-muted-foreground"
+              >
+                <span class="hidden sm:inline">Показати:</span>
+                <span class="font-medium text-foreground">
+                  {TAB_LABELS[activeTab]}
+                </span>
+                <ChevronDown class="size-3.5 opacity-60" />
+              </Button>
+            {/snippet}
+          </DropdownMenu.Trigger>
+          <!-- Вигляд меню й пунктів — зі спільного ui/dropdown-menu (як у
+               референсі в docs/); тут лише ширина. -->
+          <DropdownMenu.Content align="end" class="w-auto min-w-56">
+            {#each ['ACTIVE', 'COMPLETED', 'CANCELLED', 'ALL'] as const as value (value)}
+              {#if value === 'ALL'}
+                <DropdownMenu.Separator />
+              {/if}
+              <DropdownMenu.Item
+                class="cursor-pointer"
+                onclick={() => setTab(value)}
+              >
+                <span class="min-w-0 flex-1 truncate">{TAB_LABELS[value]}</span>
                 <span class="text-xs tabular-nums text-muted-foreground">
                   {counts[value]}
                 </span>
-              </span>
-              {#if activeTab === value}
-                <Check class="size-4 text-ring" />
-              {/if}
-            </DropdownMenu.Item>
-          {/each}
-        </DropdownMenu.Content>
-      </DropdownMenu.Root>
+                <!-- Місце під галочку є завжди: інакше лічильник обраного
+                     пункту стрибав би ліворуч. -->
+                <Check
+                  class="size-4 shrink-0 text-primary {activeTab !== value
+                    ? 'invisible'
+                    : ''}"
+                />
+              </DropdownMenu.Item>
+            {/each}
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>
 
-      {#if isClient}
-        <Button size="sm" href="/dashboard/jobs/new">
-          <Plus />
-          <span class="hidden sm:inline">Нове замовлення</span>
-        </Button>
-      {:else if isMaster}
-        <Button size="sm" href="/dashboard/jobs">
-          <Briefcase />
-          <span class="hidden sm:inline">Знайти роботу</span>
-        </Button>
-      {/if}
+        {#if isClient}
+          <Button size="sm" href="/dashboard/jobs/new">
+            <Plus />
+            <span class="hidden sm:inline">Нове замовлення</span>
+          </Button>
+        {:else if isMaster}
+          <Button size="sm" href="/dashboard/jobs">
+            <Briefcase />
+            <span class="hidden sm:inline">Знайти роботу</span>
+          </Button>
+        {/if}
+      </div>
     </div>
-  </header>
+  </PageHead>
 
   {#if filtered.length === 0}
     <div
@@ -216,7 +235,7 @@
       {/if}
     </div>
   {:else}
-    <ul class="grid gap-3 sm:grid-cols-2">
+    <ul class="mt-2 flex flex-col gap-3">
       {#each filtered as order (order.id)}
         <li class="min-w-0">
           <OrderCard {order} viewerId={data.viewerId} />

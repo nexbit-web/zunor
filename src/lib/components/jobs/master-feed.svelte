@@ -3,24 +3,19 @@
   import * as Alert from '$lib/components/ui/alert'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
   import PageHead from '$lib/components/dashboard/page-head.svelte'
-  import JobRow from './job-row.svelte'
+  import JobCard from './job-card.svelte'
   import JobCardSkeleton from './job-card-skeleton.svelte'
+  import ServiceIcon from '$lib/categories/cleaning/service-icon.svelte'
   import { onMount } from 'svelte'
   import { invalidate } from '$app/navigation'
   import { notifications } from '$lib/notifications'
-  import {
-    Star,
-    ChevronDown,
-    Check,
-    AlertCircle,
-    Search,
-    MapPin,
-    Calendar,
-  } from 'lucide-svelte'
+  import ChevronDown from '$lib/components/icons/set/chevron-down.svelte'
+  import Check from '$lib/components/icons/set/check.svelte'
+  import AlertCircle from '$lib/components/icons/set/circle-alert.svelte'
+  import Search from '$lib/components/icons/set/search.svelte'
+  import LayoutGrid from '$lib/components/icons/set/layout-grid.svelte'
 
-  import { formatDay, formatRelative } from '$lib/utils/time'
-  import { formatDistance } from '$lib/geo/districts'
-  import { SERVICES, resolveWhen } from '$lib/categories/cleaning/presets'
+  import { SERVICES } from '$lib/categories/cleaning/presets'
 
   let {
     initialJobs,
@@ -103,15 +98,9 @@
   )
 
   /** Заявка, на яку ще реально встигнути: дві години з публікації.
-      Для майстра це єдине, що варте кольору в рядку. */
+      Для майстра це єдине, що варте кольору в картці. */
   function isFresh(iso: string) {
     return Date.now() - new Date(iso).getTime() < 2 * 60 * 60_000
-  }
-
-  /** День прибирання з урахуванням «today/tomorrow» від дня створення. */
-  function dayOf(job: any): string {
-    const iso = resolveWhen(job.metadata?.when, job.createdAt)
-    return iso ? formatDay(iso) : ''
   }
 </script>
 
@@ -145,17 +134,32 @@
           {/snippet}
         </DropdownMenu.Trigger>
 
-        <DropdownMenu.Content align="end" class="w-60 rounded-2xl p-1.5">
+        <!-- Компактне меню з іконками послуг — тими самими, що в
+             картках: послугу впізнаєш оком, ще не дочитавши назву. -->
+        <!-- Вигляд меню й пунктів — зі спільного ui/dropdown-menu (як у
+             референсі в docs/); тут лише ширина. -->
+        <DropdownMenu.Content align="end" class="w-auto min-w-56">
           {#each [{ key: ALL, label: 'Усі послуги' }, ...SERVICES] as option (option.key)}
             <DropdownMenu.Item
-              class="flex cursor-pointer items-center justify-between gap-3 rounded-xl px-3 py-2 text-sm outline-none data-highlighted:bg-accent"
+              class="cursor-pointer"
               onclick={() => (activeService = option.key)}
             >
-              <span class="truncate">{option.label}</span>
+              {#if option.key === ALL}
+                <LayoutGrid
+                  class="size-4 shrink-0 text-muted-foreground"
+                  strokeWidth={1.75}
+                />
+              {:else}
+                <ServiceIcon service={option.key} class="size-4 shrink-0" />
+              {/if}
+              <span class="min-w-0 flex-1 truncate">{option.label}</span>
               {#if activeService === option.key}
-                <Check class="size-4 shrink-0 text-ring" />
+                <Check class="size-4 shrink-0 text-primary" />
               {/if}
             </DropdownMenu.Item>
+            {#if option.key === ALL}
+              <DropdownMenu.Separator />
+            {/if}
           {/each}
         </DropdownMenu.Content>
       </DropdownMenu.Root>
@@ -204,73 +208,22 @@
     {/if}
   </div>
 {:else}
-  <ul class="mt-1 border-t border-border/60">
+  <ul class="mt-2 flex flex-col gap-3">
     {#each visibleJobs as job (job.id)}
-      {@const fresh = isFresh(job.createdAt)}
-      {@const day = dayOf(job)}
-      <JobRow
+      <JobCard
         href={`/dashboard/jobs/${job.id}`}
-        service={job.metadata?.service}
         title={job.title}
         description={job.description}
-      >
-        {#snippet status()}
-          <!-- Колір дістається тільки свіжим заявкам: на них ще реально
-               встигнути, і саме це майстер шукає очима. -->
-          {#if fresh}
-            <span
-              class="inline-flex h-6 items-center gap-1.5 rounded-full bg-primary/10 px-2.5 text-[12.5px] font-medium whitespace-nowrap text-primary"
-            >
-              <span class="live-dot size-1.5 rounded-full bg-primary"></span>
-              {formatRelative(job.createdAt)}
-            </span>
-          {:else}
-            <span
-              class="inline-flex h-6 items-center text-[13px] whitespace-nowrap text-muted-foreground"
-            >
-              {formatRelative(job.createdAt)}
-            </span>
-          {/if}
-        {/snippet}
-        {#snippet meta()}
-          {#if day}
-            <span class="inline-flex items-center gap-1.5">
-              <Calendar class="size-3.5" aria-hidden="true" />
-              <span class="text-foreground/80">{day}</span>
-            </span>
-          {/if}
-
-          <!-- Район, а не адреса: точну адресу клієнт дає в чаті вже
-               після угоди. Відстань — від району самого майстра. -->
-          {#if job.place?.district}
-            <span class="inline-flex min-w-0 items-center gap-1.5">
-              <MapPin class="size-3.5 shrink-0" aria-hidden="true" />
-              <!-- {' · '} явно: пробіл на початку {#if} Svelte зрізає. -->
-              <span class="truncate">
-                {job.place
-                  .district}{#if job.place.distanceKm !== null}{' · '}{formatDistance(
-                    job.place.distanceKm,
-                  )}{/if}
-              </span>
-            </span>
-          {/if}
-
-          {#if job.client}
-            <span class="inline-flex min-w-0 items-center gap-1">
-              <span class="truncate">{job.client.name ?? 'Замовник'}</span>
-              {#if job.client.reviewsCount > 0}
-                <Star
-                  class="size-3 shrink-0 fill-amber-400 text-amber-400"
-                  aria-hidden="true"
-                />
-                <span class="font-medium text-foreground/80">
-                  {job.client.avgRating.toFixed(1)}
-                </span>
-              {/if}
-            </span>
-          {/if}
-        {/snippet}
-      </JobRow>
+        metadata={job.metadata}
+        createdAt={job.createdAt}
+        budgetMinCents={job.budgetMinCents}
+        budgetMaxCents={job.budgetMaxCents}
+        currency={job.currency}
+        fresh={isFresh(job.createdAt)}
+        match={job.match}
+        client={job.client}
+        place={job.place}
+      />
     {/each}
   </ul>
 
@@ -282,26 +235,3 @@
     <p class="py-8 text-center text-xs text-muted-foreground">Це всі заявки</p>
   {/if}
 {/if}
-
-<style>
-  /* Пульс — не прикраса: він відрізняє «іде просто зараз» від статусу,
-     який просто написаний словом. І саме тому він рівно один на рядок:
-     якби дихало все, не казало б нічого. */
-  .live-dot {
-    animation: live-pulse 2s ease-in-out infinite;
-  }
-  @keyframes live-pulse {
-    0%,
-    100% {
-      opacity: 1;
-    }
-    50% {
-      opacity: 0.35;
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .live-dot {
-      animation: none;
-    }
-  }
-</style>

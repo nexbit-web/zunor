@@ -44,6 +44,8 @@ export const events = {
   messageEdit: 'message:edit',
   messageDelete: 'message:delete',
   messageRead: 'message:read',
+  messageReaction: 'message:reaction',
+  messagePreview: 'message:preview',
   chatUpdate: 'chat:update',
   orderStatus: 'order:status',
   typing: 'client-typing',
@@ -70,6 +72,8 @@ export const notify = vi.fn(async () => {})
 
 export { DISPATCH_CONFIG } from '$lib/server/dispatch/config'
 export { WAVES_DONE_MIN } from '$lib/server/dispatch/core/waves'
+// Чиста функція без бази — справжня, як і конфіг.
+export { bestMatches } from '$lib/server/dispatch/fit'
 
 export const startWaves = vi.fn(
   async (_job: { id: string; createdAt: Date }) => {},

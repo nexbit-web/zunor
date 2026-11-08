@@ -1,12 +1,10 @@
 import { prisma } from '$lib/server/prisma'
 import { requireUser } from '$lib/server/guards'
+import { MESSAGE_SELECT, toChatMessage } from '$lib/server/chat-messages'
+import { freshest, lastSeenMany } from '$lib/server/presence'
 import { error } from '@sveltejs/kit'
 import type { PageServerLoad } from './$types'
-import type {
-  ChatDetails,
-  ChatMessage,
-  MessageType,
-} from '$lib/components/chat/types'
+import type { ChatDetails } from '$lib/components/chat/types'
 
 const PAGE_SIZE = 50
 
@@ -28,6 +26,8 @@ export const load: PageServerLoad = async ({ params, locals }) => {
             id: true,
             members: {
               select: {
+                // lastReadAt співрозмовника — з нього галочки ✓✓.
+                lastReadAt: true,
                 user: {
                   select: {
                     id: true,
@@ -35,6 +35,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
                     username: true,
                     avatar: true,
                     role: true,
+                    lastSeen: true,
                     masterProfile: {
                       select: { verificationStatus: true },
                     },
@@ -53,31 +54,23 @@ export const load: PageServerLoad = async ({ params, locals }) => {
       where: { chatId, type: { not: 'SYSTEM' } },
       orderBy: { createdAt: 'desc' },
       take: PAGE_SIZE + 1,
-      select: {
-        id: true,
-        type: true,
-        text: true,
-        attachmentUrl: true,
-        attachmentMimeType: true,
-        attachmentSize: true,
-        attachmentName: true,
-        isRead: true,
-        editedAt: true,
-        deletedAt: true,
-        createdAt: true,
-        senderId: true,
-        replyToId: true,
-        replyTo: {
-          select: { id: true, text: true, senderId: true, type: true },
-        },
-      },
+      select: MESSAGE_SELECT,
     }),
   ])
 
   if (!membership) throw error(404, 'Чат не знайдено')
 
-  const peer = membership.chat.members.find((m) => m.user.id !== userId)?.user
+  const peerMember = membership.chat.members.find((m) => m.user.id !== userId)
+  const peer = peerMember?.user
   if (!peer) throw error(404, 'Співрозмовник не знайдено')
+
+  // Точний час — з Redis, якщо він є; база пишеться рідше (presence.ts).
+  // Запит лише ПІСЛЯ перевірки членства: «коли був у мережі» — теж дані
+  // людини, і чужому їх не видно.
+  const seen = await lastSeenMany([peer.id])
+  const peerLastSeen = peer.lastSeen
+    ? freshest(peer.lastSeen, seen.get(peer.id))
+    : (seen.get(peer.id) ?? null)
 
   // Роль беремо з locals.account (її вже прочитав guardHandle) — окремий
   // SELECT був третім запитом на відкриття чату.
@@ -86,30 +79,6 @@ export const load: PageServerLoad = async ({ params, locals }) => {
   const hasMore = messages.length > PAGE_SIZE
   const items = hasMore ? messages.slice(0, PAGE_SIZE) : messages
   const nextCursor = hasMore ? items[items.length - 1].id : null
-
-  const initialMessages: ChatMessage[] = items.map((m) => ({
-    id: m.id,
-    type: m.type as MessageType,
-    text: m.deletedAt ? '' : m.text,
-    attachmentUrl: m.deletedAt ? null : m.attachmentUrl,
-    attachmentMimeType: m.attachmentMimeType,
-    attachmentSize: m.attachmentSize,
-    attachmentName: m.attachmentName,
-    isRead: m.isRead,
-    editedAt: m.editedAt?.toISOString() ?? null,
-    deletedAt: m.deletedAt?.toISOString() ?? null,
-    createdAt: m.createdAt.toISOString(),
-    senderId: m.senderId,
-    replyToId: m.replyToId,
-    replyTo: m.replyTo
-      ? {
-          id: m.replyTo.id,
-          text: m.replyTo.text,
-          senderId: m.replyTo.senderId,
-          type: m.replyTo.type as MessageType,
-        }
-      : null,
-  }))
 
   const chat: ChatDetails = {
     id: membership.chat.id,
@@ -128,12 +97,14 @@ export const load: PageServerLoad = async ({ params, locals }) => {
       isVerified: m.user.masterProfile?.verificationStatus === 'VERIFIED',
     })),
     myLastReadAt: membership.lastReadAt?.toISOString() ?? null,
+    peerLastReadAt: peerMember.lastReadAt?.toISOString() ?? null,
+    peerLastSeen: peerLastSeen?.toISOString() ?? null,
     mutedUntil: null,
   }
 
   return {
     chat,
-    initialMessages,
+    initialMessages: items.map(toChatMessage),
     initialNextCursor: nextCursor,
     currentUserId: userId,
     currentUserRole: myRole,

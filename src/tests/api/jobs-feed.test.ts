@@ -418,3 +418,59 @@ describe('view=mine', () => {
     })
   })
 })
+
+// «Топ для тебе»: догрузка позначає так само, як перша сторінка з SSR
+// (обидві йдуть через bestMatches). Рішення — у dispatch-fit.test.ts;
+// тут — що роут бере відстань від району майстра й віддає позначку.
+describe('«Топ для тебе»', () => {
+  beforeEach(() => {
+    prisma.dispatchEvent.findMany.mockResolvedValue([])
+  })
+
+  type Item = { id: string; match: string[] | null }
+  const jobsOf = async () =>
+    (await okJson<{ jobs: Item[] }>(() => GET(feedEvent('m1')))).jobs
+
+  it('заявка в районі майстра позначена, далека — ні', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      ...activeMaster,
+      district: 'center',
+    })
+    prisma.job.findMany.mockResolvedValue([
+      { ...jobRow(0), district: 'center' },
+      { ...jobRow(1), district: 'tairova' },
+    ])
+
+    const [near, far] = await jobsOf()
+    expect(near.match).toContain('near')
+    expect(far.match).toBeNull()
+  })
+
+  it('майстер без району — позначок немає: невідомо ≠ поруч', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      ...activeMaster,
+      district: null,
+    })
+    prisma.job.findMany.mockResolvedValue([
+      { ...jobRow(0), district: 'center' },
+    ])
+
+    expect((await jobsOf())[0].match).toBeNull()
+  })
+
+  it('обсяг заявки й формат майстра їдуть у запит', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      ...activeMaster,
+      district: 'center',
+    })
+    prisma.job.findMany.mockResolvedValue([])
+
+    await GET(feedEvent('m1'))
+
+    expect(prisma.job.findMany.mock.calls[0][0].select.effort).toBe(true)
+    const profile =
+      prisma.user.findUnique.mock.calls[0][0].select.masterProfile.select
+    expect(profile.crew).toBe(true)
+    expect(profile.hasVehicle).toBe(true)
+  })
+})

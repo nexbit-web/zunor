@@ -20,7 +20,7 @@
 
   import type { Snippet } from 'svelte'
   import type { HTMLInputAttributes } from 'svelte/elements'
-  import { CircleAlert } from 'lucide-svelte'
+  import CircleAlert from '$lib/components/icons/set/circle-alert.svelte'
 
   interface Props extends Omit<
     HTMLInputAttributes,
@@ -124,8 +124,11 @@
      Коли товщина справді росла, поле смикалось — border-width
      перемикається миттєво, а компенсуючий падінг їхав анімацією, і
      текст усередині повз. */
+  /* Тло у фокусі — кольору сторінки, як у GitHub: у темній темі поле
+     темнішає, у світлій лишається білим. */
   .field-input:focus {
     border-color: var(--primary);
+    background: var(--background);
     box-shadow: 0 0 0 1px var(--primary);
   }
 

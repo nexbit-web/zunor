@@ -30,6 +30,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     select: {
       id: true,
       title: true,
+      // Картка бере з неї послугу, день і теги характеристик.
+      metadata: true,
       priceCents: true,
       currency: true,
       status: true,
@@ -45,6 +47,9 @@ export const load: PageServerLoad = async ({ locals, url }) => {
       master: {
         select: { id: true, name: true, username: true, avatar: true },
       },
+      // «today/tomorrow» у metadata відносні до дня створення ЗАЯВКИ, а
+      // не замовлення — без цієї дати день прибирання зсувався б.
+      fromJob: { select: { createdAt: true } },
     },
     take: 200,
   })
@@ -57,8 +62,9 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   }
 
   return {
-    orders: orders.map((o) => ({
+    orders: orders.map(({ fromJob, ...o }) => ({
       ...o,
+      jobCreatedAt: fromJob?.createdAt.toISOString() ?? null,
       createdAt: o.createdAt.toISOString(),
       updatedAt: o.updatedAt.toISOString(),
       startedAt: o.startedAt?.toISOString() ?? null,

@@ -1,6 +1,8 @@
 <script lang="ts">
   import { goto } from '$app/navigation'
-  import { BarChart3, CalendarDays, Star } from 'lucide-svelte'
+  import BarChart3 from '$lib/components/icons/set/analytics.svelte'
+  import CalendarDays from '$lib/components/icons/set/calendar-days.svelte'
+  import Star from '$lib/components/icons/set/star.svelte'
   import {
     CalendarDate,
     getLocalTimeZone,

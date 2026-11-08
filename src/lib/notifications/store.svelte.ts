@@ -107,7 +107,9 @@ class NotificationStore {
     for (const fn of this.#listeners) fn(n)
 
     notificationSound.play()
-    showNotificationToast(n)
+    // Перейшов за сповіщенням з острова — воно прочитане, як і в стрічці.
+    // Не вдалось — markRead сам поверне лічильник.
+    showNotificationToast(n, () => void this.markRead([n.id]))
   }
 
   /**

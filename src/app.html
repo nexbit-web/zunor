@@ -30,6 +30,27 @@
       } catch (e) {}
     </script>
 
+    <!-- Палітра кабінету (in-app) і темна тема — лише в кабінеті
+         (/dashboard/**), до першого кадру. Решта сайту завжди світла й
+         на своїй палітрі. Правило те саме, що в $lib/theme-scope.ts;
+         ключ і «system» за замовчуванням — як у mode-watcher. -->
+    <script>
+      try {
+        var path = location.pathname
+        if (path === '/dashboard' || path.indexOf('/dashboard/') === 0) {
+          document.documentElement.classList.add('in-app')
+          var m = localStorage.getItem('mode-watcher-mode') || 'system'
+          if (
+            m === 'dark' ||
+            (m === 'system' &&
+              matchMedia('(prefers-color-scheme: dark)').matches)
+          ) {
+            document.documentElement.classList.add('dark')
+          }
+        }
+      } catch (e) {}
+    </script>
+
     %sveltekit.head%
   </head>
 

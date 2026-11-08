@@ -2,15 +2,22 @@
   Профіль виконавця — у двох подачах з одним станом:
 
   • onboarding — покроковий майстер (OnboardingWizard): одне питання на
-    екран, від простого до складного — імʼя, фото, які прибирання, де
-    (житло чи офіси), район, авто, як далеко їздити, команда, телефон,
-    опис, портфоліо — і в кінці перевірка всього разом. Довга
-    анкета з восьми полів лякала ще до першого символу;
-
-  Питання «які прибирання», «де», «авто» й «команда» — для підбору: від
-  них залежить, які заявки до майстра взагалі дійдуть і яким він буде в
-  черзі (categories/matching, server/dispatch). Тому вони обовʼязкові.
+    екран, від простого до складного — хто ви (людина чи компанія),
+    імʼя чи назва, фото чи логотип, телефон, які прибирання, де (житло
+    чи офіси), район, авто, як далеко їздити, сам чи з напарником, опис,
+    портфоліо — і в кінці перевірка всього разом. Довга анкета з восьми
+    полів лякала ще до першого символу;
   • edit — та сама форма одним екраном на сторінці налаштувань.
+
+  «Людина чи компанія» — перше питання, бо від нього залежить решта
+  анкети: компанія вписує назву замість імені й логотип замість фото, а
+  «сам чи з напарником» її не питаємо — компанія завжди команда. В базі
+  це не окреме поле: компанія — MasterProfile.crew = COMPANY, а назва
+  лежить у User.name, як імʼя в людини ($lib/masters/meta).
+
+  Питання «які прибирання», «де», «авто» й «формат роботи» — для підбору:
+  від них залежить, які заявки до майстра взагалі дійдуть і яким він буде
+  в черзі (categories/matching, server/dispatch). Тому вони обовʼязкові.
 
   Поля описані сніпетами один раз і збираються в обидві подачі, тож
   розійтись між собою вони не можуть. Профіль зберігається ОДНИМ запитом
@@ -21,7 +28,7 @@
   saveMasterProfile() у $lib/server/profile.ts перевіряє все повторно.
 -->
 <script lang="ts">
-  import { goto, invalidateAll } from '$app/navigation'
+  import { beforeNavigate, goto, invalidateAll } from '$app/navigation'
   import { untrack, tick } from 'svelte'
   import {
     SettingsGroup,
@@ -36,6 +43,7 @@
   import * as Popover from '$lib/components/ui/popover'
   import * as Command from '$lib/components/ui/command'
   import * as Alert from '$lib/components/ui/alert'
+  import * as AlertDialog from '$lib/components/ui/alert-dialog'
   import * as Avatar from '$lib/components/ui/avatar'
   import AvatarUploader from '$lib/components/avatar-uploader.svelte'
   import UsernameInput from '$lib/components/username-input.svelte'
@@ -63,27 +71,32 @@
     type PremiseGroup,
   } from '$lib/categories/cleaning/skills'
   import {
-    COMPANY_NAME_MAX,
-    CREW_OPTIONS,
+    KIND_OPTIONS,
+    PERSON_CREW_OPTIONS,
     VEHICLE_OPTIONS,
     crewLabel,
+    kindLabel,
+    kindOfCrew,
     parseMasterSkills,
     vehicleLabel,
     type Crew,
+    type MasterKind,
+    type PersonCrew,
   } from '$lib/masters/meta'
-  import CheckIcon from '@lucide/svelte/icons/check'
-  import ChevronsUpDownIcon from '@lucide/svelte/icons/chevrons-up-down'
-  import { UserRound, Phone, MapPin, Briefcase } from 'lucide-svelte'
-  // Пер-іконні імпорти: плитки вибору чекають компонент Svelte 5, а бочка
-  // lucide-svelte віддає старі класові.
-  import Car from '@lucide/svelte/icons/car'
-  import Bus from '@lucide/svelte/icons/bus'
-  import User from '@lucide/svelte/icons/user'
-  import Users from '@lucide/svelte/icons/users'
-  import House from '@lucide/svelte/icons/house'
-  import Building2 from '@lucide/svelte/icons/building-2'
-  import AlertCircleIcon from '@lucide/svelte/icons/alert-circle'
-  import CircleAlertIcon from '@lucide/svelte/icons/circle-alert'
+  import CheckIcon from '$lib/components/icons/set/check.svelte'
+  import ChevronsUpDownIcon from '$lib/components/icons/set/chevrons-up-down.svelte'
+  import UserRound from '$lib/components/icons/set/user-round.svelte'
+  import Phone from '$lib/components/icons/set/phone.svelte'
+  import MapPin from '$lib/components/icons/set/map-pin.svelte'
+  import Briefcase from '$lib/components/icons/set/briefcase.svelte'
+  import Car from '$lib/components/icons/set/car.svelte'
+  import Bus from '$lib/components/icons/set/bus.svelte'
+  import User from '$lib/components/icons/set/user.svelte'
+  import Users from '$lib/components/icons/set/users.svelte'
+  import House from '$lib/components/icons/set/house.svelte'
+  import Building2 from '$lib/components/icons/set/building-2.svelte'
+  import AlertCircleIcon from '$lib/components/icons/set/circle-alert.svelte'
+  import CircleAlertIcon from '$lib/components/icons/set/circle-alert.svelte'
   import type {
     OnboardingData,
     WizardPhase,
@@ -109,141 +122,231 @@
   // Три етапи, як в анкеті господаря на Airbnb: огляд на початку,
   // заставка перед кожним етапом і смуга прогресу по етапах. Дванадцять
   // питань підряд втомлюють; «другий етап із трьох» — ні.
-  const PHASES: readonly WizardPhase[] = [
-    {
-      id: 'you',
-      title: 'Познайомимось',
-      lead: 'Імʼя, фото й телефон. Клієнти обирають людей, а не нікнейми, а номер побачить лише той, хто обере саме вас.',
-    },
-    {
-      id: 'work',
-      title: 'Яку роботу берете',
-      lead: 'Які прибирання робите, де живете й як добираєтесь. З цього ми підбираємо заявки — лише ті, що вам справді підходять.',
-    },
-    {
-      id: 'profile',
-      title: 'Покажіть себе клієнтам',
-      lead: 'Кілька слів про досвід і фото робіт — і профіль іде на перевірку. Після неї заявки почнуть приходити самі.',
-    },
-  ]
+  //
+  // Тексти — під відповідь на перше питання: людині «Як вас звати?»,
+  // компанії «Як називається компанія?». Поки відповіді немає — як людині.
+  function phasesFor(company: boolean): WizardPhase[] {
+    return [
+      {
+        id: 'you',
+        title: company ? 'Про компанію' : 'Познайомимось',
+        lead: company
+          ? 'Назва, логотип і телефон. Клієнти бачать вивіску, а номер — лише той, хто обере саме вас.'
+          : 'Імʼя, фото й телефон. Клієнти обирають людей, а не нікнейми, а номер побачить лише той, хто обере саме вас.',
+      },
+      {
+        id: 'work',
+        title: 'Яку роботу берете',
+        lead: company
+          ? 'Які прибирання робите, звідки виїжджаєте й чи є авто. З цього ми підбираємо заявки — лише ті, що вам справді підходять.'
+          : 'Які прибирання робите, де живете й як добираєтесь. З цього ми підбираємо заявки — лише ті, що вам справді підходять.',
+      },
+      {
+        id: 'profile',
+        title: company
+          ? 'Покажіть компанію клієнтам'
+          : 'Покажіть себе клієнтам',
+        lead: company
+          ? 'Кілька слів про команду й фото робіт — і профіль іде на перевірку. Після неї заявки почнуть приходити самі.'
+          : 'Кілька слів про досвід і фото робіт — і профіль іде на перевірку. Після неї заявки почнуть приходити самі.',
+      },
+    ]
+  }
 
-  // Порядок усередині етапів — від того, що людина знає напамʼять, до
-  // того, над чим треба подумати: імʼя й фото заповнюються за секунди й
-  // дають відчуття руху, опис і портфоліо — наприкінці.
-  const ALL_STEPS: readonly WizardStep[] = [
-    {
-      id: 'overview',
-      kind: 'overview',
-      title: 'Стати майстром Zunor — просто',
-      subtitle: '',
-    },
-    { id: 'intro-you', kind: 'intro', phase: 'you', title: '', subtitle: '' },
-    {
-      id: 'name',
-      phase: 'you',
-      title: 'Як вас звати?',
-      subtitle:
-        'Справжнє імʼя — клієнти довіряють людям, а не нікнеймам. Username стане адресою вашої сторінки.',
-    },
-    {
-      id: 'photo',
-      phase: 'you',
-      title: 'Додайте своє фото',
-      subtitle:
-        'Майстрів із фото обличчя обирають частіше. Лише ви — без логотипів і картинок.',
-      optional: true,
-    },
-    {
-      id: 'phone',
-      phase: 'you',
-      title: 'Ваш номер телефону',
-      subtitle:
-        'Його побачить лише клієнт, який обрав саме вас, — і лише після підтвердження замовлення.',
-    },
-    { id: 'intro-work', kind: 'intro', phase: 'work', title: '', subtitle: '' },
-    {
-      id: 'services',
-      phase: 'work',
-      title: 'Які прибирання ви робите?',
-      subtitle:
-        'Заявки приходитимуть лише з обраних — без того, чим ви не займаєтесь.',
-    },
-    {
-      id: 'premises',
-      phase: 'work',
-      title: 'Де готові прибирати?',
-      subtitle:
-        'Офісні заявки не надсилатимемо тим, хто прибирає лише житло, — і навпаки.',
-    },
-    {
-      id: 'city',
-      phase: 'work',
-      title: 'Де ви живете?',
-      subtitle:
-        'Заявки з вашого району й сусідніх приходитимуть першими — менше часу в дорозі.',
-    },
-    {
-      id: 'transport',
-      phase: 'work',
-      title: 'Як добираєтесь на замовлення?',
-      subtitle: 'Підбираємо заявки так, щоб дорога не зʼїдала ваш день.',
-    },
-    {
-      id: 'radius',
-      phase: 'work',
-      title: 'Як далеко готові їздити?',
-      subtitle:
-        'Далі цієї відстані заявки не надсилатимемо. Чим ширше коло — тим більше заявок.',
-    },
-    {
-      id: 'crew',
-      phase: 'work',
-      title: 'Як ви працюєте?',
-      subtitle:
-        'Невеликі заявки першими отримують ті, хто працює сам, а будинки, офіси й після ремонту — бригади та компанії.',
-    },
-    {
-      id: 'intro-profile',
-      kind: 'intro',
-      phase: 'profile',
-      title: '',
-      subtitle: '',
-    },
-    {
-      id: 'about',
-      phase: 'profile',
-      title: 'Розкажіть про себе',
-      subtitle:
-        'Досвід, що берете з собою, чим відрізняєтесь. Це перше, що читає клієнт.',
-    },
-    {
-      id: 'portfolio',
-      phase: 'profile',
-      title: 'Покажіть свою роботу',
-      subtitle:
-        'Фото «до / після» переконують краще за слова. Можна додати й пізніше.',
-      optional: true,
-    },
-    {
-      id: 'review',
-      phase: 'profile',
-      title: 'Усе правильно?',
-      subtitle:
-        'Так вас бачитимуть клієнти. Після надсилання профіль перевірить модератор.',
-    },
-  ]
+  // «Людина чи компанія» стоїть навіть перед оглядом: огляд і заставки
+  // вже говорять мовою відповіді. Далі — від того, що людина знає
+  // напамʼять, до того, над чим треба подумати: імʼя й фото заповнюються
+  // за секунди й дають відчуття руху, опис і портфоліо — наприкінці.
+  function stepsFor(company: boolean): WizardStep[] {
+    return [
+      {
+        id: 'who',
+        title: 'Ви — приватний майстер чи компанія?',
+        subtitle:
+          'Від цього залежить, про що спитаємо далі: імʼя чи назву, фото чи логотип.',
+      },
+      {
+        id: 'overview',
+        kind: 'overview',
+        title: company
+          ? 'Підключити компанію до Zunor — просто'
+          : 'Стати майстром Zunor — просто',
+        subtitle: '',
+      },
+      { id: 'intro-you', kind: 'intro', phase: 'you', title: '', subtitle: '' },
+      company
+        ? {
+            id: 'name',
+            phase: 'you',
+            title: 'Як називається компанія?',
+            subtitle:
+              'Так вас бачитимуть клієнти — у пропозиціях, чаті й відгуках. Username стане адресою сторінки компанії.',
+          }
+        : {
+            id: 'name',
+            phase: 'you',
+            title: 'Як вас звати?',
+            subtitle:
+              'Справжнє імʼя — клієнти довіряють людям, а не нікнеймам. Username стане адресою вашої сторінки.',
+          },
+      company
+        ? {
+            id: 'photo',
+            phase: 'you',
+            title: 'Додайте логотип',
+            subtitle:
+              'Логотип або фото команди — клієнти бачать його поруч із назвою.',
+            optional: true,
+          }
+        : {
+            id: 'photo',
+            phase: 'you',
+            title: 'Додайте своє фото',
+            subtitle:
+              'Майстрів із фото обличчя обирають частіше. Лише ви — без логотипів і картинок.',
+            optional: true,
+          },
+      {
+        id: 'phone',
+        phase: 'you',
+        title: company ? 'Телефон компанії' : 'Ваш номер телефону',
+        subtitle:
+          'Його побачить лише клієнт, який обрав саме вас, — і лише після підтвердження замовлення.',
+      },
+      {
+        id: 'intro-work',
+        kind: 'intro',
+        phase: 'work',
+        title: '',
+        subtitle: '',
+      },
+      {
+        id: 'services',
+        phase: 'work',
+        title: 'Які прибирання ви робите?',
+        subtitle:
+          'Заявки приходитимуть лише з обраних — без того, чим ви не займаєтесь.',
+      },
+      {
+        id: 'premises',
+        phase: 'work',
+        title: 'Де готові прибирати?',
+        subtitle:
+          'Офісні заявки не надсилатимемо тим, хто прибирає лише житло, — і навпаки.',
+      },
+      company
+        ? {
+            id: 'city',
+            phase: 'work',
+            title: 'Звідки виїжджаєте на замовлення?',
+            subtitle:
+              'Район офісу чи складу. Заявки з нього й сусідніх приходитимуть першими — менше часу в дорозі.',
+          }
+        : {
+            id: 'city',
+            phase: 'work',
+            title: 'Де ви живете?',
+            subtitle:
+              'Заявки з вашого району й сусідніх приходитимуть першими — менше часу в дорозі.',
+          },
+      {
+        id: 'transport',
+        phase: 'work',
+        title: company
+          ? 'Як команда добирається на замовлення?'
+          : 'Як добираєтесь на замовлення?',
+        subtitle: 'Підбираємо заявки так, щоб дорога не зʼїдала ваш день.',
+      },
+      {
+        id: 'radius',
+        phase: 'work',
+        title: 'Як далеко готові їздити?',
+        subtitle:
+          'Далі цієї відстані заявки не надсилатимемо. Чим ширше коло — тим більше заявок.',
+      },
+      // Лише людині: компанія — завжди команда (див. STEPS).
+      {
+        id: 'crew',
+        phase: 'work',
+        title: 'Працюєте самі чи з напарником?',
+        subtitle:
+          'Невеликі заявки першими отримують ті, хто працює сам, а великі квартири, будинки й після ремонту — ті, хто з напарником чи бригадою.',
+      },
+      {
+        id: 'intro-profile',
+        kind: 'intro',
+        phase: 'profile',
+        title: '',
+        subtitle: '',
+      },
+      company
+        ? {
+            id: 'about',
+            phase: 'profile',
+            title: 'Розкажіть про компанію',
+            subtitle:
+              'Скільки людей у команді, як давно працюєте, чим відрізняєтесь. Це перше, що читає клієнт.',
+          }
+        : {
+            id: 'about',
+            phase: 'profile',
+            title: 'Розкажіть про себе',
+            subtitle:
+              'Досвід, що берете з собою, чим відрізняєтесь. Це перше, що читає клієнт.',
+          },
+      {
+        id: 'portfolio',
+        phase: 'profile',
+        title: 'Покажіть свою роботу',
+        subtitle:
+          'Фото «до / після» переконують краще за слова. Можна додати й пізніше.',
+        optional: true,
+      },
+      {
+        id: 'review',
+        phase: 'profile',
+        title: 'Усе правильно?',
+        subtitle:
+          'Так вас бачитимуть клієнти. Після надсилання профіль перевірить модератор.',
+      },
+    ]
+  }
 
   // untrack: початкові значення беремо один раз, інакше оновлення data
   // затирало б те, що людина щойно набрала.
   const initial = untrack(() => data.user)
   const mp = initial.masterProfile
 
+  // ─── Хто ви ───
+  // Людина чи компанія — з формату роботи: компанія — це crew = COMPANY.
+  const savedCrew = mp?.crew ?? null
+  const savedWho = kindOfCrew(savedCrew)
+  let who = $state<MasterKind | null>(savedWho)
+  let personCrew = $state<PersonCrew | null>(
+    savedCrew === 'COMPANY' ? null : savedCrew,
+  )
+  const isCompany = $derived(who === 'company')
+  const crew = $derived<Crew | null>(
+    isCompany ? 'COMPANY' : who === 'person' ? personCrew : null,
+  )
+
+  const PHASES = $derived(phasesFor(isCompany))
+
   // ─── Поля ───
   let avatarUrl = $state(initial.avatar ?? '')
   let avatarPublicId = $state(initial.avatarPublicId ?? '')
   let avatarUploading = $state(false)
 
-  let name = $state(initial.name ?? '')
+  // Імʼя людини й назва компанії — обидва User.name, але чернетки окремі:
+  // інакше імʼя з Google-акаунта ставало б «назвою компанії», а
+  // перемикання туди й назад стирало б набране.
+  let personName = $state(savedWho === 'company' ? '' : (initial.name ?? ''))
+  let companyTitle = $state(savedWho === 'company' ? (initial.name ?? '') : '')
+  const name = $derived(isCompany ? companyTitle : personName)
+  function setName(v: string): void {
+    if (isCompany) companyTitle = v
+    else personName = v
+  }
   let username = $state(initial.username ?? '')
   let usernameValid = $state<boolean | null>(initial.username ? true : null)
 
@@ -275,8 +378,6 @@
   let services = $state<string[]>(savedSkills?.services ?? [])
   let premises = $state<PremiseGroup[]>(savedSkills?.premises ?? [])
   let vehicle = $state<boolean | null>(mp?.hasVehicle ?? null)
-  let crew = $state<Crew | null>(mp?.crew ?? null)
-  let companyName = $state(mp?.companyName ?? '')
 
   let portfolioImages = $state<string[]>(mp?.portfolioImages ?? [])
   let portfolioImagesPublicIds = $state<string[]>(
@@ -284,12 +385,33 @@
   )
   let portfolioUploading = $state(false)
 
+  // ─── Незбережені фото робіт ───
+  // Нове фото одразу летить у хмару й видно в сітці, але в профіль
+  // потрапляє лише з «Зберегти» (і йде на перевірку). Тому в редагуванні
+  // позначаємо нові, а вихід зі сторінки з ними — питаємо, а не мовчки
+  // губимо. В онбордингу незбережене все, і позначки там нічого не кажуть.
+  const savedPortfolioIds = mp?.portfolioImagesPublicIds ?? []
+  const unsavedPhotos = $derived(
+    mode === 'edit'
+      ? portfolioImagesPublicIds.filter((id) => !savedPortfolioIds.includes(id))
+      : [],
+  )
+  /** Куди людина йшла, коли ми її зупинили питанням. */
+  let leaveTo = $state<string | null>(null)
+  const leaveText = $derived(
+    unsavedPhotos.length === 1
+      ? 'Ви додали фото до прикладів робіт, але не зберегли його. Без збереження воно не потрапить у профіль.'
+      : 'Ви додали фото до прикладів робіт, але не зберегли їх. Без збереження вони не потраплять у профіль.',
+  )
+  let discarding = false
+
   let submitting = $state(false)
   let step = $state(0)
 
   // Помилку показуємо лише після виходу з поля (або спроби піти далі):
   // червоне під порожнім полем, якого ще не торкались, — це грубо.
   let touched = $state({
+    who: false,
     name: false,
     username: false,
     phone: false,
@@ -354,11 +476,17 @@
       .map((c) => c.name),
   )
 
+  const whoError = $derived(
+    touched.who && who === null ? 'Оберіть один із варіантів' : '',
+  )
+  const nameLabel = $derived(isCompany ? 'Назва' : "Ім'я")
   const nameError = $derived(
     touched.name && !nameValid
       ? nameTrim.length === 0
-        ? "Введіть ім'я"
-        : `Ім'я: ${NAME_MIN}–${NAME_MAX} символів`
+        ? isCompany
+          ? 'Введіть назву компанії'
+          : "Введіть ім'я"
+        : `${nameLabel}: ${NAME_MIN}–${NAME_MAX} символів`
       : '',
   )
   const phoneError = $derived(
@@ -403,7 +531,7 @@
     touched.vehicle && vehicle === null ? 'Оберіть один із варіантів' : '',
   )
   const crewError = $derived(
-    touched.crew && crew === null ? 'Оберіть один із варіантів' : '',
+    touched.crew && personCrew === null ? 'Оберіть один із варіантів' : '',
   )
   const serviceNames = $derived(
     SERVICES.filter((s) => services.includes(s.key)).map((s) => s.label),
@@ -428,6 +556,8 @@
       categories.length > 0 &&
       (!cleans || (services.length > 0 && premises.length > 0)) &&
       vehicle !== null &&
+      // null, доки немає відповіді «хто ви», а в людини — ще й «сам чи з
+      // напарником».
       crew !== null &&
       descValid,
   )
@@ -440,9 +570,11 @@
 
   // ─── Кроки ───
   const STEPS = $derived(
-    ALL_STEPS.filter(
+    stepsFor(isCompany).filter(
       (s) =>
-        (needsDistrict || s.id !== 'radius') && (cleans || s.id !== 'premises'),
+        (needsDistrict || s.id !== 'radius') &&
+        (cleans || s.id !== 'premises') &&
+        (!isCompany || s.id !== 'crew'),
     ),
   )
   const stepIndex = (id: string) => STEPS.findIndex((s) => s.id === id)
@@ -450,6 +582,8 @@
   /** Чи заповнений крок — без побічних ефектів, для пошуку першої дірки. */
   function stepOk(id: string): boolean {
     switch (id) {
+      case 'who':
+        return who !== null
       case 'name':
         return nameValid && usernameValid === true
       case 'services':
@@ -459,7 +593,7 @@
       case 'transport':
         return vehicle !== null
       case 'crew':
-        return crew !== null
+        return personCrew !== null
       case 'city':
         return !!city && districtValid
       case 'phone':
@@ -479,6 +613,9 @@
    */
   function validateStep(id: string): boolean {
     switch (id) {
+      case 'who':
+        touched.who = true
+        break
       case 'name':
         touched.name = true
         touched.username = true
@@ -540,8 +677,13 @@
     ...o,
     icon: o.value ? Car : Bus,
   }))
-  const CREW_ICONS = { SOLO: User, TEAM: Users, COMPANY: Building2 }
-  const CREW_TILES = CREW_OPTIONS.map((o) => ({
+  const WHO_ICONS = { person: User, company: Building2 }
+  const WHO_TILES = KIND_OPTIONS.map((o) => ({
+    ...o,
+    icon: WHO_ICONS[o.value],
+  }))
+  const CREW_ICONS = { SOLO: User, TEAM: Users }
+  const CREW_TILES = PERSON_CREW_OPTIONS.map((o) => ({
     ...o,
     icon: CREW_ICONS[o.value],
   }))
@@ -566,10 +708,11 @@
     categories = [...categories, slug]
   }
 
-  async function save(): Promise<void> {
+  async function save(next = '/dashboard'): Promise<void> {
     if (busy) return
 
     touched = {
+      who: true,
       name: true,
       username: true,
       phone: true,
@@ -602,7 +745,6 @@
           categories,
           vehicle,
           crew,
-          companyName: crew === 'COMPANY' ? companyName.trim() : null,
           skills: cleans ? { [CATEGORY_SLUG]: { services, premises } } : {},
           description: descTrim,
           avatar: avatarUrl || null,
@@ -624,12 +766,46 @@
           ? 'Зміни збережено'
           : 'Готово! Профіль надіслано на перевірку',
       )
-      await goto('/dashboard')
+      await goto(next)
     } catch {
       toast.error("Помилка з'єднання. Перевірте інтернет.")
     } finally {
       submitting = false
     }
+  }
+
+  // Збереження саме веде на іншу сторінку (submitting ще true) — його не
+  // зупиняємо. Закриття вкладки чи чужий сайт: свого вікна там не
+  // показати, cancel() просить браузер спитати своїм.
+  beforeNavigate(({ cancel, to, willUnload }) => {
+    if (discarding || submitting || unsavedPhotos.length === 0) return
+    cancel()
+    if (willUnload || !to) return
+    leaveTo = to.url.pathname + to.url.search + to.url.hash
+  })
+
+  function saveAndLeave(): void {
+    const next = leaveTo ?? '/dashboard'
+    leaveTo = null
+    void save(next)
+  }
+
+  // Вийти без збереження: файли, що так і не потрапили в профіль, із
+  // хмари прибираємо — інакше там лишались би фото, яких ніде немає.
+  // keepalive — запит доживе, навіть коли сторінка вже пішла.
+  function discardAndLeave(): void {
+    const next = leaveTo ?? '/dashboard'
+    leaveTo = null
+    for (const publicId of unsavedPhotos) {
+      void fetch('/api/user/media', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'portfolio-remove', publicId }),
+        keepalive: true,
+      }).catch(() => {})
+    }
+    discarding = true
+    void goto(next)
   }
 </script>
 
@@ -642,7 +818,6 @@
     bind:value={avatarUrl}
     bind:publicId={avatarPublicId}
     bind:uploading={avatarUploading}
-    fallback={nameTrim.charAt(0).toUpperCase() || '?'}
     {large}
     onError={(msg) => toast.error(msg)}
   />
@@ -651,16 +826,27 @@
 {#snippet nameControl()}
   <Input
     id="name"
-    icon={UserRound}
-    bind:value={name}
+    icon={isCompany ? Briefcase : UserRound}
+    bind:value={() => name, setName}
     onblur={() => (touched.name = true)}
-    placeholder="Олена Коваленко"
+    placeholder={isCompany ? 'Чисто Сервіс' : 'Олена Коваленко'}
     maxlength={NAME_MAX}
-    autocomplete="name"
+    autocomplete={isCompany ? 'organization' : 'name'}
     aria-invalid={!!nameError}
-    class="bg-background"
     required
   />
+{/snippet}
+
+{#snippet whoControl()}
+  <ChoiceTiles
+    name="who"
+    label="Приватний майстер чи компанія"
+    bind:value={who}
+    options={WHO_TILES}
+    invalid={!!whoError}
+    onpick={() => (touched.who = true)}
+  />
+  <FieldError text={whoError} />
 {/snippet}
 
 {#snippet usernameControl()}
@@ -686,7 +872,6 @@
     inputmode="tel"
     autocomplete="tel-national"
     aria-invalid={!!phoneError}
-    class="bg-background"
     required
   />
 {/snippet}
@@ -702,7 +887,7 @@
           role="combobox"
           aria-expanded={cityOpen}
           aria-invalid={!!cityError}
-          class="w-full cursor-pointer justify-between rounded-[10px] bg-background pl-3 font-normal focus-visible:border-input focus-visible:ring-0 aria-invalid:ring-0"
+          class="w-full cursor-pointer justify-between rounded-[10px] border-input bg-field pl-3 font-normal hover:bg-field aria-expanded:bg-background focus-visible:border-input focus-visible:ring-0 aria-invalid:ring-0 dark:bg-field dark:hover:bg-field dark:aria-expanded:bg-background"
         >
           <span class="flex min-w-0 items-center gap-2">
             <MapPin
@@ -813,7 +998,7 @@
 {/snippet}
 
 {#snippet stageArt(id: string, size: 'lg' | 'sm')}
-  <StageArt kind={id} {size} />
+  <StageArt kind={id} {size} company={isCompany} />
 {/snippet}
 
 {#snippet servicesControl()}
@@ -872,32 +1057,13 @@
 {#snippet crewControl()}
   <ChoiceTiles
     name="crew"
-    label="Як ви працюєте"
-    bind:value={crew}
+    label="Працюєте самі чи з напарником"
+    bind:value={personCrew}
     options={CREW_TILES}
     invalid={!!crewError}
     onpick={() => (touched.crew = true)}
   />
   <FieldError text={crewError} />
-  <!-- Назва — лише компанії й необовʼязкова: вивіска допомагає довіри, але
-       вимагати її (а тим паче ЄДРПОУ) на старті — зайве тертя. -->
-  {#if crew === 'COMPANY'}
-    <div class="mt-4">
-      <SettingsField label="Назва компанії" for="companyName">
-        {#snippet control()}
-          <Input
-            id="companyName"
-            icon={Briefcase}
-            bind:value={companyName}
-            placeholder="Необовʼязково"
-            maxlength={COMPANY_NAME_MAX}
-            autocomplete="organization"
-            class="bg-background"
-          />
-        {/snippet}
-      </SettingsField>
-    </div>
-  {/if}
 {/snippet}
 
 {#snippet descriptionControl(rows: number = 5)}
@@ -905,11 +1071,13 @@
     id="description"
     bind:value={description}
     onblur={() => (touched.desc = true)}
-    placeholder="Досвід, що саме робите, чим відрізняєтесь від інших."
+    placeholder={isCompany
+      ? 'Скільки вас у команді, як давно працюєте, чим відрізняєтесь від інших.'
+      : 'Досвід, що саме робите, чим відрізняєтесь від інших.'}
     {rows}
     maxlength={DESC_MAX}
     aria-invalid={!!descError}
-    class="resize-none bg-background"
+    class="resize-none"
     required
   />
   <!-- Підказка про мінімум зникає, щойно його набрано, а лічильник
@@ -945,6 +1113,7 @@
     bind:images={portfolioImages}
     bind:publicIds={portfolioImagesPublicIds}
     bind:uploading={portfolioUploading}
+    savedIds={mode === 'edit' ? savedPortfolioIds : undefined}
     maxItems={6}
     onError={(msg) => toast.error(msg)}
   />
@@ -976,9 +1145,11 @@
 {/snippet}
 
 {#snippet stepContent(id: string)}
-  {#if id === 'name'}
+  {#if id === 'who'}
+    {@render whoControl()}
+  {:else if id === 'name'}
     <SettingsField
-      label="Ім'я"
+      label={nameLabel}
       for="name"
       error={nameError}
       control={nameControl}
@@ -987,7 +1158,8 @@
     <!-- Адреса сторінки — видимим рядком, а не підказкою: на цьому кроці
          людина саме її й придумує, і бачити результат одразу — приємно. -->
     <p class="mt-1 text-[13px] text-muted-foreground">
-      Ваша сторінка: zunor.org/@{username || 'username'}
+      {isCompany ? 'Сторінка компанії' : 'Ваша сторінка'}: zunor.org/@{username ||
+        'username'}
     </p>
   {:else if id === 'photo'}
     <div class="flex justify-center py-4">
@@ -1027,7 +1199,9 @@
       control={phoneControl}
     />
   {:else if id === 'about'}
-    <Label for="description" class="sr-only">Про себе</Label>
+    <Label for="description" class="sr-only">
+      {isCompany ? 'Про компанію' : 'Про себе'}
+    </Label>
     {@render descriptionControl(7)}
   {:else if id === 'portfolio'}
     {@render portfolioControl()}
@@ -1063,8 +1237,17 @@
     </div>
 
     <dl class="mt-5 divide-y divide-border border-y border-border">
-      {@render reviewRow('Імʼя', 'name', `${nameTrim} · @${username}`)}
-      {@render reviewRow('Фото', 'photo', avatarUrl ? 'Додано' : '')}
+      {@render reviewRow('Хто ви', 'who', kindLabel(who))}
+      {@render reviewRow(
+        isCompany ? 'Назва' : 'Імʼя',
+        'name',
+        `${nameTrim} · @${username}`,
+      )}
+      {@render reviewRow(
+        isCompany ? 'Логотип' : 'Фото',
+        'photo',
+        avatarUrl ? 'Додано' : '',
+      )}
       {@render reviewRow(
         'Послуги',
         'services',
@@ -1078,7 +1261,7 @@
         )}
       {/if}
       {@render reviewRow(
-        'Де живете',
+        isCompany ? 'Звідки виїжджаєте' : 'Де живете',
         'city',
         [districtName, cityName].filter(Boolean).join(', '),
       )}
@@ -1086,15 +1269,15 @@
       {#if needsDistrict}
         {@render reviewRow('Виїзд', 'radius', travelLabel(travelRadius))}
       {/if}
-      {@render reviewRow(
-        'Як працюєте',
-        'crew',
-        [crewLabel(crew), crew === 'COMPANY' ? companyName.trim() : '']
-          .filter(Boolean)
-          .join(' · '),
-      )}
+      {#if !isCompany}
+        {@render reviewRow('Як працюєте', 'crew', crewLabel(personCrew))}
+      {/if}
       {@render reviewRow('Телефон', 'phone', `+380 ${phoneDisplay}`)}
-      {@render reviewRow('Про себе', 'about', descTrim)}
+      {@render reviewRow(
+        isCompany ? 'Про компанію' : 'Про себе',
+        'about',
+        descTrim,
+      )}
       {@render reviewRow(
         'Приклади робіт',
         'portfolio',
@@ -1141,17 +1324,27 @@
       novalidate
     >
       <SettingsGroup
-        title="Особисті дані"
-        footnote="Клієнти бачать ці дані, обираючи виконавця. Зміни підуть на повторну перевірку."
+        title={isCompany ? 'Дані компанії' : 'Особисті дані'}
+        footnote="Ці дані бачать клієнти. Зміни пройдуть повторну перевірку."
       >
-        <SettingsField label="Фото" hint="З фото відгукуються охочіше">
+        <SettingsBlock>
+          <p class="mb-2 text-sm">Хто ви</p>
+          {@render whoControl()}
+        </SettingsBlock>
+
+        <SettingsField
+          label={isCompany ? 'Логотип' : 'Фото'}
+          hint={isCompany
+            ? 'Логотип або фото команди'
+            : 'З фото обирають охочіше'}
+        >
           {#snippet control()}
             {@render photoControl()}
           {/snippet}
         </SettingsField>
 
         <SettingsField
-          label="Ім'я"
+          label={nameLabel}
           for="name"
           error={nameError}
           control={nameControl}
@@ -1175,7 +1368,7 @@
 
       <SettingsGroup
         title="Де ви працюєте"
-        footnote="Заявки з вашого району й сусідніх приходять першими. Далі обраної відстані — не надсилаємо."
+        footnote="Заявки далі обраної відстані не надсилаємо."
       >
         <SettingsField label="Місто" error={cityError} control={cityControl} />
 
@@ -1183,7 +1376,7 @@
           <SettingsField
             label="Район"
             for="district"
-            hint="Звідки ви їдете на замовлення. Публічно його не показуємо"
+            hint="Звідки ви їдете. Публічно не показуємо"
             error={districtError}
             control={districtControl}
           />
@@ -1199,10 +1392,12 @@
           {@render transportControl()}
         </SettingsBlock>
 
-        <SettingsBlock>
-          <p class="mb-2 text-sm">Як ви працюєте</p>
-          {@render crewControl()}
-        </SettingsBlock>
+        {#if !isCompany}
+          <SettingsBlock>
+            <p class="mb-2 text-sm">Працюєте самі чи з напарником</p>
+            {@render crewControl()}
+          </SettingsBlock>
+        {/if}
       </SettingsGroup>
 
       <!-- Заголовок картки замінив собою підпис «Що ви виконуєте», який
@@ -1210,7 +1405,7 @@
            те саме. Обмеження поїхало у виноску під карткою. -->
       <SettingsGroup
         title="Що ви виконуєте"
-        footnote="Заявки надходитимуть лише з обраних прибирань і обʼєктів."
+        footnote="Надсилатимемо лише такі заявки."
       >
         {#if !onlyCategory}
           <SettingsBlock>
@@ -1231,17 +1426,16 @@
           </SettingsBlock>
         {/if}
 
-        <SettingsBlock>
-          <Label for="description" class="mb-2 text-sm font-normal">
-            Про себе
-          </Label>
-          {@render descriptionControl()}
-        </SettingsBlock>
+        <SettingsField
+          label={isCompany ? 'Про компанію' : 'Про себе'}
+          for="description"
+          control={descriptionControl}
+        />
       </SettingsGroup>
 
       <SettingsGroup
         title="Приклади робіт"
-        footnote="Необов'язково. Фото «до / після» працюють найкраще."
+        footnote="Необовʼязково. Найкраще — фото «до / після»."
       >
         <SettingsBlock>
           {@render portfolioControl()}
@@ -1249,24 +1443,20 @@
       </SettingsGroup>
 
       <!-- ═══ Дії ═══
-           У кінці форми, праворуч — як у діалогах macOS. Підтверджувальна
-           дія остання: погляд іде зліва направо й закінчується на тому,
-           що людина хоче натиснути. -->
-      <div class="mt-7 flex items-center justify-end gap-2">
-        {#if busyNote}
-          <span class="mr-auto text-[12px] text-muted-foreground">
-            {busyNote}
-          </span>
-        {/if}
+           Під полями ліворуч, як у формах налаштувань GitHub: праворуч від
+           полів шириною 440px кнопки висіли б окремо від форми.
+           Підтверджувальна дія остання: погляд іде зліва направо й
+           закінчується на тому, що людина хоче натиснути. -->
+      <div class="mt-7 flex flex-wrap items-center gap-2">
 
-        <!-- «Скасувати» — рамка кольору primary на прозорому тлі, заливка
-             приходить лише під курсором: дві однаково залиті кнопки поруч
-             змусили б вибирати очима, яка з них головна. -->
+        <!-- «Скасувати» — сіра капсула, «Зберегти» — синя, як «New
+             folder» / «New project» у Lovable: синя одна, тож головну дію
+             видно одразу. -->
         <Button
           type="button"
           onclick={onBack}
           disabled={busy}
-          variant="primary-outline"
+          variant="secondary"
         >
           Скасувати
         </Button>
@@ -1288,7 +1478,49 @@
             <span>Зберегти</span>
           {/if}
         </Button>
+
+        {#if busyNote}
+          <span class="ml-1 text-[12px] text-muted-foreground">
+            {busyNote}
+          </span>
+        {/if}
       </div>
     </form>
   </div>
 {/if}
+
+<AlertDialog.Root
+  open={leaveTo !== null}
+  onOpenChange={(open) => {
+    if (!open) leaveTo = null
+  }}
+>
+  <!-- Трохи ширше за типове: на компʼютері три дії стають в один ряд. -->
+  <AlertDialog.Content class="data-[size=default]:sm:max-w-md">
+    <AlertDialog.Header>
+      <AlertDialog.Title>Зберегти нові фото?</AlertDialog.Title>
+      <!-- Текст упритул до тегів: опис тримає переноси й пробіли
+           (whitespace-pre-wrap), і розбитий по рядках шаблон показувався
+           з розривом і відступом посеред речення. -->
+      <AlertDialog.Description>{leaveText}</AlertDialog.Description>
+    </AlertDialog.Header>
+    <!-- На вузькому екрані три дії в ряд не влазять — тоді стовпчиком
+         праворуч, головна («Зберегти») згори. Слова всередині кнопки не
+         переносяться ніколи. -->
+    <AlertDialog.Footer
+      class="flex-col-reverse items-end gap-1 sm:flex-row sm:items-center sm:gap-2"
+    >
+      <AlertDialog.Cancel class="whitespace-nowrap">Скасувати</AlertDialog.Cancel>
+      <AlertDialog.Action
+        variant="destructive"
+        onclick={discardAndLeave}
+        class="whitespace-nowrap"
+      >
+        Не зберігати
+      </AlertDialog.Action>
+      <AlertDialog.Action onclick={saveAndLeave} class="whitespace-nowrap">
+        Зберегти
+      </AlertDialog.Action>
+    </AlertDialog.Footer>
+  </AlertDialog.Content>
+</AlertDialog.Root>

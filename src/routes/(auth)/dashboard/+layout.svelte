@@ -1,21 +1,16 @@
 <script lang="ts">
   import { untrack } from 'svelte'
   import { page } from '$app/state'
-  import { goto, afterNavigate } from '$app/navigation'
+  import { goto } from '$app/navigation'
   import * as Sidebar from '$lib/components/ui/sidebar/index.js'
   import AppSidebar from '$lib/components/dashboard/app-sidebar.svelte'
   import MobileTrigger from '$lib/components/dashboard/mobile-trigger.svelte'
 
   let { data, children } = $props()
 
-  // На десктопі сторінка прокручується всередині блока контенту, а не
-  // вікно. SvelteKit скидає прокрутку ВІКНА, тож без цього новий екран
-  // відкривався б на тій самій висоті, де лишився попередній.
-  let insetEl = $state<HTMLElement | null>(null)
-  afterNavigate(({ from, to }) => {
-    if (from?.url.pathname === to?.url.pathname) return
-    insetEl?.scrollTo({ top: 0 })
-  })
+  // Прокручується сам документ, а не блок контенту (див. вікно нижче),
+  // тож прокрутку між сторінками скидає сам SvelteKit — власного
+  // скидання тут не треба.
 
   // untrack: cookie дає лише ПОЧАТКОВИЙ стан. Далі його веде сам
   // Sidebar.Provider через bind, і перезапис із data згортав би панель
@@ -30,13 +25,20 @@
     page.url.pathname.startsWith('/dashboard/onboarding'),
   )
 
+  // Повідомлення — окремий екран зі своїм меню ліворуч (список чатів):
+  // панель дашборда відʼїжджає за край, а повертає її кнопка «Назад» у
+  // тому меню ($lib/utils/entry-point). Налаштування — ні: там панель
+  // лишається на місці поруч із меню розділів.
+  let sidebarAway = $derived(
+    page.url.pathname.startsWith('/dashboard/messages'),
+  )
+
   // Чат і майстер заявки — повноекранні: там скролить внутрішня область,
   // а не сторінка, інакше композер їде за межі вікна.
   let isChat = $derived(
     page.url.pathname === '/dashboard/jobs/new' ||
       page.url.pathname.startsWith('/dashboard/messages'),
   )
-
   // null означає «сервер сказав, що сесії немає».
   // undefined — «дані ще не приїхали»: редиректити рано.
   $effect(() => {
@@ -89,22 +91,19 @@
 {#if isOnboarding}
   <main class="min-h-svh bg-background">{@render children()}</main>
 {:else}
-  <!-- Помітно вужча за типову для shadcn (16rem): панель зачиняється
-       повністю, і що довший її шлях за край екрана, то помітніший сам
-       проїзд. 13.5rem — межа, за якою найдовший пункт («Нове замовлення»)
-       починає обриватись. -->
-  <!-- Рамка й блок: на десктопі контент живе в скругленому блоці з
-       відступом 6px від країв вікна, а простір довкола — того ж кольору,
-       що й панель (variant="inset" в AppSidebar). Блок має сталу висоту
-       екрана й прокручується сам, тож рамка лишається на місці й не
-       їде разом зі сторінкою. На телефоні рамки немає: 6px з кожного
-       боку там забрали б надто багато від і так вузького екрана. -->
+  <!-- Панель — за референсом у docs/: розгорнута 15rem (240px), рейка
+       57px — 8 + квадрат 40 + 8 і 1px лінії праворуч (border-e у
+       variant="sidebar" лежить усередині ширини). Контент стоїть
+       упритул до панелі, без вікна й відступів: межу тримає лінія.
+
+       Прокручується сам документ, панель при цьому стоїть (вона fixed).
+       Виняток — чати (isChat): там контент рівно на екран, бо композер
+       мусить стояти внизу, а прокручується стрічка. -->
   <Sidebar.Provider
     bind:open={sidebarOpen}
-    style="--sidebar-width: 13.5rem; --sidebar-width-icon: 2.25rem;"
-    class="md:h-svh md:overflow-hidden"
+    style="--sidebar-width: 15rem; --sidebar-width-icon: calc(3.5rem + 1px);"
   >
-    <AppSidebar />
+    <AppSidebar away={sidebarAway} />
 
     <!-- Чат отримує ЖОРСТКУ висоту екрана й на телефоні теж. Без неї
          ланцюжок h-full нічого не тримав: main за замовчуванням не
@@ -112,10 +111,11 @@
          спейсером розтягувала сторінку, композер їхав за край, а спейсер,
          що рахується від висоти стрічки, ріс сам від себе. -->
     <Sidebar.Inset
-      bind:ref={insetEl}
       class={[
-        'min-w-0 bg-background md:m-1.5! md:ml-0! md:h-[calc(100svh-0.75rem)] md:rounded-[10px]! md:border md:border-panel-border md:shadow-none',
-        isChat ? 'h-svh overflow-hidden' : 'md:overflow-y-auto',
+        'min-w-0 bg-background',
+        // Чат — рівно на екран, решта — не нижча за екран і росте з
+        // вмістом.
+        isChat ? 'h-svh overflow-hidden' : 'min-h-svh',
       ]}
     >
       <!-- Кнопка панелі лише для мобільного: на десктопі свою кнопку малює
@@ -126,8 +126,13 @@
 
            Окремого нижнього меню теж більше немає: Sidebar сам відповідає
            за мобільний режим, а два різні меню рано чи пізно розійшлись би
-           складом пунктів. -->
-      <MobileTrigger />
+           складом пунктів.
+
+           У повідомленнях на її місці — «Назад» (малює сам розділ):
+           меню там своє, а панель дашборда відʼїхала. -->
+      {#if !sidebarAway}
+        <MobileTrigger />
+      {/if}
 
       <!-- min-h-0 знімає ту саму «не менше за вміст»: лише тоді висота
            main — це висота Inset, і h-full у чаті справді щось означає. -->

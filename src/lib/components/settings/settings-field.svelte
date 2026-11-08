@@ -7,7 +7,7 @@
   // Одна з копій уже встигла розійтись у записі (`max-w-[300px]` проти
   // `max-w-75` — те саме число, але шукати збіг доводилось очима).
   import type { Snippet } from 'svelte'
-  import { CircleAlert } from 'lucide-svelte'
+  import CircleAlert from '$lib/components/icons/set/circle-alert.svelte'
   import { getSettingsLayout } from './layout'
   import FieldHint from './field-hint.svelte'
 
@@ -15,7 +15,8 @@
     label: string
     /**
      * Підказка: обмеження, формат, хто це побачить. Показується іконкою
-     * біля підпису з тултипом, а не рядком під ним.
+     * біля підпису з тултипом, а не рядком під ним; у stacked — рядком
+     * під полем, як у GitHub.
      */
     hint?: string
     /**
@@ -32,7 +33,15 @@
 
   let { label, hint, for: htmlFor, error, control }: Props = $props()
 
-  const split = getSettingsLayout() === 'split'
+  const layout = getSettingsLayout()
+  const split = layout === 'split'
+  const stacked = layout === 'stacked'
+
+  const captionClass = stacked
+    ? 'text-sm font-semibold'
+    : split
+      ? 'text-[14px] font-medium'
+      : 'text-sm font-normal'
 </script>
 
 <!-- Підпис і іконка підказки в один рядок. Кнопка підказки — поруч із
@@ -40,21 +49,14 @@
 {#snippet caption()}
   <span class="inline-flex items-center gap-1.5">
     {#if htmlFor}
-      <label
-        for={htmlFor}
-        class="cursor-pointer {split
-          ? 'text-[14px] font-medium'
-          : 'text-sm font-normal'}"
-      >
+      <label for={htmlFor} class="cursor-pointer {captionClass}">
         {label}
       </label>
     {:else}
-      <span class={split ? 'text-[14px] font-medium' : 'text-sm'}>
-        {label}
-      </span>
+      <span class={captionClass}>{label}</span>
     {/if}
 
-    {#if hint}
+    {#if hint && !stacked}
       <FieldHint text={hint} />
     {/if}
   </span>
@@ -74,7 +76,26 @@
   {/if}
 {/snippet}
 
-{#if split}
+{#if stacked}
+  <!-- Як поле в налаштуваннях GitHub: жирний підпис, під ним поле не
+       ширше 440px (рядок на всю колонку читався б як поле для абзацу), а
+       підказка — текстом під полем: у колонці на всю сторінку місця
+       вистачає, і тултип тут лише ховав би її. -->
+  <div class="py-2 first:pt-0 last:pb-0">
+    {@render caption()}
+
+    <div class="mt-1.5 max-w-110">
+      {@render control()}
+      {@render errorLine()}
+    </div>
+
+    {#if hint}
+      <p class="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+        {hint}
+      </p>
+    {/if}
+  </div>
+{:else if split}
   <!-- Підпис НАД полем, як у ClickUp: права колонка розділу вузька, і
        «підпис ліворуч» стиснув би поле до половини. Ліній між полями
        немає — їх розділяє повітря. -->

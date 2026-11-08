@@ -440,7 +440,6 @@ describe('майстер: відповіді для підбору', () => {
   type Written = {
     hasVehicle: unknown
     crew: unknown
-    companyName: unknown
     metadata: unknown
   }
   const written = () =>
@@ -455,7 +454,8 @@ describe('майстер: відповіді для підбору', () => {
     for (const data of [written().create, written().update]) {
       expect(data.hasVehicle).toBe(true)
       expect(data.crew).toBe('TEAM')
-      expect(data.companyName).toBeNull()
+      // Назви компанії окремим полем немає: вона — User.name.
+      expect(data).not.toHaveProperty('companyName')
       // vehicle/team у JSON більше не пишемо: одне джерело правди.
       expect(data.metadata).toEqual({
         skills: {
@@ -465,20 +465,40 @@ describe('майстер: відповіді для підбору', () => {
     }
   })
 
-  it('назва компанії зберігається для компанії', async () => {
+  // Анкета компанії питає назву замість імені — і вона ж показується
+  // всюди, де видно майстра (профіль, пропозиції, чат, відгуки).
+  it('компанія: назва — це імʼя акаунта', async () => {
     await saveMasterProfile(USER, {
       ...cleaner,
       crew: 'COMPANY',
-      companyName: '  Чисто Сервіс  ',
+      name: '  Чисто Сервіс  ',
     })
     expect(written().update.crew).toBe('COMPANY')
-    expect(written().update.companyName).toBe('Чисто Сервіс')
+    expect(prisma.user.update.mock.calls[0][0].data.name).toBe('Чисто Сервіс')
   })
 
-  // Перейшов із компанії в «сам» — стара вивіска не має лишитись у профілі.
-  it('не компанія — назву стираємо, навіть якщо її надіслали', async () => {
-    await saveMasterProfile(USER, { ...cleaner, companyName: 'Чужа вивіска' })
-    expect(written().update.companyName).toBeNull()
+  // Старий клієнт форми ще шле companyName — сервер його не пише нікуди,
+  // інакше в акаунта було б дві назви.
+  it('старе поле companyName ігнорується', async () => {
+    await saveMasterProfile(USER, {
+      ...cleaner,
+      crew: 'COMPANY',
+      companyName: 'Чужа вивіска',
+    })
+    expect(written().update).not.toHaveProperty('companyName')
+    expect(prisma.user.update.mock.calls[0][0].data.name).toBe(validMaster.name)
+  })
+
+  it('коротка назва компанії — помилка про назву, а не про імʼя', async () => {
+    const err = await saveMasterProfile(USER, {
+      ...cleaner,
+      crew: 'COMPANY',
+      name: 'Я',
+    }).catch((e: { status: number; body: { message: string } }) => e)
+    expect(err).toMatchObject({ status: 400 })
+    expect((err as { body: { message: string } }).body.message).toMatch(
+      /^Назва/,
+    )
   })
 
   const bad: [string, unknown][] = [
@@ -492,7 +512,7 @@ describe('майстер: відповіді для підбору', () => {
     ],
     [
       'задовга назва компанії',
-      { ...cleaner, crew: 'COMPANY', companyName: 'я'.repeat(81) },
+      { ...cleaner, crew: 'COMPANY', name: 'я'.repeat(81) },
     ],
     [
       'прибирання без жодного виду',

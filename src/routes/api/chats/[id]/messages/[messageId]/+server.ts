@@ -2,6 +2,12 @@ import { json, error } from '@sveltejs/kit'
 import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
 import { channels, events, safeTrigger } from '$lib/server/pusher'
+import { toLinkPreview } from '$lib/server/chat-messages'
+import {
+  attachLinkPreview,
+  linkPreviewColumn,
+  planLinkPreview,
+} from '$lib/server/chat-link-preview'
 import type { RequestHandler } from './$types'
 
 const MAX_TEXT_LENGTH = 4000
@@ -30,6 +36,7 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
       chatId: true,
       createdAt: true,
       deletedAt: true,
+      linkPreview: true,
     },
   })
 
@@ -38,6 +45,13 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
   if (message.senderId !== user.id) throw error(403, 'Not your message')
   if (message.deletedAt) throw error(400, 'Message deleted')
   if (message.type !== 'TEXT') throw error(400, 'Only text can be edited')
+
+  // Посилання те саме — картка лишається; інше чи зникло — стара йде
+  // геть разом із ним, а по нову сходимо після відповіді.
+  const linkPreview = planLinkPreview(
+    newText,
+    toLinkPreview(message.linkPreview),
+  )
 
   // Вікно редагування
   const age = Date.now() - message.createdAt.getTime()
@@ -48,7 +62,11 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
   const editedAt = new Date()
   await prisma.message.update({
     where: { id: params.messageId },
-    data: { text: newText, editedAt },
+    data: {
+      text: newText,
+      editedAt,
+      linkPreview: linkPreviewColumn(linkPreview.value),
+    },
   })
 
   // Якщо це останнє повідомлення в чаті — оновити кеш
@@ -65,12 +83,18 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
     chatId: params.id,
     text: newText,
     editedAt: editedAt.toISOString(),
+    linkPreview: linkPreview.value,
   })
+
+  if (linkPreview.fetchLater) {
+    void attachLinkPreview(params.id, params.messageId, newText)
+  }
 
   return json({
     ok: true,
     text: newText,
     editedAt: editedAt.toISOString(),
+    linkPreview: linkPreview.value,
   })
 }
 

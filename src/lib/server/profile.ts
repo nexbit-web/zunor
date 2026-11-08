@@ -14,7 +14,7 @@ import { validateUsername } from '$lib/username'
 import { cityDistricts, findDistrict, type District } from '$lib/geo/districts'
 import { isTravelRadius } from '$lib/geo/travel'
 import { matchingFor } from '$lib/categories/matching'
-import { COMPANY_NAME_MAX, isCrew } from '$lib/masters/meta'
+import { isCrew } from '$lib/masters/meta'
 import type { Prisma, Role } from '../../generated/prisma/client'
 import { invalidateAccount } from './account-cache'
 import { forgetMasterPage } from './master-page'
@@ -114,7 +114,6 @@ export async function loadProfileData(userId: string) {
             travelRadiusKm: true,
             hasVehicle: true,
             crew: true,
-            companyName: true,
             metadata: true,
             description: true,
             portfolioImages: true,
@@ -258,9 +257,12 @@ export async function saveMasterProfile(
   // CLIENT → MASTER пройде, MASTER → MASTER (редагування) теж.
   assertRoleTransition(me.role, 'MASTER')
 
+  // У компанії в name — її назва: вона й показується всюди замість імені
+  // (окремої колонки немає, див. schema.prisma, MasterProfile.crew).
   const name = asString(input.name)
   if (name.length < NAME_MIN || name.length > NAME_MAX) {
-    throw error(400, `Імʼя: ${NAME_MIN}–${NAME_MAX} символів`)
+    const label = input.crew === 'COMPANY' ? 'Назва' : 'Імʼя'
+    throw error(400, `${label}: ${NAME_MIN}–${NAME_MAX} символів`)
   }
 
   const usernameResult = validateUsername(asString(input.username))
@@ -320,13 +322,6 @@ export async function saveMasterProfile(
     throw error(400, 'Вкажіть, як ви працюєте: самі, бригадою чи компанією')
   }
   const crew = input.crew
-  // Назва — лише в компанії: у решти поле мовчки чиститься, щоб зміна
-  // формату не лишала в профілі чужої вивіски.
-  const companyName =
-    crew === 'COMPANY' ? asString(input.companyName) || null : null
-  if (companyName && companyName.length > COMPANY_NAME_MAX) {
-    throw error(400, `Назва компанії: до ${COMPANY_NAME_MAX} символів`)
-  }
   const rawSkills =
     input.skills && typeof input.skills === 'object'
       ? (input.skills as Record<string, unknown>)
@@ -421,7 +416,6 @@ export async function saveMasterProfile(
         travelRadiusKm,
         hasVehicle,
         crew,
-        companyName,
         metadata,
         description,
         portfolioImages,
@@ -434,7 +428,6 @@ export async function saveMasterProfile(
         travelRadiusKm,
         hasVehicle,
         crew,
-        companyName,
         metadata,
         description,
         portfolioImages,

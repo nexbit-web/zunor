@@ -15,11 +15,19 @@
   } from '$lib/components/ui/avatar'
   import { Skeleton } from '$lib/components/ui/skeleton'
   import { safeJsonLd } from '$lib/utils/json-ld'
-  import { BadgeCheck, Copy, Check, Star } from 'lucide-svelte'
+  import BadgeCheck from '$lib/components/icons/set/badge-check.svelte'
+  import Building2 from '$lib/components/icons/set/building-2.svelte'
+  import Copy from '$lib/components/icons/set/copy.svelte'
+  import Check from '$lib/components/icons/set/check.svelte'
+  import House from '$lib/components/icons/set/house.svelte'
+  import Star from '$lib/components/icons/set/star.svelte'
+  import User from '$lib/components/icons/set/user.svelte'
   import type { FreelancerProfileData as ProfileData } from '$lib/components/profile/types'
   import PhotoGallery from '$lib/components/photo-gallery.svelte'
+  import ServiceIcon from '$lib/categories/cleaning/service-icon.svelte'
   import { getBannerForCategories } from '$lib/categories/registry'
-  import toast from 'svelte-hot-french-toast'
+  import { kindLabel, kindOfCrew } from '$lib/masters/meta'
+  import { copyToClipboard } from '$lib/utils/clipboard'
 
   interface Props {
     user: ProfileData
@@ -43,6 +51,23 @@
     }
   }
 
+  /**
+   * «березня 2025» — місяць у родовому відмінку. Місяць із роком Intl
+   * віддає в називному («березень 2025 р.»), і «з березень» читалось з
+   * помилкою; з днем — у родовому, тож день просто відкидаємо.
+   */
+  function monthYear(value: string | Date): string {
+    const d = new Date(value)
+    if (Number.isNaN(d.getTime())) return ''
+    const parts = new Intl.DateTimeFormat('uk-UA', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    }).formatToParts(d)
+    const part = (type: string) => parts.find((p) => p.type === type)?.value
+    return `${part('month')} ${part('year')}`
+  }
+
   /** Рейтинг → рядок. Захист від NaN. */
   function fmtRating(value: number): string {
     return (Number.isFinite(value) ? value : 0).toFixed(1)
@@ -64,9 +89,15 @@
     return 'відгуків'
   }
 
-  const created = $derived(
-    formatDate(user.createdAt, { month: 'long', year: 'numeric' }),
-  )
+  // Хто це — людина чи компанія (компанія — crew = COMPANY). Профіль,
+  // старший за питання (crew = null), підпису не має.
+  const kind = $derived(kindOfCrew(user.crew))
+  const isCompany = $derived(kind === 'company')
+  const KindIcon = $derived(isCompany ? Building2 : User)
+
+  const since = $derived(monthYear(user.createdAt))
+  const services = $derived(user.services ?? [])
+  const premises = $derived(user.premises ?? [])
   const profileUrl = $derived(
     user.username ? `/@${user.username}` : `/dashboard`,
   )
@@ -77,11 +108,12 @@
       : null,
   )
 
-  // SEO: Person schema. Безпечно — проходить через safeJsonLd().
+  // SEO: компанія — LocalBusiness, людина — Person. Безпечно — проходить
+  // через safeJsonLd().
   const personJsonLd = $derived(
     safeJsonLd({
       '@context': 'https://schema.org',
-      '@type': 'Person',
+      '@type': isCompany ? 'LocalBusiness' : 'Person',
       name: user.name,
       ...(user.username && {
         alternateName: `@${user.username}`,
@@ -115,15 +147,11 @@
 
   async function copyUsername(): Promise<void> {
     if (!user.username) return
-    try {
-      await navigator.clipboard.writeText('@' + user.username)
-      copied = true
-      clearTimeout(copyTimer)
-      copyTimer = setTimeout(() => (copied = false), 2000)
-      toast.success('Скопійовано', { duration: 2000 })
-    } catch {
-      // Clipboard недоступний (HTTP / дозволи) — мовчки ігноруємо.
-    }
+    if (!(await copyToClipboard('@' + user.username, 'Нікнейм скопійовано')))
+      return
+    copied = true
+    clearTimeout(copyTimer)
+    copyTimer = setTimeout(() => (copied = false), 2000)
   }
   // Чистимо таймер при розмонтуванні.
   $effect(() => () => clearTimeout(copyTimer))
@@ -153,7 +181,9 @@
 <article
   class="mx-auto w-full max-w-150 px-5 pt-10 pb-16"
   itemscope
-  itemtype="https://schema.org/Person"
+  itemtype={isCompany
+    ? 'https://schema.org/LocalBusiness'
+    : 'https://schema.org/Person'}
 >
   <!-- ═══ Банер ═══
        Нижчий за попередній (180px) і без темного градієнта поверх:
@@ -172,41 +202,61 @@
     </div>
   {/if}
 
-  <!-- ═══ Хто це ═══ -->
-  <header
-    class="flex flex-col items-center text-center {bannerUrl ? '-mt-10' : ''}"
-  >
-    <div class="relative">
-      {#if user.avatar && !avatarLoaded}
-        <div
-          class="absolute inset-0 z-10 size-20 overflow-hidden rounded-full ring-4 ring-background"
-        >
-          <Skeleton class="size-full rounded-full" />
-        </div>
-      {/if}
-      <Avatar class="size-20 ring-4 ring-background">
-        {#if user.avatar}
-          <AvatarImage
-            src={user.avatar}
-            alt="Аватар {user.name}"
-            loading="eager"
-            fetchpriority="high"
-            decoding="async"
-            onload={() => (avatarLoaded = true)}
-            onerror={() => (avatarLoaded = true)}
-          />
-          <meta itemprop="image" content={user.avatar} />
+  <!-- ═══ Хто це ═══
+       Як профіль у Twitter: аватар ліворуч, наполовину на банері, а імʼя
+       й підписи — під ним, по лівому краю. По центру шапка займала пів
+       екрана, і до суті доводилось гортати. «Редагувати» — праворуч на
+       рівні аватара. -->
+  <header>
+    <div
+      class="flex items-end justify-between gap-4 {bannerUrl ? '-mt-10' : ''}"
+    >
+      <div class="relative ml-4 shrink-0">
+        {#if user.avatar && !avatarLoaded}
+          <div
+            class="absolute inset-0 z-10 size-20 overflow-hidden rounded-full ring-4 ring-background"
+          >
+            <Skeleton class="size-full rounded-full" />
+          </div>
         {/if}
-        <AvatarFallback
-          class="cursor-default bg-muted text-2xl font-medium text-muted-foreground"
+        <Avatar class="size-20 ring-4 ring-background">
+          {#if user.avatar}
+            <AvatarImage
+              src={user.avatar}
+              alt={isCompany ? `Логотип ${user.name}` : `Аватар ${user.name}`}
+              loading="eager"
+              fetchpriority="high"
+              decoding="async"
+              onload={() => (avatarLoaded = true)}
+              onerror={() => (avatarLoaded = true)}
+            />
+            <meta itemprop="image" content={user.avatar} />
+          {/if}
+          <AvatarFallback
+            class="cursor-default bg-muted text-2xl font-medium text-muted-foreground"
+          >
+            {initials}
+          </AvatarFallback>
+        </Avatar>
+      </div>
+
+      {#if isOwner}
+        <a
+          href="/dashboard/settings/profile"
+          class="inline-flex h-9 shrink-0 items-center rounded-[8px] border border-primary px-4 text-[14px] text-primary transition-colors hover:bg-primary hover:text-primary-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
-          {initials}
-        </AvatarFallback>
-      </Avatar>
+          Редагувати профіль
+        </a>
+      {/if}
     </div>
 
-    <div class="mt-4 flex items-center gap-1.5">
-      <h1 class="text-2xl font-semibold" itemprop="name">{user.name}</h1>
+    <div class="mt-3 flex items-center gap-1.5">
+      <h1
+        class="text-2xl font-semibold [overflow-wrap:anywhere]"
+        itemprop="name"
+      >
+        {user.name}
+      </h1>
       {#if user.verificationStatus === 'VERIFIED'}
         <BadgeCheck
           class="size-5 shrink-0 fill-primary stroke-primary-foreground"
@@ -217,7 +267,7 @@
 
     {#if user.username}
       <p
-        class="mt-1 flex items-center gap-1.5 text-[15px] text-muted-foreground"
+        class="mt-0.5 flex items-center gap-1.5 text-[15px] text-muted-foreground"
       >
         <span itemprop="alternateName">@{user.username}</span>
         <button
@@ -235,33 +285,37 @@
       </p>
     {/if}
 
-    <!-- Місто й дата одним рядком, без піктограм: це підпис під іменем,
-         а не дані, заради яких потрібні значки. -->
-    <p class="mt-1 text-[15px] text-muted-foreground">
-      {#if user.city}<span
-          itemprop="address"
-          itemscope
-          itemtype="https://schema.org/PostalAddress"
-          ><span itemprop="addressLocality">{user.city}</span></span
-        > ·
-      {/if}з {created.display}
-    </p>
-
-    {#if isOwner}
-      <a
-        href="/dashboard/settings/profile"
-        class="mt-5 inline-flex h-9 items-center rounded-[8px] border border-primary px-4 text-[14px] text-primary transition-colors hover:bg-primary hover:text-primary-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-      >
-        Редагувати профіль
-      </a>
-    {/if}
+    <!-- Хто це — пігулкою кольору акценту: клієнту варто одразу бачити,
+         кличе він людину чи клінінгову компанію. Поруч — місто й дата,
+         без піктограм: це підпис, а не дані, заради яких потрібні значки. -->
+    <div
+      class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[15px] text-muted-foreground"
+    >
+      {#if kind}
+        <span
+          class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-0.5 text-[12.5px] font-semibold text-primary"
+        >
+          <KindIcon class="size-3.5 shrink-0" aria-hidden="true" />
+          {kindLabel(kind)}
+        </span>
+      {/if}
+      <span>
+        {#if user.city}<span
+            itemprop="address"
+            itemscope
+            itemtype="https://schema.org/PostalAddress"
+            ><span itemprop="addressLocality">{user.city}</span></span
+          >{/if}{#if user.city && since}{' · '}{/if}{#if since}на Zunor з {since}{/if}
+      </span>
+    </div>
   </header>
 
   <!-- ═══ Як працював ═══
        Значка «Топ виконавець» немає: він вмикався на 50 виконаних
-       замовленнях, а саме це число стоїть поруч у цифрах. Рейтинг
-       показуємо лише коли є відгуки — «0.0» читається як погана оцінка,
-       а не як «оцінок ще немає». -->
+       замовленнях, а саме це число стоїть поруч у цифрах. Без відгуків
+       замість рейтингу — «Новий»: «0.0» читається як погана оцінка, а
+       прочерк — як збій, хоча насправді оцінок просто ще немає (так
+       робить і Airbnb). -->
   <div
     class="mt-8 grid grid-cols-3 divide-x divide-border/60 border-y border-border/60 py-5 text-center"
   >
@@ -269,17 +323,12 @@
       <div
         class="inline-flex items-center gap-1.5 text-[22px] font-semibold tabular-nums"
       >
-        {#if hasRating}
-          <Star
-            class="size-4 fill-amber-400 text-amber-400"
-            aria-hidden="true"
-          />
-          {fmtRating(user.avgRating)}
-        {:else}
-          <span class="text-muted-foreground">—</span>
-        {/if}
+        <Star class="size-4 fill-amber-400 text-amber-400" aria-hidden="true" />
+        {hasRating ? fmtRating(user.avgRating) : isCompany ? 'Нова' : 'Новий'}
       </div>
-      <div class="mt-0.5 text-[13px] text-muted-foreground">рейтинг</div>
+      <div class="mt-0.5 text-[13px] text-muted-foreground">
+        {hasRating ? 'рейтинг' : 'ще без оцінок'}
+      </div>
     </div>
     <div>
       <div class="text-[22px] font-semibold tabular-nums">
@@ -303,21 +352,47 @@
       <h2 class="text-[15px] font-semibold">{categoryLabel}</h2>
       <!-- flex-wrap: із кількома категоріями рядок не має виїжджати за
            колонку на вузькому екрані. -->
+      <!-- Категорія — тоном акценту, послуги поруч — сірими з іконками
+           тими самими, що в заявках: «Прибирання» саме по собі нічого не
+           каже, а «Генеральне · Миття вікон» — те, що клієнт і шукає. -->
       <div class="mt-2 flex flex-wrap gap-2">
         {#each user.categories as category (category)}
           <span
-            class="inline-flex h-8 items-center rounded-[8px] bg-muted px-3 text-[14px]"
+            class="inline-flex h-8 items-center rounded-[8px] bg-primary/10 px-3 text-[14px] font-medium text-primary"
           >
             {category}
           </span>
         {/each}
+        {#each services as s (s.key)}
+          <span
+            class="inline-flex h-8 items-center gap-1.5 rounded-[8px] bg-muted px-3 text-[14px]"
+          >
+            <ServiceIcon service={s.key} class="size-4.5 shrink-0" />
+            {s.label}
+          </span>
+        {/each}
       </div>
+      {#if premises.length > 0}
+        <p
+          class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[14px] text-muted-foreground"
+        >
+          {#each premises as p (p.key)}
+            {@const Icon = p.key === 'business' ? Building2 : House}
+            <span class="inline-flex items-center gap-1.5">
+              <Icon class="size-4" aria-hidden="true" />
+              {p.label}
+            </span>
+          {/each}
+        </p>
+      {/if}
     </section>
   {/if}
 
-  <!-- ═══ Про себе ═══ -->
+  <!-- ═══ Про себе / про компанію ═══ -->
   <section aria-labelledby="about-heading" class="mt-8">
-    <h2 id="about-heading" class="text-[15px] font-semibold">Про себе</h2>
+    <h2 id="about-heading" class="text-[15px] font-semibold">
+      {isCompany ? 'Про компанію' : 'Про себе'}
+    </h2>
     {#if user.bio}
       <p
         class="mt-2 leading-relaxed text-muted-foreground [overflow-wrap:anywhere]"
@@ -327,7 +402,11 @@
       </p>
     {:else}
       <p class="mt-2 text-muted-foreground">
-        {isOwner ? 'Ти ще не додав опис.' : 'Майстер ще не додав опис.'}
+        {isOwner
+          ? 'Ти ще не додав опис.'
+          : isCompany
+            ? 'Компанія ще не додала опис.'
+            : 'Майстер ще не додав опис.'}
       </p>
     {/if}
   </section>

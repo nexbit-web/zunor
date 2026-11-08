@@ -35,9 +35,11 @@
   import { cityDistricts, findDistrict } from '$lib/geo/districts'
   import { cn } from '$lib/utils'
   import toast from 'svelte-hot-french-toast'
-  import CheckIcon from '@lucide/svelte/icons/check'
-  import ChevronsUpDownIcon from '@lucide/svelte/icons/chevrons-up-down'
-  import { UserRound, Phone, MapPin } from 'lucide-svelte'
+  import CheckIcon from '$lib/components/icons/set/check.svelte'
+  import ChevronsUpDownIcon from '$lib/components/icons/set/chevrons-up-down.svelte'
+  import UserRound from '$lib/components/icons/set/user-round.svelte'
+  import Phone from '$lib/components/icons/set/phone.svelte'
+  import MapPin from '$lib/components/icons/set/map-pin.svelte'
   import type {
     OnboardingData,
     WizardStep,
@@ -273,7 +275,6 @@
     bind:value={avatarUrl}
     bind:publicId={avatarPublicId}
     bind:uploading={avatarUploading}
-    fallback={nameTrim.charAt(0).toUpperCase() || 'U'}
     onError={(msg) => toast.error(msg)}
   />
 {/snippet}
@@ -288,7 +289,6 @@
     maxlength={NAME_MAX}
     autocomplete="name"
     aria-invalid={!!nameError}
-    class="bg-background"
     required
   />
 {/snippet}
@@ -307,7 +307,6 @@
     inputmode="tel"
     autocomplete="tel-national"
     aria-invalid={!!phoneError}
-    class="bg-background"
     required
   />
 {/snippet}
@@ -323,7 +322,7 @@
           role="combobox"
           aria-expanded={cityOpen}
           aria-invalid={!!cityError}
-          class="w-full cursor-pointer justify-between rounded-[10px] bg-background pl-3 font-normal focus-visible:border-input focus-visible:ring-0 aria-invalid:ring-0"
+          class="w-full cursor-pointer justify-between rounded-[10px] border-input bg-field pl-3 font-normal hover:bg-field aria-expanded:bg-background focus-visible:border-input focus-visible:ring-0 aria-invalid:ring-0 dark:bg-field dark:hover:bg-field dark:aria-expanded:bg-background"
         >
           <span class="flex min-w-0 items-center gap-2">
             <MapPin
@@ -407,7 +406,7 @@
     placeholder="Необов'язково: є кіт, під'їзд із кодом, зручніше зранку."
     rows={3}
     maxlength={BIO_MAX}
-    class="resize-none bg-background"
+    class="resize-none"
   />
   <!-- Лічильник зʼявляється лише біля стелі: доки до неї далеко, він
        відповідає на питання, якого ніхто не ставив. -->
@@ -483,11 +482,11 @@
     >
       <SettingsGroup
         title="Особисті дані"
-        footnote="Ці дані бачить виконавець після підтвердження замовлення."
+        footnote="Майстер бачить їх лише після підтвердження замовлення."
       >
         <SettingsField
           label="Фото"
-          hint="Необов'язково"
+          hint="Необовʼязково"
           control={photoControl}
         />
 
@@ -512,37 +511,30 @@
           <SettingsField
             label="Район"
             for="district"
-            hint="Майстри бачать лише район заявки — точну адресу ви повідомите в чаті"
+            hint="Майстри бачать лише район, не адресу"
             error={districtError}
             control={districtControl}
           />
         {/if}
 
-        <SettingsBlock>
-          <Label for="bio" class="mb-2 text-sm font-normal">Про себе</Label>
-          {@render bioControl()}
-        </SettingsBlock>
+        <SettingsField label="Про себе" for="bio" control={bioControl} />
       </SettingsGroup>
 
       <!-- ═══ Дії ═══
-           У кінці форми, праворуч — як у діалогах macOS. Підтверджувальна
-           дія остання: погляд іде зліва направо й закінчується на тому,
-           що людина хоче натиснути. -->
-      <div class="mt-7 flex items-center justify-end gap-2">
-        {#if busyNote}
-          <span class="mr-auto text-[12px] text-muted-foreground">
-            {busyNote}
-          </span>
-        {/if}
+           Під полями ліворуч, як у формах налаштувань GitHub: праворуч від
+           полів шириною 440px кнопки висіли б окремо від форми.
+           Підтверджувальна дія остання: погляд іде зліва направо й
+           закінчується на тому, що людина хоче натиснути. -->
+      <div class="mt-7 flex flex-wrap items-center gap-2">
 
-        <!-- «Скасувати» — рамка кольору primary на прозорому тлі, заливка
-             приходить лише під курсором: дві однаково залиті кнопки поруч
-             змусили б вибирати очима, яка з них головна. -->
+        <!-- «Скасувати» — сіра капсула, «Зберегти» — синя, як «New
+             folder» / «New project» у Lovable: синя одна, тож головну дію
+             видно одразу. -->
         <Button
           type="button"
           onclick={onBack}
           disabled={busy}
-          variant="primary-outline"
+          variant="secondary"
         >
           Скасувати
         </Button>
@@ -564,6 +556,12 @@
             <span>Зберегти</span>
           {/if}
         </Button>
+
+        {#if busyNote}
+          <span class="ml-1 text-[12px] text-muted-foreground">
+            {busyNote}
+          </span>
+        {/if}
       </div>
     </form>
   </div>

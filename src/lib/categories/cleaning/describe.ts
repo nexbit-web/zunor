@@ -130,7 +130,7 @@ export function describeJob(
   if (m.floor != null) {
     details.push({
       label: 'Поверх',
-      value: `${m.floor} поверх`,
+      value: `${m.floor}-й поверх`,
       icon: 'Building',
     })
   }

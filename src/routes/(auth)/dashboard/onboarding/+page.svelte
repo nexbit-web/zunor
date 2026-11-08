@@ -11,7 +11,8 @@
   import FieldError from '$lib/components/forms/field-error.svelte'
   import { Button } from '$lib/components/ui/button'
   import { Spinner } from '$lib/components/ui/spinner'
-  import { UserRound, BrushCleaning } from 'lucide-svelte'
+  import UserRound from '$lib/components/icons/set/user-round.svelte'
+  import BrushCleaning from '$lib/components/icons/set/brush-cleaning.svelte'
 
   type Role = 'client' | 'master'
 

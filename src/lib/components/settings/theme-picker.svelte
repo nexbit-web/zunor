@@ -7,7 +7,8 @@
   // беруть поточний --primary, тож зміна кольору в палітрі поруч одразу
   // видна і в превʼю теми.
 
-  import { userPrefersMode, setMode } from 'mode-watcher'
+  import { userPrefersMode } from 'mode-watcher'
+  import { switchTheme } from '$lib/theme-transition'
   import { cn } from '$lib/utils'
   import { appearance } from '$lib/stores/appearance.svelte'
   import { nextRadioIndex } from './radio-keys'
@@ -38,18 +39,18 @@
   // самі, що в layout.css для відповідної теми.
   const TONES = {
     light: {
-      frame: '#e9ebf0',
+      frame: '#f3f3f3',
       panel: '#ffffff',
-      rail: '#d4d4d4',
-      line: '#e8e8e8',
-      strong: '#d4d4d4',
+      rail: '#ebebeb',
+      line: '#e3e5e6',
+      strong: '#d8dcde',
     },
     dark: {
-      frame: '#000000',
-      panel: '#191919',
-      rail: '#2a2a2a',
-      line: '#2a2a2a',
-      strong: '#3a3a3a',
+      frame: '#15171b',
+      panel: '#1b1d21',
+      rail: '#212327',
+      line: '#282b2f',
+      strong: '#36383c',
     },
   } as const
 
@@ -68,7 +69,7 @@
     if (next === null) return
 
     e.preventDefault()
-    setMode(OPTIONS[next].value)
+    switchTheme(OPTIONS[next].value, buttons[next])
     buttons[next]?.focus()
   }
 </script>
@@ -117,7 +118,7 @@
       aria-checked={selected}
       aria-label={opt.hint}
       tabindex={selected ? 0 : -1}
-      onclick={() => setMode(opt.value)}
+      onclick={(e) => switchTheme(opt.value, e.currentTarget)}
       onkeydown={(e) => handleKeydown(e, i)}
       class="group flex min-w-0 cursor-pointer flex-col items-center gap-2 rounded-[10px] outline-none"
     >

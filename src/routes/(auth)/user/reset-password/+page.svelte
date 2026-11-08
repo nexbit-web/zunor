@@ -5,7 +5,10 @@
   import { authClient } from '$lib/auth-client'
   import { goto } from '$app/navigation'
   import { page } from '$app/state'
-  import { CircleAlert, Eye, EyeOff, ArrowLeft } from 'lucide-svelte'
+  import CircleAlert from '$lib/components/icons/set/circle-alert.svelte'
+  import Eye from '$lib/components/icons/set/eye.svelte'
+  import EyeOff from '$lib/components/icons/set/eye-off.svelte'
+  import ArrowLeft from '$lib/components/icons/set/arrow-left.svelte'
 
   // ─── Token з URL ───
   const token = $derived(page.url.searchParams.get('token') ?? '')

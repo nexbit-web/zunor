@@ -1,0 +1,99 @@
+/*
+ * Перегляд фото в подачі Telegram Desktop: темне тло, ряд білих іконок
+ * угорі праворуч (видалити, завантажити, наблизити, закрити), круглі
+ * стрілки по боках. Кольори не з теми: перегляд завжди темний.
+ */
+
+/* Нижче діалогів (z-50): підтвердження видалення відкривається поверх
+   перегляду. Решта застосунку — не вище z-40, тож перегляд над нею. */
+.app-pswp {
+  --pswp-root-z-index: 45;
+  --pswp-placeholder-bg: #111;
+}
+
+.app-pswp .pswp__top-bar {
+  height: auto;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 10px 0;
+}
+
+.app-pswp .pswp__top-bar .pswp__button {
+  width: 44px;
+  height: 44px;
+  border-radius: 9999px;
+  opacity: 0.8;
+  transition:
+    opacity 150ms ease,
+    background-color 150ms ease;
+}
+
+.app-pswp .pswp__top-bar .pswp__button:hover,
+.app-pswp .pswp__top-bar .pswp__button:focus-visible {
+  opacity: 1;
+  background: rgb(255 255 255 / 0.1);
+}
+
+/* Іконки — контурні, як решта застосунку (lucide), а не заливкою, як у
+   PhotoSwipe. Тінь — щоб читались і на світлому фото, коли воно
+   наближене під панель. */
+.app-pswp .pswp__button .pswp__icn {
+  fill: none;
+  color: #fff;
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.45));
+}
+
+.app-pswp .pswp__top-bar .pswp__icn {
+  top: 10px;
+  left: 10px;
+  width: 24px;
+  height: 24px;
+}
+
+.app-pswp .pswp__button--close {
+  margin-right: 0;
+}
+
+.app-pswp .pswp__counter {
+  height: 44px;
+  margin: 0 0 0 10px;
+  font-size: 15px;
+  line-height: 44px;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.45);
+}
+
+/* Стрілки — круглі напівпрозорі кнопки, що світлішають під курсором. */
+.app-pswp .pswp__button--arrow {
+  width: 52px;
+  height: 52px;
+  margin-top: -26px;
+  border-radius: 9999px;
+  background: rgb(255 255 255 / 0.08);
+  opacity: 0.85;
+  transition:
+    opacity 150ms ease,
+    background-color 150ms ease;
+}
+
+.app-pswp .pswp__button--arrow:hover,
+.app-pswp .pswp__button--arrow:focus-visible {
+  opacity: 1;
+  background: rgb(255 255 255 / 0.16);
+}
+
+.app-pswp .pswp__button--arrow--prev {
+  left: 16px;
+}
+
+.app-pswp .pswp__button--arrow--next {
+  right: 16px;
+}
+
+.app-pswp .pswp__button--arrow .pswp__icn {
+  top: 50%;
+  left: 50%;
+  right: auto;
+  width: 26px;
+  height: 26px;
+  margin: -13px 0 0 -13px;
+}

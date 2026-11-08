@@ -7,10 +7,13 @@
   import { Button } from '$lib/components/ui/button'
   import { Input } from '$lib/components/ui/input'
   import { Textarea } from '$lib/components/ui/textarea'
-  import { Label } from '$lib/components/ui/label'
   import { Spinner } from '$lib/components/ui/spinner'
   import { cn } from '$lib/utils'
-  import { Plus, X, Check, UserRound, House } from 'lucide-svelte'
+  import Plus from '$lib/components/icons/set/plus.svelte'
+  import X from '$lib/components/icons/set/x.svelte'
+  import Check from '$lib/components/icons/set/check.svelte'
+  import UserRound from '$lib/components/icons/set/user-round.svelte'
+  import House from '$lib/components/icons/set/house.svelte'
   import toast from 'svelte-hot-french-toast'
   import type { PageData } from './$types'
   import { untrack } from 'svelte'
@@ -82,7 +85,7 @@
        окремий абзац над ними висів би сам по собі. -->
   <SettingsGroup
     title="Про вас"
-    footnote="Zunor враховуватиме це, оформлюючи заявку — і не питатиме те, що ви вже вказали."
+    footnote="Zunor не питатиме те, що вже знає."
   >
     <SettingsField label="Як звертатись" for="call-name">
       {#snippet control()}
@@ -92,41 +95,40 @@
           bind:value={callName}
           maxlength={40}
           placeholder={data.userName || 'Ваше імʼя'}
-          class="bg-background"
         />
       {/snippet}
     </SettingsField>
 
-    <SettingsBlock>
-      <Label for="about" class="text-sm font-normal">Чим займаєтесь</Label>
-      <p class="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">
-        Наприклад: здаю квартири подобово, тому прибирання потрібне часто і
-        швидко.
-      </p>
-      <Textarea
-        id="about"
-        bind:value={about}
-        rows={3}
-        maxlength={data.limits.about}
-        placeholder="Кілька речень про вас і ваші потреби."
-        class="mt-2 resize-none bg-background"
-      />
-      <!-- Лічильник з'являється лише коли є що рахувати: під порожнім
-           полем «0/922» читається як помилка, а не як підказка. -->
-      {#if about.length > 0}
-        <div class="mt-1.5 flex justify-end">
-          <span class="text-[12px] tabular-nums text-muted-foreground">
-            {about.length}/{data.limits.about}
-          </span>
-        </div>
-      {/if}
-    </SettingsBlock>
+    <SettingsField
+      label="Чим займаєтесь"
+      for="about"
+    >
+      {#snippet control()}
+        <Textarea
+          id="about"
+          bind:value={about}
+          rows={3}
+          maxlength={data.limits.about}
+          placeholder="Наприклад: здаю квартири подобово, прибирання потрібне часто"
+          class="resize-none"
+        />
+        <!-- Лічильник з'являється лише коли є що рахувати: під порожнім
+             полем «0/922» читається як помилка, а не як підказка. -->
+        {#if about.length > 0}
+          <div class="mt-1.5 flex justify-end">
+            <span class="text-[12px] tabular-nums text-muted-foreground">
+              {about.length}/{data.limits.about}
+            </span>
+          </div>
+        {/if}
+      {/snippet}
+    </SettingsField>
   </SettingsGroup>
 
   <!-- ═══ Об'єкти ═══ -->
   <SettingsGroup
     title="Ваші обʼєкти"
-    footnote="Те, що прибираєте регулярно, — асистент не питатиме щоразу."
+    footnote="Те, що прибираєте регулярно."
   >
 
     {#each objects as obj, i (i)}
@@ -157,7 +159,6 @@
               bind:value={objects[i].note}
               maxlength={data.limits.objectNote}
               placeholder="3 кімнати, Таїрова, 5 поверх без ліфта"
-              class="bg-background"
               aria-label="Деталі обʼєкта"
             />
           </div>
@@ -190,7 +191,7 @@
   <!-- ═══ Послуги ═══ -->
   <SettingsGroup
     title="Що вас цікавить"
-    footnote="Асистент пропонуватиме це першим. Анкета — довідка про вас, а не команда асистенту: вказівки щодо його поведінки він проігнорує."
+    footnote="Асистент пропонуватиме це першим."
   >
     <SettingsBlock>
       <div class="flex flex-wrap gap-2">
@@ -217,7 +218,8 @@
     </SettingsBlock>
   </SettingsGroup>
 
-  <div class="mt-8 flex justify-end">
+  <!-- Під полями ліворуч, як у формах налаштувань GitHub. -->
+  <div class="mt-8 flex">
     <Button
       onclick={save}
       disabled={saving || !dirty}
