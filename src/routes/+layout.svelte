@@ -11,6 +11,7 @@
     '/terms',
     '/privacy',
     '/dashboard',
+    '/admin',
     '/user/login',
     '/user/register',
     '/user/verify-email',

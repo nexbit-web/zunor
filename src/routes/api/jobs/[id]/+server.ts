@@ -4,6 +4,8 @@ import { prisma } from '$lib/server/prisma'
 import { clientRatingSelect, flattenClientRating } from '$lib/server/user-dto'
 import { cancelWaves } from '$lib/server/dispatch'
 import { checkJobAccess, jobViewerSelect } from '$lib/server/job-access'
+import { editJob } from '$lib/server/job-edit'
+import { limit } from '$lib/server/rate-limit'
 import type { RequestHandler } from './$types'
 
 /**
@@ -74,6 +76,28 @@ export const GET: RequestHandler = async ({ params, locals }) => {
     job: { ...job, client: flattenClientRating(job.client) },
     isOwner,
   })
+}
+
+/**
+ * PATCH /api/jobs/[id] — змінити заявку. Лише власник і лише відкрита;
+ * правила й побічні дії — у $lib/server/job-edit.
+ *
+ * Тіло — як у POST /api/jobs: { metadata, description, attachments,
+ * attachmentsPublicIds }.
+ */
+export const PATCH: RequestHandler = async ({ params, locals, request }) => {
+  const user = requireApiUser(locals)
+
+  // Кожне збереження може сповістити майстрів — не частіше розумного.
+  const rl = limit(`job:edit:${user.id}`, { points: 30, duration: 60 * 60_000 })
+  if (!rl.success) throw error(429, 'Забагато змін. Спробуйте пізніше')
+
+  const body = await request.json().catch(() => null)
+  if (!body || typeof body !== 'object') throw error(400, 'Invalid JSON')
+
+  const result = await editJob(user.id, params.id, body as Record<string, unknown>)
+  if (!result.ok) throw error(result.status, result.message)
+  return json({ ok: true, changed: result.changed })
 }
 
 /**

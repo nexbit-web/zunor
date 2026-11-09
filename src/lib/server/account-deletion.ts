@@ -10,7 +10,7 @@
 //
 // Що зникає: імʼя, пошта (замінюється на службову — справжня звільняється
 // для нової реєстрації), @handle і публічна сторінка, телефон, фото,
-// «про себе», анкета асистента, район, способи входу (пароль, Google),
+// «про себе», анкета асистента, район, чат Telegram, способи входу (пароль, Google),
 // сесії, сповіщення, коди підтвердження, анкета й портфоліо майстра, фото
 // помешкань у заявках. Файли — і з Cloudinary (уся тека zunor/users/<id>/).
 //
@@ -29,6 +29,7 @@ import { cancelWaves } from './dispatch'
 import { revokeSessions } from './sessions'
 import { invalidateAccount } from './account-cache'
 import { activeOrdersCount } from './active-orders'
+import { forgetChatId } from './telegram/chat-cache'
 
 /** Імʼя, яке бачить друга сторона в чатах, замовленнях і відгуках. */
 export const DELETED_NAME = 'Видалений акаунт'
@@ -46,6 +47,68 @@ export type DeleteResult =
   | { ok: false; reason: 'active-orders'; count: number }
   | { ok: false; reason: 'not-found' }
 
+/** Відкрита робота людини: її заявки, що шукають майстра, і її пропозиції, що чекають. */
+export interface OpenWork {
+  openJobIds: string[]
+  pending: { id: string; jobId: string }[]
+}
+
+export async function openWorkOf(userId: string): Promise<OpenWork> {
+  const [jobs, pending] = await Promise.all([
+    prisma.job.findMany({
+      where: { clientId: userId, status: 'OPEN' },
+      select: { id: true },
+    }),
+    prisma.proposal.findMany({
+      where: { masterId: userId, status: 'SENT' },
+      select: { id: true, jobId: true },
+    }),
+  ])
+  return { openJobIds: jobs.map((j) => j.id), pending }
+}
+
+/**
+ * Закриває відкриту роботу людини, якої на платформі більше не буде
+ * (видалення акаунта, бан). Усередині транзакції:
+ *   — відкриті заявки скасовуються, як кнопкою «Скасувати заявку»
+ *     (DELETE /api/jobs/[id]): відгуки на них відхилені;
+ *   — пропозиції, що чекають, відкликаються, як «Відкликати»
+ *     (DELETE /api/proposals/[id]): лічильник заявки мінус один.
+ * Хвилі розсилки знімає afterOpenWorkClosed — уже після коміту.
+ */
+export async function closeOpenWork(
+  tx: Prisma.TransactionClient,
+  work: OpenWork,
+  now: Date,
+): Promise<void> {
+  if (work.openJobIds.length > 0) {
+    await tx.job.updateMany({
+      where: { id: { in: work.openJobIds } },
+      data: { status: 'CANCELLED', closedAt: now },
+    })
+    await tx.proposal.updateMany({
+      where: { jobId: { in: work.openJobIds }, status: 'SENT' },
+      data: { status: 'REJECTED' },
+    })
+  }
+
+  for (const p of work.pending) {
+    await tx.proposal.update({
+      where: { id: p.id },
+      data: { status: 'WITHDRAWN', withdrawnAt: now },
+    })
+    await tx.job.update({
+      where: { id: p.jobId },
+      data: { proposalsCount: { decrement: 1 } },
+    })
+  }
+}
+
+/** Після коміту: заявок більше немає — їхні хвилі не мають будити майстрів. */
+export function afterOpenWorkClosed(work: OpenWork): void {
+  for (const id of work.openJobIds) cancelWaves(id)
+}
+
 export async function deleteAccount(userId: string): Promise<DeleteResult> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -58,32 +121,10 @@ export async function deleteAccount(userId: string): Promise<DeleteResult> {
 
   const now = new Date()
 
-  // Відкриті заявки — скасувати, як це робить кнопка «Скасувати заявку»
-  // (DELETE /api/jobs/[id]): відгуки на них відхилені, хвилі зняті нижче.
-  const openJobs = await prisma.job.findMany({
-    where: { clientId: userId, status: 'OPEN' },
-    select: { id: true },
-  })
-  const openJobIds = openJobs.map((j) => j.id)
-
-  // Пропозиції майстра, що ще чекають, — відкликати, як «Відкликати»
-  // (DELETE /api/proposals/[id]): лічильник заявки мінус один.
-  const pending = await prisma.proposal.findMany({
-    where: { masterId: userId, status: 'SENT' },
-    select: { id: true, jobId: true },
-  })
+  const work = await openWorkOf(userId)
 
   await prisma.$transaction(async (tx) => {
-    if (openJobIds.length > 0) {
-      await tx.job.updateMany({
-        where: { id: { in: openJobIds } },
-        data: { status: 'CANCELLED', closedAt: now },
-      })
-      await tx.proposal.updateMany({
-        where: { jobId: { in: openJobIds }, status: 'SENT' },
-        data: { status: 'REJECTED' },
-      })
-    }
+    await closeOpenWork(tx, work, now)
 
     // Фото помешкань — це дані клієнта. Файли видаляються з хмари нижче,
     // а посилання — тут, інакше на сторінці старого замовлення в майстра
@@ -92,17 +133,6 @@ export async function deleteAccount(userId: string): Promise<DeleteResult> {
       where: { clientId: userId },
       data: { attachments: [], attachmentsPublicIds: [] },
     })
-
-    for (const p of pending) {
-      await tx.proposal.update({
-        where: { id: p.id },
-        data: { status: 'WITHDRAWN', withdrawnAt: now },
-      })
-      await tx.job.update({
-        where: { id: p.jobId },
-        data: { proposalsCount: { decrement: 1 } },
-      })
-    }
 
     // Анкета майстра: isActive: false прибирає його з розсилки, стрічки й
     // рекомендацій (усі три фільтрують за ним).
@@ -131,6 +161,8 @@ export async function deleteAccount(userId: string): Promise<DeleteResult> {
         aiProfile: Prisma.DbNull,
         city: null,
         district: null,
+        telegramChatId: null,
+        telegramLinkedAt: null,
         isOnline: false,
         // Бан — друга лінія захисту: якщо десь лишилась жива сесія (кеш
         // cookie живе 5 хв), guardHandle викине її на першому ж запиті.
@@ -157,7 +189,7 @@ export async function deleteAccount(userId: string): Promise<DeleteResult> {
 
   // ─── Після коміту ───
 
-  for (const id of openJobIds) cancelWaves(id)
+  afterOpenWorkClosed(work)
 
   // Сесії — і з бази, і з Redis (через better-auth), потім кеш стану
   // акаунта: бан має подіяти на першому ж запиті, а не за TTL.
@@ -165,6 +197,7 @@ export async function deleteAccount(userId: string): Promise<DeleteResult> {
     console.error('[account-deletion] revoke sessions failed:', err),
   )
   await invalidateAccount(userId)
+  forgetChatId(userId)
 
   // Файли — остання й необовʼязкова частина: акаунт уже знеособлено, а
   // збій хмари не має повертати людині «не вдалося видалити». Залишки

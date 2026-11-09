@@ -4,7 +4,7 @@
   пропозиція», і його дія — обрати майстра; заявку він написав сам і
   знає. Під пропозиціями — сама заявка (JobSummary — спільний із
   майстром, картка за зразком вакансії work.ua), угорі її картки — меню
-  ⋮ із «Скасувати заявку»: дія рідкісна й незворотна, тож не кнопкою на
+  ⋮ із «Редагувати заявку» й «Скасувати заявку»: дія рідкісна й незворотна, тож не кнопкою на
   виду.
 
   Мова та сама, що в «Моїх заявках»: шапка PageHead, рядки з волосиною
@@ -33,6 +33,7 @@
   import Star from '$lib/components/icons/set/star.svelte'
   import MoreVertical from '$lib/components/icons/set/more-vertical.svelte'
   import Trash2 from '$lib/components/icons/set/trash-2.svelte'
+  import Pencil from '$lib/components/icons/set/pencil.svelte'
   import PageHead from '$lib/components/dashboard/page-head.svelte'
   import JobSummary from '$lib/components/jobs/job-summary.svelte'
   import JobState from '$lib/components/jobs/job-state.svelte'
@@ -299,6 +300,13 @@
               {/if}
             </DropdownMenu.Trigger>
             <DropdownMenu.Content align="end" sideOffset={6} class="w-56">
+              <DropdownMenu.Item
+                class="cursor-pointer"
+                onSelect={() => goto(`/dashboard/jobs/${data.job.id}/edit`)}
+              >
+                <Pencil /> Редагувати заявку
+              </DropdownMenu.Item>
+              <DropdownMenu.Separator />
               <DropdownMenu.Item
                 variant="destructive"
                 class="cursor-pointer"

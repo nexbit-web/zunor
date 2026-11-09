@@ -64,6 +64,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
       proposalsCount: true,
       viewsCount: true,
       expiresAt: true,
+      editedAt: true,
       createdAt: true,
       clientId: true,
       client: {
@@ -306,6 +307,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
       ),
       createdAt: job.createdAt.toISOString(),
       expiresAt: job.expiresAt.toISOString(),
+      editedAt: job.editedAt?.toISOString() ?? null,
       client: {
         ...job.client,
         avgRating: job.client.avgRatingAsClient,

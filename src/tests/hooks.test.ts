@@ -319,3 +319,98 @@ describe('стійкість авторизації', () => {
     expect(event.locals.user).toBeNull()
   })
 })
+
+// ─── Адмінка: замок №1 (adminGate) ───
+// Ззовні адмінки не видно: гість і не співробітник отримують 404 на будь-
+// якій адресі під /admin і /api/admin. Співробітник без коду другого
+// фактора — лише сторінку коду.
+
+describe('адмінка', () => {
+  /** HttpError, кинутий error(), — його статус. */
+  async function statusOf(pathname: string, loggedIn = true): Promise<number> {
+    try {
+      const res = await run(pathname, loggedIn)
+      return res.status
+    } catch (err) {
+      const e = err as { status?: number; location?: string }
+      if (typeof e?.status === 'number') return e.status
+      throw err
+    }
+  }
+
+  function asStaff(role = 'ADMIN') {
+    prisma.user.findUnique.mockResolvedValue(account({ role, onboarded: false }))
+    getSession.mockReset()
+  }
+
+  async function runStaff(pathname: string) {
+    getSession.mockResolvedValue({ user: { id: 'u1' }, session: { id: 'sess-1' } })
+    const event = makeEvent({ url: pathname, method: 'GET' })
+    return (await handle({
+      event,
+      resolve,
+    } as unknown as Parameters<typeof handle>[0])) as Response
+  }
+
+  it('гість отримує 404, а не редірект на логін', async () => {
+    for (const path of ['/admin', '/admin/users', '/admin/2fa', '/api/admin/x']) {
+      expect(await statusOf(path, false)).toBe(404)
+    }
+    expect(resolve).not.toHaveBeenCalled()
+  })
+
+  it('клієнт і майстер отримують 404', async () => {
+    for (const role of ['CLIENT', 'MASTER']) {
+      prisma.user.findUnique.mockResolvedValue(account({ role }))
+      clearAccountCache()
+      expect(await statusOf('/admin')).toBe(404)
+      expect(await statusOf('/api/admin/x')).toBe(404)
+    }
+    expect(resolve).not.toHaveBeenCalled()
+  })
+
+  it('забанений співробітник — 404', async () => {
+    prisma.user.findUnique.mockResolvedValue(account({ role: 'ADMIN', banned: true }))
+    expect(await statusOf('/admin')).toBe(404)
+  })
+
+  it('співробітник без коду — на сторінку коду, API — 401', async () => {
+    asStaff()
+    const { clearStepUp } = await import('$lib/server/admin/step-up')
+    clearStepUp()
+
+    try {
+      await runStaff('/admin/users')
+      throw new Error('мав бути редірект')
+    } catch (err) {
+      const e = err as { status: number; location: string }
+      expect(e.status).toBe(303)
+      expect(e.location).toContain('/admin/2fa')
+    }
+
+    try {
+      await runStaff('/api/admin/x')
+      throw new Error('мав бути 401')
+    } catch (err) {
+      expect((err as { status: number }).status).toBe(401)
+    }
+
+    // Сама сторінка коду відкривається без коду.
+    expect((await runStaff('/admin/2fa')).status).toBe(200)
+  })
+
+  it('співробітник із введеним кодом проходить', async () => {
+    asStaff('MODERATOR')
+    const { markVerified, clearStepUp } = await import('$lib/server/admin/step-up')
+    clearStepUp()
+    markVerified('sess-1')
+    expect((await runStaff('/admin/moderation')).status).toBe(200)
+  })
+
+  it('співробітника без анкети дашборд веде в адмінку, а не в онбординг', async () => {
+    asStaff('MODERATOR')
+    getSession.mockResolvedValue({ user: { id: 'u1' }, session: { id: 'sess-1' } })
+    const r = await redirectOf('/dashboard')
+    expect(r.location).toBe('/admin')
+  })
+})

@@ -47,13 +47,25 @@ export function jobOfferNotice(
   }
 }
 
-/** Подія в особистий канал. Лише для сповіщення, яке вже в базі. */
-export function pushNotification(notification: Notification): Promise<void> {
-  return safeTrigger(
-    `private-user-${notification.userId}`,
-    'notification:new',
-    { notification },
-  )
+/**
+ * Подія в особистий канал і копія в Telegram, якщо людина його
+ * підключила. Лише для сповіщення, яке вже в базі.
+ *
+ * Telegram — ліниво: модуль тягне grammY, а pushNotification імпортують
+ * диспетчер і роути (і їхні тести), яким бот ні до чого. Без токена бота
+ * sendToTelegram одразу виходить. Обидва шляхи нічого не кидають.
+ */
+export async function pushNotification(
+  notification: Notification,
+): Promise<void> {
+  await Promise.allSettled([
+    safeTrigger(`private-user-${notification.userId}`, 'notification:new', {
+      notification,
+    }),
+    import('./telegram').then(({ sendToTelegram }) =>
+      sendToTelegram(notification),
+    ),
+  ])
 }
 
 /**
@@ -124,6 +136,48 @@ export const Notify = {
       body: 'Залиш відгук про майстра',
       orderId,
     }),
+  /**
+   * Нагадування за день до роботи (server/reminders.ts). Кожній стороні —
+   * хто з ким і що: людина звіряє завтрашній день, а не шукає замовлення.
+   */
+  orderReminderClient: (
+    clientId: string,
+    orderId: string,
+    orderTitle: string,
+    masterName: string | null,
+  ) =>
+    notify({
+      userId: clientId,
+      type: 'ORDER_REMINDER',
+      title: 'Нагадуємо: завтра прибирання',
+      body: masterName ? `${orderTitle} · ${masterName}` : orderTitle,
+      orderId,
+    }),
+  orderReminderMaster: (
+    masterId: string,
+    orderId: string,
+    orderTitle: string,
+    clientName: string | null,
+  ) =>
+    notify({
+      userId: masterId,
+      type: 'ORDER_REMINDER',
+      title: 'Нагадуємо: завтра в тебе прибирання',
+      body: clientName ? `${orderTitle} · ${clientName}` : orderTitle,
+      orderId,
+    }),
+  /**
+   * Клієнт змінив заявку, на яку майстер уже відгукнувся: ціна й строк у
+   * пропозиції могли бути на старі умови.
+   */
+  jobUpdated: (masterId: string, jobId: string, jobTitle: string) =>
+    notify({
+      userId: masterId,
+      type: 'JOB_UPDATED',
+      title: 'Клієнт змінив заявку',
+      body: `${jobTitle} — перевір, чи твоя пропозиція ще актуальна`,
+      jobId,
+    }),
   orderCancelled: (recipientId: string, orderId: string, reason?: string) =>
     notify({
       userId: recipientId,
@@ -140,5 +194,29 @@ export const Notify = {
       title: 'Майстер відмовився, але я вже шукаю нового.',
       body: 'Скоро зʼявляться нові відгуки — я повідомлю.',
       jobId,
+    }),
+
+  // ─── Рішення адмінки (/admin) ───
+  verificationApproved: (masterId: string) =>
+    notify({
+      userId: masterId,
+      type: 'VERIFICATION_APPROVED',
+      title: 'Твій профіль перевірено',
+      body: 'Біля твого імені тепер позначка верифікації — клієнти бачать, що профіль справжній.',
+    }),
+  verificationRejected: (masterId: string, reason: string) =>
+    notify({
+      userId: masterId,
+      type: 'VERIFICATION_REJECTED',
+      title: 'Профіль поки не пройшов перевірку',
+      body: `${reason}
+Виправ профіль і збережи — перевіримо знову.`,
+    }),
+  reportResolved: (reporterId: string) =>
+    notify({
+      userId: reporterId,
+      type: 'REPORT_RESOLVED',
+      title: 'Твою скаргу розглянуто',
+      body: 'Дякуємо, що допомагаєш робити Zunor безпечнішим.',
     }),
 }

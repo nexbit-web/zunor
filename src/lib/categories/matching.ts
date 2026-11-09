@@ -2,10 +2,12 @@
 //
 // Движок розсилки (server/dispatch) про прибирання нічого не знає: він
 // питає тут, чи підходить майстер заявці (умови на Job.metadata), чи
-// потрібне заявці авто і який у неї обсяг. Нова категорія — новий запис у
-// MATCHING; категорія без запису підходить усім, як і досі.
+// потрібне заявці авто і який у неї обсяг. Те саме з днем роботи для
+// нагадувань (server/reminders) і з дублями заявок (server/job-duplicates).
+// Нова категорія — новий запис у MATCHING; категорія без запису підходить
+// усім, як і досі.
 
-import { CATEGORY_SLUG } from './cleaning/presets'
+import { CATEGORY_SLUG, resolveWhen } from './cleaning/presets'
 import { cleaningEffort } from './cleaning/effort'
 import {
   cleaningConditions,
@@ -37,6 +39,18 @@ export interface CategoryMatching {
    * рахує: тоді формат роботи майстра на підбір не впливає.
    */
   effort(jobMetadata: unknown): number | null
+  /**
+   * День роботи — ISO-день за Києвом («YYYY-MM-DD»). createdAt — коли
+   * створено ЗАЯВКУ: відносні «сьогодні/завтра» рахуються від неї. null —
+   * дня немає (категорія без дати): тоді й нагадувати нема про що.
+   */
+  serviceDay(jobMetadata: unknown, createdAt: Date | string): string | null
+  /**
+   * Що робить дві заявки клієнта «тією самою» ($lib/server/job-duplicates):
+   * однаковий ключ — попередження перед створенням другої. null — категорія
+   * дублів не розпізнає, попередження не буде.
+   */
+  duplicateKey(jobMetadata: unknown): string | null
 }
 
 const OPEN: CategoryMatching = {
@@ -44,6 +58,8 @@ const OPEN: CategoryMatching = {
   conditions: () => [],
   needsVehicle: () => false,
   effort: () => null,
+  serviceDay: () => null,
+  duplicateKey: () => null,
 }
 
 const MATCHING: Record<string, CategoryMatching> = {
@@ -52,6 +68,15 @@ const MATCHING: Record<string, CategoryMatching> = {
     conditions: (skills) => cleaningConditions(parseCleaningSkills(skills)),
     needsVehicle: cleaningNeedsVehicle,
     effort: cleaningEffort,
+    serviceDay: (meta, createdAt) =>
+      resolveWhen((meta as { when?: unknown } | null)?.when, createdAt),
+    // Та сама послуга — незалежно від дня: нова заявка замість зміненої
+    // дати теж дубль. Приміщення не порівнюємо — асистент іноді називає
+    // ту саму квартиру по-різному, а зайве питання коштує один клік.
+    duplicateKey: (meta) => {
+      const service = (meta as { service?: unknown } | null)?.service
+      return typeof service === 'string' ? service : null
+    },
   },
 }
 

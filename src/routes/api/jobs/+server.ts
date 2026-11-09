@@ -11,6 +11,7 @@ import { sanitizeJobTitle, sanitizeJobDescription } from '$lib/server/job-copy'
 import { getDistricts } from '$lib/server/reference'
 import { cityDistricts, findDistrict } from '$lib/geo/districts'
 import { matchingFor } from '$lib/categories/matching'
+import { findDuplicateJob } from '$lib/server/job-duplicates'
 import type { RequestHandler } from './$types'
 
 // GET тут навмисно немає: пагіновану видачу заявок (і «мої», і стрічку
@@ -24,6 +25,9 @@ import type { RequestHandler } from './$types'
  * Категорія фіксована (прибирання). metadata валідується конфігом категорії,
  * title генерується сервером із metadata (клієнтському title не довіряємо),
  * місто й район беруться з профілю клієнта. Бюджет не питаємо.
+ *
+ * Схожа відкрита заявка вже є — 409 `{ message, duplicate }` без створення;
+ * повтор із `allowDuplicate: true` створює (`$lib/server/job-duplicates`).
  */
 export const POST: RequestHandler = async ({ request, locals }) => {
   const user = requireApiUser(locals)
@@ -75,14 +79,22 @@ export const POST: RequestHandler = async ({ request, locals }) => {
   const city = me?.city
   if (!city) throw error(400, 'Спочатку вкажіть місто у профілі')
 
-  const [categoryExists, cityExists, allDistricts] = await Promise.all([
-    prisma.category.findUnique({
-      where: { slug: CATEGORY_SLUG },
-      select: { id: true },
-    }),
-    prisma.city.findUnique({ where: { slug: city }, select: { id: true } }),
-    getDistricts(),
-  ])
+  // Дубль питаємо, доки людина не сказала «Все одно створити»
+  // ($lib/server/job-duplicates). Явний `true`, не будь-яке truthy.
+  const allowDuplicate = body.allowDuplicate === true
+
+  const [categoryExists, cityExists, allDistricts, duplicate] =
+    await Promise.all([
+      prisma.category.findUnique({
+        where: { slug: CATEGORY_SLUG },
+        select: { id: true },
+      }),
+      prisma.city.findUnique({ where: { slug: city }, select: { id: true } }),
+      getDistricts(),
+      allowDuplicate
+        ? null
+        : findDuplicateJob(user.id, CATEGORY_SLUG, metadata),
+    ])
 
   // Район — теж із профілю, а не з тіла запиту: з нього рахуються кільця
   // розсилки, і підставити чужий район означало б покликати не тих майстрів.
@@ -91,6 +103,15 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     findDistrict(cityDistricts(allDistricts, city), me?.district)?.slug ?? null
   if (!categoryExists) throw error(500, 'Категорію прибирання не налаштовано')
   if (!cityExists) throw error(400, 'Місто не знайдено')
+
+  // Після решти перевірок: «Все одно створити» не має впертись у помилку,
+  // яку можна було показати одразу. Заявку не створено — розсилки немає.
+  if (duplicate) {
+    return json(
+      { message: 'Схожа заявка вже шукає майстра', duplicate },
+      { status: 409 },
+    )
+  }
 
   const expiresAt = new Date(Date.now() + JOB_LIFETIME_MS)
 

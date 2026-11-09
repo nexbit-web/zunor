@@ -77,6 +77,9 @@ export async function loadCandidates(
       role: 'MASTER',
       city: job.city,
       id: { not: job.clientId },
+      // Забанений не отримує заявок: увійти він не може, а покликаним
+      // рахувався б — і остання хвиля думала б, що заявку вже побачили.
+      banned: false,
       masterProfile: {
         isActive: true,
         categories: { has: job.category },

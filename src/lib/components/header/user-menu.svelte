@@ -13,12 +13,9 @@
   import CircleUserRound from '$lib/components/icons/set/circle-user-round.svelte'
   import Settings from '$lib/components/icons/set/settings.svelte'
   import LogOut from '$lib/components/icons/set/log-out.svelte'
-  import { signOut } from '$lib/auth-client'
-  import { goto, invalidateAll } from '$app/navigation'
   import { page } from '$app/state'
-  import { chatStore } from '$lib/stores/chat-store.svelte'
-  import { disconnectPusher } from '$lib/pusher-client'
   import toast from 'svelte-hot-french-toast'
+  import { signOutAndGo } from '$lib/utils/sign-out'
 
   let { onnavigate }: { onnavigate: (url: string) => void } = $props()
 
@@ -43,14 +40,7 @@
     signingOut = true
 
     try {
-      // Спершу рвемо реалтайм: інакше лишиться відкритий сокет
-      // на канал користувача, якого вже немає в сесії.
-      chatStore.unsubscribeAll()
-      disconnectPusher()
-
-      await signOut()
-      await invalidateAll()
-      await goto('/')
+      await signOutAndGo('/')
       toast('До зустрічі!', { icon: '👋' })
     } catch {
       signingOut = false

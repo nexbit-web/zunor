@@ -3,10 +3,11 @@ import { json, error } from '@sveltejs/kit'
 import { prisma } from '$lib/server/prisma'
 import { CRON_SECRET } from '$env/static/private'
 import { resumeDispatch } from '$lib/server/dispatch'
+import { sendDayBeforeReminders } from '$lib/server/reminders'
 import type { RequestHandler } from './$types'
 
 /**
- * GET /api/cron?task=auto-expire|dispatch-waves|all
+ * GET /api/cron?task=auto-expire|dispatch-waves|reminders|all
  * Авторизація: CRON_SECRET в Authorization: Bearer ...
  *
  * dispatch-waves — СТРАХОВКА, а не основний механізм: хвилі ведуть таймери
@@ -14,8 +15,12 @@ import type { RequestHandler } from './$types'
  * Крон кличе те саме відновлення — на випадок, якщо процес жив, а хвиля
  * вичерпала повтори.
  *
- * Розклад: dispatch-waves — раз на 30 хвилин, auto-expire — раз на добу.
- * Частіше ставити не можна, причина — у scheduler.ts.
+ * reminders — теж страховка: нагадування за день до прибирання шле
+ * таймер процесу о 18:00 за Києвом. Повтор того ж дня нічого не шле.
+ *
+ * Розклад: dispatch-waves — раз на 30 хвилин, auto-expire — раз на добу,
+ * reminders — раз на добу, о 18:05 за Києвом. Частіше ставити не можна,
+ * причина — у scheduler.ts.
  */
 
 interface CronResult {
@@ -56,6 +61,10 @@ export const GET: RequestHandler = async ({ url, request }) => {
 
   if (task === 'dispatch-waves' || task === 'all') {
     results.push(await runDispatchWaves())
+  }
+
+  if (task === 'reminders' || task === 'all') {
+    results.push(await runReminders())
   }
 
   return json({
@@ -105,5 +114,15 @@ async function runDispatchWaves(): Promise<CronResult> {
       affected: 0,
       error: err instanceof Error ? err.message : 'Unknown error',
     }
+  }
+}
+
+/** Нагадування за день до прибирання — те саме, що шле таймер процесу. */
+async function runReminders(): Promise<CronResult> {
+  try {
+    return { task: 'reminders', ok: true, affected: await sendDayBeforeReminders() }
+  } catch (err) {
+    console.error('[cron] reminders failed:', err)
+    return { task: 'reminders', ok: false, affected: 0, error: 'reminders failed' }
   }
 }

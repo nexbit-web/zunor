@@ -35,6 +35,11 @@ model User {
   banReason            String?
   banExpires           DateTime?
   aiProfile            Json?
+  /// Чат із ботом Zunor у Telegram — туди дублюються сповіщення
+  /// ($lib/server/telegram). null — Telegram не підключено. Рядком, бо
+  /// id чату в Telegram виходить за межі Int.
+  telegramChatId       String?           @unique
+  telegramLinkedAt     DateTime?
   accounts             Account[]
   chats                ChatMember[]
   jobs                 Job[]             @relation("ClientJobs")
@@ -48,6 +53,10 @@ model User {
   proposals            Proposal[]        @relation("MasterProposals")
   authoredReviews      Review[]          @relation("AuthorReviews")
   sessions             Session[]
+  reportsFiled         Report[]          @relation("ReportsFiled")
+  reportsReceived      Report[]          @relation("ReportsReceived")
+  staffTwoFactor       StaffTwoFactor?
+  adminActions         AdminAction[]     @relation("AdminActions")
 
   @@index([username])
   @@index([role, city])
@@ -112,6 +121,9 @@ model Job {
   viewsCount           Int        @default(0)
   expiresAt            DateTime
   closedAt             DateTime?
+  /// Коли клієнт востаннє змінив заявку (api/jobs/[id] PATCH). Не updatedAt:
+  /// той рухають і перегляди, і лічильник пропозицій. null — не змінювали.
+  editedAt             DateTime?
   createdAt            DateTime   @default(now())
   updatedAt            DateTime   @updatedAt
   selectedOrderId      String?    @unique
@@ -436,6 +448,73 @@ model Verification {
   @@map("verification")
 }
 
+/// Скарга однієї людини на іншу («Поскаржитися» в замовленні, чаті,
+/// профілі чи на заявці). Розглядає модератор у CRM: про нову скаргу її
+/// повідомляє подія report:new на службовому каналі Pusher.
+model Report {
+  id           String       @id @default(cuid())
+  reporterId   String
+  targetId     String
+  /// Причина — закритий набір ($lib/reports/reasons.ts), спільний для
+  /// браузера й сервера.
+  reason       String
+  text         String?
+  /// Де це сталось — щоб модератор відкрив контекст одним кліком. Не
+  /// більше одного; без жодного — скарга з профілю.
+  orderId      String?
+  chatId       String?
+  jobId        String?
+  status       ReportStatus @default(OPEN)
+  /// Рішення пише CRM.
+  resolvedAt   DateTime?
+  resolvedById String?
+  resolution   String?
+  createdAt    DateTime     @default(now())
+  reporter     User         @relation("ReportsFiled", fields: [reporterId], references: [id], onDelete: Cascade)
+  target       User         @relation("ReportsReceived", fields: [targetId], references: [id], onDelete: Cascade)
+
+  //   [status, createdAt]               — черга модератора: відкриті за віком
+  //   [targetId]                        — усі скарги на людину
+  //   [reporterId, targetId, createdAt] — повтор тієї самої скарги за добу
+  @@index([status, createdAt])
+  @@index([targetId])
+  @@index([reporterId, targetId, createdAt])
+}
+
+/// Другий фактор співробітника для входу в /admin — код із застосунку
+/// (Google Authenticator тощо), $lib/server/admin/totp.ts.
+model StaffTwoFactor {
+  userId    String    @id
+  /// Секрет TOTP, зашифрований AES-256-GCM (ключ — з BETTER_AUTH_SECRET):
+  /// витік бази сам по собі не дає генерувати коди.
+  secret    String
+  /// null — налаштування почате, але перший код ще не підтверджено.
+  enabledAt DateTime?
+  /// Останній прийнятий 30-секундний крок: той самий код двічі не пройде.
+  lastStep  Int?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// Журнал дій в адмінці: хто, що, над ким і коли. Лише дописується —
+/// змінити чи стерти запис з адмінки неможливо.
+model AdminAction {
+  id         String   @id @default(cuid())
+  actorId    String
+  /// Ключ дії: verify.approve, report.resolve, user.ban, staff.role…
+  action     String
+  targetType String?
+  targetId   String?
+  details    Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+  actor      User     @relation("AdminActions", fields: [actorId], references: [id])
+
+  @@index([createdAt])
+  @@index([actorId, createdAt])
+  @@index([targetType, targetId])
+}
+
 model DispatchEvent {
   id          String    @id @default(cuid())
   jobId       String
@@ -518,4 +597,10 @@ enum MessageType {
 enum ReviewDirection {
   CLIENT_TO_MASTER
   MASTER_TO_CLIENT
+}
+
+enum ReportStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
 }

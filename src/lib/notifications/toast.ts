@@ -9,14 +9,20 @@ import toast, { useToasterState } from 'svelte-hot-french-toast'
 import type { Component } from 'svelte'
 import Island, { type IslandProps, type IslandTone } from './island.svelte'
 import { linkFor, type Notification } from './types'
+import { KIND_TEXT, FALLBACK_TEXT, type KindText } from './kinds'
 import ClipboardIcon from '$lib/components/icons/set/clipboard-list.svelte'
 import MessageIcon from '$lib/components/icons/set/message-square-text.svelte'
 import HandshakeIcon from '$lib/components/icons/set/handshake.svelte'
 import TimerIcon from '$lib/components/icons/set/timer.svelte'
 import CircleCheckIcon from '$lib/components/icons/set/circle-check.svelte'
 import CalendarXIcon from '$lib/components/icons/set/calendar-x.svelte'
+import CalendarClockIcon from '$lib/components/icons/set/calendar-clock.svelte'
+import PencilIcon from '$lib/components/icons/set/pencil.svelte'
 import UserSearchIcon from '$lib/components/icons/set/user-round-search.svelte'
 import BellIcon from '$lib/components/icons/set/bell.svelte'
+import BadgeCheckIcon from '$lib/components/icons/set/badge-check.svelte'
+import CircleAlertIcon from '$lib/components/icons/set/circle-alert.svelte'
+import FlagIcon from '$lib/components/icons/set/flag.svelte'
 
 /** Довше за звичайний тост: тут є що прочитати й на що натиснути. */
 const DURATION = 10_000
@@ -30,66 +36,61 @@ const CARD_SPACE = 200
 
 const ID_PREFIX = 'notification-'
 
-interface IslandKind {
-  /** Одне-два слова над заголовком картки. */
-  label: string
-  /** Напис на кнопці — що саме станеться, а не «Відкрити». */
-  action: string
+interface IslandKind extends KindText {
   icon: Component<{ class?: string }>
   tone: IslandTone
 }
 
+// Слова (ярлик і напис дії) — з kinds.ts, спільні з Telegram; тут лише
+// те, що належить самій картці: іконка й тон.
 const KINDS: Record<string, IslandKind> = {
-  NEW_JOB: {
-    label: 'Нова заявка',
-    action: 'Переглянути заявку',
-    icon: ClipboardIcon,
-    tone: 'accent',
-  },
-  NEW_PROPOSAL: {
-    label: 'Новий відгук',
-    action: 'Переглянути відгук',
-    icon: MessageIcon,
-    tone: 'accent',
-  },
+  NEW_JOB: { ...KIND_TEXT.NEW_JOB, icon: ClipboardIcon, tone: 'accent' },
+  NEW_PROPOSAL: { ...KIND_TEXT.NEW_PROPOSAL, icon: MessageIcon, tone: 'accent' },
   PROPOSAL_ACCEPTED: {
-    label: 'Вас обрали',
-    action: 'Відкрити замовлення',
+    ...KIND_TEXT.PROPOSAL_ACCEPTED,
     icon: HandshakeIcon,
     tone: 'success',
   },
-  ORDER_STARTED: {
-    label: 'Робота почалась',
-    action: 'Відкрити замовлення',
-    icon: TimerIcon,
-    tone: 'accent',
-  },
+  ORDER_STARTED: { ...KIND_TEXT.ORDER_STARTED, icon: TimerIcon, tone: 'accent' },
   ORDER_COMPLETED: {
-    label: 'Роботу завершено',
-    action: 'Залишити відгук',
+    ...KIND_TEXT.ORDER_COMPLETED,
     icon: CircleCheckIcon,
     tone: 'success',
   },
   ORDER_CANCELLED: {
-    label: 'Скасовано',
-    action: 'Деталі замовлення',
+    ...KIND_TEXT.ORDER_CANCELLED,
     icon: CalendarXIcon,
     tone: 'danger',
   },
+  ORDER_REMINDER: {
+    ...KIND_TEXT.ORDER_REMINDER,
+    icon: CalendarClockIcon,
+    tone: 'accent',
+  },
   JOB_REOPENED: {
-    label: 'Шукаємо нового',
-    action: 'До заявки',
+    ...KIND_TEXT.JOB_REOPENED,
     icon: UserSearchIcon,
     tone: 'warning',
   },
+  JOB_UPDATED: { ...KIND_TEXT.JOB_UPDATED, icon: PencilIcon, tone: 'warning' },
+  VERIFICATION_APPROVED: {
+    ...KIND_TEXT.VERIFICATION_APPROVED,
+    icon: BadgeCheckIcon,
+    tone: 'success',
+  },
+  VERIFICATION_REJECTED: {
+    ...KIND_TEXT.VERIFICATION_REJECTED,
+    icon: CircleAlertIcon,
+    tone: 'warning',
+  },
+  REPORT_RESOLVED: {
+    ...KIND_TEXT.REPORT_RESOLVED,
+    icon: FlagIcon,
+    tone: 'accent',
+  },
 }
 
-const FALLBACK: IslandKind = {
-  label: 'Сповіщення',
-  action: 'Відкрити',
-  icon: BellIcon,
-  tone: 'accent',
-}
+const FALLBACK: IslandKind = { ...FALLBACK_TEXT, icon: BellIcon, tone: 'accent' }
 
 /**
  * Звільняє місце під нову картку. Бібліотека складає тости стовпчиком

@@ -50,6 +50,8 @@
     viewsCount: number
     createdAt: string
     expiresAt: string
+    /** Клієнт змінював заявку — майстрові варто знати, що умови нові. */
+    editedAt?: string | null
     effort: number | null
     budgetMinCents: number | null
     budgetMaxCents: number | null
@@ -166,6 +168,7 @@
   const published = $derived.by(() => {
     const parts = [
       `Опубліковано ${formatRelative(job.createdAt)}`,
+      ...(job.editedAt ? [`змінено ${formatRelative(job.editedAt)}`] : []),
       `${job.viewsCount} ${pluralUk(job.viewsCount, 'перегляд', 'перегляди', 'переглядів')}`,
     ]
     if (

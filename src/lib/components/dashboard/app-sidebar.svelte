@@ -42,6 +42,9 @@
   } from '$lib/components/icons'
   import PanelLeftIcon from '$lib/components/icons/set/panel-left.svelte'
   import CloseIcon from '$lib/components/icons/set/x.svelte'
+  import HelpIcon from '$lib/components/icons/set/circle-help.svelte'
+  import ShieldIcon from '$lib/components/icons/set/shield-check.svelte'
+  import { isStaff } from '$lib/admin/roles'
   import type { IconProps } from '$lib/components/icons/stroke-icon.svelte'
 
   const ICON_SIZE = 20
@@ -163,6 +166,9 @@
 
   const pathname = $derived(page.url.pathname)
   const settingsActive = $derived(pathname.startsWith('/dashboard/settings'))
+  const helpActive = $derived(pathname.startsWith('/dashboard/help'))
+  // Вхід в адмінку — лише співробітникам (роль із бази, як і `role` вище).
+  const staff = $derived(isStaff(page.data.role))
 
   // Перехід за пунктом меню на телефоні закриває шторку: інакше вона
   // лишалась би поверх сторінки, на яку користувач щойно пішов.
@@ -376,6 +382,52 @@
 
   <Sidebar.Footer>
     <Sidebar.Menu class="gap-0.5">
+      {#if staff}
+        <Sidebar.MenuItem>
+          <Sidebar.MenuButton
+            class={MENU_BUTTON_CLASS}
+            tooltipContent="Адмінка"
+            tooltipContentProps={{ sideOffset: 8, arrowClasses: 'hidden' }}
+          >
+            {#snippet child({ props })}
+              <a {...props} href="/admin" onclick={closeOnMobile}>
+                <span class="nav-icon flex shrink-0">
+                  <ShieldIcon size={ICON_SIZE} strokeWidth={ICON_STROKE} />
+                </span>
+                <span class="group-data-[collapsible=icon]:hidden">
+                  Адмінка
+                </span>
+              </a>
+            {/snippet}
+          </Sidebar.MenuButton>
+        </Sidebar.MenuItem>
+      {/if}
+      <!-- Допомога — біля налаштувань, а не серед розділів угорі: туди
+           йдуть рідко, і в робочому меню вона була б шумом. -->
+      <Sidebar.MenuItem>
+        <Sidebar.MenuButton
+          class={MENU_BUTTON_CLASS}
+          isActive={helpActive}
+          tooltipContent="Допомога"
+          tooltipContentProps={{ sideOffset: 8, arrowClasses: 'hidden' }}
+        >
+          {#snippet child({ props })}
+            <a
+              {...props}
+              href="/dashboard/help"
+              aria-current={helpActive ? 'page' : undefined}
+              onclick={closeOnMobile}
+            >
+              <span class="nav-icon flex shrink-0">
+                <HelpIcon size={ICON_SIZE} strokeWidth={ICON_STROKE} />
+              </span>
+              <span class="group-data-[collapsible=icon]:hidden">
+                Допомога
+              </span>
+            </a>
+          {/snippet}
+        </Sidebar.MenuButton>
+      </Sidebar.MenuItem>
       <Sidebar.MenuItem>
         <Sidebar.MenuButton
           class={MENU_BUTTON_CLASS}

@@ -7,6 +7,12 @@ vi.mock('$lib/server/prisma', async () => ({
   prisma: (await import('../helpers/prisma-mock')).prisma,
 }))
 vi.mock('$lib/server/dispatch', async () => await import('../helpers/infra'))
+// Саму розсилку нагадувань покриває reminders.test.ts; тут — лише що крон
+// її кличе й не падає разом із нею.
+const { sendDayBeforeReminders } = vi.hoisted(() => ({
+  sendDayBeforeReminders: vi.fn(async (): Promise<number> => 0),
+}))
+vi.mock('$lib/server/reminders', () => ({ sendDayBeforeReminders }))
 
 const { GET } = await import('../../routes/api/cron/+server')
 
@@ -31,6 +37,7 @@ beforeEach(() => {
   resetInfra()
   prisma.job.updateMany.mockResolvedValue({ count: 0 })
   prisma.job.findMany.mockResolvedValue([])
+  sendDayBeforeReminders.mockReset().mockResolvedValue(0)
 })
 
 describe('авторизація', () => {
@@ -93,6 +100,27 @@ describe('задачі', () => {
   it('task=auto-expire не запускає хвилі', async () => {
     await GET(cronEvent(auth, 'auto-expire'))
     expect(resumeDispatch).not.toHaveBeenCalled()
+    expect(sendDayBeforeReminders).not.toHaveBeenCalled()
+  })
+
+  it('reminders шле нагадування й рахує замовлення', async () => {
+    sendDayBeforeReminders.mockResolvedValue(4)
+
+    const body = await okJson<{ results: { task: string; affected: number }[] }>(
+      () => GET(cronEvent(auth, 'reminders')),
+    )
+    expect(sendDayBeforeReminders).toHaveBeenCalledTimes(1)
+    expect(body.results).toEqual([{ task: 'reminders', ok: true, affected: 4 }])
+  })
+
+  it('збій нагадувань — ok:false, а не 500', async () => {
+    sendDayBeforeReminders.mockRejectedValue(new Error('neon timeout'))
+
+    const body = await okJson<{ ok: boolean; results: { task: string }[] }>(() =>
+      GET(cronEvent(auth, 'reminders')),
+    )
+    expect(body.ok).toBe(false)
+    expect(body.results[0].task).toBe('reminders')
   })
 
   // Крон — та сама страховка, що й старт процесу: одне відновлення, а не

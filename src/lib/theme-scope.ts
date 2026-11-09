@@ -12,7 +12,12 @@
 //  — далі — ефект у кореневому лейауті (`isThemedPath` + `mode.current`).
 // Міняєш правило — міняй обидва місця.
 
-/** Шлях, на якому діє обрана тема (кабінет). */
+/** Шлях, на якому діє обрана тема (кабінет і адмінка). */
 export function isThemedPath(pathname: string): boolean {
-  return pathname === '/dashboard' || pathname.startsWith('/dashboard/')
+  return (
+    pathname === '/dashboard' ||
+    pathname.startsWith('/dashboard/') ||
+    pathname === '/admin' ||
+    pathname.startsWith('/admin/')
+  )
 }

@@ -14,6 +14,7 @@
     maxItems = 6,
     uploading = $bindable(false),
     savedIds,
+    deferRemove = false,
     onError,
   }: {
     images: string[]
@@ -27,6 +28,12 @@
      * не позначаємо (онбординг, де незбережене все).
      */
     savedIds?: string[]
+    /**
+     * Прибрати фото лише з форми, а файл стирає сервер після «Зберегти»
+     * (редагування заявки). Інакше «Скасувати» лишало б заявку з
+     * посиланням на вже стертий файл.
+     */
+    deferRemove?: boolean
     onError?: (msg: string) => void
   } = $props()
 
@@ -142,6 +149,11 @@
 
   async function remove(i: number) {
     const publicId = publicIds[i]
+    if (deferRemove) {
+      images = images.filter((_, idx) => idx !== i)
+      publicIds = publicIds.filter((_, idx) => idx !== i)
+      return
+    }
     removingIdx = i
 
     try {

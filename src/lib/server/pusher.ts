@@ -44,6 +44,8 @@ export const events = {
   orderStatus: 'order:status',
   typing: 'client-typing',
   moderationNew: 'moderation:new',
+  /** Нова скарга (Report) — у CRM-модераторів. Несе лише id і причину. */
+  reportNew: 'report:new',
 } as const
 
 /**

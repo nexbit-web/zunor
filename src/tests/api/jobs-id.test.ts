@@ -13,6 +13,8 @@ vi.mock('$lib/server/prisma', async () => ({
   prisma: (await import('../helpers/prisma-mock')).prisma,
 }))
 vi.mock('$lib/server/dispatch', async () => await import('../helpers/infra'))
+vi.mock('$lib/server/notifications', async () => await import('../helpers/infra'))
+vi.mock('$lib/server/cloudinary', async () => await import('../helpers/infra'))
 
 const { GET, DELETE } = await import('../../routes/api/jobs/[id]/+server')
 

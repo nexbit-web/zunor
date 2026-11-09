@@ -217,6 +217,12 @@ describe('сторінка замовлення /dashboard/orders/[id]', () => {
     prisma.order.findUnique.mockResolvedValue(order)
   })
 
+  it('службова відмітка нагадування в «Історію подій» не йде', async () => {
+    await orderPage.load(orderEvent(CLIENT))
+    const include = prisma.order.findUnique.mock.calls[0][0].include
+    expect(include.events.where).toEqual({ type: { notIn: ['REMINDER_SENT'] } })
+  })
+
   it('гість — редірект на логін', async () => {
     const location = await redirectOf(() =>
       orderPage.load(

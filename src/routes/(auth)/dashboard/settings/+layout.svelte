@@ -10,7 +10,6 @@
   // кожен розділ — справжній маршрут зі своїм завантажувачем, і окремий
   // механізм підвантаження поверх них лише дублював роутер.
 
-  import { goto, invalidateAll } from '$app/navigation'
   import { page } from '$app/state'
   import {
     sectionsForRole,
@@ -19,12 +18,10 @@
   } from '$lib/components/settings'
   import { Spinner } from '$lib/components/ui/spinner'
   import * as AlertDialog from '$lib/components/ui/alert-dialog'
-  import { signOut } from '$lib/auth-client'
-  import { chatStore } from '$lib/stores/chat-store.svelte'
-  import { disconnectPusher } from '$lib/pusher-client'
   import { WaveIcon } from '$lib/components/icons'
   import LogOut from '$lib/components/icons/set/log-out.svelte'
   import toast from 'svelte-hot-french-toast'
+  import { signOutAndGo } from '$lib/utils/sign-out'
 
   let { children } = $props()
 
@@ -65,14 +62,7 @@
     signingOut = true
 
     try {
-      // Спершу рвемо реалтайм: інакше лишиться відкритий сокет
-      // на канал користувача, якого вже немає в сесії.
-      chatStore.unsubscribeAll()
-      disconnectPusher()
-
-      await signOut()
-      await invalidateAll()
-      await goto('/')
+      await signOutAndGo('/')
       toast('До зустрічі!', { icon: WaveIcon })
     } catch {
       signingOut = false

@@ -1,6 +1,7 @@
 import { prisma } from '$lib/server/prisma'
 import { requireUser } from '$lib/server/guards'
 import { error } from '@sveltejs/kit'
+import { SERVICE_EVENTS } from '$lib/server/order-events'
 import type { PageServerLoad } from './$types'
 
 export const load: PageServerLoad = async ({ params, locals }) => {
@@ -40,6 +41,9 @@ export const load: PageServerLoad = async ({ params, locals }) => {
         },
       },
       events: {
+        // Службова відмітка нагадування (server/reminders) — аудит, не
+        // подія для людей: в «Історії подій» їй не місце.
+        where: { type: { notIn: [...SERVICE_EVENTS] } },
         orderBy: { createdAt: 'asc' },
         select: {
           id: true,

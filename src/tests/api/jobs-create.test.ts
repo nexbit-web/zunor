@@ -42,6 +42,8 @@ function primeDb() {
   prisma.user.findUnique.mockResolvedValue({ city: 'odesa' })
   prisma.category.findUnique.mockResolvedValue({ id: 'cat-1' })
   prisma.city.findUnique.mockResolvedValue({ id: 'city-1' })
+  // Відкритих заявок у клієнта немає — дубля не буде.
+  prisma.job.findMany.mockResolvedValue([])
   prisma.job.create.mockResolvedValue({
     id: 'job-1',
     title: 'Прибирання квартири',
@@ -318,6 +320,7 @@ describe('успішне створення', () => {
       prisma.user.findUnique.mockResolvedValue({ city: 'odesa', district })
       prisma.category.findUnique.mockResolvedValue({ id: 'cat-1' })
       prisma.city.findUnique.mockResolvedValue({ id: 'city-1' })
+      prisma.job.findMany.mockResolvedValue([])
       prisma.job.create.mockResolvedValue({ id: 'job-1', title: 'Т' })
 
       const res = (await POST(
@@ -335,6 +338,136 @@ describe('успішне створення', () => {
     const days = (expiresAt.getTime() - Date.now()) / 86_400_000
     expect(days).toBeGreaterThan(6.99)
     expect(days).toBeLessThanOrEqual(7)
+  })
+})
+
+// Друга заявка на те саме — найчастіше випадковість (повтор після збою,
+// форма після чату). Майстрам це дві однакові картки, тож спершу питаємо.
+describe('схожа відкрита заявка', () => {
+  const openJob = (metadata: Record<string, unknown>, id = 'job-old') => ({
+    id,
+    title: 'Стандартне прибирання квартири',
+    metadata: { premise: 'apartment', rooms: '2', ...metadata },
+    createdAt: new Date(),
+  })
+
+  it('та сама послуга — 409 з тією заявкою, нову не створено', async () => {
+    prisma.job.findMany.mockResolvedValue([
+      openJob({ service: 'standard', when: 'tomorrow' }),
+    ])
+
+    const res = (await POST(
+      createEvent(freshUser(), { metadata: validMetadata }),
+    )) as Response
+
+    expect(res.status).toBe(409)
+    const body = await res.json()
+    expect(body.duplicate).toMatchObject({
+      id: 'job-old',
+      title: 'Стандартне прибирання квартири',
+    })
+    expect(body.duplicate.day).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    expect(prisma.job.create).not.toHaveBeenCalled()
+    expect(startWaves).not.toHaveBeenCalled()
+  })
+
+  it('«Все одно створити» (allowDuplicate: true) — створює, дублів не шукає', async () => {
+    prisma.job.findMany.mockResolvedValue([
+      openJob({ service: 'standard', when: 'today' }),
+    ])
+
+    const res = (await POST(
+      createEvent(freshUser(), {
+        metadata: validMetadata,
+        allowDuplicate: true,
+      }),
+    )) as Response
+
+    expect(res.status).toBe(201)
+    expect(prisma.job.findMany).not.toHaveBeenCalled()
+    expect(prisma.job.create).toHaveBeenCalledTimes(1)
+  })
+
+  // Лише буквальне true: рядок чи 1 з кривого клієнта не вимикає питання.
+  it('allowDuplicate не true — питання лишається', async () => {
+    prisma.job.findMany.mockResolvedValue([
+      openJob({ service: 'standard', when: 'today' }),
+    ])
+
+    for (const allowDuplicate of ['true', 1, 'yes']) {
+      const res = (await POST(
+        createEvent(freshUser(), { metadata: validMetadata, allowDuplicate }),
+      )) as Response
+      expect(res.status).toBe(409)
+    }
+    expect(prisma.job.create).not.toHaveBeenCalled()
+  })
+
+  it('шукає лише серед живих заявок цього клієнта, зі стелею', async () => {
+    const user = freshUser()
+    await POST(createEvent(user, { metadata: validMetadata }))
+
+    const query = prisma.job.findMany.mock.calls[0][0]
+    expect(query.where).toMatchObject({
+      clientId: user,
+      category: 'cleaning',
+      status: 'OPEN',
+    })
+    expect(query.where.expiresAt.gt).toBeInstanceOf(Date)
+    expect(query.take).toBeGreaterThan(0)
+    expect(query.take).toBeLessThanOrEqual(50)
+  })
+
+  it('інша послуга — не дубль', async () => {
+    prisma.job.findMany.mockResolvedValue([
+      openJob({ service: 'windows', when: 'today', windowsCount: 3 }),
+    ])
+
+    const res = (await POST(
+      createEvent(freshUser(), { metadata: validMetadata }),
+    )) as Response
+    expect(res.status).toBe(201)
+  })
+
+  // День минув, а крон ще не закрив заявку — відсилати до неї нема чого.
+  it('заявка з днем у минулому — не дубль', async () => {
+    prisma.job.findMany.mockResolvedValue([
+      openJob({ service: 'standard', when: '2020-01-01' }),
+    ])
+
+    const res = (await POST(
+      createEvent(freshUser(), { metadata: validMetadata }),
+    )) as Response
+    expect(res.status).toBe(201)
+  })
+
+  it('кілька схожих — показуємо найновішу', async () => {
+    prisma.job.findMany.mockResolvedValue([
+      openJob({ service: 'standard', when: 'today' }, 'job-new'),
+      openJob({ service: 'standard', when: 'tomorrow' }, 'job-older'),
+    ])
+
+    const res = (await POST(
+      createEvent(freshUser(), { metadata: validMetadata }),
+    )) as Response
+    expect((await res.json()).duplicate.id).toBe('job-new')
+    expect(prisma.job.findMany.mock.calls[0][0].orderBy).toEqual({
+      createdAt: 'desc',
+    })
+  })
+
+  // «Все одно створити» не має впертись у помилку, яку можна було
+  // показати одразу.
+  it('без міста в профілі — 400, а не питання про дубль', async () => {
+    prisma.user.findUnique.mockResolvedValue({ city: null })
+    prisma.job.findMany.mockResolvedValue([
+      openJob({ service: 'standard', when: 'today' }),
+    ])
+
+    const res = await failure(() =>
+      POST(createEvent(freshUser(), { metadata: validMetadata })),
+    )
+    expect(res.status).toBe(400)
   })
 })
 

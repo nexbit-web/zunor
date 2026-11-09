@@ -15,6 +15,8 @@
   import MoreVertical from '$lib/components/icons/set/more-vertical.svelte'
   import UserIcon from '$lib/components/icons/set/user.svelte'
   import LinkIcon from '$lib/components/icons/set/link.svelte'
+  import FlagIcon from '$lib/components/icons/set/flag.svelte'
+  import ReportDialog from '$lib/components/reports/report-dialog.svelte'
   import { copyToClipboard } from '$lib/utils/clipboard'
   import {
     Avatar,
@@ -55,6 +57,7 @@
 
   // ─── Форма відгуку ───
   let formOpen = $state(false)
+  let reportOpen = $state(false)
   let message = $state('')
   let priceUah = $state<number | ''>('')
   let estimatedDays = $state<number | ''>('')
@@ -229,10 +232,28 @@
           >
             <LinkIcon /> Скопіювати посилання
           </DropdownMenu.Item>
+          <DropdownMenu.Separator />
+          <DropdownMenu.Item
+            variant="destructive"
+            class="cursor-pointer"
+            onSelect={() => (reportOpen = true)}
+          >
+            <FlagIcon /> Поскаржитися
+          </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Root>
     {/snippet}
   </JobSummary>
+
+  <!-- Скарга на заявку — це скарга на її автора, з заявкою як контекстом
+       (фейкова заявка, вимоги поза Zunor). -->
+  <ReportDialog
+    bind:open={reportOpen}
+    targetId={data.job.client.id}
+    targetName={data.job.client.name}
+    targetRole="CLIENT"
+    context={{ jobId: data.job.id }}
+  />
 
   {#if data.proposals.length > 0}
     <!-- Майстер уже подав пропозицію -->

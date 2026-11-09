@@ -50,6 +50,7 @@ export const events = {
   orderStatus: 'order:status',
   typing: 'client-typing',
   moderationNew: 'moderation:new',
+  reportNew: 'report:new',
 } as const
 
 // ─── $lib/server/notifications ───
@@ -58,9 +59,15 @@ export const Notify = {
   newProposal: vi.fn(async () => {}),
   proposalAccepted: vi.fn(async () => {}),
   orderStarted: vi.fn(async () => {}),
+  orderReminderClient: vi.fn(async () => {}),
+  orderReminderMaster: vi.fn(async () => {}),
+  jobUpdated: vi.fn(async () => {}),
   orderCompleted: vi.fn(async () => {}),
   orderCancelled: vi.fn(async () => {}),
   jobReopened: vi.fn(async () => {}),
+  verificationApproved: vi.fn(async () => {}),
+  verificationRejected: vi.fn(async () => {}),
+  reportResolved: vi.fn(async () => {}),
 }
 
 export const notify = vi.fn(async () => {})

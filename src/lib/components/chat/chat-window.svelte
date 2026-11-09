@@ -34,6 +34,11 @@
   import Volume2 from '$lib/components/icons/set/volume-2.svelte'
   import VolumeX from '$lib/components/icons/set/volume-x.svelte'
   import X from '$lib/components/icons/set/x.svelte'
+  import MoreVertical from '$lib/components/icons/set/more-vertical.svelte'
+  import UserIcon from '$lib/components/icons/set/user.svelte'
+  import Flag from '$lib/components/icons/set/flag.svelte'
+  import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
+  import ReportDialog from '$lib/components/reports/report-dialog.svelte'
   import { photoLightbox } from '$lib/utils/photo-lightbox'
   import { getPusher } from '$lib/pusher-client'
   import {
@@ -142,6 +147,18 @@
   let activeMatchId = $state<string | null>(null)
 
   const peer = $derived(chat.peer)
+
+  // Скарга зі шапки чату. Тип ролі тут старий (FREELANCER), а з бази
+  // приходить MASTER; у старих чатах роль може й не бути — тоді майстра
+  // видно з handle: публічна сторінка є лише в майстра.
+  let reportOpen = $state(false)
+  const peerRole = $derived<'MASTER' | 'CLIENT'>(
+    String(peer.role) === 'MASTER' ||
+      peer.role === 'FREELANCER' ||
+      !!peer.username
+      ? 'MASTER'
+      : 'CLIENT',
+  )
 
   const isOnline = $derived(
     !!peerSeenAt && now - peerSeenAt.getTime() < ONLINE_MS,
@@ -1063,9 +1080,46 @@
                   <Volume2 class="size-5.25" />
                 {/if}
               </Button>
+
+              <!-- Меню чату, як ⋮ у Telegram: рідкісні дії, яким не місце
+                   окремими кнопками в шапці. -->
+              <DropdownMenu.Root>
+                <DropdownMenu.Trigger
+                  aria-label="Ще дії"
+                  class="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted data-[state=open]:bg-muted"
+                >
+                  <MoreVertical class="size-5.25" />
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Content align="end" sideOffset={6} class="w-56">
+                  {#if peer.username}
+                    <DropdownMenu.Item
+                      class="cursor-pointer"
+                      onSelect={() => goto(`/@${peer.username}`)}
+                    >
+                      <UserIcon /> Профіль
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Separator />
+                  {/if}
+                  <DropdownMenu.Item
+                    variant="destructive"
+                    class="cursor-pointer"
+                    onSelect={() => (reportOpen = true)}
+                  >
+                    <Flag /> Поскаржитися
+                  </DropdownMenu.Item>
+                </DropdownMenu.Content>
+              </DropdownMenu.Root>
             </div>
           {/if}
         </header>
+
+        <ReportDialog
+          bind:open={reportOpen}
+          targetId={peer.id}
+          targetName={peer.name}
+          targetRole={peerRole}
+          context={{ chatId }}
+        />
 
         <!-- ─── Знайдене: розкривається з шапки вниз ─── -->
         {#if searchOpen && resultsOpen}

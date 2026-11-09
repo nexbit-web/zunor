@@ -31,13 +31,19 @@
     </script>
 
     <!-- Палітра кабінету (in-app) і темна тема — лише в кабінеті
-         (/dashboard/**), до першого кадру. Решта сайту завжди світла й
-         на своїй палітрі. Правило те саме, що в $lib/theme-scope.ts;
-         ключ і «system» за замовчуванням — як у mode-watcher. -->
+         (/dashboard/**) і адмінці (/admin/**), до першого кадру. Решта
+         сайту завжди світла й на своїй палітрі. Правило те саме, що в
+         $lib/theme-scope.ts; ключ і «system» за замовчуванням — як у
+         mode-watcher. -->
     <script>
       try {
         var path = location.pathname
-        if (path === '/dashboard' || path.indexOf('/dashboard/') === 0) {
+        if (
+          path === '/dashboard' ||
+          path.indexOf('/dashboard/') === 0 ||
+          path === '/admin' ||
+          path.indexOf('/admin/') === 0
+        ) {
           document.documentElement.classList.add('in-app')
           var m = localStorage.getItem('mode-watcher-mode') || 'system'
           if (

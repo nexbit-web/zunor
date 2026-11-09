@@ -37,3 +37,14 @@ export function sanitizeJobDescription(raw: unknown): string | null {
   if (text.length < DESC_MIN) return null
   return text.slice(0, DESC_MAX)
 }
+
+/**
+ * Опис заявки, який людина править сама (редагування заявки). На відміну
+ * від sanitizeJobDescription, короткий текст не відкидаємо: «Є кіт» —
+ * теж опис, а порожній — свідоме «без опису» (null).
+ */
+export function sanitizeJobNote(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  const text = stripControl(raw, true).replace(/\n{3,}/g, '\n\n')
+  return text ? text.slice(0, DESC_MAX) : null
+}

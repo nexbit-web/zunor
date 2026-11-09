@@ -43,6 +43,8 @@
     ZunorResponse,
     ZunorClientMessage,
   } from '$lib/types/zunor'
+  import type { DuplicateJob } from '$lib/types/jobs'
+  import DuplicateNotice from '$lib/components/jobs/duplicate-notice.svelte'
   import { ZunorMark } from '$lib/components/icons'
   import toast from 'svelte-hot-french-toast'
   import { copyToClipboard } from '$lib/utils/clipboard'
@@ -79,6 +81,12 @@
   let streaming = $state(false) // хід агента в польоті: від запиту до фіналу
   let submitting = $state(false) // створюємо заявку через /api/jobs
   let finished = $state(false)
+  // Схожа відкрита заявка (409 від POST /api/jobs) — для КОНКРЕТНОГО драфту:
+  // новий драфт після «Змінити деталі» може бути вже про інше. raw — щоб
+  // порівнювати той самий обʼєкт, а не його проксі.
+  let duplicate = $state.raw<{ job: DuplicateJob; draft: ZunorDraft } | null>(
+    null,
+  )
   let started = $state(false)
   let copiedId = $state<number | null>(null)
   let showScrollButton = $state(false)
@@ -877,10 +885,23 @@
           description: draft.description,
           attachments: sentPhotos.map((p) => p.url),
           attachmentsPublicIds: sentPhotos.map((p) => p.publicId),
+          // Попередження на цьому драфті вже бачили — «Все одно створити».
+          allowDuplicate: duplicate?.draft === draft ? true : undefined,
         }),
       })
       const json = (await res.json().catch(() => ({}))) as {
         message?: string
+        duplicate?: DuplicateJob
+      }
+
+      // Не збій і не репліка Zunor: попередження стає на картку драфту,
+      // над кнопкою, яка тепер створює другу заявку свідомо.
+      if (res.status === 409 && json.duplicate) {
+        duplicate = { job: json.duplicate, draft }
+        submitting = false
+        await tick()
+        await revealContentEnd()
+        return
       }
 
       if (!res.ok) {
@@ -1751,6 +1772,14 @@
                   </div>
                 {/if}
 
+                {#if duplicate && duplicate.draft === m.draft}
+                  <DuplicateNotice
+                    duplicate={duplicate.job}
+                    service={m.draft.metadata.service}
+                    class="mb-3"
+                  />
+                {/if}
+
                 <button
                   type="button"
                   onclick={() => confirmOrder(m.draft)}
@@ -1766,6 +1795,8 @@
                     Зачекайте...
                   {:else if uploading}
                     Завантаження фото...
+                  {:else if duplicate && duplicate.draft === m.draft}
+                    Все одно створити
                   {:else}
                     Підтвердити заявку
                   {/if}
