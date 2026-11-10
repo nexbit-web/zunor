@@ -3,7 +3,26 @@ import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
 import { limit } from '$lib/server/rate-limit'
 import { parseAiProfile } from '$lib/server/zunor/ai-profile'
+import { loadAssistantSettings } from '$lib/server/settings-data'
 import type { RequestHandler } from './$types'
+
+/**
+ * GET /api/profile/ai-profile — анкета асистента з пресетами й лімітами
+ * (Налаштування → AI асистент у застосунку). Лише замовнику, як і запис.
+ */
+export const GET: RequestHandler = async ({ locals }) => {
+  const user = requireApiUser(locals)
+
+  const me = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { role: true },
+  })
+  if (me?.role !== 'CLIENT') {
+    throw error(403, 'Анкета доступна лише замовникам')
+  }
+
+  return json(await loadAssistantSettings(user.id))
+}
 
 export const POST: RequestHandler = async ({ request, locals }) => {
   const user = requireApiUser(locals)
