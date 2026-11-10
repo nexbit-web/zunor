@@ -1,13 +1,13 @@
 // Дані розділів налаштувань — спільні для сторінок сайту
 // (dashboard/settings/*/+page.server.ts) і застосунку (GET-ендпоінти
-// /api/me/profile, /api/me/security, /api/telegram/link,
-// /api/profile/ai-profile). Розділ на сайті й екран у застосунку
+// /api/me/profile, /api/me/master-profile, /api/me/security,
+// /api/telegram/link, /api/profile/ai-profile). Розділ на сайті й екран у застосунку
 // показують одне й те саме, тож і читають це з одного місця: інакше
 // одне з двох рано чи пізно почало б показувати застаріле.
 
 import { prisma } from './prisma'
 import { activeOrdersCount } from './active-orders'
-import { getCities, getDistricts } from './reference'
+import { getCategories, getCities, getDistricts } from './reference'
 import { telegramEnabled, telegramLinkUrl } from './telegram'
 import {
   parseAiProfile,
@@ -16,6 +16,7 @@ import {
   MAX_OBJECTS,
 } from './zunor/ai-profile'
 import { PREMISES, SERVICES } from '$lib/categories/cleaning/presets'
+import { parseMasterSkills } from '$lib/masters/meta'
 
 /**
  * Профіль замовника для форми редагування в застосунку. Вужче за
@@ -50,6 +51,81 @@ export async function loadClientProfileForm(userId: string) {
     // Райони всіх міст разом: форма сама бере райони обраного міста, і
     // зміна міста не потребує нового запиту. Координати формі не
     // потрібні — лише назва й група («Місто» / «Передмістя»).
+    districts: districts.map((d) => ({
+      citySlug: d.citySlug,
+      slug: d.slug,
+      name: d.name,
+      group: d.group,
+    })),
+  }
+}
+
+/**
+ * Анкета майстра для екрана «Профіль» у застосунку — ті самі поля, що
+ * форма на сайті (dashboard/settings/profile, master-onboarding): дані,
+ * де працює, що робить, опис, приклади робіт і стан перевірки. Плюс
+ * довідники (категорії, міста, райони). Зберігає застосунок тим самим
+ * шляхом, що й сайт, — POST /api/profile/master.
+ *
+ * Анкети ще немає (майстер без MasterProfile) — `master: null`: форма
+ * відкривається порожньою.
+ */
+export async function loadMasterProfileForm(userId: string) {
+  const [user, categories, cities, districts] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        name: true,
+        email: true,
+        username: true,
+        phone: true,
+        avatar: true,
+        avatarPublicId: true,
+        city: true,
+        district: true,
+        role: true,
+        masterProfile: {
+          select: {
+            categories: true,
+            travelRadiusKm: true,
+            hasVehicle: true,
+            crew: true,
+            metadata: true,
+            description: true,
+            portfolioImages: true,
+            portfolioImagesPublicIds: true,
+            verificationStatus: true,
+            verificationRejectReason: true,
+          },
+        },
+      },
+    }),
+    getCategories(),
+    getCities(),
+    getDistricts(),
+  ])
+  if (!user) return null
+
+  const { masterProfile: mp, ...rest } = user
+  return {
+    user: rest,
+    master: mp
+      ? {
+          categories: mp.categories,
+          travelRadiusKm: mp.travelRadiusKm,
+          hasVehicle: mp.hasVehicle,
+          crew: mp.crew,
+          // Уміння за категоріями ({ [slug]: … }) — без решти metadata.
+          skills: parseMasterSkills(mp.metadata),
+          description: mp.description ?? '',
+          portfolioImages: mp.portfolioImages,
+          portfolioImagesPublicIds: mp.portfolioImagesPublicIds,
+          verificationStatus: mp.verificationStatus,
+          verificationRejectReason: mp.verificationRejectReason,
+        }
+      : null,
+    categories: categories.map((c) => ({ slug: c.slug, name: c.name })),
+    cities: cities.map((c) => ({ slug: c.slug, name: c.name })),
     districts: districts.map((d) => ({
       citySlug: d.citySlug,
       slug: d.slug,
