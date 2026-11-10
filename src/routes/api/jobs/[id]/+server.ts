@@ -1,80 +1,57 @@
 import { json, error } from '@sveltejs/kit'
 import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
-import { clientRatingSelect, flattenClientRating } from '$lib/server/user-dto'
+import { flattenClientRating } from '$lib/server/user-dto'
 import { cancelWaves } from '$lib/server/dispatch'
-import { checkJobAccess, jobViewerSelect } from '$lib/server/job-access'
 import { editJob } from '$lib/server/job-edit'
+import { loadJobDetail } from '$lib/server/job-detail'
 import { limit } from '$lib/server/rate-limit'
 import type { RequestHandler } from './$types'
 
 /**
- * GET /api/jobs/[id] — деталі заявки.
+ * GET /api/jobs/[id] — деталі заявки (екран заявки в застосунку).
  *
- * Доступ — за єдиним правилом з $lib/server/job-access: власник, релевантний
- * майстер або майстер із власною пропозицією. Решта отримує 404.
+ * Дані й доступ — $lib/server/job-detail, ті самі, що в сторінки сайту:
+ * власник, релевантний майстер або майстер із власною пропозицією. Решта
+ * отримує 404 (а не 403: інакше відповідь підтверджує існування чужої
+ * заявки).
  *
- * Раніше тут не було жодної перевірки, окрім «залогінений»: коментар обіцяв
- * ховати attachments від сторонніх, а код віддавав усе — включно з фото
- * помешкання клієнта — будь-якому акаунту.
+ * `?open=1` — людина відкрила заявку: унікальний перегляд і «майстер
+ * відкрив» для диспетчера, як на сторінці сайту. Обидва ідемпотентні
+ * (один перегляд на глядача), тож оновлення екрана нічого не накручує.
+ *
+ * Контракт: поля, що були раніше, — ті самі (category / city — slug),
+ * решта лише додана: metadata, effort, editedAt, place, categoryName,
+ * cityName, client.createdAt; proposals, isMaster, canPropose,
+ * cantProposeReason.
  */
-export const GET: RequestHandler = async ({ params, locals }) => {
+export const GET: RequestHandler = async ({ params, locals, url }) => {
   const user = requireApiUser(locals)
 
-  const [job, viewer] = await Promise.all([
-    prisma.job.findUnique({
-      where: { id: params.id },
-      select: {
-        id: true,
-        clientId: true,
-        category: true,
-        city: true,
-        title: true,
-        description: true,
-        budgetMinCents: true,
-        budgetMaxCents: true,
-        currency: true,
-        attachments: true,
-        status: true,
-        proposalsCount: true,
-        viewsCount: true,
-        expiresAt: true,
-        closedAt: true,
-        createdAt: true,
-        client: {
-          select: {
-            id: true,
-            name: true,
-            username: true,
-            avatar: true,
-            ...clientRatingSelect,
-          },
-        },
-      },
-    }),
-    prisma.user.findUnique({
-      where: { id: user.id },
-      select: jobViewerSelect,
-    }),
-  ])
-
-  if (!job) throw error(404, 'Заявку не знайдено')
-  if (!viewer) throw error(404, 'Заявку не знайдено')
-
-  const { canView, isOwner } = await checkJobAccess(job, {
-    id: user.id,
-    ...viewer,
+  const detail = await loadJobDetail(params.id, user.id, {
+    track: url.searchParams.get('open') === '1',
   })
-  // 404, а не 403: інакше відповідь підтверджує існування чужої заявки.
-  if (!canView) throw error(404, 'Заявку не знайдено')
+  if (!detail) throw error(404, 'Заявку не знайдено')
 
-  // Перегляди тут НЕ рахуємо: лічильник веде сторінка заявки
-  // (dashboard/jobs/[id]/+page.server.ts), яка робить це через JobView —
-  // один унікальний перегляд на глядача. Другий інкремент у цьому
-  // ендпоінті рахував би ту саму людину двічі й на кожен запит.
+  const { job } = detail
+  const { city: _clientCity, ...client } = job.client
   return json({
-    job: { ...job, client: flattenClientRating(job.client) },
-    isOwner,
+    job: {
+      ...job,
+      client: {
+        ...flattenClientRating(client),
+        createdAt: client.createdAt.toISOString(),
+      },
+      editedAt: job.editedAt?.toISOString() ?? null,
+      categoryName: detail.categoryName,
+      cityName: detail.cityName,
+      place: detail.place,
+    },
+    isOwner: detail.isOwner,
+    isMaster: detail.isMaster,
+    proposals: detail.proposals,
+    canPropose: detail.canPropose,
+    cantProposeReason: detail.cantProposeReason,
   })
 }
 
