@@ -3,6 +3,7 @@
 
 export { startWaves, cancelWaves, scheduledCount } from './scheduler'
 export { resumeDispatch } from './recovery'
+export { runQueuedWave, verifyWaveRequest } from './queue'
 export { markOpened, markResponded } from './data/journal'
 export { masterFeedScope, type FeedScope } from './feed'
 export { bestMatches, type FitReason } from './fit'

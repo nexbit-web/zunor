@@ -50,7 +50,7 @@ export async function requireStaff(
   min: StaffRole = 'MODERATOR',
 ): Promise<Staff> {
   const staff = await requireStaffNoStepUp(locals)
-  if (!isVerified(staff.sessionId)) error(404, 'Not found')
+  if (!(await isVerified(staff.sessionId))) error(404, 'Not found')
   if (!atLeast(staff.role, min)) error(404, 'Not found')
   return staff
 }

@@ -33,7 +33,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
   const user = requireApiUser(locals)
 
   // 10 заявок на годину на користувача — захист від спаму стрічки майстрів.
-  const rl = limit(`job:create:${user.id}`, {
+  const rl = await limit(`job:create:${user.id}`, {
     points: 10,
     duration: 60 * 60_000,
   })

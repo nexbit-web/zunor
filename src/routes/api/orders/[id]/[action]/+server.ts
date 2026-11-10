@@ -11,6 +11,7 @@ import { channels, events, safeTrigger } from '$lib/server/pusher'
 import { Notify } from '$lib/server/notifications'
 import { startWaves } from '$lib/server/dispatch'
 import type { RequestHandler } from './$types'
+import { background } from '$lib/server/background'
 
 /**
  * POST /api/orders/[id]/[action]
@@ -192,7 +193,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 
   // Майстер відмовився → перезапускаємо диспатч (мозок шукає заміну)
   if (transition === 'CANCEL' && actor === 'MASTER' && order.fromJob) {
-    void startWaves(order.fromJob)
+    background(startWaves(order.fromJob), 'dispatch reopen')
   }
 
   try {

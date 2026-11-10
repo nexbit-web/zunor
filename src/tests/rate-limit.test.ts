@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { limit } from '$lib/server/rate-limit'
+import { limitLocal as limit } from '$lib/server/rate-limit'
 
 // Це єдиний захист від перебору пароля, спаму заявок і накрутки рахунку
 // DeepSeek (/api/zunor/chat — 20/хв і 200/добу). Тому тести перевіряють не

@@ -14,9 +14,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
   const user = requireApiUser(locals)
   const userId = user.id
 
-  const burst = limit(`zunor:burst:${userId}`, { points: 20, duration: 60_000 })
+  const burst = await limit(`zunor:burst:${userId}`, { points: 20, duration: 60_000 })
   if (!burst.success) throw error(429, 'Занадто швидко. Хвилинку :)')
-  const daily = limit(`zunor:daily:${userId}`, {
+  const daily = await limit(`zunor:daily:${userId}`, {
     points: 200,
     duration: 24 * 60 * 60_000,
   })

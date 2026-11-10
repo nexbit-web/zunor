@@ -20,7 +20,7 @@ export const PUT: RequestHandler = async ({ params, request, locals }) => {
 
   // Подвійний клік ставить і знімає — ліміт щедрий, але скрипт, що
   // смикає реакцію в циклі, у розсилку Pusher не пройде.
-  const rl = limit(`react:${user.id}`, { points: 120, duration: 60_000 })
+  const rl = await limit(`react:${user.id}`, { points: 120, duration: 60_000 })
   if (!rl.success) throw error(429, 'Забагато реакцій, зачекайте хвилинку')
 
   const body = await request.json().catch(() => null)

@@ -9,8 +9,14 @@
 // тягнути туди grammY немає сенсу. Стеля обовʼязкова (AGENTS, 2.1).
 
 import { prisma } from '../prisma'
+import { serverless } from '../runtime'
 
-const TTL_MS = 10 * 60_000
+/**
+ * На Vercel копій функції кілька, а скидання кешу при (від)привʼязці діє
+ * лише в одній: інші ще TTL слали б у відвʼязаний чат чи мовчали б після
+ * привʼязки. Тому там TTL короткий — його вистачає на пачку однієї хвилі.
+ */
+const TTL_MS = serverless ? 30_000 : 10 * 60_000
 const MAX_ENTRIES = 5_000
 
 const cache = new Map<string, { chatId: string | null; at: number }>()

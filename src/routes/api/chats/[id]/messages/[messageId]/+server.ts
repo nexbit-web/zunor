@@ -9,6 +9,7 @@ import {
   planLinkPreview,
 } from '$lib/server/chat-link-preview'
 import type { RequestHandler } from './$types'
+import { background } from '$lib/server/background'
 
 const MAX_TEXT_LENGTH = 4000
 const EDIT_WINDOW_MS = 24 * 60 * 60 * 1000 // 24 години на редагування
@@ -87,7 +88,10 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
   })
 
   if (linkPreview.fetchLater) {
-    void attachLinkPreview(params.id, params.messageId, newText)
+    background(
+      attachLinkPreview(params.id, params.messageId, newText),
+      'link preview',
+    )
   }
 
   return json({

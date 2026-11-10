@@ -13,6 +13,7 @@ import {
 } from '$lib/server/admin/totp'
 import { logAdmin } from '$lib/server/admin/audit'
 import { sendTelegramText } from '$lib/server/telegram'
+import { background } from '$lib/server/background'
 import { safeRedirectTarget } from '$lib/utils/redirect'
 import type { Actions, PageServerLoad } from './$types'
 
@@ -27,7 +28,7 @@ function target(raw: string | null): string {
 
 export const load: PageServerLoad = async ({ locals, url }) => {
   const staff = await requireStaffNoStepUp(locals)
-  if (isVerified(staff.sessionId)) redirect(303, target(url.searchParams.get('redirectTo')))
+  if (await isVerified(staff.sessionId)) redirect(303, target(url.searchParams.get('redirectTo')))
 
   const row = await prisma.staffTwoFactor.findUnique({
     where: { userId: staff.id },
@@ -69,7 +70,7 @@ export const actions: Actions = {
     const staff = await requireStaffNoStepUp(locals)
 
     // Шість цифр перебором — мільйон варіантів; 5 спроб за 5 хвилин.
-    const rl = limit(`admin-2fa:${staff.id}`, { points: 5, duration: 5 * 60_000 })
+    const rl = await limit(`admin-2fa:${staff.id}`, { points: 5, duration: 5 * 60_000 })
     if (!rl.success) {
       return fail(429, { error: 'Забагато спроб. Зачекайте кілька хвилин.' })
     }
@@ -86,7 +87,7 @@ export const actions: Actions = {
       where: { userId: staff.id },
       data: { lastStep: step, enabledAt: row.enabledAt ?? new Date() },
     })
-    markVerified(staff.sessionId)
+    await markVerified(staff.sessionId)
 
     await logAdmin(event, staff.id, firstTime ? 'auth.2fa_setup' : 'auth.2fa')
 
@@ -97,10 +98,13 @@ export const actions: Actions = {
     } catch {
       // без адреси
     }
-    void sendTelegramText(
-      staff.id,
-      `Вхід в адмінку Zunor${ip ? ` з адреси ${ip}` : ''}. Якщо це не ви — ` +
-        'негайно змініть пароль і повідомте адміністратора.',
+    background(
+      sendTelegramText(
+        staff.id,
+        `Вхід в адмінку Zunor${ip ? ` з адреси ${ip}` : ''}. Якщо це не ви — ` +
+          'негайно змініть пароль і повідомте адміністратора.',
+      ),
+      'admin login alert',
     )
 
     redirect(303, target(url.searchParams.get('redirectTo')))
@@ -109,7 +113,7 @@ export const actions: Actions = {
   /** «Заблокувати адмінку»: код знадобиться знову, сесія на сайті лишається. */
   lock: async ({ locals }) => {
     const staff = await requireStaffNoStepUp(locals)
-    forgetVerified(staff.sessionId)
+    await forgetVerified(staff.sessionId)
     redirect(303, '/admin/2fa')
   },
 }

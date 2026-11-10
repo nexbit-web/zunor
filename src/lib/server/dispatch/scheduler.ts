@@ -2,10 +2,15 @@
 // тоді, коли є робота (крон щохвилини не давав би Neon заснути). Надійність
 // дає не таймер: номер відпрацьованої хвилі пишеться в заявку, і все, що
 // таймер не встиг, підбирає відновлення (recovery.ts).
+//
+// На Vercel (runtime.ts) таймер не доживає до хвилі — там хвилі й повтори
+// ставить черга QStash (queue.ts), а таймерів процесу немає взагалі.
 
 import { DISPATCH_CONFIG } from './config'
 import { FINAL_WAVE, waveStartsAt } from './core/waves'
 import { dispatchJob } from './dispatch'
+import { enqueueWave, queueWaves } from './queue'
+import { serverless } from '../runtime'
 import type { JobRef } from './types'
 
 type Timer = ReturnType<typeof setTimeout>
@@ -20,7 +25,8 @@ const watches = new Map<string, Watch>()
 
 /** Нова чи перевідкрита заявка: хвиля, що настала, — зараз, решта — за розкладом. */
 export async function startWaves(job: JobRef): Promise<void> {
-  scheduleWaves(job)
+  if (serverless) await queueWaves(job)
+  else scheduleWaves(job)
   await runWave(job.id)
 }
 
@@ -68,6 +74,13 @@ export async function runWave(jobId: string, attempt = 0): Promise<void> {
       return
     }
     console.warn(`[dispatch] job=${jobId} wave failed, retry in ${delaySec}s`)
+    if (serverless) {
+      // Повтор через чергу: QStash ще й сам повторить, якщо й він впаде.
+      const queued = await enqueueWave(jobId, delaySec).catch(() => false)
+      if (!queued)
+        console.error(`[dispatch] job=${jobId} retry not queued, left to recovery`)
+      return
+    }
     after(jobId, delaySec * 1000, () => runWave(jobId, attempt + 1))
   }
 }

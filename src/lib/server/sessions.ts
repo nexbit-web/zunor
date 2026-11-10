@@ -28,7 +28,11 @@ export async function refreshSessionUser(userId: string): Promise<void> {
   }
 }
 
-/** Бан: сесії геть і з Redis, і з бази. */
+/**
+ * Бан: сесії геть і з Redis, і з бази. Саме `deleteUserSessions(userId)`:
+ * з better-auth 1.6.x `deleteSessions` приймає лише масив ТОКЕНІВ, і рядок
+ * userId там падав би на `.map` — бан мовчки лишав би живі сесії.
+ */
 export async function revokeSessions(userId: string): Promise<void> {
-  await (await internalAdapter()).deleteSessions(userId)
+  await (await internalAdapter()).deleteUserSessions(userId)
 }

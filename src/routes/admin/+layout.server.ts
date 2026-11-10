@@ -8,7 +8,7 @@ import type { LayoutServerLoad } from './$types'
 // меню й лічильників немає: нічого з адмінки до коду не показуємо.
 export const load: LayoutServerLoad = async ({ locals }) => {
   const staff = await requireStaffNoStepUp(locals)
-  const verified = isVerified(staff.sessionId)
+  const verified = await isVerified(staff.sessionId)
 
   return {
     staff: {

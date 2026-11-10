@@ -1,12 +1,17 @@
-// adapter-node, а не adapter-auto: деплой на Hostinger Business Web Hosting —
-// це звичайний довгоживучий Node-процес, а не serverless-платформа, яку
-// adapter-auto вміє розпізнати (на збірці він чесно писав
-// "Could not detect a supported production environment").
+// Два способи деплою, адаптер обирається сам:
 //
-// Наслідок для коду: процес ОДИН і живе довго. Тому стан у пам'яті
-// (rate-limit, presence, account-cache, планувальник хвиль диспетчера)
-// працює як задумано — спільного сховища на кшталт Redis не потрібно.
-import adapter from '@sveltejs/adapter-node';
+// — Vercel (VERCEL=1 на їхній збірці) → adapter-vercel: функції Node.js.
+//   Стан, що мусить бути спільним між копіями функцій, живе в Redis і в
+//   черзі QStash — див. src/lib/server/runtime.ts і AGENTS, розділ 2.1.
+// — усе інше (Hostinger Business Web Hosting) → adapter-node: один
+//   довгоживучий Node-процес; таймери хвиль, ліміти й кеші — у його памʼяті.
+//
+// adapter-auto тут не підходить: Hostinger він не розпізнає ("Could not
+// detect a supported production environment").
+import adapterNode from '@sveltejs/adapter-node';
+import adapterVercel from '@sveltejs/adapter-vercel';
+
+const onVercel = process.env.VERCEL === '1';
 
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
@@ -15,10 +20,16 @@ const config = {
 		runes: ({ filename }) => (filename.split(/[/\\]/).includes('node_modules') ? undefined : true)
 	},
 	kit: {
-		// adapter-auto only supports some environments, see https://svelte.dev/docs/kit/adapter-auto for a list.
-		// If your environment is not supported, or you settled on a specific environment, switch out the adapter.
-		// See https://svelte.dev/docs/kit/adapters for more information about adapters.
-		adapter: adapter()
+		adapter: onVercel
+			? adapterVercel({
+					runtime: 'nodejs22.x',
+					// Регіон функцій — поруч із базою Neon: кожен запит робить
+					// кілька походів у базу, і океан між ними видно в кожному.
+					// fra1 — Франкфурт (Neon aws-eu-central-1). Інший регіон
+					// бази — постав свій через ZUNOR_VERCEL_REGION.
+					regions: [process.env.ZUNOR_VERCEL_REGION || 'fra1']
+				})
+			: adapterNode()
 	}
 };
 

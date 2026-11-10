@@ -5,6 +5,7 @@
 // рядком ISO.
 
 import { attempt, redisKey } from './redis'
+import { background } from './background'
 
 type Primitive = string | number | boolean | null | undefined
 
@@ -53,7 +54,10 @@ export async function cached<T>(
   const value = await load()
   if (value === null && !cacheNull) return value
   if ((generations.get(full) ?? 0) === generation) {
-    void attempt((r) => r.set(full, JSON.stringify(value), { ex: ttlSec }))
+    background(
+      attempt((r) => r.set(full, JSON.stringify(value), { ex: ttlSec })),
+      'cache set',
+    )
   }
   return value
 }

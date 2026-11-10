@@ -18,6 +18,7 @@ import { touchPresence } from '$lib/server/presence'
 import { getAccountState, invalidateAccount } from '$lib/server/account-cache'
 import { resumeDispatch } from '$lib/server/dispatch'
 import { revokeSessions } from '$lib/server/sessions'
+import { productionDeploy, serverless } from '$lib/server/runtime'
 // ═══════════════════ Маршрути ═══════════════════
 
 const LOGIN_PATH = '/user/login'
@@ -85,7 +86,7 @@ const adminGate: Handle = async ({ event, resolve }) => {
   const onTwoFactorPage =
     pathname === ADMIN_2FA_PATH || pathname.startsWith(`${ADMIN_2FA_PATH}/`)
 
-  if (!onTwoFactorPage && !isVerified(staff.sessionId)) {
+  if (!onTwoFactorPage && !(await isVerified(staff.sessionId))) {
     if (isApi) error(401, 'Потрібен код другого фактора')
     redirect(
       303,
@@ -253,6 +254,22 @@ const securityHeaders: Handle = async ({ event, resolve }) => {
  */
 export const init: ServerInit = () => {
   if (building) return
+
+  // Telegram-бот: команди й вебхук (прод) чи polling (dev). Ліниво — щоб
+  // grammY не тягнувся в кожен імпорт hooks (і в його тести); без
+  // TELEGRAM_BOT_TOKEN нічого не робить. Прев'ю-деплой Vercel вебхук не
+  // ставить: інакше він перехопив би бота в бойового сайту.
+  if (productionDeploy) {
+    void import('$lib/server/telegram')
+      .then(({ startTelegram }) => startTelegram())
+      .catch((err) => console.error('[telegram] start failed:', err))
+  }
+
+  // Vercel: init — це кожен холодний старт функції, а таймер після
+  // відповіді не живе. Хвилі там веде черга QStash, нагадування й
+  // відновлення — крон (vercel.json). Далі — лише довгоживучий процес.
+  if (serverless) return
+
   void resumeDispatch()
     .then(({ checked, caughtUp }) => {
       if (checked > 0) {
@@ -262,13 +279,6 @@ export const init: ServerInit = () => {
       }
     })
     .catch((err) => console.error('[dispatch] resume failed:', err))
-
-  // Telegram-бот: команди й вебхук (прод) чи polling (dev). Ліниво — щоб
-  // grammY не тягнувся в кожен імпорт hooks (і в його тести); без
-  // TELEGRAM_BOT_TOKEN нічого не робить.
-  void import('$lib/server/telegram')
-    .then(({ startTelegram }) => startTelegram())
-    .catch((err) => console.error('[telegram] start failed:', err))
 
   // Нагадування за день до прибирання: щоденний таймер о 18:00 за Києвом
   // (крон `reminders` — страховка).

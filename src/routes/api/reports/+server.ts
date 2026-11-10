@@ -29,7 +29,7 @@ const DAY_MS = 24 * 60 * 60_000
 export const POST: RequestHandler = async ({ request, locals }) => {
   const user = requireApiUser(locals)
 
-  const rl = limit(`report:${user.id}`, { points: 5, duration: 60 * 60_000 })
+  const rl = await limit(`report:${user.id}`, { points: 5, duration: 60 * 60_000 })
   if (!rl.success) error(429, 'Забагато скарг за годину. Спробуйте пізніше.')
 
   const body = (await request.json().catch(() => null)) as Record<

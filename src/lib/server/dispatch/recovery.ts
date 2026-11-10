@@ -1,12 +1,14 @@
 // Відновлення розсилки: хвилі, які таймер не встиг (рестарт процесу, збій
 // бази, вичерпані повтори), запускаються тут. Кличеться на старті процесу
-// (hooks.server.ts) і страхувальним кроном. Кликати можна будь-коли:
-// хвиля ідемпотентна.
+// (hooks.server.ts, лише Hostinger) і страхувальним кроном. Кликати можна
+// будь-коли: хвиля ідемпотентна.
 
 import { DISPATCH_CONFIG } from './config'
 import { FINAL_WAVE, ageMinutes, waveAt } from './core/waves'
 import { prisma } from './data/db'
 import { runWave, scheduleWaves } from './scheduler'
+import { queueWaves } from './queue'
+import { serverless } from '../runtime'
 import type { ResumeReport } from './types'
 
 export async function resumeDispatch(
@@ -28,7 +30,10 @@ export async function resumeDispatch(
   // По черзі, а не разом: після рестарту заявок може бути багато, а базі
   // щойно прокинутись.
   for (const job of jobs) {
-    scheduleWaves(job, now.getTime())
+    // Vercel: таймерів процесу немає — хвилі попереду ставить черга
+    // (повторна постановка тієї самої хвилі відсікається dedupe-ключем).
+    if (serverless) await queueWaves(job, now.getTime())
+    else scheduleWaves(job, now.getTime())
     if (waveAt(ageMinutes(job.createdAt, now)) > job.dispatchWave) {
       await runWave(job.id)
       caughtUp++

@@ -8,7 +8,7 @@ import type { RequestHandler } from './$types'
 export const POST: RequestHandler = async ({ request, locals }) => {
   const user = requireApiUser(locals)
 
-  const rl = limit(`ai-profile:${user.id}`, {
+  const rl = await limit(`ai-profile:${user.id}`, {
     points: 30,
     duration: 60 * 60_000,
   })

@@ -4,6 +4,7 @@ import type { Role } from '../../generated/prisma/client'
 import Pusher from 'pusher-js'
 import { PUBLIC_PUSHER_KEY, PUBLIC_PUSHER_CLUSTER } from '$env/static/public'
 import { building } from '$app/environment'
+import { serverless } from './runtime'
 export interface AccountState {
   id: string
   role: Role
@@ -18,8 +19,13 @@ export interface AccountState {
  * пошти), скидає кеш явно через invalidateAccount і діє миттєво; CRM робить
  * те саме через Pusher (subscribeToInvalidations нижче). Тому TTL великий:
  * короткий означав би запит до бази майже на кожній навігації дашборда.
+ *
+ * На Vercel памʼяті процесу НЕМАЄ (0): копій функції кілька, а
+ * invalidateAccount скидає памʼять лише своєї. Людина, що заповнила анкету
+ * в одній копії, до 5 хв поверталась би на форму в іншій, а бан діяв би із
+ * запізненням. Там стан читається з Redis — один спільний рівень.
  */
-const TTL_MS = 5 * 60_000
+const TTL_MS = serverless ? 0 : 5 * 60_000
 
 /**
  * Другий рівень — Redis: стан переживає рестарт процесу, і після спливу
@@ -75,8 +81,10 @@ export async function getAccountState(
     }),
   )
 
-  cache.set(userId, { state, expiresAt: now + TTL_MS })
-  evictIfNeeded()
+  if (TTL_MS > 0) {
+    cache.set(userId, { state, expiresAt: now + TTL_MS })
+    evictIfNeeded()
+  }
 
   return state
 }
@@ -110,7 +118,9 @@ export function clearAccountCache(): void {
  */
 function subscribeToInvalidations(): void {
   // building — під час prerender/збірки підключатись нікуди не треба.
-  if (building) return
+  // Vercel — памʼяті процесу немає (TTL_MS = 0), скидати нічого, а кожна
+  // копія функції тримала б своє зʼєднання й їла ліміт зʼєднань Pusher.
+  if (building || serverless) return
 
   try {
     const pusher = new Pusher(PUBLIC_PUSHER_KEY, {

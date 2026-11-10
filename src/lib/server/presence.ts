@@ -7,6 +7,7 @@
 
 import { prisma } from './prisma'
 import { attempt, redisEnabled, redisKey } from './redis'
+import { background } from './background'
 
 const MINUTE = 60_000
 
@@ -34,15 +35,21 @@ export function touchPresence(userId: string): void {
 
   if (redisEnabled && now - last.redis >= REDIS_EVERY_MS) {
     last.redis = now
-    void attempt((r) => r.set(seenKey(userId), now, { ex: REDIS_TTL_SEC }))
+    background(
+      attempt((r) => r.set(seenKey(userId), now, { ex: REDIS_TTL_SEC })),
+      'presence redis',
+    )
   }
 
   if (now - last.db >= DB_EVERY_MS) {
     last.db = now
     // Fail-soft: presence не має ламати запит.
-    prisma.user
-      .update({ where: { id: userId }, data: { lastSeen: new Date(now) } })
-      .catch(() => {})
+    background(
+      prisma.user
+        .update({ where: { id: userId }, data: { lastSeen: new Date(now) } })
+        .catch(() => {}),
+      'presence db',
+    )
   }
 
   written.set(userId, last)

@@ -18,7 +18,7 @@ import type { RequestHandler } from './$types'
 export const DELETE: RequestHandler = async ({ request, locals }) => {
   const user = requireApiUser(locals)
 
-  const rl = limit(`account-delete:${user.id}`, {
+  const rl = await limit(`account-delete:${user.id}`, {
     points: 5,
     duration: 10 * 60_000,
   })

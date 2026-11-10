@@ -10,6 +10,7 @@ import {
   planLinkPreview,
 } from '$lib/server/chat-link-preview'
 import type { RequestHandler } from './$types'
+import { background } from '$lib/server/background'
 
 const MESSAGE_PAGE_SIZE = 50
 const MAX_TEXT_LENGTH = 4000
@@ -52,7 +53,7 @@ export const GET: RequestHandler = async ({ params, url, locals }) => {
 export const POST: RequestHandler = async ({ params, request, locals }) => {
   const user = requireApiUser(locals)
 
-  const rl = limit(`msg:${user.id}`, {
+  const rl = await limit(`msg:${user.id}`, {
     points: 60,
     duration: 60_000,
   })
@@ -224,7 +225,8 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
   )
 
   // Без await: сторонній сайт не має тримати відправку.
-  if (linkPreview.fetchLater) void attachLinkPreview(chatId, message.id, text)
+  if (linkPreview.fetchLater)
+    background(attachLinkPreview(chatId, message.id, text), 'link preview')
 
   return json({ message: payload })
 }
