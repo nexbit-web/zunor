@@ -1,192 +1,205 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { DISPATCH_CONFIG } from '$lib/server/dispatch/types'
+import { DISPATCH_CONFIG } from '$lib/server/dispatch/config'
+import type { DispatchResult } from '$lib/server/dispatch/types'
 
 const dispatchJob = vi.fn(
-  async (_jobId: string, _title: string) =>
-    ({ notified: 0, wave: 1 }) as {
-      notified: number
-      wave: number
-      stopped?: string
-    },
+  async (_jobId: string): Promise<DispatchResult> => WAVE_DONE,
 )
 
-vi.mock('$lib/server/dispatch/index', () => ({ dispatchJob }))
+vi.mock('$lib/server/dispatch/dispatch', () => ({ dispatchJob }))
 
-const { scheduleWaves, cancelWaves, scheduledCount } =
+const { startWaves, scheduleWaves, cancelWaves, scheduledCount, runWave } =
   await import('$lib/server/dispatch/scheduler')
 
-// Планувальник хвиль у пам'яті процесу. Це не оптимізація «на смак»: крон
-// раз на хвилину не давав Neon заснути ніколи й випалював місячну квоту за
-// тиждень при НУЛЬОВОМУ трафіку. Тому тести стежать за двома речами:
+// Планувальник — швидкий шлях хвиль. Тести стежать за трьома речами:
 //
-//   • таймери справді знімаються, коли заявка більше не приймає відгуки —
-//     інакше вони прокидаються й будять базу даремно (це прямі гроші);
-//   • жодна гілка не лишає запис у Map назавжди — процес один і живе
-//     тижнями, витік тут накопичується без кінця.
+//   • хвиля стартує рівно від createdAt заявки — і для нової, і для
+//     підхопленої після рестарту;
+//   • збій хвилі повторюється, а не губиться;
+//   • таймери знімаються, щойно заявка не приймає відгуків, і жоден запис
+//     не лишається в Map назавжди — процес один і живе тижнями.
 
-const JOB = 'job-1'
+const WAVE_DONE: DispatchResult = {
+  kind: 'wave',
+  wave: 1,
+  notified: 0,
+  lastCall: false,
+}
+const MIN = 60_000
+const NOW = new Date('2026-10-25T12:00:00Z')
+const { WAVES, RETRY_DELAYS_SEC } = DISPATCH_CONFIG
+const DELAYED = WAVES.filter((w) => w.afterMinutes > 0)
+const LAST_AT = WAVES.at(-1)!.afterMinutes * MIN
 
-/** Скільки хвиль планується таймерами (перша йде синхронно при створенні). */
-const DELAYED_WAVES = DISPATCH_CONFIG.WAVES.filter((w) => w.afterMinutes > 0)
+const fresh = (id = 'job-1') => ({ id, createdAt: new Date(Date.now()) })
 
 beforeEach(() => {
   vi.useFakeTimers()
+  vi.setSystemTime(NOW)
   dispatchJob.mockReset()
-  dispatchJob.mockResolvedValue({ notified: 0, wave: 1 })
+  dispatchJob.mockResolvedValue(WAVE_DONE)
+  vi.spyOn(console, 'warn').mockImplementation(() => {})
+  vi.spyOn(console, 'error').mockImplementation(() => {})
 })
 
 afterEach(() => {
-  // Прибираємо за собою: Map живе в модулі й спільна на весь файл.
-  cancelWaves(JOB)
-  cancelWaves('job-2')
+  // Map живе в модулі й спільна на весь файл.
+  for (const id of ['job-1', 'job-2']) cancelWaves(id)
   vi.useRealTimers()
+  vi.restoreAllMocks()
 })
 
-describe('планування', () => {
-  it('ставить таймер на кожну відкладену хвилю', async () => {
-    scheduleWaves(JOB, 'Прибирання')
-    expect(scheduledCount()).toBe(1)
+describe('розклад від createdAt', () => {
+  it('нова заявка: перша хвиля одразу, решта — у свій час', async () => {
+    await startWaves(fresh())
+    expect(dispatchJob).toHaveBeenCalledTimes(1)
 
-    // Перша хвиля — синхронна, планувальник її не чіпає.
-    await vi.advanceTimersByTimeAsync(0)
-    expect(dispatchJob).not.toHaveBeenCalled()
-
-    for (const wave of DELAYED_WAVES) {
-      await vi.advanceTimersByTimeAsync(wave.afterMinutes * 60_000)
+    for (const w of DELAYED) {
+      await vi.advanceTimersToNextTimerAsync()
+      expect(Date.now() - NOW.getTime()).toBe(w.afterMinutes * MIN)
     }
-    expect(dispatchJob).toHaveBeenCalledTimes(DELAYED_WAVES.length)
+    expect(dispatchJob).toHaveBeenCalledTimes(1 + DELAYED.length)
   })
 
-  it('хвиля будить диспетчер саме в свій час, не раніше', async () => {
-    scheduleWaves(JOB, 'Прибирання')
+  it('хвиля не стартує раніше свого часу', async () => {
+    scheduleWaves(fresh())
 
-    const first = DELAYED_WAVES[0].afterMinutes * 60_000
-    await vi.advanceTimersByTimeAsync(first - 1000)
+    await vi.advanceTimersByTimeAsync(DELAYED[0].afterMinutes * MIN - 1000)
     expect(dispatchJob).not.toHaveBeenCalled()
 
     await vi.advanceTimersByTimeAsync(2000)
-    expect(dispatchJob).toHaveBeenCalledWith(JOB, 'Прибирання')
+    expect(dispatchJob).toHaveBeenCalledWith('job-1')
   })
 
-  // Захист від подвійного планування: /api/jobs викликає scheduleWaves один
-  // раз, але страхувальний крон може дійти до тієї ж заявки.
-  it('повторне планування тієї ж заявки ігнорується', async () => {
-    scheduleWaves(JOB, 'Прибирання')
-    scheduleWaves(JOB, 'Прибирання')
-    scheduleWaves(JOB, 'Інша назва')
+  // Після рестарту заявці вже кілька хвилин: таймери ставляться лише на
+  // хвилі, що попереду, і рахуються від її createdAt, а не від «зараз».
+  it('стара заявка — лише хвилі, що попереду, у правильний момент', async () => {
+    const createdAt = new Date(NOW.getTime() - 3 * MIN)
+    scheduleWaves({ id: 'job-1', createdAt })
 
-    expect(scheduledCount()).toBe(1)
-
-    await vi.advanceTimersByTimeAsync(60 * 60_000)
-    expect(dispatchJob).toHaveBeenCalledTimes(DELAYED_WAVES.length)
+    const ahead = DELAYED.filter((w) => w.afterMinutes * MIN > 3 * MIN)
+    await vi.runAllTimersAsync()
+    expect(dispatchJob).toHaveBeenCalledTimes(ahead.length)
+    expect(Date.now() - createdAt.getTime()).toBe(LAST_AT)
   })
 
-  it('різні заявки плануються незалежно', async () => {
-    scheduleWaves(JOB, 'Перша')
-    scheduleWaves('job-2', 'Друга')
+  it('усі хвилі позаду — таймерів немає і заявка не під наглядом', () => {
+    scheduleWaves({
+      id: 'job-1',
+      createdAt: new Date(NOW.getTime() - 60 * MIN),
+    })
+    expect(scheduledCount()).toBe(0)
+  })
 
+  it('повторне планування тієї ж заявки нічого не дублює', async () => {
+    scheduleWaves(fresh())
+    scheduleWaves(fresh())
+
+    await vi.runAllTimersAsync()
+    expect(dispatchJob).toHaveBeenCalledTimes(DELAYED.length)
+  })
+
+  it('різні заявки плануються незалежно', () => {
+    scheduleWaves(fresh('job-1'))
+    scheduleWaves(fresh('job-2'))
     expect(scheduledCount()).toBe(2)
   })
 })
 
-describe('скасування', () => {
-  // Викликається з DELETE /api/jobs/[id] і з accept пропозиції. Забудеш —
-  // і таймер розбудить базу заради заявки, для якої decide() однаково
-  // поверне 'job-closed'.
-  it('скасування знімає всі таймери заявки', async () => {
-    scheduleWaves(JOB, 'Прибирання')
-    cancelWaves(JOB)
+describe('повтори при збої', () => {
+  it('упала хвиля — повтор за розкладом RETRY_DELAYS_SEC', async () => {
+    dispatchJob.mockRejectedValueOnce(new Error('neon timeout'))
 
-    expect(scheduledCount()).toBe(0)
+    await runWave('job-1')
+    expect(dispatchJob).toHaveBeenCalledTimes(1)
 
-    await vi.advanceTimersByTimeAsync(60 * 60_000)
-    expect(dispatchJob).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(RETRY_DELAYS_SEC[0] * 1000 - 1)
+    expect(dispatchJob).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(dispatchJob).toHaveBeenCalledTimes(2)
   })
 
-  it('скасування невідомої заявки нічого не ламає', () => {
-    expect(() => cancelWaves('немає-такої')).not.toThrow()
+  it('повтори скінчились — здаємось, далі хвилю підбере відновлення', async () => {
+    dispatchJob.mockRejectedValue(new Error('neon down'))
+
+    await runWave('job-1')
+    await vi.runAllTimersAsync()
+
+    expect(dispatchJob).toHaveBeenCalledTimes(1 + RETRY_DELAYS_SEC.length)
+    expect(scheduledCount()).toBe(0)
+  })
+
+  it('runWave не кидає — збій не валить того, хто кликав', async () => {
+    dispatchJob.mockRejectedValue(new Error('boom'))
+    await expect(runWave('job-1')).resolves.toBeUndefined()
+  })
+
+  it('перша хвиля нової заявки теж повторюється', async () => {
+    dispatchJob.mockRejectedValueOnce(new Error('neon timeout'))
+
+    await startWaves(fresh())
+    await vi.advanceTimersByTimeAsync(RETRY_DELAYS_SEC[0] * 1000)
+    expect(dispatchJob).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('зупинка й скасування', () => {
+  it('заявку закрили — решта хвиль знімається сама', async () => {
+    dispatchJob.mockResolvedValue({ kind: 'stop', reason: 'job-closed' })
+
+    await startWaves(fresh())
+    expect(scheduledCount()).toBe(0)
+
+    await vi.runAllTimersAsync()
+    expect(dispatchJob).toHaveBeenCalledTimes(1)
+  })
+
+  it('досить відгуків — теж', async () => {
+    scheduleWaves(fresh())
+    dispatchJob.mockResolvedValue({ kind: 'stop', reason: 'enough-proposals' })
+
+    await vi.advanceTimersByTimeAsync(DELAYED[0].afterMinutes * MIN)
+    expect(scheduledCount()).toBe(0)
+  })
+
+  // Порожня хвиля — не привід зупинятись: майстри можуть зареєструватись
+  // між хвилями.
+  it('нікого не покликали — наступні хвилі лишаються', async () => {
+    scheduleWaves(fresh())
+
+    await vi.advanceTimersByTimeAsync(DELAYED[0].afterMinutes * MIN)
+    expect(scheduledCount()).toBe(1)
+  })
+
+  it('cancelWaves знімає і хвилі, і повтори', async () => {
+    dispatchJob.mockRejectedValueOnce(new Error('neon timeout'))
+    await startWaves(fresh())
+
+    cancelWaves('job-1')
+    await vi.runAllTimersAsync()
+
+    expect(dispatchJob).toHaveBeenCalledTimes(1)
     expect(scheduledCount()).toBe(0)
   })
 
   it('скасування однієї заявки не чіпає сусідню', async () => {
-    scheduleWaves(JOB, 'Перша')
-    scheduleWaves('job-2', 'Друга')
+    scheduleWaves(fresh('job-1'))
+    scheduleWaves(fresh('job-2'))
 
-    cancelWaves(JOB)
-    expect(scheduledCount()).toBe(1)
+    cancelWaves('job-1')
+    await vi.runAllTimersAsync()
 
-    await vi.advanceTimersByTimeAsync(60 * 60_000)
-    expect(dispatchJob).toHaveBeenCalledWith('job-2', 'Друга')
-    expect(dispatchJob).not.toHaveBeenCalledWith(JOB, 'Перша')
-  })
-})
-
-describe('самоочищення', () => {
-  // Заявка закрилась або набрала відгуків — решту хвиль знімаємо самі,
-  // не чекаючи, поки хтось покличе cancelWaves.
-  it('job-closed знімає решту хвиль', async () => {
-    dispatchJob.mockResolvedValue({
-      notified: 0,
-      wave: 2,
-      stopped: 'job-closed',
-    })
-    scheduleWaves(JOB, 'Прибирання')
-
-    await vi.advanceTimersByTimeAsync(DELAYED_WAVES[0].afterMinutes * 60_000)
-
-    expect(scheduledCount()).toBe(0)
-
-    await vi.advanceTimersByTimeAsync(60 * 60_000)
-    expect(dispatchJob).toHaveBeenCalledTimes(1)
+    expect(dispatchJob).toHaveBeenCalledWith('job-2')
+    expect(dispatchJob).not.toHaveBeenCalledWith('job-1')
   })
 
-  it('enough-proposals теж знімає решту', async () => {
-    dispatchJob.mockResolvedValue({
-      notified: 0,
-      wave: 2,
-      stopped: 'enough-proposals',
-    })
-    scheduleWaves(JOB, 'Прибирання')
-
-    await vi.advanceTimersByTimeAsync(DELAYED_WAVES[0].afterMinutes * 60_000)
-    expect(scheduledCount()).toBe(0)
-  })
-
-  // А от 'no-candidates' — не привід зупинятись: майстри можуть
-  // зареєструватись між хвилями, і саме заради них хвиля 3 «всі решта».
-  it('no-candidates НЕ скасовує наступні хвилі', async () => {
-    dispatchJob.mockResolvedValue({
-      notified: 0,
-      wave: 2,
-      stopped: 'no-candidates',
-    })
-    scheduleWaves(JOB, 'Прибирання')
-
-    await vi.advanceTimersByTimeAsync(DELAYED_WAVES[0].afterMinutes * 60_000)
-    expect(scheduledCount()).toBe(1)
-
-    await vi.advanceTimersByTimeAsync(60 * 60_000)
-    expect(dispatchJob).toHaveBeenCalledTimes(DELAYED_WAVES.length)
+  it('скасування невідомої заявки нічого не ламає', () => {
+    expect(() => cancelWaves('немає-такої')).not.toThrow()
   })
 
   it('після останньої хвилі запис зникає з Map', async () => {
-    scheduleWaves(JOB, 'Прибирання')
-
-    await vi.advanceTimersByTimeAsync(60 * 60_000)
-
-    expect(dispatchJob).toHaveBeenCalledTimes(DELAYED_WAVES.length)
-    expect(scheduledCount()).toBe(0)
-  })
-
-  // Падіння диспетчера (Neon відвалився) не має лишати заявку в Map
-  // назавжди і не має зривати наступні хвилі.
-  it('падіння диспетчера не ламає планувальник', async () => {
-    dispatchJob.mockRejectedValue(new Error('neon timeout'))
-    scheduleWaves(JOB, 'Прибирання')
-
-    await vi.advanceTimersByTimeAsync(60 * 60_000)
-
-    expect(dispatchJob).toHaveBeenCalledTimes(DELAYED_WAVES.length)
+    await startWaves(fresh())
+    await vi.runAllTimersAsync()
     expect(scheduledCount()).toBe(0)
   })
 })

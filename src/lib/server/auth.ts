@@ -1,9 +1,11 @@
 import { betterAuth } from 'better-auth'
 import { prismaAdapter } from 'better-auth/adapters/prisma'
 import { emailOTP } from 'better-auth/plugins'
+import { expo } from '@better-auth/expo'
 import { sveltekitCookies } from 'better-auth/svelte-kit'
 import { getRequestEvent } from '$app/server'
 import { dev } from '$app/environment'
+import { env } from '$env/dynamic/private'
 import {
   BETTER_AUTH_URL,
   BETTER_AUTH_SECRET,
@@ -11,8 +13,12 @@ import {
   GOOGLE_CLIENT_SECRET,
 } from '$env/static/private'
 import { prisma } from './prisma'
+import { authStorage } from './auth-storage'
+import { invalidateAccount } from './account-cache'
 import { sendResetPasswordEmail } from './email'
 import { sendOtpEmail } from './email/otp-email'
+import { serverless } from './runtime'
+import { background } from './background'
 
 const OTP_TTL_SECONDS = 600 // 10 хв — довше, ніж середня затримка SMTP
 
@@ -21,6 +27,10 @@ export const auth = betterAuth({
   secret: BETTER_AUTH_SECRET,
 
   database: prismaAdapter(prisma, { provider: 'postgresql' }),
+
+  // Сесії й одноразові коди — у Redis (auth-storage.ts): перевірка сесії
+  // на кожен запит не будить Neon. Без Redis — undefined, усе в базі.
+  secondaryStorage: authStorage,
 
   // ─── Google OAuth ───
   socialProviders: {
@@ -90,6 +100,21 @@ export const auth = betterAuth({
     expiresIn: 60 * 60 * 24 * 30,
     updateAge: 60 * 60 * 24,
     cookieCache: { enabled: true, maxAge: 60 * 5 },
+    // Сесія пишеться і в базу: Redis — копія, а не єдине місце. Сесії,
+    // створені до Redis, і промах у ньому читаються з бази.
+    storeSessionInDatabase: true,
+  },
+
+  // Поле користувача змінив сам better-auth (підтвердження пошти тощо) —
+  // guard має перечитати стан акаунта, а не тримати кеш.
+  databaseHooks: {
+    user: {
+      update: {
+        after: async (user) => {
+          await invalidateAccount(user.id)
+        },
+      },
+    },
   },
 
   advanced: {
@@ -113,15 +138,24 @@ export const auth = betterAuth({
       '/request-password-reset': { window: 3600, max: 5 },
       '/get-session': false, // дзвониться на кожен перехід, лімітувати нічого
     },
-    // memory тримає ліміти в одному процесі. Перед горизонтальним
-    // масштабуванням → 'database' + `npx @better-auth/cli generate`
-    // (він додасть модель rateLimit у schema.prisma).
-    storage: 'memory',
+    // memory тримає ліміти в одному процесі (Hostinger). На Vercel копій
+    // функції кілька — там ліміти в Redis, поруч із сесіями
+    // (secondaryStorage), інакше перебір пароля ділився б між копіями.
+    storage: serverless && authStorage ? 'secondary-storage' : 'memory',
   },
 
   trustedOrigins: [
     BETTER_AUTH_URL,
+    // Мобільний застосунок (../mobile): плагін expo() бере походження
+    // запиту з його заголовка, і це має бути наша схема.
+    'zunor://',
     ...(dev ? ['http://localhost:5173', 'http://localhost:4173'] : []),
+    // Застосунок у Expo Go має адресу exp://<IP>:8081. Лише в dev і на
+    // ТЕСТОВОМУ деплої з ZUNOR_EXPO_GO=1 (Vercel, щоб ганяти застосунок
+    // проти нього): на бойовому exp:// пустив би будь-який проєкт з Expo Go.
+    ...(dev || env.ZUNOR_EXPO_GO === '1'
+      ? ['exp://', 'exp://**', 'exp://192.168.*.*:*/**']
+      : []),
   ],
 
   user: {
@@ -155,12 +189,14 @@ export const auth = betterAuth({
 
       sendVerificationOTP: async ({ email, otp, type }) => {
         // Не await: час відповіді не повинен залежати від SMTP,
-        // інакше різниця в затримці видає, існує адреса чи ні.
-        void sendOtpEmail({ email, otp, type }).catch((err) => {
-          console.error('[auth] otp email failed:', err)
-        })
+        // інакше різниця в затримці видає, існує адреса чи ні. Але й не
+        // голий void: на Vercel функцію заморозили б до відправки листа.
+        background(sendOtpEmail({ email, otp, type }), 'otp email')
       },
     }),
+    // Вхід із мобільного застосунку: у нативного запиту немає Origin —
+    // плагін бере його з заголовка expo-origin (перевіряється trustedOrigins).
+    expo(),
     // sveltekitCookies має бути ОСТАННІМ у масиві.
     sveltekitCookies(getRequestEvent),
   ],

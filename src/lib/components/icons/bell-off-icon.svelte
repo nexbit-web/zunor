@@ -1,83 +1,15 @@
 <script lang="ts">
-  // Перекреслений дзвіночок для тоста «звук вимкнено».
-  // Дзвіночок завмирає, а риска прокреслюється — рух іде в один бік,
-  // на відміну від коливань «увімкнено». Різницю видно навіть боковим зором.
-  interface Props {
-    size?: number
-  }
+  // Перекреслений дзвіночок (Hugeicons NotificationOff01) — тост «звук
+  // вимкнено». Червоний, щоб відрізнявся від «увімкнено» боковим зором.
+  import StrokeIcon, { type IconProps } from './stroke-icon.svelte'
 
-  let { size = 18 }: Props = $props()
+  let { class: className = '', ...rest }: IconProps = $props()
 </script>
 
-<svg
-  class="text-red-500 dark:text-red-400"
-  width={size}
-  height={size}
-  viewBox="0 0 24 24"
-  fill="none"
-  stroke="currentColor"
-  stroke-width="2"
-  stroke-linecap="round"
-  stroke-linejoin="round"
-  aria-hidden="true"
->
-  <g class="bell">
-    <path
-      d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"
-    />
-    <path d="M10.268 21a2 2 0 0 0 3.464 0" />
-  </g>
-
-  <!-- Риска. pathLength="1" нормалізує довжину контуру, тому
-       stroke-dasharray однаковий незалежно від координат. -->
-  <path class="slash" pathLength="1" d="M3 3l18 18" />
-</svg>
-
-<style>
-  svg {
-    display: block;
-  }
-
-  /* Дзвіночок в'яне: коротке стискання, поки риска його перекреслює. */
-  .bell {
-    transform-origin: 12px 12px;
-    animation: mute-bell 420ms cubic-bezier(0.32, 0.72, 0, 1);
-  }
-
-  .slash {
-    stroke-dasharray: 1;
-    stroke-dashoffset: 0;
-    animation: draw-slash 380ms ease-out 120ms both;
-  }
-
-  @keyframes mute-bell {
-    0% {
-      transform: scale(1);
-      opacity: 1;
-    }
-    50% {
-      transform: scale(0.9);
-      opacity: 0.6;
-    }
-    100% {
-      transform: scale(1);
-      opacity: 1;
-    }
-  }
-
-  @keyframes draw-slash {
-    from {
-      stroke-dashoffset: 1;
-    }
-    to {
-      stroke-dashoffset: 0;
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .bell,
-    .slash {
-      animation: none;
-    }
-  }
-</style>
+<StrokeIcon {...rest} class="text-red-500 dark:text-red-400 {className}">
+  <path d="M15.5 18C15.5 19.933 13.933 21.5 12 21.5C10.067 21.5 8.5 19.933 8.5 18" />
+  <path d="M2 2L22 22" />
+  <path
+    d="M21 16.2311C21 15.762 20.8136 15.3121 20.4819 14.9803L19.8787 14.3771C19.3161 13.8145 19 13.0514 19 12.2558V9.5C19 5.634 15.866 2.5 12 2.5C10.4497 2.5 9.01706 3.00399 7.85707 3.85707M4.76887 18C3.79195 18 3 17.208 3 16.2311C3 15.762 3.18636 15.3121 3.51809 14.9803L4.12132 14.3771C4.68393 13.8145 5 13.0514 5 12.2558V9.5C5 8.20839 5.34981 6.99849 5.95987 5.95987L18 18H4.76887Z"
+  />
+</StrokeIcon>

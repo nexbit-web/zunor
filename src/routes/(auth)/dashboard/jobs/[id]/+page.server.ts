@@ -1,9 +1,10 @@
 import { prisma } from '$lib/server/prisma'
 import { requireUser } from '$lib/server/guards'
 import { error, redirect } from '@sveltejs/kit'
-import { markOpened } from '$lib/server/dispatch'
-import { getRecommendedIds } from '$lib/server/ranking'
+import { markOpened, recommendForJob } from '$lib/server/dispatch'
 import { checkJobAccess, jobViewerSelect } from '$lib/server/job-access'
+import { getDistricts } from '$lib/server/reference'
+import { cityDistricts, jobPlace } from '$lib/geo/districts'
 import type { PageServerLoad } from './$types'
 
 /**
@@ -31,6 +32,8 @@ export const load: PageServerLoad = async ({ params, locals }) => {
     where: { id: userId },
     select: {
       ...jobViewerSelect,
+      // Район глядача — лише для підпису «≈4 км» біля району заявки.
+      district: true,
       masterProfile: {
         select: {
           isActive: true,
@@ -50,15 +53,18 @@ export const load: PageServerLoad = async ({ params, locals }) => {
       description: true,
       category: true,
       city: true,
+      district: true,
       status: true,
       budgetMinCents: true,
       budgetMaxCents: true,
       currency: true,
       attachments: true,
       metadata: true,
+      effort: true,
       proposalsCount: true,
       viewsCount: true,
       expiresAt: true,
+      editedAt: true,
       createdAt: true,
       clientId: true,
       client: {
@@ -88,7 +94,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
   if (!canView) throw error(404, 'Заявку не знайдено')
 
   // Людиночитні назви для категорії та міста (slug → name)
-  const [categoryRow, cityRow] = await Promise.all([
+  const [categoryRow, cityRow, allDistricts] = await Promise.all([
     prisma.category.findUnique({
       where: { slug: job.category },
       select: { name: true },
@@ -97,6 +103,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
       where: { slug: job.city },
       select: { name: true, region: true },
     }),
+    getDistricts(),
   ])
 
   const categoryName = categoryRow?.name ?? job.category
@@ -156,11 +163,15 @@ export const load: PageServerLoad = async ({ params, locals }) => {
             avgRatingAsMaster: true,
             reviewsCountAsMaster: true,
             lastSeen: true,
+            city: true,
+            district: true,
             masterProfile: {
               select: {
                 verificationStatus: true,
                 completedOrders: true,
                 createdAt: true,
+                hasVehicle: true,
+                crew: true,
               },
             },
             _count: {
@@ -175,14 +186,18 @@ export const load: PageServerLoad = async ({ params, locals }) => {
       },
     })
 
-    // Ранжування: топ-3 + слот новачку.
+    // Топ-3 + слот новачку — тими самими вагами, що й розсилка.
     const now = new Date()
     const { recommended: recommendedIds, newbies: newbieIds } =
-      getRecommendedIds(
+      await recommendForJob(
+        job,
         items.map((p) => ({
           id: p.id,
           createdAt: p.createdAt,
           master: {
+            id: p.master.id,
+            city: p.master.city,
+            district: p.master.district,
             lastSeen: p.master.lastSeen,
             avgRating: p.master.avgRatingAsMaster,
             isVerified:
@@ -190,6 +205,8 @@ export const load: PageServerLoad = async ({ params, locals }) => {
             activeOrders: p.master._count.masterOrders,
             masterSince: p.master.masterProfile?.createdAt ?? now,
             completedOrders: p.master.masterProfile?.completedOrders ?? 0,
+            hasVehicle: p.master.masterProfile?.hasVehicle,
+            crew: p.master.masterProfile?.crew,
           },
         })),
         now,
@@ -282,8 +299,15 @@ export const load: PageServerLoad = async ({ params, locals }) => {
       categorySlug: job.category,
       city: cityName,
       citySlug: job.city,
+      // Район, а не адреса: точну адресу клієнт дає в чаті після угоди.
+      place: jobPlace(
+        cityDistricts(allDistricts, job.city),
+        job.district,
+        user.city === job.city ? user.district : null,
+      ),
       createdAt: job.createdAt.toISOString(),
       expiresAt: job.expiresAt.toISOString(),
+      editedAt: job.editedAt?.toISOString() ?? null,
       client: {
         ...job.client,
         avgRating: job.client.avgRatingAsClient,

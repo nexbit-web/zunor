@@ -1,5 +1,5 @@
 <script lang="ts">
-  import MinusIcon from '@lucide/svelte/icons/minus'
+  import MinusIcon from '$lib/components/icons/set/minus.svelte'
   import type { WithElementRef } from '$lib/utils.js'
   import { cn } from '$lib/utils.js'
   import type { HTMLAttributes } from 'svelte/elements'

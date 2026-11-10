@@ -51,12 +51,34 @@ describe('формат', () => {
     expect(container.textContent).not.toContain('3-20 символів')
   })
 
-  it('короткий username підсвічується помилкою', async () => {
+  // Помилка формату зʼявляється ПІСЛЯ виходу з поля, а не на першій
+  // набраній літері: інакше поле червоніє людині, яка ще друкує.
+  it('поки друкують, помилки формату немає', async () => {
     const { container } = field()
 
     await fireEvent.input(input(container), { target: { value: 'ab' } })
 
+    expect(container.textContent).not.toContain('3-20 символів')
+    expect(hasClass(input(container), 'border-destructive')).toBe(false)
+  })
+
+  it('короткий username підсвічується помилкою після blur', async () => {
+    const { container } = field()
+
+    await fireEvent.input(input(container), { target: { value: 'ab' } })
+    await fireEvent.blur(input(container))
+
     expect(container.textContent).toContain('3-20 символів')
+    expect(hasClass(input(container), 'border-destructive')).toBe(true)
+  })
+
+  // Порожнє поле мовчить, доки його не чіпали. На сабміті форма сама
+  // вмикає touched — інакше обовʼязкове поле лишалось би білим, а
+  // кнопка мовчки не спрацьовувала б.
+  it('порожнє обовʼязкове поле червоніє, коли форма це вмикає', () => {
+    const { container } = field({ touched: true })
+
+    expect(container.textContent).toContain('Введіть username')
     expect(hasClass(input(container), 'border-destructive')).toBe(true)
   })
 
@@ -64,6 +86,7 @@ describe('формат', () => {
     const { container } = field()
 
     await fireEvent.input(input(container), { target: { value: '1master' } })
+    await fireEvent.blur(input(container))
 
     expect(container.textContent).toContain('3-20 символів')
   })
@@ -110,6 +133,7 @@ describe('формат', () => {
     const { container } = field()
 
     await fireEvent.input(input(container), { target: { value: 'admin' } })
+    await fireEvent.blur(input(container))
 
     expect(container.textContent).toContain('зарезервовано')
     expect(container.textContent).not.toContain('3-20 символів')
@@ -126,14 +150,17 @@ describe('перевірка зайнятості', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('вільне ім’я підсвічується зеленим', async () => {
+  // Зелену рамку прибрано навмисно: «вільно» каже галочка в полі, а
+  // рамка лишається кольоровою тільки тоді, коли щось не так.
+  it('вільне ім’я не показує жодної помилки', async () => {
     respondWith({ available: true })
     const { container } = field()
 
     await fireEvent.input(input(container), { target: { value: 'freeone' } })
     await settle()
 
-    expect(hasClass(input(container), 'border-green-500')).toBe(true)
+    expect(hasClass(input(container), 'border-destructive')).toBe(false)
+    expect(container.textContent).not.toContain('вже зайнято')
   })
 
   it('зайняте ім’я пояснюється текстом', async () => {
@@ -180,7 +207,7 @@ describe('перевірка зайнятості', () => {
     await settle()
 
     expect(fetchMock).not.toHaveBeenCalled()
-    expect(hasClass(input(container), 'border-green-500')).toBe(true)
+    expect(hasClass(input(container), 'border-destructive')).toBe(false)
   })
 
   it('немає мережі — поле не бреше про доступність', async () => {
@@ -219,26 +246,19 @@ describe('життєвий цикл', () => {
   })
 })
 
-describe('превʼю посилання', () => {
-  it('порожнє поле показує підказку-заглушку', () => {
+// Підпис і адресу профілю дає поле форми (SettingsField з підказкою).
+// Коли компонент малював їх і сам, у формі «Username» стояв двічі.
+describe('без дублювання підпису', () => {
+  it('власного підпису й опису в компоненті немає', () => {
     const { container } = field()
 
-    expect(container.textContent).toContain('zunor.org/@username')
+    expect(container.querySelector('label')).toBeNull()
+    expect(container.textContent).not.toContain('zunor.org')
   })
 
-  it('введене ім’я одразу видно в посиланні', async () => {
+  it('id лишається тим, на який вказує підпис форми', () => {
     const { container } = field()
 
-    await fireEvent.input(input(container), { target: { value: 'oleks' } })
-
-    expect(container.textContent).toContain('zunor.org/@oleks')
-  })
-
-  it('при помилці формату показується помилка, а не посилання', async () => {
-    const { container } = field()
-
-    await fireEvent.input(input(container), { target: { value: 'ab' } })
-
-    expect(container.textContent).not.toContain('zunor.org/@ab')
+    expect(input(container).id).toBe('username')
   })
 })

@@ -116,7 +116,10 @@ export function trashLabel(key: string): string {
 }
 
 // Частота (для регулярного)
+// «Щодня» — для офісів і комерції: без нього щоденне прибирання офісу
+// оформлювалось як «Раз на тиждень», і картка заявки казала неправду.
 export const FREQUENCY_OPTIONS = [
+  { key: 'daily', label: 'Щодня' },
   { key: 'weekly', label: 'Раз на тиждень' },
   { key: 'biweekly', label: 'Раз на 2 тижні' },
   { key: 'monthly', label: 'Раз на місяць' },
@@ -177,6 +180,31 @@ export const QUICK_WHEN = [
   { key: 'today', label: 'Сьогодні' },
   { key: 'tomorrow', label: 'Завтра' },
 ]
+const QUICK_WHEN_OFFSET: Record<string, number> = { today: 0, tomorrow: 1 }
+
+/**
+ * Дата прибирання як ISO-день у календарі Києва.
+ *
+ * «today»/«tomorrow» зберігаються як є — відносно дня СТВОРЕННЯ заявки.
+ * Без createdAt вони брешуть: заявка «на завтра», створена тиждень тому,
+ * показувалась як «Завтра» ще цілий тиждень.
+ */
+export function resolveWhen(
+  when: unknown,
+  createdAt: string | Date,
+): string | null {
+  if (typeof when !== 'string') return null
+  const offset = QUICK_WHEN_OFFSET[when]
+  if (offset === undefined)
+    return /^\d{4}-\d{2}-\d{2}$/.test(when) ? when : null
+
+  const base = new Date(createdAt).getTime()
+  if (Number.isNaN(base)) return null
+  return new Date(base + offset * 86_400_000).toLocaleDateString('sv-SE', {
+    timeZone: 'Europe/Kyiv',
+  })
+}
+
 export function whenLabel(key: string): string {
   const q = QUICK_WHEN.find((w) => w.key === key)
   if (q) return q.label

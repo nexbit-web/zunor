@@ -1,6 +1,7 @@
 import { json, error } from '@sveltejs/kit'
 import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
+import { forgetMasterPage } from '$lib/server/master-page'
 import type { RequestHandler } from './$types'
 
 export const POST: RequestHandler = async ({ request, locals }) => {
@@ -89,6 +90,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     },
     { maxWait: 10000, timeout: 20000 },
   )
+
+  // Рейтинг і відгуки майстра — на його публічній сторінці.
+  if (isClient) await forgetMasterPage(targetId)
 
   return json({ ok: true })
 }

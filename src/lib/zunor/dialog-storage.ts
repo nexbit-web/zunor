@@ -31,6 +31,20 @@ export type ZunorDialogMessage =
       thinkSeconds: number
     }
   | { id: number; role: 'summary'; draft: ZunorDraft }
+  /**
+   * Службова примітка: збій звʼязку чи сервера або «Стоп» — подія в НАС, а
+   * не репліка Zunor. Моделі не віддається: «Щось пішло не так» в історії
+   * асистента лише збивало б її з розмови.
+   */
+  | {
+      id: number
+      role: 'notice'
+      text: string
+      /** error — збій; stopped — людина сама натиснула «Стоп». */
+      tone: 'error' | 'stopped'
+      /** Хід зірвався — його можна повторити тією ж історією. */
+      retry: boolean
+    }
 
 export interface ZunorDialog {
   messages: ZunorDialogMessage[]

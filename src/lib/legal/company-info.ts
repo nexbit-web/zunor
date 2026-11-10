@@ -7,6 +7,8 @@ export const COMPANY = {
   taxId: '', // ІПН фізособи-підприємця або ЄДРПОУ
   legalAddress: '', // юридична адреса
   supportEmail: 'support@zunor.org',
+  /** Канал у Telegram — той самий, що у футері лендинга. */
+  telegram: 'https://t.me/zunor_official',
   privacyEmail: 'privacy@zunor.org',
   siteUrl: 'https://zunor.org',
 } as const

@@ -24,7 +24,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
   const user = locals.user
   if (!user) return json({ error: 'Unauthorized' }, { status: 401 })
 
-  const rl = limit(`upload-sign:${user.id}`, {
+  const rl = await limit(`upload-sign:${user.id}`, {
     points: 30,
     duration: 60_000,
   })

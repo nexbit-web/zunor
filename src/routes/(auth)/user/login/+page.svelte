@@ -1,30 +1,26 @@
 <script lang="ts">
-  import { ArrowLeft, Plus } from 'lucide-svelte'
+  import AuthShell from '$lib/components/auth/auth-shell.svelte'
   import LoginForm from '$lib/components/login-form.svelte'
 </script>
 
-<div class="grid min-h-svh lg:grid-cols-2">
-  <div class="flex flex-col gap-4 p-6 md:p-10">
-    <div class="flex gap-2 md:justify-start">
-      <a
-        href="/"
-        class="flex items-center gap-2 font-medium hover:text-gray-400"
-      >
-        <ArrowLeft size={20} />
-        Головна
-      </a>
-    </div>
-    <div class="flex flex-1 items-center justify-center">
-      <div class="w-full max-w-xs">
-        <LoginForm />
-      </div>
-    </div>
-  </div>
-  <div class="relative hidden bg-muted lg:block">
-    <img
-      src="/login.png"
-      alt="placeholder"
-      class="absolute inset-0 h-full w-full object-cover dark:brightness-[0.2] dark:grayscale"
-    />
-  </div>
-</div>
+<svelte:head>
+  <title>Вхід — Zunor</title>
+</svelte:head>
+
+<!-- Одна колонка по центру, як у ClickUp: знак, заголовок із посиланням
+     на реєстрацію, під ним форма. Тексти — дослівно з української версії
+     ClickUp. Картинки збоку немає — вона не пояснювала форму й на
+     телефоні не показувалась узагалі. -->
+<AuthShell title="Ласкаво просимо назад!" mark="password">
+  {#snippet subtitle()}
+    Немає облікового запису?
+    <a
+      href="/user/register"
+      class="text-primary underline-offset-4 transition-colors hover:text-primary-hover hover:underline"
+    >
+      Зареєструватися
+    </a>
+  {/snippet}
+
+  <LoginForm />
+</AuthShell>

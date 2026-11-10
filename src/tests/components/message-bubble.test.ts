@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render } from '@testing-library/svelte'
+import { render, fireEvent } from '@testing-library/svelte'
 import MessageBubble from '$lib/components/chat/message-bubble.svelte'
 import type { ChatMessage } from '$lib/components/chat/types'
 
@@ -33,6 +33,8 @@ function message(over: Partial<ChatMessage> = {}): ChatMessage {
     senderId: 'peer-1',
     replyToId: null,
     replyTo: null,
+    reactions: [],
+    linkPreview: null,
     ...over,
   }
 }
@@ -109,7 +111,16 @@ describe('чиє повідомлення', () => {
     const theirs = bubble({}, { isMine: false })
 
     expect(mine.container.innerHTML).toContain('bg-primary')
-    expect(theirs.container.innerHTML).toContain('bg-card')
+    expect(theirs.container.innerHTML).toContain('bg-bubble-in')
+  })
+
+  // Градієнт, як в iMessage, — лише на своїх: чужі лишаються картками.
+  it('градієнт — лише на своєму', () => {
+    const mine = bubble({}, { isMine: true })
+    const theirs = bubble({}, { isMine: false })
+
+    expect(mine.container.querySelector('.bubble-mine')).not.toBeNull()
+    expect(theirs.container.querySelector('.bubble-mine')).toBeNull()
   })
 
   // Хвостик малюється лише в останнього в групі — інакше серія
@@ -306,5 +317,205 @@ describe('статуси доставки', () => {
     const { container } = bubble({}, { isHighlighted: true })
 
     expect(container.innerHTML).toContain('ring-2')
+  })
+})
+
+describe('реакції', () => {
+  const REACTED = {
+    reactions: [
+      { emoji: '❤️', userIds: ['me'] },
+      { emoji: '👍', userIds: ['peer-1', 'x'] },
+    ],
+  }
+
+  it('показуються чипами, моя — натиснута', () => {
+    const { container } = bubble(REACTED, { currentUserId: 'me' })
+
+    const mine = container.querySelector('[aria-pressed="true"]')
+    expect(mine?.textContent).toContain('❤️')
+    // Кількість — лише коли реакцій більше однієї.
+    expect(container.textContent).toContain('2')
+  })
+
+  it('дотик по чипу передає емодзі вікну', async () => {
+    const onReact = vi.fn()
+    const { container } = bubble(REACTED, { currentUserId: 'me', onReact })
+
+    await fireEvent.click(container.querySelector('[aria-pressed="true"]')!)
+    expect(onReact).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'msg-1' }),
+      '❤️',
+    )
+  })
+
+  // На видалене реагувати нема на що — і старі реакції зникають разом із ним.
+  it('у видаленого реакцій немає', () => {
+    const { container } = bubble({
+      ...REACTED,
+      deletedAt: new Date().toISOString(),
+    })
+
+    expect(container.textContent).not.toContain('❤️')
+  })
+
+  it('поки летить — реагувати не можна', () => {
+    const { container } = bubble(REACTED, {
+      isMine: true,
+      isPending: true,
+      onReact: vi.fn(),
+    })
+
+    for (const b of container.querySelectorAll('[aria-pressed]')) {
+      expect((b as HTMLButtonElement).disabled).toBe(true)
+    }
+  })
+})
+
+describe('посилання', () => {
+  it('адреса в тексті — посилання, що відкривається безпечно', () => {
+    const { container } = bubble({ text: 'План: https://example.com/a.pdf' })
+
+    const a = container.querySelector('a[href="https://example.com/a.pdf"]')!
+    expect(a).not.toBeNull()
+    expect(a.getAttribute('target')).toBe('_blank')
+    expect(a.getAttribute('rel')).toContain('noopener')
+    expect(a.getAttribute('rel')).toContain('nofollow')
+  })
+
+  it('javascript: лишається текстом', () => {
+    const { container } = bubble({ text: 'javascript:alert(1)' })
+
+    expect(container.querySelector('a')).toBeNull()
+    expect(container.textContent).toContain('javascript:alert(1)')
+  })
+})
+
+describe('картка посилання', () => {
+  const linkPreview = {
+    url: 'https://pb.ua/short?5Z1QZ',
+    siteName: 'next.privat24.ua',
+    title: 'Інтернет-банк, доступний кожному',
+    description: 'Усі фінансові послуги за кілька кліків',
+  }
+  const withCard = (over: Partial<ChatMessage> = {}) =>
+    bubble({ text: 'Оплата: https://pb.ua/short?5Z1QZ', linkPreview, ...over })
+
+  it('сайт, заголовок і опис під текстом', () => {
+    const { container } = withCard()
+
+    expect(container.textContent).toContain('next.privat24.ua')
+    expect(container.textContent).toContain('Інтернет-банк, доступний кожному')
+    expect(container.textContent).toContain('Усі фінансові послуги')
+  })
+
+  it('картка веде на посилання з тексту й відкривається безпечно', () => {
+    const { container } = withCard()
+
+    const card = [
+      ...container.querySelectorAll('a[href="https://pb.ua/short?5Z1QZ"]'),
+    ].find((a) => a.textContent?.includes('next.privat24.ua'))!
+    expect(card).toBeDefined()
+    expect(card.getAttribute('target')).toBe('_blank')
+    expect(card.getAttribute('rel')).toContain('noopener')
+    expect(card.getAttribute('rel')).toContain('nofollow')
+  })
+
+  it('картинок у картці немає — їх вантажив би браузер співрозмовника', () => {
+    const { container } = withCard()
+    expect(container.querySelector('img')).toBeNull()
+  })
+
+  it('час один — під карткою, а не двічі', () => {
+    const { getAllByText } = withCard({
+      createdAt: '2026-03-15T14:05:00.000Z',
+    })
+    const time = new Date('2026-03-15T14:05:00.000Z').toLocaleTimeString(
+      'uk-UA',
+      { hour: '2-digit', minute: '2-digit' },
+    )
+    expect(getAllByText(time)).toHaveLength(1)
+  })
+
+  it('у видаленого картки немає', () => {
+    const { container } = withCard({
+      text: '',
+      deletedAt: new Date().toISOString(),
+    })
+    expect(container.textContent).not.toContain('next.privat24.ua')
+  })
+})
+
+describe('перехід до цитати', () => {
+  const QUOTED = {
+    replyToId: 'old',
+    replyTo: {
+      id: 'old',
+      text: 'Ось адреса',
+      senderId: 'me',
+      type: 'TEXT' as const,
+    },
+  }
+
+  it('клік по цитаті веде до оригіналу', async () => {
+    const onJumpTo = vi.fn()
+    const { getByText } = bubble(QUOTED, { onJumpTo })
+
+    await fireEvent.click(getByText('Ось адреса'))
+    expect(onJumpTo).toHaveBeenCalledWith('old')
+  })
+
+  // Сервер не віддає текст видаленого навіть у цитаті — показуємо, чому.
+  it('цитата видаленого — «Повідомлення видалено»', () => {
+    const { container } = bubble({
+      ...QUOTED,
+      replyTo: { ...QUOTED.replyTo, text: '' },
+    })
+
+    expect(container.textContent).toContain('Повідомлення видалено')
+  })
+})
+
+// Фото без підпису — без бульбашки, як у Telegram: залите тло давало
+// навколо знімка товсту рамку кольору акценту. З підписом бульбашка
+// лишається — тексту потрібне тло.
+describe('фото без бульбашки', () => {
+  const PHOTO = {
+    type: 'PHOTO' as const,
+    attachmentUrl: 'https://res.cloudinary.com/demo/a.jpg',
+  }
+
+  it('своє фото без підпису — без заливки й хвостика', () => {
+    const { container } = bubble(
+      { ...PHOTO, text: '' },
+      { isMine: true, isLastInGroup: true },
+    )
+    const el = container.querySelector('.bubble')!
+
+    expect(el.classList.contains('bubble-mine')).toBe(false)
+    expect(el.classList.contains('bg-primary')).toBe(false)
+    expect(el.classList.contains('tail-out')).toBe(false)
+  })
+
+  it('з підписом бульбашка повертається', () => {
+    const { container } = bubble(
+      { ...PHOTO, text: 'Ось кухня' },
+      { isMine: true, isLastInGroup: true },
+    )
+    const el = container.querySelector('.bubble')!
+
+    expect(el.classList.contains('bubble-mine')).toBe(true)
+    expect(el.classList.contains('tail-out')).toBe(true)
+  })
+})
+
+describe('фото в галереї чату', () => {
+  it('фото позначене для галереї (PhotoSwipe у вікні чату)', () => {
+    const { container } = bubble({
+      type: 'PHOTO',
+      attachmentUrl: 'https://res.cloudinary.com/demo/a.jpg',
+      text: '',
+    })
+
+    expect(container.querySelector('a[data-pswp]')).not.toBeNull()
   })
 })

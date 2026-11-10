@@ -22,6 +22,13 @@ export interface CleaningMetadata {
   premise: string
   service: string
   when: string
+  /** Приблизна площа зі слів клієнта, м². Основа обсягу (effort.ts). */
+  areaM2?: number
+  /**
+   * Поправка асистента до обсягу: +1 / −1 за тим, чого немає в полях
+   * («вітрини в ТЦ», «дуже брудно»). Нуль не зберігаємо.
+   */
+  effortAdjust?: -1 | 1
   // житлові послуги
   rooms?: string
   floor?: number

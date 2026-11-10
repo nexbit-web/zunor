@@ -1,6 +1,7 @@
-// Детект активної послуги (Intent Detection). Скан історії з КІНЦЯ,
-// тільки user-повідомлення. Це UX-оптимізація промпту, НЕ рівень безпеки:
-// авторитетне поле service все одно валідує validateCleaningMetadata.
+// Детект активної послуги (Intent Detection). Скан історії від ПОЧАТКУ,
+// тільки user-повідомлення: обрана послуга тримається, доки клієнт явно
+// не передумає. Це UX-оптимізація промпту, НЕ рівень безпеки: авторитетне
+// поле service все одно валідує validateCleaningMetadata.
 import { SERVICES } from '$lib/categories/cleaning/presets'
 import type { ZunorClientMessage } from '$lib/types/zunor'
 import { SERVICE_SYNONYMS, type ServiceKey } from './service-rules'
@@ -33,27 +34,84 @@ const TRIGGERS: ReadonlyArray<{ key: ServiceKey; needles: readonly string[] }> =
     needles: [norm(s.label), ...(SERVICE_SYNONYMS[s.key] ?? []).map(norm)],
   }))
 
+// Межі слова — Unicode-класами: `\b` у JS не бачить кирилиці (AGENTS.md).
+const word = (alternatives: string) =>
+  new RegExp(`(?<![\\p{L}\\p{N}_])(${alternatives})(?![\\p{L}\\p{N}_])`, 'iu')
+
+/**
+ * Явна зміна наміру. Голих «ні»/«нет» тут немає навмисно: це звичайна
+ * відповідь («Ні, тварин немає…»), і вона перемикала б послугу.
+ */
+const CHANGE_OF_MIND = word(
+  'хоча|хотя|краще|лучше|замість|вместо|передумав|передумала|насправді|на самом деле',
+)
+
+/** Додаток до обраного: «вікна теж», «ещё окна» — деталь, а не новий вибір. */
+const ADDITION = word(
+  'теж|також|ще|заодно|додатково|плюс|тоже|также|ещё|еще|дополнительно',
+)
+
+/** Натиснута кнопка чи коротка репліка-вибір: «Миття вікон», «Генеральне». */
+const CHOICE_MAX_WORDS = 3
+
+interface Mention {
+  key: ServiceKey
+  /** Позиція збігу в повідомленні: 0 — повідомлення починається з послуги. */
+  at: number
+}
+
+/** Послуга, названа першою в межах одного повідомлення. */
+function serviceIn(content: string): Mention | null {
+  const text = norm(content).trimStart()
+  let best: Mention | null = null
+  for (const t of TRIGGERS) {
+    for (const needle of t.needles) {
+      if (!needle) continue
+      const at = findNeedle(text, needle)
+      if (at !== -1 && (best === null || at < best.at)) {
+        best = { key: t.key, at }
+      }
+    }
+  }
+  return best
+}
+
+/**
+ * Репліка-вибір: коротка, без цифр і ПОЧИНАЄТЬСЯ з назви послуги — так
+ * виглядає натиснута кнопка. «5 вікон» чи «пʼять вікон» — це відповідь на
+ * «скільки вікон?» усередині генерального, а не новий вибір.
+ */
+function isChoice(content: string, mention: Mention): boolean {
+  const words = content.trim().split(/\s+/).length
+  return mention.at === 0 && words <= CHOICE_MAX_WORDS && !/\d/.test(content)
+}
+
+/**
+ * Активна послуга розмови. Обрану послугу тримаємо: згадка іншої в
+ * ВІДПОВІДІ — це деталь, а не новий вибір. «Генеральне… вікна теж
+ * хотілося б» перемикало фокус на «Миття вікон», і агент вимагав
+ * кількість вікон як обовʼязкове поле, доки клієнт не здавався.
+ *
+ * Перемикаємо лише на явну зміну наміру або на коротку репліку-вибір.
+ */
 export function detectActiveService(
   history: ReadonlyArray<ZunorClientMessage>,
 ): ServiceKey | null {
-  for (let i = history.length - 1; i >= 0; i--) {
-    const msg = history[i]
-    if (!msg || msg.role !== 'user') continue
+  let active: ServiceKey | null = null
+  for (const msg of history) {
+    if (msg.role !== 'user') continue
+    const found = serviceIn(msg.content)
+    if (!found || found.key === active) continue
 
-    const text = norm(msg.content)
-    // У межах одного повідомлення виграє послуга з найранішим збігом
-    // (натиск кнопки → весь текст = label → збіг на 0 → виграє).
-    let best: { key: ServiceKey; at: number } | null = null
-    for (const t of TRIGGERS) {
-      for (const needle of t.needles) {
-        if (!needle) continue
-        const at = findNeedle(text, needle)
-        if (at !== -1 && (best === null || at < best.at)) {
-          best = { key: t.key, at }
-        }
-      }
+    const addition = ADDITION.test(msg.content)
+    const changedMind = CHANGE_OF_MIND.test(msg.content) && !addition
+    if (
+      active === null ||
+      changedMind ||
+      (!addition && isChoice(msg.content, found))
+    ) {
+      active = found.key
     }
-    if (best) return best.key
   }
-  return null
+  return active
 }

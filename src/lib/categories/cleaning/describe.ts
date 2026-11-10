@@ -1,6 +1,7 @@
 // Перетворює Job.metadata у список характеристик для показу клієнту/майстру.
 // Адаптивно — поля залежать від послуги.
 
+import { pluralUk } from '$lib/utils/plural'
 import {
   premiseLabel,
   serviceLabel,
@@ -11,6 +12,7 @@ import {
   trashLabel,
   frequencyLabel,
   whenLabel,
+  resolveWhen,
   itemLabel,
   itemVariantLabel,
 } from './presets'
@@ -29,22 +31,18 @@ export interface JobDetail {
   items?: JobDetailItem[]
 }
 
-// Українська плюралізація для числівників: pluralUk(3, 'вікно', 'вікна', 'вікон')
-// → 'вікна'. Враховує 11–14 (завжди третя форма).
-function pluralUk(n: number, one: string, few: string, many: string): string {
-  const mod100 = Math.abs(n) % 100
-  if (mod100 >= 11 && mod100 <= 14) return many
-  const mod10 = mod100 % 10
-  if (mod10 === 1) return one
-  if (mod10 >= 2 && mod10 <= 4) return few
-  return many
-}
-
 /**
  * Будує список характеристик заявки з metadata.
  * Повертає [] якщо metadata порожня або не з прибирання.
+ *
+ * createdAt — для «today»/«tomorrow»: вони відносні до дня створення
+ * заявки (resolveWhen). Драфт у чаті ще не створений, тож його звідти
+ * кличуть без дати й показують «Завтра» як є.
  */
-export function describeJob(metadata: unknown): JobDetail[] {
+export function describeJob(
+  metadata: unknown,
+  createdAt?: string | Date,
+): JobDetail[] {
   if (!metadata || typeof metadata !== 'object') return []
 
   const m = metadata as Record<string, unknown>
@@ -74,6 +72,15 @@ export function describeJob(metadata: unknown): JobDetail[] {
       label: 'Кімнат',
       value: roomLabel(String(m.rooms)),
       icon: 'DoorOpen',
+    })
+  }
+
+  // Площа — зі слів клієнта, тому «≈»
+  if (typeof m.areaM2 === 'number' && m.areaM2 > 0) {
+    details.push({
+      label: 'Площа',
+      value: `≈ ${m.areaM2} м²`,
+      icon: 'Ruler',
     })
   }
 
@@ -123,7 +130,7 @@ export function describeJob(metadata: unknown): JobDetail[] {
   if (m.floor != null) {
     details.push({
       label: 'Поверх',
-      value: `${m.floor} поверх`,
+      value: `${m.floor}-й поверх`,
       icon: 'Building',
     })
   }
@@ -152,9 +159,10 @@ export function describeJob(metadata: unknown): JobDetail[] {
 
   // Коли
   if (m.when) {
+    const day = createdAt ? resolveWhen(m.when, createdAt) : null
     details.push({
       label: 'Коли',
-      value: whenLabel(String(m.when)),
+      value: whenLabel(day ?? String(m.when)),
       icon: 'Calendar',
     })
   }

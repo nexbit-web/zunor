@@ -3,8 +3,14 @@ import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
 import { channels, events, safeTrigger } from '$lib/server/pusher'
 import { limit } from '$lib/server/rate-limit'
+import { MESSAGE_SELECT, toChatMessage } from '$lib/server/chat-messages'
+import {
+  attachLinkPreview,
+  linkPreviewColumn,
+  planLinkPreview,
+} from '$lib/server/chat-link-preview'
 import type { RequestHandler } from './$types'
-import type { ChatMessage } from '$lib/components/chat/types'
+import { background } from '$lib/server/background'
 
 const MESSAGE_PAGE_SIZE = 50
 const MAX_TEXT_LENGTH = 4000
@@ -34,61 +40,20 @@ export const GET: RequestHandler = async ({ params, url, locals }) => {
     orderBy: { createdAt: 'desc' },
     take: MESSAGE_PAGE_SIZE + 1,
     ...(cursor && { cursor: { id: cursor }, skip: 1 }),
-    select: {
-      id: true,
-      type: true,
-      text: true,
-      attachmentUrl: true,
-      attachmentMimeType: true,
-      attachmentSize: true,
-      attachmentName: true,
-      isRead: true,
-      editedAt: true,
-      deletedAt: true,
-      createdAt: true,
-      senderId: true,
-      replyToId: true,
-      replyTo: {
-        select: { id: true, text: true, senderId: true, type: true },
-      },
-    },
+    select: MESSAGE_SELECT,
   })
 
   const hasMore = messages.length > MESSAGE_PAGE_SIZE
   const items = hasMore ? messages.slice(0, MESSAGE_PAGE_SIZE) : messages
   const nextCursor = hasMore ? items[items.length - 1].id : null
 
-  const transformed: ChatMessage[] = items.map((m) => ({
-    id: m.id,
-    type: m.type as AllowedType,
-    text: m.deletedAt ? '' : m.text,
-    attachmentUrl: m.deletedAt ? null : m.attachmentUrl,
-    attachmentMimeType: m.attachmentMimeType,
-    attachmentSize: m.attachmentSize,
-    attachmentName: m.attachmentName,
-    isRead: m.isRead,
-    editedAt: m.editedAt?.toISOString() ?? null,
-    deletedAt: m.deletedAt?.toISOString() ?? null,
-    createdAt: m.createdAt.toISOString(),
-    senderId: m.senderId,
-    replyToId: m.replyToId,
-    replyTo: m.replyTo
-      ? {
-          id: m.replyTo.id,
-          text: m.replyTo.text,
-          senderId: m.replyTo.senderId,
-          type: m.replyTo.type as AllowedType,
-        }
-      : null,
-  }))
-
-  return json({ messages: transformed, nextCursor })
+  return json({ messages: items.map(toChatMessage), nextCursor })
 }
 
 export const POST: RequestHandler = async ({ params, request, locals }) => {
   const user = requireApiUser(locals)
 
-  const rl = limit(`msg:${user.id}`, {
+  const rl = await limit(`msg:${user.id}`, {
     points: 60,
     duration: 60_000,
   })
@@ -200,6 +165,11 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
         ? '📷 Фото'
         : '📎 Файл'
 
+  // Картка посилання — лише в тексті (підпис до фото її не має, як у
+  // Telegram). Відома з кешу пишеться одразу, невідома — після відповіді.
+  const linkPreview =
+    type === 'TEXT' ? planLinkPreview(text) : { value: null, fetchLater: false }
+
   const [message] = await prisma.$transaction([
     prisma.message.create({
       data: {
@@ -213,27 +183,11 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
         attachmentSize,
         attachmentName,
         replyToId,
+        linkPreview: linkPreviewColumn(linkPreview.value),
       },
       select: {
-        id: true,
-        type: true,
-        text: true,
-        attachmentUrl: true,
-        attachmentMimeType: true,
-        attachmentSize: true,
-        attachmentName: true,
-        isRead: true,
-        editedAt: true,
-        deletedAt: true,
-        createdAt: true,
-        senderId: true,
-        replyToId: true,
-        replyTo: {
-          select: { id: true, text: true, senderId: true, type: true },
-        },
-        sender: {
-          select: { name: true, avatar: true },
-        },
+        ...MESSAGE_SELECT,
+        sender: { select: { name: true, avatar: true } },
       },
     }),
     prisma.chat.update({
@@ -246,29 +200,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
     }),
   ])
 
-  const payload: ChatMessage = {
-    id: message.id,
-    type: message.type as AllowedType,
-    text: message.text,
-    attachmentUrl: message.attachmentUrl,
-    attachmentMimeType: message.attachmentMimeType,
-    attachmentSize: message.attachmentSize,
-    attachmentName: message.attachmentName,
-    isRead: message.isRead,
-    editedAt: message.editedAt?.toISOString() ?? null,
-    deletedAt: message.deletedAt?.toISOString() ?? null,
-    createdAt: message.createdAt.toISOString(),
-    senderId: message.senderId,
-    replyToId: message.replyToId,
-    replyTo: message.replyTo
-      ? {
-          id: message.replyTo.id,
-          text: message.replyTo.text,
-          senderId: message.replyTo.senderId,
-          type: message.replyTo.type as AllowedType,
-        }
-      : null,
-  }
+  const payload = toChatMessage(message)
 
   // ─── Безпечний broadcast: помилки логуються, не падають ───
 
@@ -291,6 +223,10 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
       }),
     ),
   )
+
+  // Без await: сторонній сайт не має тримати відправку.
+  if (linkPreview.fetchLater)
+    background(attachLinkPreview(chatId, message.id, text), 'link preview')
 
   return json({ message: payload })
 }

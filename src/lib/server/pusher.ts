@@ -32,6 +32,9 @@ export const events = {
   messageEdit: 'message:edit',
   messageDelete: 'message:delete',
   messageRead: 'message:read',
+  messageReaction: 'message:reaction',
+  /** Картка посилання дійшла після самого повідомлення. */
+  messagePreview: 'message:preview',
   chatUpdate: 'chat:update',
   /**
    * Зміна статусу замовлення.
@@ -41,6 +44,8 @@ export const events = {
   orderStatus: 'order:status',
   typing: 'client-typing',
   moderationNew: 'moderation:new',
+  /** Нова скарга (Report) — у CRM-модераторів. Несе лише id і причину. */
+  reportNew: 'report:new',
 } as const
 
 /**

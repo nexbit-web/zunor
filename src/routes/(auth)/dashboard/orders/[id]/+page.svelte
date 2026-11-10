@@ -12,7 +12,14 @@
     AvatarFallback,
     AvatarImage,
   } from '$lib/components/ui/avatar'
-  import { Clock, Copy, Check, Phone, MessageSquare, Star } from 'lucide-svelte'
+  import Clock from '$lib/components/icons/set/clock.svelte'
+  import Copy from '$lib/components/icons/set/copy.svelte'
+  import Check from '$lib/components/icons/set/check.svelte'
+  import Phone from '$lib/components/icons/set/phone.svelte'
+  import MessageSquare from '$lib/components/icons/set/message-square.svelte'
+  import Star from '$lib/components/icons/set/star.svelte'
+  import Flag from '$lib/components/icons/set/flag.svelte'
+  import ReportDialog from '$lib/components/reports/report-dialog.svelte'
   import { Button } from '$lib/components/ui/button'
   import OrderActions from '$lib/components/orders/order-actions.svelte'
   import ReviewForm from '$lib/components/orders/review-form.svelte'
@@ -21,6 +28,7 @@
   import type { PageData } from './$types'
   import { describeJob } from '$lib/categories/cleaning/describe'
   import toast from 'svelte-hot-french-toast'
+  import { copyToClipboard } from '$lib/utils/clipboard'
 
   let { data }: { data: PageData } = $props()
 
@@ -31,6 +39,8 @@
   const isClient = $derived(data.viewerId === order.clientId)
   const isMaster = $derived(data.viewerId === order.masterId)
   const peer = $derived(isClient ? order.master : order.client)
+
+  let reportOpen = $state(false)
 
   const peerRating = $derived(
     isClient
@@ -104,15 +114,11 @@
   let copyTimeout: ReturnType<typeof setTimeout> | null = null
 
   async function copyOrderId() {
-    try {
-      await navigator.clipboard.writeText(order.id)
-      copyConfirm = true
-      if (copyTimeout) clearTimeout(copyTimeout)
-      copyTimeout = setTimeout(() => (copyConfirm = false), 2000)
-      toast.success('Скопійовано', { duration: 2000 })
-    } catch {
-      /* ignore */
-    }
+    if (!(await copyToClipboard(order.id, 'Номер замовлення скопійовано')))
+      return
+    copyConfirm = true
+    if (copyTimeout) clearTimeout(copyTimeout)
+    copyTimeout = setTimeout(() => (copyConfirm = false), 2000)
   }
 
   /**
@@ -162,7 +168,7 @@
   <meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 
-<div class="order-scope min-h-svh px-6 py-10">
+<div class="order-scope min-h-(--app-h) px-6 py-10">
   <div class="mx-auto max-w-250">
     <!-- Breadcrumb + ID -->
     <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -503,7 +509,26 @@
             <MessageSquare class="mr-2 size-4" aria-hidden="true" />
             {order.chatId ? 'Перейти в чат' : 'Написати повідомлення'}
           </Button>
+
+          <!-- Тихо, під головними діями: скарга потрібна рідко, але тоді
+               її мають знайти тут, поруч із тим, на кого вона. -->
+          <button
+            type="button"
+            onclick={() => (reportOpen = true)}
+            class="mt-2 flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg py-2 text-[13px] text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            <Flag class="size-3.5" aria-hidden="true" />
+            Поскаржитися на {isClient ? 'майстра' : 'замовника'}
+          </button>
         </div>
+
+        <ReportDialog
+          bind:open={reportOpen}
+          targetId={isClient ? order.masterId : order.clientId}
+          targetName={peer.name}
+          targetRole={isClient ? 'MASTER' : 'CLIENT'}
+          context={{ orderId: order.id }}
+        />
 
         <!-- Actions -->
         <div class="{scard} p-4.5">

@@ -9,28 +9,31 @@
   let { data }: { data: PageData } = $props()
 
   const isMaster = $derived(data.user.role === 'MASTER')
+
+  const close = () => goto('/dashboard')
 </script>
 
 {#if isMaster}
-  <MasterOnboarding {data} mode="edit" onBack={() => goto('/dashboard')} />
+  <MasterOnboarding {data} mode="edit" onBack={close} />
 {:else}
-  <ClientOnboarding {data} mode="edit" onBack={() => goto('/dashboard')} />
+  <ClientOnboarding {data} mode="edit" onBack={close} />
 
   <!-- Перехід у виконавці — окрема усвідомлена дія, а не побічний ефект
        відкриття форми. Назад дороги немає, тому попереджаємо явно.
-       SettingsGroup тепер малює ту саму картку, що й форма вище, тож
-       власна розмітка тут більше не потрібна. -->
-  <div class="mx-auto w-full max-w-2xl px-4 pb-8">
-    <SettingsGroup title="Роль">
+       Окремої лінії зверху немає: її дає заголовок розділу. -->
+  <div class="mt-10">
+    <SettingsGroup
+      title="Роль"
+      footnote="Повернутися до ролі замовника буде неможливо."
+    >
       <SettingsRow
         label="Стати виконавцем"
-        description="Заповніть профіль виконавця — і почнете отримувати заявки. Повернутися до ролі замовника буде неможливо."
+        description="Отримуйте заявки як майстер."
       >
         {#snippet control()}
           <Button
-            variant="outline"
             onclick={() => goto('/dashboard/onboarding/master')}
-            class="bg-background"
+            variant="secondary"
           >
             Почати
           </Button>

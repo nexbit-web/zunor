@@ -2,12 +2,19 @@
   import { onMount } from 'svelte'
   import { chatStore } from '$lib/stores/chat-store.svelte'
   import { unlockAudio, loadMutePreference } from '$lib/sound/notification'
+  import { provideEntryPoint } from '$lib/utils/entry-point.svelte'
   import type { LayoutData } from './$types'
 
   let {
     data,
     children,
   }: { data: LayoutData; children: import('svelte').Snippet } = $props()
+
+  // Панель дашборда тут відʼїжджає, як у налаштуваннях. «Назад» біля
+  // пошуку в списку чатів веде туди, звідки зайшли в повідомлення, —
+  // перемикання між чатами не рахується. Тут, а не в сторінках: лейаут
+  // живе весь час, поки ми в розділі.
+  provideEntryPoint('/dashboard/messages')
 
   onMount(() => {
     chatStore.setChats(data.chats)

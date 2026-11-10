@@ -10,10 +10,7 @@ vi.mock(
   '$lib/server/notifications',
   async () => await import('../helpers/infra'),
 )
-vi.mock(
-  '$lib/server/dispatch/scheduler',
-  async () => await import('../helpers/infra'),
-)
+vi.mock('$lib/server/dispatch', async () => await import('../helpers/infra'))
 
 const { POST } = await import('../../routes/api/proposals/[id]/accept/+server')
 

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, fireEvent } from '@testing-library/svelte'
 import {
   SETTINGS_SECTIONS,
+  SETTINGS_GROUPS,
   DEFAULT_SECTION,
   sectionsForRole,
 } from '$lib/components/settings/nav'
@@ -114,13 +115,14 @@ describe('підсвітка вибраного', () => {
     ).toHaveLength(1)
   })
 
-  it('галочка стоїть тільки на обраній', () => {
-    mode.userPrefersMode.current = 'light'
+  // Мініатюра «Системної» — дві теми навпіл. Одна картинка тут
+  // показувала б лише ту тему, що увімкнена зараз.
+  it('мініатюра «системної» містить обидві теми', () => {
     const { container } = render(ThemePicker)
 
-    const [light, dark] = options(container)
-    expect(light.querySelector('svg[data-icon]')).not.toBeNull()
-    expect(dark.querySelector('svg[data-icon]')).toBeNull()
+    const [light, , system] = options(container)
+    expect(light.querySelectorAll('svg')).toHaveLength(1)
+    expect(system.querySelectorAll('svg')).toHaveLength(2)
   })
 })
 
@@ -235,13 +237,32 @@ describe('клік', () => {
 // ─────────────── Розділи налаштувань ───────────────
 
 describe('розділи налаштувань', () => {
-  it('у кожного розділу є slug, підпис, іконка й плитка', () => {
+  it('у кожного розділу є slug, підпис, іконка й група', () => {
     for (const s of SETTINGS_SECTIONS) {
       expect(s.slug, s.slug).toBeTruthy()
       expect(s.label, s.slug).toBeTruthy()
       expect(s.icon, s.slug).toBeTruthy()
-      expect(s.tile, s.slug).toBeTruthy()
+      expect(s.group, s.slug).toBeTruthy()
     }
+  })
+
+  // Розділ із групою, якої немає в SETTINGS_GROUPS, у меню налаштувань не
+  // потрапив би нікуди — зник би мовчки.
+  it('кожен розділ стоїть у відомій групі', () => {
+    const groups = SETTINGS_GROUPS.map((g) => g.id)
+
+    for (const s of SETTINGS_SECTIONS) {
+      expect(groups, s.slug).toContain(s.group)
+    }
+  })
+
+  // Вихід — дія внизу меню, а не розділ зі сторінкою з однією кнопкою.
+  it('«Вийти» не є розділом', () => {
+    expect(SETTINGS_SECTIONS.map((s) => s.slug)).not.toContain('account')
+  })
+
+  it('налаштування відкриваються на профілі', () => {
+    expect(DEFAULT_SECTION).toBe('profile')
   })
 
   it('slug унікальні — це шматки URL', () => {

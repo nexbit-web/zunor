@@ -1,5 +1,8 @@
 ﻿// src/lib/components/profile/types.ts
 
+import type { Crew } from '$lib/masters/meta'
+import type { SkillLabel } from '$lib/categories/cleaning/skills'
+
 export type VerificationStatus = 'NONE' | 'PENDING' | 'VERIFIED' | 'REJECTED'
 
 export interface ProfileReview {
@@ -32,6 +35,16 @@ export interface FreelancerProfileData {
   completedOrders: number
 
   reviews: ProfileReview[]
+
+  /**
+   * Формат роботи: компанія (COMPANY) чи людина — сама або з напарником.
+   * null/відсутнє — профіль старший за питання, сторінка мовчить.
+   */
+  crew?: Crew | null
+  /** Які прибирання робить — з анкети майстра. */
+  services?: SkillLabel[]
+  /** Де прибирає: житло, офіси. */
+  premises?: SkillLabel[]
 }
 
 export interface ClientProfileData {

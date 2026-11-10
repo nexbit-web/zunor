@@ -7,13 +7,18 @@
 // Єдине джерело правди про сесію на запит — locals.
 
 import { auth } from '$lib/server/auth'
-import { prisma } from '$lib/server/prisma'
 import { svelteKitHandler } from 'better-auth/svelte-kit'
 import { building, dev } from '$app/environment'
 import { sequence } from '@sveltejs/kit/hooks'
-import { redirect, type Handle } from '@sveltejs/kit'
+import { error, redirect, type Handle, type ServerInit } from '@sveltejs/kit'
+import { staffOf } from '$lib/server/admin/guard'
+import { isVerified } from '$lib/server/admin/step-up'
+import { isStaff } from '$lib/admin/roles'
 import { touchPresence } from '$lib/server/presence'
 import { getAccountState, invalidateAccount } from '$lib/server/account-cache'
+import { resumeDispatch } from '$lib/server/dispatch'
+import { revokeSessions } from '$lib/server/sessions'
+import { productionDeploy, serverless } from '$lib/server/runtime'
 // ═══════════════════ Маршрути ═══════════════════
 
 const LOGIN_PATH = '/user/login'
@@ -52,6 +57,42 @@ const sessionHandle: Handle = async ({ event, resolve }) => {
   event.locals.account = null
 
   if (session) touchPresence(session.user.id)
+
+  return resolve(event)
+}
+
+// ═══════════════════ Адмінка ═══════════════════
+//
+// Замок №1 адмінки (№2 — requireStaff у кожному load/action, див.
+// $lib/server/admin/guard.ts). Стоїть ПЕРЕД guardHandle, бо той пропускає
+// /api/* і не знає про /admin.
+//
+//  — гість і не співробітник → 404 на будь-якій адресі під /admin і
+//    /api/admin: ззовні не видно навіть, що адмінка існує;
+//  — співробітник без введеного коду другого фактора → сторінка коду
+//    (/admin/2fa), API → 401. Сама /admin/2fa доступна без коду.
+
+const ADMIN_2FA_PATH = '/admin/2fa'
+
+const adminGate: Handle = async ({ event, resolve }) => {
+  const { pathname, search } = event.url
+  const isPage = pathname === '/admin' || pathname.startsWith('/admin/')
+  const isApi = pathname.startsWith('/api/admin/')
+  if (!isPage && !isApi) return resolve(event)
+
+  const staff = await staffOf(event.locals)
+  if (!staff) error(404, 'Not found')
+
+  const onTwoFactorPage =
+    pathname === ADMIN_2FA_PATH || pathname.startsWith(`${ADMIN_2FA_PATH}/`)
+
+  if (!onTwoFactorPage && !(await isVerified(staff.sessionId))) {
+    if (isApi) error(401, 'Потрібен код другого фактора')
+    redirect(
+      303,
+      `${ADMIN_2FA_PATH}?redirectTo=${encodeURIComponent(pathname + search)}`,
+    )
+  }
 
   return resolve(event)
 }
@@ -99,12 +140,11 @@ const guardHandle: Handle = async ({ event, resolve }) => {
   if (!account) redirect(303, LOGIN_PATH)
 
   // ─── Замок 1: бан ───
-  // Убиваємо сесії в БД, щоб доступ зник і після протухання cookie-кешу.
+  // Убиваємо сесії і в Redis, і в БД, щоб доступ зник і після протухання
+  // cookie-кешу.
   if (account.banned) {
-    await prisma.session
-      .deleteMany({ where: { userId: account.id } })
-      .catch(() => {})
-    invalidateAccount(account.id)
+    await revokeSessions(account.id).catch(() => {})
+    await invalidateAccount(account.id)
     redirect(303, `${LOGIN_PATH}?error=banned`)
   }
 
@@ -127,6 +167,10 @@ const guardHandle: Handle = async ({ event, resolve }) => {
   if (!isProtected) return resolve(event)
 
   // ─── Замок 3: онбординг ───
+  // Співробітник без анкети — не клієнт і не майстер: його місце в
+  // адмінці, а не на формі онбордингу (туди ж веде вхід за замовчуванням).
+  if (!account.onboarded && isStaff(account.role)) redirect(303, '/admin')
+
   // Не пройшов онбординг → замикаємо в /dashboard/onboarding/**.
   if (!account.onboarded && !pathname.startsWith(ONBOARDING_PATH)) {
     redirect(303, ONBOARDING_PATH)
@@ -137,7 +181,7 @@ const guardHandle: Handle = async ({ event, resolve }) => {
   // лишається доступним онбордженому КЛІЄНТУ — це апгрейд ролі,
   // і його власний load сам розвертає мастера на /dashboard/profile.
   if (account.onboarded && pathname === ONBOARDING_PATH) {
-    redirect(303, '/dashboard/profile')
+    redirect(303, '/dashboard ')
   }
 
   // Віддаємо стан далі — load-функції не роблять той самий SELECT удруге.
@@ -201,9 +245,52 @@ const securityHeaders: Handle = async ({ event, resolve }) => {
   return response
 }
 
+// ═══════════════════ Старт процесу ═══════════════════
+
+/**
+ * Хвилі розсилки, чиї таймери загинули разом із попереднім процесом
+ * (деплой, падіння, рестарт dev-сервера), підхоплюються одразу на старті.
+ * Не чекаємо: сервер приймає запити, поки відновлення йде фоном.
+ */
+export const init: ServerInit = () => {
+  if (building) return
+
+  // Telegram-бот: команди й вебхук (прод) чи polling (dev). Ліниво — щоб
+  // grammY не тягнувся в кожен імпорт hooks (і в його тести); без
+  // TELEGRAM_BOT_TOKEN нічого не робить. Прев'ю-деплой Vercel вебхук не
+  // ставить: інакше він перехопив би бота в бойового сайту.
+  if (productionDeploy) {
+    void import('$lib/server/telegram')
+      .then(({ startTelegram }) => startTelegram())
+      .catch((err) => console.error('[telegram] start failed:', err))
+  }
+
+  // Vercel: init — це кожен холодний старт функції, а таймер після
+  // відповіді не живе. Хвилі там веде черга QStash, нагадування й
+  // відновлення — крон (vercel.json). Далі — лише довгоживучий процес.
+  if (serverless) return
+
+  void resumeDispatch()
+    .then(({ checked, caughtUp }) => {
+      if (checked > 0) {
+        console.log(
+          `[dispatch] resumed: checked=${checked} caughtUp=${caughtUp}`,
+        )
+      }
+    })
+    .catch((err) => console.error('[dispatch] resume failed:', err))
+
+  // Нагадування за день до прибирання: щоденний таймер о 18:00 за Києвом
+  // (крон `reminders` — страховка).
+  void import('$lib/server/reminders')
+    .then(({ startReminders }) => startReminders())
+    .catch((err) => console.error('[reminders] start failed:', err))
+}
+
 export const handle = sequence(
   securityHeaders,
   authHandle,
   sessionHandle,
+  adminGate,
   guardHandle,
 )

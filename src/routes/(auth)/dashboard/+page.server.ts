@@ -1,6 +1,9 @@
 import { prisma } from '$lib/server/prisma'
 import { requireUser } from '$lib/server/guards'
 import { redirect } from '@sveltejs/kit'
+import { parseMasterSkills } from '$lib/masters/meta'
+import { CATEGORY_SLUG } from '$lib/categories/cleaning/presets'
+import { describeCleaningSkills } from '$lib/categories/cleaning/skills'
 import type { PageServerLoad } from './$types'
 import type {
   FreelancerProfileData,
@@ -82,6 +85,8 @@ export const load: PageServerLoad = async ({
           verificationStatus: true,
           verificationRejectReason: true,
           completedOrders: true,
+          crew: true,
+          metadata: true,
         },
       },
     },
@@ -150,6 +155,9 @@ export const load: PageServerLoad = async ({
   const categoryNames = (mp?.categories ?? []).map(
     (slug) => categoryRows.find((c) => c.slug === slug)?.name ?? slug,
   )
+  const skills = describeCleaningSkills(
+    parseMasterSkills(mp?.metadata)[CATEGORY_SLUG],
+  )
 
   return {
     profileType: 'master',
@@ -172,6 +180,9 @@ export const load: PageServerLoad = async ({
       reviewsCount: user.reviewsCountAsMaster,
       completedOrders: mp?.completedOrders ?? 0,
       reviews,
+      crew: mp?.crew ?? null,
+      services: skills.services,
+      premises: skills.premises,
     },
   }
 }

@@ -1,109 +1,25 @@
 <script lang="ts">
-  // Іконка «Повідомлення». Сітка lucide 24×24, stroke 2, round caps.
-  //
-  // Бульбашка діалогу з трьома крапками. Анімуються крапки — по черзі,
-  // як індикатор набору тексту: сенс прямий, у чаті хтось пише.
-  //
-  // Крапки намальовані як шляхи нульової довжини з round cap —
-  // так вони підхоплюють stroke-width і масштабуються разом з іконкою,
-  // на відміну від <circle> з фіксованим r.
+  // «Повідомлення» — бульбашка з трьома крапками (Hugeicons BubbleChat).
+  import StrokeIcon, { type IconProps } from './stroke-icon.svelte'
 
-  interface Props {
-    size?: number
-    strokeWidth?: number
-    class?: string
-    /** Зовнішнє керування. Без пропа іконка реагує на власний hover. */
-    animate?: boolean
+  interface Props extends IconProps {
+    /**
+     * Крапки в бульбашці. Без них — порожня бульбашка: для порожніх
+     * станів списку чатів, де ніхто нічого не пише.
+     */
+    dots?: boolean
   }
 
-  let {
-    size = 17,
-    strokeWidth = 2,
-    class: className = '',
-    animate,
-  }: Props = $props()
-
-  const controlled = $derived(animate !== undefined)
+  let { dots = true, ...rest }: Props = $props()
 </script>
 
-<span
-  class="messages-icon {className}"
-  class:is-animating={controlled && animate}
-  class:is-hoverable={!controlled}
->
-  <svg
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    stroke-width={strokeWidth}
-    stroke-linecap="round"
-    stroke-linejoin="round"
-    xmlns="http://www.w3.org/2000/svg"
-    aria-hidden="true"
-  >
-    <!-- Бульбашка з хвостиком унизу ліворуч -->
-    <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
-
-    <!-- Крапки: спалахують по черзі -->
-    <path class="dot" d="M8 12h.01" />
-    <path class="dot dot-2" d="M12 12h.01" />
-    <path class="dot dot-3" d="M16 12h.01" />
-  </svg>
-</span>
-
-<style>
-  .messages-icon {
-    display: inline-flex;
-  }
-
-  /* display:block прибирає «щілину» під базовою лінією inline-елемента,
-     через яку іконка здається зміщеною в flex-контейнері. */
-  .messages-icon :global(svg) {
-    display: block;
-  }
-
-  .dot {
-    transform-origin: center;
-  }
-
-  /* Крапка підстрибує й трохи більшає — так каскад читається як набір
-     тексту, а не як просте блимання. */
-  @keyframes pulse-dot {
-    0%,
-    100% {
-      transform: translateY(0) scale(1);
-      opacity: 0.55;
-    }
-    40% {
-      transform: translateY(-1.5px) scale(1.15);
-      opacity: 1;
-    }
-  }
-
-  .is-hoverable:hover .dot,
-  .is-animating .dot {
-    animation: pulse-dot 600ms ease-in-out;
-  }
-
-  /* Затримки дають хвилю зліва направо.
-     both — щоб до старту крапка лишалась у вихідному стані. */
-  .is-hoverable:hover .dot-2,
-  .is-animating .dot-2 {
-    animation-delay: 120ms;
-    animation-fill-mode: both;
-  }
-
-  .is-hoverable:hover .dot-3,
-  .is-animating .dot-3 {
-    animation-delay: 240ms;
-    animation-fill-mode: both;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .dot {
-      animation: none !important;
-    }
-  }
-</style>
+<StrokeIcon {...rest}>
+  <path
+    d="M12 21.5C17.2467 21.5 21.5 17.2467 21.5 12C21.5 6.75329 17.2467 2.5 12 2.5C6.75329 2.5 2.5 6.75329 2.5 12C2.5 13.3377 2.66372 14.5604 3.1189 15.6954C3.81756 17.4374 3.68195 18.9241 2.5 20.5C3.86146 21.1644 5.86811 21.1419 7 20.0725C8.45323 20.9748 10.1636 21.5 12 21.5Z"
+  />
+  {#if dots}
+    <path
+      d="M12.2 12.0002H12M7.69961 11.9999H7.49961M16.6996 11.9999H16.4996M12.4 12.0002C12.4 12.2212 12.2209 12.4002 12 12.4002C11.7791 12.4002 11.6 12.2212 11.6 12.0002C11.6 11.7793 11.7791 11.6002 12 11.6002C12.2209 11.6002 12.4 11.7793 12.4 12.0002ZM7.89961 11.9999C7.89961 12.2208 7.72052 12.3999 7.49961 12.3999C7.2787 12.3999 7.09961 12.2208 7.09961 11.9999C7.09961 11.7789 7.2787 11.5999 7.49961 11.5999C7.72052 11.5999 7.89961 11.7789 7.89961 11.9999ZM16.8996 11.9999C16.8996 12.2208 16.7205 12.3999 16.4996 12.3999C16.2787 12.3999 16.0996 12.2208 16.0996 11.9999C16.0996 11.7789 16.2787 11.5999 16.4996 11.5999C16.7205 11.5999 16.8996 11.7789 16.8996 11.9999Z"
+    />
+  {/if}
+</StrokeIcon>

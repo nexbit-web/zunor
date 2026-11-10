@@ -9,7 +9,12 @@ vi.mock('$lib/server/prisma', async () => ({
 }))
 vi.mock('$lib/server/pusher', async () => await import('./helpers/infra'))
 
-const { notify, Notify } = await import('$lib/server/notifications')
+const { notify, Notify, newJobNotice, jobOfferNotice, pushNotification } =
+  await import('$lib/server/notifications')
+
+/** «Нова заявка» пишеться розсилкою пакетом, але це те саме сповіщення. */
+const newJob = (userId: string, jobId: string, title: string) =>
+  notify(newJobNotice(userId, jobId, title) as Parameters<typeof notify>[0])
 
 // Сповіщення — це два записи одних даних: рядок у БД (його побачить той,
 // хто зайде на сторінку) і подія Pusher (її побачить той, хто вже сидить у
@@ -34,7 +39,13 @@ const createdData = () => prisma.notification.create.mock.calls[0][0].data
 beforeEach(() => {
   resetPrisma()
   resetInfra()
-  prisma.notification.create.mockResolvedValue(CREATED)
+  // Як справжня Prisma: створений рядок містить і передані поля.
+  prisma.notification.create.mockImplementation(
+    async ({ data }: { data: Record<string, unknown> }) => ({
+      ...CREATED,
+      ...data,
+    }),
+  )
 })
 
 describe('notify(): запис і broadcast', () => {
@@ -77,7 +88,9 @@ describe('notify(): запис і broadcast', () => {
   it('у події їде створений запис цілком', async () => {
     await notify({ userId: 'u-1', type: 'NEW_JOB', title: 'x' })
 
-    expect(safeTrigger.mock.calls[0][2]).toEqual({ notification: CREATED })
+    const created = await prisma.notification.create.mock.results[0].value
+    expect(created).toMatchObject(CREATED)
+    expect(safeTrigger.mock.calls[0][2]).toEqual({ notification: created })
   })
 
   it('спершу запис у БД, потім подія', async () => {
@@ -139,6 +152,43 @@ describe('notify(): транзакційного клієнта немає на�
   })
 })
 
+describe('jobOfferNotice: пропозиція з-за меж виїзду', () => {
+  it('той самий тип і адреса, що й «нова заявка», але інший тон', () => {
+    const offer = jobOfferNotice('m1', 'job-1', 'Вікна', 12.4)
+
+    expect(offer).toMatchObject({
+      userId: 'm1',
+      type: 'NEW_JOB',
+      jobId: 'job-1',
+    })
+    expect(offer.title).not.toBe(newJobNotice('m1', 'job-1', 'Вікна').title)
+    expect(offer.body).toContain(
+      'Вікна. Це ≈12 км — далі, ніж ти зазвичай їздиш',
+    )
+  })
+
+  it('відстань невідома — без числа, але з тим самим поясненням', () => {
+    expect(jobOfferNotice('m1', 'job-1', 'Вікна', null).body).toContain(
+      'Вікна. Це далі, ніж ти зазвичай їздиш',
+    )
+  })
+})
+
+describe('pushNotification: подія для вже записаного сповіщення', () => {
+  // Розсилка пише сповіщення в транзакції, а подію шле окремо після
+  // коміту — канал і назва події мусять бути ті самі, що в notify().
+  it('шле в особистий канал отримувача подію notification:new', async () => {
+    const row = { ...CREATED, userId: 'master-7', type: 'NEW_JOB', title: 'x' }
+    await pushNotification(row as Parameters<typeof pushNotification>[0])
+
+    expect(safeTrigger).toHaveBeenCalledWith(
+      'private-user-master-7',
+      'notification:new',
+      { notification: row },
+    )
+  })
+})
+
 // ─────────────────── Хелпери Notify.* ───────────────────
 
 /** Прогін одного хелпера: повертає data, що поїхала в create. */
@@ -154,7 +204,7 @@ async function fire(run: () => Promise<void>) {
 
 describe('адресація: кожен хелпер б’є в потрібного користувача', () => {
   it('NEW_JOB — майстру, з id заявки', async () => {
-    const d = await fire(() => Notify.newJob('master-1', 'job-1', 'Прибирання'))
+    const d = await fire(() => newJob('master-1', 'job-1', 'Прибирання'))
 
     expect(d).toMatchObject({
       userId: 'master-1',
@@ -243,7 +293,7 @@ describe('адресація: кожен хелпер б’є в потрібн�
 
 describe('контракт із клієнтом', () => {
   const ALL: Array<[string, () => Promise<void>]> = [
-    ['newJob', () => Notify.newJob('u', 'job-1', 'Прибирання')],
+    ['newJob', () => newJob('u', 'job-1', 'Прибирання')],
     ['newProposal', () => Notify.newProposal('u', 'job-1', 'prop-1')],
     ['proposalAccepted', () => Notify.proposalAccepted('u', 'job-1', 'ord-1')],
     ['orderStarted', () => Notify.orderStarted('u', 'ord-1')],

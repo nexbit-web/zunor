@@ -9,7 +9,12 @@ export const NOTIFICATION_TYPES = [
   'ORDER_STARTED',
   'ORDER_COMPLETED',
   'ORDER_CANCELLED',
+  'ORDER_REMINDER',
   'JOB_REOPENED',
+  'JOB_UPDATED',
+  'VERIFICATION_APPROVED',
+  'VERIFICATION_REJECTED',
+  'REPORT_RESOLVED',
 ] as const
 
 export type NotificationType =
@@ -45,7 +50,15 @@ export interface Notification {
  * клієнта мовчки редіректило на дашборд. Відгуки клієнт бачить на
  * сторінці своєї заявки, і `jobId` у цьому сповіщенні теж є.
  */
-export function linkFor(n: Notification): string {
+export function linkFor(
+  // Лише тип і адресні поля: так її кличе й сервер (Telegram), де в
+  // записі з бази createdAt — Date, а не рядок.
+  n: Pick<Notification, 'type' | 'orderId' | 'jobId' | 'chatId'>,
+): string {
+  // Рішення модерації — про профіль: там видно позначку чи причину відмови.
+  if (n.type === 'VERIFICATION_APPROVED' || n.type === 'VERIFICATION_REJECTED') {
+    return '/dashboard/profile'
+  }
   if (n.orderId) return `/dashboard/orders/${n.orderId}`
   if (n.jobId) return `/dashboard/jobs/${n.jobId}`
   if (n.chatId) return `/dashboard/messages/${n.chatId}`

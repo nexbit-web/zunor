@@ -1,5 +1,6 @@
 <script lang="ts">
   import FreelancerProfileView from '$lib/components/profile/freelancer-profile-view.svelte'
+  import ReportButton from '$lib/components/reports/report-button.svelte'
   import { page } from '$app/state'
   import type { PageData } from './$types'
 
@@ -92,3 +93,15 @@
   isOwner={false}
   isAuthenticated={data.isAuthenticated}
 />
+
+<!-- Лише з акаунтом: скарга без автора нічого не варта, а власника
+     сторінки лоадер сюди не пускає (редірект на дашборд). -->
+{#if data.isAuthenticated}
+  <div class="flex justify-center pb-10">
+    <ReportButton
+      targetId={data.user.id}
+      targetName={data.user.name}
+      targetRole="MASTER"
+    />
+  </div>
+{/if}

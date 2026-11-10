@@ -60,7 +60,7 @@ describe('канал чату', () => {
     expect(res.status).toBe(200)
     expect(prisma.chatMember.findUnique).toHaveBeenCalledWith({
       where: { chatId_userId: { chatId: 'chat-1', userId: 'u1' } },
-      select: expect.anything(),
+      select: { chatId: true },
     })
   })
 
@@ -83,24 +83,30 @@ describe('канал чату', () => {
     expect(res.status).toBe(403)
   })
 
-  it('presence віддає лише публічні поля учасника', async () => {
-    prisma.chatMember.findUnique.mockResolvedValue({
-      user: {
-        id: 'u1',
-        name: 'Оля',
-        avatar: 'https://res.cloudinary.com/a.jpg',
-      },
-    })
+  // Імʼя й аватар — із сесії (окремий SELECT заради них зайвий). Ані
+  // email, ані телефону в presence бути не може: ці дані бачать УСІ
+  // учасники каналу.
+  it('presence віддає лише публічні поля учасника — із сесії', async () => {
+    prisma.chatMember.findUnique.mockResolvedValue({ chatId: 'chat-1' })
+    const user = {
+      id: 'u1',
+      name: 'Оля',
+      email: 'olia@example.com',
+      image: 'https://res.cloudinary.com/a.jpg',
+    }
 
-    await POST(authEvent('u1', 'presence-chat-chat-1'))
+    await POST(
+      makeEvent({
+        form: { socket_id: '123.456', channel_name: 'presence-chat-chat-1' },
+        locals: { ...sessionUser('u1'), user },
+      }),
+    )
 
     const [, , presenceData] = pusherServer.authorizeChannel.mock.calls[0]
     expect(presenceData).toEqual({
       user_id: 'u1',
       user_info: { name: 'Оля', avatar: 'https://res.cloudinary.com/a.jpg' },
     })
-    // Ані email, ані телефону в presence бути не може: ці дані бачать УСІ
-    // учасники каналу.
     expect(JSON.stringify(presenceData)).not.toContain('@')
   })
 })

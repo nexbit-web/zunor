@@ -9,7 +9,7 @@ import type {
 
 /**
  * Глобальний store для синхронізації стану чатів між сторінками:
- *  • Бейдж "непрочитаних" у хедері і mobile-nav оновлюється у real-time
+ *  • Бейдж "непрочитаних" у панелі дашборда оновлюється у real-time
  *  • Список чатів на /messages синхронізується автоматично коли приходить
  *    повідомлення в інший чат
  *
@@ -52,6 +52,15 @@ class ChatStore {
   setChats(chats: ChatPreview[]) {
     this.chats = chats
     this.initialized = true
+  }
+
+  /**
+   * Співрозмовник прочитав чат (подія message:read у відкритому вікні) —
+   * галочки в списку стають подвійними без перезавантаження.
+   */
+  markPeerRead(chatId: string, lastReadAt: string) {
+    const chat = this.chats.find((c) => c.id === chatId)
+    if (chat) chat.peerLastReadAt = lastReadAt
   }
 
   /** Локально позначити чат як прочитаний (коли юзер його відкриває) */

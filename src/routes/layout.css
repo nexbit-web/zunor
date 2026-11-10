@@ -1,12 +1,38 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import 'shadcn-svelte/tailwind.css';
-@import '@fontsource/roboto/400.css';
-@import '@fontsource/roboto/500.css';
-@import '@fontsource/roboto/700.css';
+@import '@fontsource-variable/inter/opsz.css';
 @import '@fontsource/roboto-mono/400.css';
 
+/* ═══════════════════════════════════════════════════════════════
+   Inter — шрифт інтерфейсу.
+
+   Взято замість SF UI: ліцензія Apple дозволяє SF лише в застосунках
+   під платформи Apple і прямо забороняє його на вебсайтах. Inter
+   малювався як відкрита заміна саме цій гарнітурі — ті самі пропорції
+   й високий x-height, тільки під ліцензією OFL.
+
+   Варіативне накреслення з віссю opsz: одна вісь ваги 100–900 замість
+   п'яти окремих файлів і оптичний розмір, який браузер підбирає САМ під
+   кегль. Це те, заради чого в SF існували два сімейства (Text для
+   дрібного, Display для великого) — тут воно робиться без другого
+   сімейства й без нашої участі.
+
+   Кирилиця лежить окремим файлом з власним unicode-range: браузер
+   візьме латиницю (73KB) і кирилицю (29KB), а грецьку й вʼєтнамську з
+   того самого пакета не завантажить ніколи.
+   ═══════════════════════════════════════════════════════════════ */
+
 @custom-variant dark (&:is(.dark *));
+
+/* Висота робочої області дашборда. Контент стоїть впритул до країв вікна
+   (без зовнішніх відступів, див. dashboard/+layout.svelte), тож це вся
+   висота екрана. Сторінки, яким потрібна «щонайменше на весь екран» (щоб
+   порожній стан став по центру), беруть цю змінну, а не 100svh напряму:
+   якщо відступи колись повернуться, правити доведеться одне місце. */
+:root {
+  --app-h: 100svh;
+}
 
 /* ═══════════════════════════════════════════════════════════════
    Zunor — токени теми.
@@ -19,143 +45,460 @@
 
    Кожен токен, що є тут, має бути в ОБОХ темах: :root і .dark.
    Виняток — --radius, він не залежить від теми.
+
+   Палітра — з DESIGN.md: сірі Ink Black / Slate / Ash / Fog / Cloud /
+   Bone, синій Signal Blue для дій. DESIGN.md описує лише світлу тему;
+   темна — холодні графітові сірі з референсу в docs/ (полотно #15171b,
+   панель і картки #1b1d21, лінії #282b2f, текст #dbdee3; див. .dark
+   нижче).
    ═══════════════════════════════════════════════════════════════ */
 
 :root {
-  /* ─── База: фон, текст, поверхні ─── */
-  --background: #fcfcfb;
-  --foreground: #131313;
+  /* ─────────────────────────────────────────────
+     BASE
+     ───────────────────────────────────────────── */
+
+  --background: #ffffff;
+  --foreground: #202020; /* Ink Black */
 
   --card: #ffffff;
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: #202020;
 
-  /* Фон робочої зони дашборда (bg-(--dashboard) у його лейауті). */
-  --dashboard: #fcfcfa;
+  /* Вхідний пузир чату — білий на зелених шпалерах, як у Telegram. */
+  --bubble-in: #ffffff;
 
-  --popover: oklch(1 0 0);
-  /* Було помилково #3390ec — увесь текст у попап-меню ставав синім. */
-  --popover-foreground: oklch(0.145 0 0);
+  /* Службові плашки поверх шпалер чату (дата, «Оберіть чат»): напівпрозора
+     тінь шпалер, а не біла картка, — як у Telegram, плашка бере колір того,
+     що під нею, і не ріже візерунок білою латкою. */
+  --chat-service: rgb(0 0 0 / 0.22);
+  --chat-service-foreground: #ffffff;
 
-  /* Напівпрозорий фон під шапкою майстра заявки (jobs/new). */
-  --bg-translucent: lab(100% 0 0/0.8);
+  /* Бокова панель (рейка й розгорнута) — на тон сіріша за полотно, від
+     сторінки її відділяє ще й лінія (--sidebar-border). Тони — з
+     референсу в docs/ (піпеткою): панель #f3f3f3, активний пункт #ebebeb. */
+  --sidebar-raised: #f3f3f3;
 
-  /* Текстові кольори для місць із власною версткою (header, +error). */
-  --color-text: #131313;
-  --color-text-500: #7b7974;
+  --popover: #ffffff;
+  --popover-foreground: #202020;
 
-  /* ─── Акцент ─── */
-  --primary: #c6613f;
-  --primary-foreground: oklch(1 0 0);
-  --primary-hover: #d97757;
+  /* ─────────────────────────────────────────────
+     GLASS / MATERIAL
+     ───────────────────────────────────────────── */
 
-  /* Фокусна рамка синя, а акцент теракотовий: залишок попередньої
-     палітри, не задум. Звести до одного — --ring: var(--primary). */
-  --ring: #0071e3;
+  --bg-translucent: rgb(255 255 255 / 0.72);
 
-  /* ─── Нейтральні ─── */
-  --secondary: #f1f0ed;
-  --secondary-foreground: oklch(0.145 0 0);
+  --glass-background: rgb(255 255 255 / 0.72);
+  --glass-border: rgb(0 0 0 / 0.08);
+  --glass-highlight: rgb(255 255 255 / 0.55);
+  --glass-shadow: 0 12px 40px rgb(0 0 0 / 0.08);
 
-  --muted: #ececea;
-  --muted-foreground: #7b7974;
+  /* ─────────────────────────────────────────────
+     TEXT
+     ───────────────────────────────────────────── */
 
-  --accent: #f1f0ed;
-  --accent-foreground: oklch(0.145 0 0);
+  --color-text: #202020;
+  --color-text-500: #646464;
 
-  --destructive: #ef4444;
+  --muted-foreground: #646464; /* Slate */
 
-  /* Бордер у звичайному стані нейтральний — кольоровим стає лише фокус. */
-  --border: #dfdfdd;
-  --input: oklch(0.92 0 0);
+  /* ─────────────────────────────────────────────
+     PRIMARY
+     ───────────────────────────────────────────── */
 
-  /* ─── Сайдбар ───
-     Повний набір потрібен компонентам з shadcn-svelte (ui/sidebar): вони
-     звертаються до bg-sidebar, bg-sidebar-accent, border-sidebar-border
-     і ring-sidebar-ring. Значення навмисно повторюють базові токени, а не
-     заводять окрему палітру: панель має бути частиною застосунку, а не
-     виглядати як вставка з чужої теми. Захочеш відділити її фоном —
-     міняти треба тут, в одному місці.
+  --primary: #1f6feb; /* Signal Blue */
+  --primary-foreground: #ffffff;
+  /* Від --primary, а не окремим кольором: акцент користувач міняє в
+     налаштуваннях (data-accent нижче), і ховер з фокусом мають іти за
+     ним. Для Signal Blue це рівно #33a7ff. */
+  --primary-hover: color-mix(in srgb, var(--primary) 80%, white);
 
-     --sidebar береться з --dashboard, а не з --background: рівно так було
-     й до переїзду на shadcn — панель лежала на фоні робочої зони, а
-     контент поруч був на чистому --background. У світлій темі різниця
-     майже непомітна, у темній панель на пів тону глибша за сторінку, і
-     саме це відділяло її від контенту без зайвої лінії. */
-  --sidebar: var(--dashboard);
-  --sidebar-foreground: oklch(0.145 0 0);
+  --ring: var(--primary);
+
+  /* ─────────────────────────────────────────────
+     NEUTRALS
+     ───────────────────────────────────────────── */
+
+  --secondary: #eeeeee; /* Mercury */
+  --secondary-foreground: #202020;
+
+  --muted: #eeeeee;
+
+  --accent: #eeeeee;
+  --accent-foreground: #202020;
+
+  /* ─────────────────────────────────────────────
+     STATUS
+     ───────────────────────────────────────────── */
+
+  --destructive: #ff3b30;
+
+  /* ─────────────────────────────────────────────
+     BORDERS / INPUTS
+     ───────────────────────────────────────────── */
+
+  --border: #e8e8e8; /* Bone — межа за замовчуванням */
+
+  /* Рамка КОНТРОЛА (поле, textarea, select, чекбокс) — одна на весь
+     сайт. Вона свідомо помітніша за --border: --border розділяє блоки,
+     і там лінію треба ледь вгадувати, а рамка контрола показує, куди
+     можна клікнути, і має читатись сама по собі. На 0.08 її не було
+     видно взагалі — поле зливалося з полотном. */
+  --input: #b3b3b3; /* Fog — найсвітліша межа, що ще читається */
+  --input-hover: #838383; /* Ash */
+
+  /* Тло поля вводу — теж одне на весь сайт. */
+  --field: #ffffff;
+
+  /* ─────────────────────────────────────────────
+     SIDEBAR
+     ───────────────────────────────────────────── */
+
+  /* Панель — свого тону (--sidebar-raised), і шторка на телефоні теж:
+     це та сама панель. */
+  --sidebar: var(--sidebar-raised);
+  --sidebar-foreground: #202020;
+
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: var(--primary-foreground);
-  --sidebar-accent: var(--accent);
-  --sidebar-accent-foreground: var(--accent-foreground);
-  --sidebar-border: var(--border);
+
+  /* Ховер і активний пункт — токени Perplexity (perplexity.ai, їхній
+     CSS): ховер — ghost-neutral 3.5% (#1c1c1c), активний — #ebebeb. */
+  --sidebar-accent: rgb(28 28 28 / 0.035);
+  --sidebar-accent-foreground: #202020;
+  --sidebar-active: #ebebeb;
+
+  /* Лінія між панеллю й сторінкою і над рядком користувача —
+     border-soft: колір тексту кабінету на 7%. На панелі #f3f3f3 це
+     рівно #e3e5e6, на білому — #eef0f1. */
+  --sidebar-border: rgb(11 40 51 / 0.07);
   --sidebar-ring: var(--ring);
 
-  /* ─── Смуга прокрутки ─── */
-  --scrollbar-thumb: rgb(0 0 0 / 0.18);
-  --scrollbar-thumb-hover: rgb(0 0 0 / 0.3);
+  /* Межа блока з контентом на тлі рамки. Bone (#e8e8e8) тут не годиться:
+     вона майже збігається з Plaster рамки й просто зникала б. Cloud —
+     «волосяна» межа палітри, вона читається і на білому, і на рамці. */
+  --panel-border: #d4d4d4; /* Cloud */
 
-  --radius: 0.625rem;
+  /* ─────────────────────────────────────────────
+     SCROLLBAR
+     ───────────────────────────────────────────── */
+
+  --scrollbar-thumb: rgb(0 0 0 / 0.18);
+  --scrollbar-thumb-hover: rgb(0 0 0 / 0.28);
+
+  /* ─────────────────────────────────────────────
+     SYSTEM
+     ───────────────────────────────────────────── */
+
+  --radius: 0.75rem;
 }
 
+/* Світла палітра КАБІНЕТУ — токени Perplexity, зняті з їхнього CSS
+   (perplexity.ai) і звірені зі скриншотами в docs/:
+     bg-base #fbfbfb → сторінка; bg-raised #fff → картки, меню, поле;
+     fg-primary #0b2833 → текст; fg-secondary (75%) → #475d65;
+     border-soft (7% тексту) → лінії й рамки карток;
+     border-base (15% тексту) → рамки полів, кнопок, меню;
+     bg-soft (7% #1c1c1c) → ховер у меню; #ebebeb → сірі кнопки.
+   Лінії й рамки — напівпрозорі, як у них: на панелі, картці й сторінці
+   вони дають рівно ті самі кольори, що в оригіналі. Тони панелі — у
+   :root вище (--sidebar-raised, --sidebar-active).
+
+   Лише на /dashboard/**: клас in-app на <html> ставлять скрипт в
+   app.html і кореневий лейаут — за тим самим правилом, що й dark
+   ($lib/theme-scope). Лендинг і решта публічних сторінок лишаються на
+   своїй палітрі (:root). Блок стоїть ДО .dark: вага однакова, тож у
+   темній темі перемагає .dark. */
+.in-app {
+  --background: #fbfbfb;
+  --foreground: #0b2833;
+
+  --card: #ffffff;
+  --card-foreground: #0b2833;
+
+  --popover: #ffffff;
+  --popover-foreground: #0b2833;
+
+  --color-text: #0b2833;
+  --color-text-500: #475d65;
+  --muted-foreground: #475d65;
+
+  --secondary: #ebebeb;
+  --secondary-foreground: #0b2833;
+  --muted: #f3f3f3;
+  --accent: rgb(28 28 28 / 0.07);
+  --accent-foreground: #0b2833;
+
+  --border: rgb(11 40 51 / 0.07);
+  --input: rgb(11 40 51 / 0.15);
+  --input-hover: rgb(11 40 51 / 0.2);
+  --panel-border: rgb(11 40 51 / 0.07);
+
+  --sidebar-foreground: #0b2833;
+  --sidebar-accent-foreground: #0b2833;
+}
+
+/* color-scheme (скролбари, нативні поля) — за класом `dark`, а не за
+   inline-стилем від mode-watcher: той ставить «dark» за ВИБОРОМ людини,
+   а поза кабінетом сторінка світла незалежно від вибору
+   ($lib/theme-scope). */
+:root {
+  color-scheme: light !important;
+}
 .dark {
-  --background: #1a1a19;
-  --foreground: #f9f9f7;
+  color-scheme: dark !important;
+}
+.dark {
+  /* ─────────────────────────────────────────────
+     BASE
+     ───────────────────────────────────────────── */
 
-  --card: #272725;
-  --card-foreground: oklch(100% 0 0);
+  /* Палітра темної теми — токени Perplexity, зняті з їхнього CSS
+     (perplexity.ai) і звірені зі скриншотами в docs/:
+       bg-base #15171b → сторінка; bg-raised #1b1d21 → панель, картки,
+       меню; odin-dark-300 #212327 → активний пункт, сірі кнопки;
+       fg-primary #dbdee3 → текст; fg-secondary (65%) → #96989d;
+       border-soft (7% тексту) → лінії (на панелі — рівно #282b2f);
+       border-base (14%) → рамки полів і кнопок.
+     Поле вводу — #1f2125, як поле запиту на скриншоті. */
+  --background: #15171b;
+  --foreground: #dbdee3;
 
-  --dashboard: #161615;
+  --card: #1b1d21;
+  --card-foreground: #dbdee3;
 
-  --popover: oklch(23% 0.002 107);
-  --popover-foreground: oklch(100% 0 0);
+  --bubble-in: var(--card);
 
-  --bg-translucent: lab(49.8943% -0.875205 3.29613/0.16);
+  /* Плашки над шпалерами чату — напівпрозорий сірий. */
+  --chat-service: rgb(144 147 152 / 0.32);
+  --chat-service-foreground: #dbdee3;
 
-  --color-text: #f9f9f7;
-  --color-text-500: #7b7974;
+  /* Бокова панель (і рейка, і розгорнута): на тон світліша за полотно,
+     від сторінки її відділяє лінія (у світлій темі — сіріша). */
+  --sidebar-raised: #1b1d21;
 
-  --primary: #c6613f;
-  --primary-foreground: oklch(1 0 0);
-  --primary-hover: #d97757;
-  --ring: #0071e3;
+  /* Меню, списки, діалоги — bg-raised, як картки; від полотна їх
+     відділяє ще й рамка (ring у компонентах ui). */
+  --popover: #1b1d21;
+  --popover-foreground: #dbdee3;
 
-  --secondary: #313130;
-  --secondary-foreground: oklch(90.95% 0.002 107);
+  /* ─────────────────────────────────────────────
+     GLASS / MATERIAL
+     ───────────────────────────────────────────── */
 
-  --muted: #3f3f3d;
-  --muted-foreground: #a8a6a0;
+  --bg-translucent: rgb(27 29 33 / 0.72);
 
-  --accent: #3c3c3a;
-  --accent-foreground: oklch(100% 0 0);
+  --glass-background: rgb(27 29 33 / 0.72);
+  --glass-border: rgb(219 222 227 / 0.1);
+  --glass-highlight: rgb(219 222 227 / 0.06);
+  --glass-shadow: 0 16px 50px rgb(0 0 0 / 0.55);
 
-  --destructive: #f87171;
+  /* ─────────────────────────────────────────────
+     TEXT
+     ───────────────────────────────────────────── */
 
-  --border: #353533;
-  --input: oklch(37.2% 0.004 107 / 40%);
+  --color-text: #dbdee3;
+  --color-text-500: #96989d;
 
-  --sidebar: var(--dashboard);
-  --sidebar-foreground: oklch(100% 0 0);
+  --muted-foreground: #96989d;
+
+  /* ─────────────────────────────────────────────
+     PRIMARY
+     ───────────────────────────────────────────── */
+
+  /* Фірмовий синій — ним залиті кнопки й смужка активного пункту.
+     Токен один і для тла, і для тексту: світліший синій для посилань
+     гірше читався б як тло під білим текстом. */
+  --primary: #1f6feb;
+  --primary-foreground: #ffffff;
+  --primary-hover: color-mix(in srgb, var(--primary) 80%, white);
+
+  --ring: var(--primary);
+
+  /* ─────────────────────────────────────────────
+     NEUTRALS
+     ───────────────────────────────────────────── */
+
+  /* Тло вторинних кнопок і поля пошуку — видно і на полотні, і на
+     картці; bg-muted/40 карток онбордингу дає на ньому тон блоків. */
+  --secondary: #212327;
+  --secondary-foreground: #dbdee3;
+
+  --muted: #212327;
+
+  /* Ховер — bg-soft (6% тексту): однаково читається на полотні, у меню
+     й на блоці. Тому заливати ним те, під чим прокручується вміст, не
+     можна — див. mobile-trigger. */
+  --accent: rgb(219 222 227 / 0.06);
+  --accent-foreground: #dbdee3;
+
+  /* ─────────────────────────────────────────────
+     STATUS
+     ───────────────────────────────────────────── */
+
+  --destructive: #f85149;
+
+  /* ─────────────────────────────────────────────
+     BORDERS / INPUTS
+     ───────────────────────────────────────────── */
+
+  /* Рамка блоків — border-soft; роздільники рядків — border-border/60. */
+  --border: rgb(219 222 227 / 0.07);
+
+  /* Поле вводу — на тон світліше за сторінку (як поле запиту в
+     референсі); рамка — border-base, під курсором — border-focus. */
+  --input: rgb(219 222 227 / 0.14);
+  --input-hover: rgb(219 222 227 / 0.2);
+
+  --field: #1f2125;
+
+  /* ─────────────────────────────────────────────
+     SIDEBAR
+     ───────────────────────────────────────────── */
+
+  /* Панель — свого тону (див. світлу тему), шторка на телефоні теж. */
+  --sidebar: var(--sidebar-raised);
+  --sidebar-foreground: #dbdee3;
+
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: var(--primary-foreground);
-  --sidebar-accent: var(--accent);
-  --sidebar-accent-foreground: var(--accent-foreground);
-  --sidebar-border: var(--border);
+
+  /* Ховер — bg-subtle (3% тексту): на панелі #1b1d21 це рівно #212327,
+     той самий тон, що й активний пункт, — як у Perplexity. */
+  --sidebar-accent: rgb(219 222 227 / 0.03);
+  --sidebar-accent-foreground: #dbdee3;
+  --sidebar-active: #212327;
+
+  --sidebar-border: rgb(219 222 227 / 0.07);
   --sidebar-ring: var(--ring);
 
-  --scrollbar-thumb: rgb(255 255 255 / 0.2);
-  --scrollbar-thumb-hover: rgb(255 255 255 / 0.35);
+  --panel-border: rgb(219 222 227 / 0.07);
+
+  /* ─────────────────────────────────────────────
+     SCROLLBAR
+     ───────────────────────────────────────────── */
+
+  --scrollbar-thumb: rgb(144 147 152 / 0.35);
+  --scrollbar-thumb-hover: rgb(144 147 152 / 0.55);
+
+  /* ─────────────────────────────────────────────
+     SYSTEM
+     ───────────────────────────────────────────── */
+
+  --radius: 0.75rem;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Акцентний колір — вибір користувача в «Налаштування → Вигляд».
+
+   Атрибут, а не клас: значення одне з десяти, і `[data-accent]` читає
+   однаково і <html> (тема всього застосунку), і окремий елемент. Саме
+   так малюються зразки в палітрі — кнопка з data-accent="pink" сама
+   отримує рожевий --primary, тож кольори живуть ТІЛЬКИ тут, а не ще й
+   копією в TypeScript. Селектори стоять після .dark і мають ту саму
+   вагу: перемагає акцент.
+
+   Список id — у $lib/stores/appearance.svelte.ts (ACCENTS), до першого
+   кадру атрибут ставить скрипт у app.html.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Чорно-білий: чорний акцент у світлій темі й білий у темній, текст на
+   кнопках інвертується разом із ним. Друге правило ловить і <html>
+   (.dark на ньому самому), і зразок у палітрі всередині темної теми. */
+[data-accent='mono'] {
+  --primary: #202020; /* Ink Black */
+  --primary-foreground: #ffffff;
+}
+.dark[data-accent='mono'],
+.dark [data-accent='mono'] {
+  --primary: #dbdee3;
+  --primary-foreground: #15171b;
+}
+[data-accent='violet'] {
+  --primary: #7b68ee;
+}
+[data-accent='blue'] {
+  --primary: #0091ff;
+}
+/* У темній темі синій — фірмовий (той самий, що й --primary
+   .dark): #0091ff на темному полотні відгонить блакиттю й випадає з
+   палітри. Дві форми селектора — як у чорно-білого: <html> і зразок у
+   палітрі. */
+.dark[data-accent='blue'],
+.dark [data-accent='blue'] {
+  --primary: #1f6feb;
+}
+[data-accent='pink'] {
+  --primary: #ee5e99;
+}
+[data-accent='purple'] {
+  --primary: #b660e0;
+}
+[data-accent='indigo'] {
+  --primary: #6985ff;
+}
+[data-accent='orange'] {
+  --primary: #e16b16;
+}
+[data-accent='teal'] {
+  --primary: #0f9d9f;
+}
+[data-accent='mocha'] {
+  --primary: #aa8d80;
+}
+[data-accent='green'] {
+  --primary: #238636;
+}
+
+/* Мініатюри тем у «Вигляді» (theme-picker): кожна у СВОЄМУ тоні, а не в
+   увімкненій темі. Інакше в темній темі світле превʼю отримало б білі
+   акценти на білому блоці. Стосується лише чорно-білого — решта кольорів
+   однакові в обох темах. */
+[data-accent='mono'][data-tone='light'] {
+  --primary: #202020;
+}
+[data-accent='mono'][data-tone='dark'] {
+  --primary: #dbdee3;
+}
+
+/* ─── Висока контрастність ───
+   Темніший другорядний текст і помітніші рамки — для тих, кому сірий
+   на білому читається погано. Ті самі сірі з палітри DESIGN.md, лише
+   на крок-два темніші (у темній темі — світліші). */
+:root[data-contrast='more'] {
+  --muted-foreground: #424242;
+  --color-text-500: #424242;
+  --border: #b3b3b3; /* Fog */
+  --input: #646464; /* Slate */
+  --input-hover: #202020;
+  --sidebar-border: #838383;
+  --panel-border: #838383; /* Ash */
+}
+.dark[data-contrast='more'] {
+  --muted-foreground: #d4d4d4; /* Cloud */
+  --color-text-500: #d4d4d4;
+  --border: #646464;
+  --input: #b3b3b3;
+  --input-hover: #e8e8e8;
+  --sidebar-border: #646464;
+  --panel-border: #646464;
 }
 
 @theme inline {
+  /* Системні шрифти в запасі — не формальність: на macOS та iOS
+     -apple-system це SF, найближчий родич Inter, тож підміна на час
+     завантаження лишається непомітною. */
   --font-sans:
-    'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Oxygen-Sans',
-    Ubuntu, Cantarell, 'Helvetica Neue', sans-serif;
+    'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', sans-serif;
 
   --font-mono: 'Roboto Mono', monospace;
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
+  --color-bubble-in: var(--bubble-in);
+  --color-chat-service: var(--chat-service);
+  --color-chat-service-foreground: var(--chat-service-foreground);
   --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
@@ -175,6 +518,9 @@
 
   --color-border: var(--border);
   --color-input: var(--input);
+  --color-input-hover: var(--input-hover);
+  --color-field: var(--field);
+  --color-panel-border: var(--panel-border);
 
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
@@ -206,13 +552,15 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
+  /* scrollbar-gutter: stable тут більше немає. Він тримав місце під смугу
+     прокрутки завжди — і на сторінках без прокрутки праворуч стояла
+     порожня темна (чи сіра) доріжка на всю висоту, особливо помітна поверх
+     відсвіту на сторінках входу. Зсув на ширину смуги при переході між
+     довгою й короткою сторінкою — менше зло, ніж смуга, яка нічого не
+     прокручує. */
   html {
     @apply font-sans;
     scroll-behavior: smooth;
-    /* Місце під смугу резервується завжди — інакше при переході зі
-       сторінки без прокрутки на сторінку з нею весь контент стрибає
-       вбік на ширину смуги. */
-    scrollbar-gutter: stable;
   }
 
   /* ─── Смуга прокрутки ───
@@ -295,10 +643,27 @@
   color: transparent;
 }
 
+/* Lottie одним кольором — кольором тексту довкола (LottiePlayer
+   monochrome, ZunorMarkAnimated, ZunorPasswordPeek). Чисто чорне в JSON —
+   «прорізи» (очі, обведення рук): вони кольору тла, як очі в ZunorMark.
+   Кольори lottie ставить атрибутами fill/stroke, а CSS атрибути
+   перекриває. */
+.lottie-mono path[fill] {
+  fill: currentColor;
+}
+
+.lottie-mono path[stroke] {
+  stroke: currentColor;
+}
+
+.lottie-mono path[fill='rgb(0,0,0)'] {
+  fill: var(--background);
+}
+
 /* ─── NProgress (смуга завантаження вгорі) ─── */
 html #nprogress .bar {
   background: var(--primary);
-  height: 2px;
+  height: 3px;
 }
 
 #nprogress {
@@ -316,4 +681,60 @@ html #nprogress .peg {
   main {
     padding-bottom: 40px;
   }
+}
+
+/* ─── Перемикання теми колом (src/lib/theme-transition.ts) ───
+   Як у Telegram: у темну — темне коло розходиться від кнопки на весь
+   екран, у світлу — темне стягується назад у неї. Браузер анімує лише
+   маску над двома знятими кадрами, сторінка в цей час не малюється.
+   Центр і радіус (--theme-x/y/r) ставить JS на <html>, звідки їх і
+   успадковує дерево ::view-transition. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  /* Без стандартного перехресного згасання: видно лише коло. */
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+html[data-theme-switch='to-dark']::view-transition-new(root) {
+  animation: theme-grow 560ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+/* Старий (темний) кадр — поверх нового, інакше стягувалось би під ним. */
+html[data-theme-switch='to-light']::view-transition-old(root) {
+  z-index: 1;
+  animation: theme-shrink 560ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+@keyframes theme-grow {
+  from {
+    clip-path: circle(0 at var(--theme-x) var(--theme-y));
+  }
+  to {
+    clip-path: circle(var(--theme-r) at var(--theme-x) var(--theme-y));
+  }
+}
+
+@keyframes theme-shrink {
+  from {
+    clip-path: circle(var(--theme-r) at var(--theme-x) var(--theme-y));
+  }
+  to {
+    clip-path: circle(0 at var(--theme-x) var(--theme-y));
+  }
+}
+
+/* На час кола — без CSS-переходів кольорів (див. theme-transition.ts). */
+.theme-switching *,
+.theme-switching *::before,
+.theme-switching *::after {
+  transition: none !important;
+}
+
+/* Іконка звичайного тоста ({ icon: WaveIcon }): бібліотека малює
+   компонент без пропів, а іконки набору за замовчуванням 24px. */
+.app-toast > svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
 }

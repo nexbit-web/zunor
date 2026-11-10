@@ -165,6 +165,67 @@ describe('avatar: посилання', () => {
   })
 })
 
+// Видалення фото: що стирати, вирішує сервер за userId із сесії. Тіло
+// запиту не несе publicId узагалі, тож чужий файл так не зачепити.
+describe('avatar-remove', () => {
+  const fixedId = `zunor/users/${USER}/avatar/profile`
+
+  const destroyedIds = () =>
+    cloudinary.uploader.destroy.mock.calls.map((c: unknown[]) => c[0])
+
+  it('прибирає фото з профілю', async () => {
+    const res = await post(USER, { kind: 'avatar-remove' })
+
+    expect(res.status).toBe(200)
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: USER },
+      data: { avatar: null, avatarPublicId: null },
+    })
+  })
+
+  // Файл міг потрапити в хмару, а в базу — ні (завантажили на
+  // онбордингу й не зберегли форму). Тож фіксований id стирається завжди.
+  it('стирає файл у хмарі, навіть якщо в базі його немає', async () => {
+    await post(USER, { kind: 'avatar-remove' })
+
+    expect(destroyedIds()).toEqual([fixedId])
+    expect(cloudinary.uploader.destroy).toHaveBeenCalledWith(fixedId, {
+      resource_type: 'image',
+      invalidate: true,
+    })
+  })
+
+  it('старий id із бази теж стирається, якщо він наш', async () => {
+    const legacy = `zunor/users/${USER}/avatar/old`
+    prisma.user.findUnique.mockResolvedValue({ avatarPublicId: legacy })
+
+    await post(USER, { kind: 'avatar-remove' })
+
+    expect(destroyedIds().sort()).toEqual([fixedId, legacy].sort())
+  })
+
+  it('чужий id у базі не чіпаємо', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      avatarPublicId: 'zunor/users/other-user/avatar/profile',
+    })
+
+    await post(USER, { kind: 'avatar-remove' })
+
+    expect(destroyedIds()).toEqual([fixedId])
+  })
+
+  it('збій хмари не валить запит: з профілю фото вже прибране', async () => {
+    cloudinary.uploader.destroy.mockRejectedValueOnce(
+      new Error('cloudinary down'),
+    )
+
+    const res = await post(USER, { kind: 'avatar-remove' })
+
+    expect(res.status).toBe(200)
+    expect(prisma.user.update).toHaveBeenCalled()
+  })
+})
+
 // Ім'я хмари Cloudinary — це ПЕРШИЙ сегмент шляху, і воно перевіряється
 // нарівні з хостом. Без цього підходило б посилання на ЧУЖИЙ акаунт, аби в
 // шляху десь трапився свій publicId:

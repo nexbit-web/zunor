@@ -5,6 +5,10 @@ import { cloudinary, safeTrigger, resetInfra } from './helpers/infra'
 vi.mock('$lib/server/prisma', async () => ({
   prisma: (await import('./helpers/prisma-mock')).prisma,
 }))
+vi.mock('$lib/server/reference', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('$lib/server/reference')>()),
+  getDistricts: (await import('./helpers/districts')).getDistricts,
+}))
 vi.mock('$lib/server/cloudinary', async () => await import('./helpers/infra'))
 vi.mock('$lib/server/pusher', async () => await import('./helpers/infra'))
 
@@ -18,7 +22,9 @@ const { saveClientProfile, saveMasterProfile } =
 //   • MASTER → CLIENT заборонено назавжди (інакше репутацію можна «скинути»,
 //     ставши клієнтом і повернувшись майстром із чистим профілем);
 //   • onboarded виставляється ЛИШЕ після повної валідації;
-//   • кеш акаунта скидається одразу, інакше guard до 5 хвилин бачить старе.
+//   • кеш акаунта скидається одразу, інакше guard до 5 хвилин бачить старе;
+//   • район і радіус виїзду — тільки зі списку: з них рахуються кільця
+//     розсилки, і сміття тут означало б покликати не тих майстрів.
 
 const USER = 'user-1'
 
@@ -26,6 +32,7 @@ const validClient = {
   name: 'Оля Петренко',
   phone: '+380671234567',
   city: 'odesa',
+  district: 'center',
   bio: 'Люблю чистоту',
 }
 
@@ -34,8 +41,11 @@ const validMaster = {
   username: 'ivan_k',
   phone: '+380671234567',
   city: 'odesa',
+  district: 'tairova',
   categories: ['cleaning'],
   description: 'я'.repeat(60),
+  vehicle: false,
+  crew: 'SOLO',
 }
 
 /** Ловить кинутий error() і повертає статус. */
@@ -320,5 +330,239 @@ describe('майстер: запис', () => {
     expect(cloudinary.uploader.destroy).not.toHaveBeenCalledWith('keep', {
       resource_type: 'image',
     })
+  })
+})
+
+describe('район і радіус виїзду', () => {
+  // Без району заявка клієнта пішла б усім підряд, а майстра не було б у
+  // жодному кільці, крім останнього. Для міста зі списком — обовʼязковий.
+  it('клієнт без району в Одесі — 400', async () => {
+    const { district: _, ...noDistrict } = validClient
+    expect(await failsWith(() => saveClientProfile(USER, noDistrict))).toBe(400)
+    expect(prisma.user.update).not.toHaveBeenCalled()
+  })
+
+  it('вигаданий район не приймається як є', async () => {
+    for (const district of ['nowhere', 'CENTER', ' ', 42, null]) {
+      resetPrisma()
+      prisma.user.findUnique.mockResolvedValue({
+        role: 'CLIENT',
+        avatarPublicId: null,
+      })
+      prisma.city.findFirst.mockResolvedValue({ slug: 'odesa' })
+
+      expect(
+        await failsWith(() =>
+          saveClientProfile(USER, { ...validClient, district }),
+        ),
+      ).toBe(400)
+    }
+  })
+
+  it('район клієнта пишеться в профіль', async () => {
+    await saveClientProfile(USER, validClient)
+    expect(prisma.user.update.mock.calls[0][0].data.district).toBe('center')
+  })
+
+  // Місто без списку районів працює як раніше: питати нема про що, а
+  // район з іншого міста там нічого не означає.
+  it('місто без списку районів — район не питаємо і пишемо null', async () => {
+    prisma.city.findFirst.mockResolvedValue({ slug: 'mykolaiv' })
+
+    await saveClientProfile(USER, {
+      ...validClient,
+      city: 'mykolaiv',
+      district: 'center',
+    })
+    expect(prisma.user.update.mock.calls[0][0].data.district).toBeNull()
+  })
+
+  it('майстер без району в Одесі — 400', async () => {
+    const { district: _, ...noDistrict } = validMaster
+    expect(await failsWith(() => saveMasterProfile(USER, noDistrict))).toBe(400)
+    expect(prisma.$transaction).not.toHaveBeenCalled()
+  })
+
+  it('район майстра пишеться в профіль', async () => {
+    await saveMasterProfile(USER, validMaster)
+    expect(prisma.user.update.mock.calls[0][0].data.district).toBe('tairova')
+  })
+
+  it('радіус — лише з фіксованих варіантів', async () => {
+    for (const travelRadiusKm of [7, '5', -1, 0, 1000, 'будь-де']) {
+      resetPrisma()
+      prisma.user.findUnique.mockResolvedValue({
+        role: 'CLIENT',
+        avatarPublicId: null,
+        masterProfile: null,
+      })
+
+      expect(
+        await failsWith(() =>
+          saveMasterProfile(USER, { ...validMaster, travelRadiusKm }),
+        ),
+      ).toBe(400)
+    }
+  })
+
+  it('обраний радіус іде і в новий профіль, і в оновлення', async () => {
+    await saveMasterProfile(USER, { ...validMaster, travelRadiusKm: 5 })
+
+    const upsert = prisma.masterProfile.upsert.mock.calls[0][0]
+    expect(upsert.create.travelRadiusKm).toBe(5)
+    expect(upsert.update.travelRadiusKm).toBe(5)
+  })
+
+  // Старий клієнт форми радіуса не шле — це «будь-де», а не помилка.
+  it('радіус не передали — будь-де (null)', async () => {
+    await saveMasterProfile(USER, validMaster)
+    expect(
+      prisma.masterProfile.upsert.mock.calls[0][0].update.travelRadiusKm,
+    ).toBeNull()
+  })
+})
+
+// Відповіді для підбору: від них залежить, які заявки до майстра дійдуть.
+// «Не відповів» означало б «отримуй усе» — той самий спам, від якого ці
+// питання рятують, тож вони обовʼязкові. Авто й формат роботи — колонки
+// MasterProfile, у metadata — лише вміння в межах категорії.
+describe('майстер: відповіді для підбору', () => {
+  const cleaner = {
+    ...validMaster,
+    categories: ['prybyrannya'],
+    vehicle: true,
+    crew: 'TEAM',
+    skills: {
+      prybyrannya: { services: ['windows', 'sofa'], premises: ['home'] },
+    },
+  }
+
+  type Written = {
+    hasVehicle: unknown
+    crew: unknown
+    metadata: unknown
+  }
+  const written = () =>
+    prisma.masterProfile.upsert.mock.calls[0][0] as {
+      create: Written
+      update: Written
+    }
+
+  it('авто й формат — у колонки, уміння — у metadata; і в новий профіль, і в оновлення', async () => {
+    await saveMasterProfile(USER, cleaner)
+
+    for (const data of [written().create, written().update]) {
+      expect(data.hasVehicle).toBe(true)
+      expect(data.crew).toBe('TEAM')
+      // Назви компанії окремим полем немає: вона — User.name.
+      expect(data).not.toHaveProperty('companyName')
+      // vehicle/team у JSON більше не пишемо: одне джерело правди.
+      expect(data.metadata).toEqual({
+        skills: {
+          prybyrannya: { services: ['windows', 'sofa'], premises: ['home'] },
+        },
+      })
+    }
+  })
+
+  // Анкета компанії питає назву замість імені — і вона ж показується
+  // всюди, де видно майстра (профіль, пропозиції, чат, відгуки).
+  it('компанія: назва — це імʼя акаунта', async () => {
+    await saveMasterProfile(USER, {
+      ...cleaner,
+      crew: 'COMPANY',
+      name: '  Чисто Сервіс  ',
+    })
+    expect(written().update.crew).toBe('COMPANY')
+    expect(prisma.user.update.mock.calls[0][0].data.name).toBe('Чисто Сервіс')
+  })
+
+  // Старий клієнт форми ще шле companyName — сервер його не пише нікуди,
+  // інакше в акаунта було б дві назви.
+  it('старе поле companyName ігнорується', async () => {
+    await saveMasterProfile(USER, {
+      ...cleaner,
+      crew: 'COMPANY',
+      companyName: 'Чужа вивіска',
+    })
+    expect(written().update).not.toHaveProperty('companyName')
+    expect(prisma.user.update.mock.calls[0][0].data.name).toBe(validMaster.name)
+  })
+
+  it('коротка назва компанії — помилка про назву, а не про імʼя', async () => {
+    const err = await saveMasterProfile(USER, {
+      ...cleaner,
+      crew: 'COMPANY',
+      name: 'Я',
+    }).catch((e: { status: number; body: { message: string } }) => e)
+    expect(err).toMatchObject({ status: 400 })
+    expect((err as { body: { message: string } }).body.message).toMatch(
+      /^Назва/,
+    )
+  })
+
+  const bad: [string, unknown][] = [
+    ['без відповіді про авто', { ...cleaner, vehicle: undefined }],
+    ['авто рядком', { ...cleaner, vehicle: 'так' }],
+    ['без формату роботи', { ...cleaner, crew: null }],
+    ['вигаданий формат роботи', { ...cleaner, crew: 'ARMY' }],
+    [
+      'старе поле team замість формату',
+      { ...cleaner, crew: undefined, team: true },
+    ],
+    [
+      'задовга назва компанії',
+      { ...cleaner, crew: 'COMPANY', name: 'я'.repeat(81) },
+    ],
+    [
+      'прибирання без жодного виду',
+      {
+        ...cleaner,
+        skills: { prybyrannya: { services: [], premises: ['home'] } },
+      },
+    ],
+    [
+      'прибирання без обʼєктів',
+      {
+        ...cleaner,
+        skills: { prybyrannya: { services: ['deep'], premises: [] } },
+      },
+    ],
+    ['прибирання без умінь зовсім', { ...cleaner, skills: undefined }],
+  ]
+
+  for (const [label, body] of bad) {
+    it(`${label} → 400`, async () => {
+      expect(await failsWith(() => saveMasterProfile(USER, body))).toBe(400)
+      expect(prisma.$transaction).not.toHaveBeenCalled()
+    })
+  }
+
+  // Ключі з довідника, без сміття з клієнта: умова розсилки будується з
+  // них напряму, і вигадана послуга просто нікому не відповідала б.
+  it('невідомі послуги й обʼєкти відкидаються, порядок — довідника', async () => {
+    await saveMasterProfile(USER, {
+      ...cleaner,
+      skills: {
+        prybyrannya: {
+          services: ['sofa', 'hack', 'standard', 'sofa'],
+          premises: ['business', 'mars'],
+        },
+      },
+    })
+
+    expect(written().update.metadata).toMatchObject({
+      skills: {
+        prybyrannya: { services: ['standard', 'sofa'], premises: ['business'] },
+      },
+    })
+  })
+
+  it('уміння категорії, якої майстер не обрав, не пишуться', async () => {
+    await saveMasterProfile(USER, {
+      ...validMaster,
+      skills: { prybyrannya: { services: ['deep'], premises: ['home'] } },
+    })
+    expect(written().update.metadata).toMatchObject({ skills: {} })
   })
 })

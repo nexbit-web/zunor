@@ -5,6 +5,7 @@ import SettingsGroup from '$lib/components/settings/settings-group.svelte'
 import SettingsRow from '$lib/components/settings/settings-row.svelte'
 import SettingsField from '$lib/components/settings/settings-field.svelte'
 import SettingsBlock from '$lib/components/settings/settings-block.svelte'
+import { SETTINGS_LAYOUT_KEY } from '$lib/components/settings/layout'
 
 // Чотири компоненти, з яких зібрані ВСІ згруповані картки застосунку:
 // налаштування, онбординг, профіль. Візуальна мова тут одна на весь
@@ -236,5 +237,176 @@ describe('SettingsBlock — блок на всю ширину', () => {
     expect(block.className).toContain('border-t')
     expect(block.className).toContain('first:border-t-0')
     expect(block.className).toContain('mx-4')
+  })
+})
+
+// ─────────────── Подача split (сторінка налаштувань) ───────────────
+//
+// Ті самі компоненти на сторінці налаштувань стоять у дві колонки, як у ClickUp. Подачу
+// задає контейнер контекстом — сторінка розділу про неї не знає. Тут
+// тримаємо дві речі: без контексту нічого не міняється (онбординг лишається
+// карткою), а в split зникає саме те, що належить картці.
+
+const split = { context: new Map([[SETTINGS_LAYOUT_KEY, 'split']]) }
+
+describe('подача split', () => {
+  it('група: назва й пояснення в лівій колонці, без картки', () => {
+    const { container } = render(SettingsGroup, {
+      ...split,
+      props: {
+        title: 'Пароль',
+        footnote: 'Інші сеанси буде завершено',
+        children: text('поля'),
+      },
+    })
+
+    const [left, right] = [
+      ...(container.querySelector('section')?.children ?? []),
+    ] as HTMLElement[]
+    expect(left.querySelector('h2')?.textContent?.trim()).toBe('Пароль')
+    expect(left.textContent).toContain('Інші сеанси буде завершено')
+    expect(right.textContent).toContain('поля')
+    expect(container.innerHTML).not.toContain('bg-muted/40')
+  })
+
+  // Ліва колонка лишається навіть порожньою: інакше поля розділу без
+  // назви з'їжджали б на всю ширину, повз вертикаль сусідніх розділів.
+  it('група без назви тримає ліву колонку', () => {
+    const { container } = render(SettingsGroup, {
+      ...split,
+      props: { children: text('поля') },
+    })
+
+    expect(container.querySelector('section')?.children).toHaveLength(2)
+    expect(container.querySelector('h2')).toBeNull()
+  })
+
+  it('поле: підпис над контролом, без втоплення картки', () => {
+    const { container } = render(SettingsField, {
+      ...split,
+      props: { label: 'Ім’я', for: 'name', control: text('i') },
+    })
+
+    const row = container.firstElementChild as HTMLElement
+    expect(row.className).not.toContain('mx-4')
+    expect(row.innerHTML).not.toContain('sm:w-[56%]')
+    expect(container.querySelector('label')?.getAttribute('for')).toBe('name')
+  })
+
+  it('помилка поля лишається з role="alert"', () => {
+    const { container } = render(SettingsField, {
+      ...split,
+      props: { label: 'x', error: 'Обовʼязкове поле', control: text('i') },
+    })
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      'Обовʼязкове поле',
+    )
+  })
+
+  it('рядок зберігає роздільник, але без mx-4', () => {
+    const { container } = render(SettingsRow, {
+      ...split,
+      props: { label: 'x' },
+    })
+
+    const row = container.firstElementChild as HTMLElement
+    expect(row.className).toContain('first:border-t-0')
+    expect(row.className).not.toContain('mx-4')
+  })
+
+  it('блок без лінії й без mx-4', () => {
+    const { container } = render(SettingsBlock, {
+      ...split,
+      props: { children: text('a') },
+    })
+
+    const block = container.firstElementChild as HTMLElement
+    expect(block.className).not.toContain('border-t')
+    expect(block.className).not.toContain('mx-4')
+  })
+})
+
+// ─────────────── Подача stacked (сторінка налаштувань) ───────────────
+//
+// Сторінка налаштувань — одна колонка, як у GitHub. Тримаємо те, на чому
+// стоїть вигляд: підпис над полем, поле не ширше 440px, підказка текстом
+// під полем (а не тултипом), і лінія між рядками не дублює лінію під
+// заголовком розділу.
+
+const stacked = { context: new Map([[SETTINGS_LAYOUT_KEY, 'stacked']]) }
+
+describe('подача stacked', () => {
+  it('група: заголовок і пояснення над лінією, без картки', () => {
+    const { container } = render(SettingsGroup, {
+      ...stacked,
+      props: {
+        title: 'Пароль',
+        footnote: 'Інші сеанси буде завершено',
+        children: text('поля'),
+      },
+    })
+
+    const head = container.querySelector('h2')?.parentElement as HTMLElement
+    expect(head.className).toContain('border-b')
+    expect(head.textContent).toContain('Інші сеанси буде завершено')
+    expect(container.textContent).toContain('поля')
+    expect(container.innerHTML).not.toContain('bg-muted/40')
+  })
+
+  // Перший рядок розділу мусить бути first-child, інакше під лінією
+  // заголовка ставала друга — від рядка.
+  it('вміст групи — в окремій обгортці, а не поруч із заголовком', () => {
+    const { container } = render(SettingsGroup, {
+      ...stacked,
+      props: { title: 'Роль', children: text('рядок') },
+    })
+
+    const section = container.querySelector('section') as HTMLElement
+    const body = section.lastElementChild as HTMLElement
+    expect(body.querySelector('h2')).toBeNull()
+    expect(body.firstElementChild?.textContent).toBe('рядок')
+  })
+
+  it('поле: підпис над полем, ширина 440px, підказка текстом під ним', () => {
+    const { container } = render(SettingsField, {
+      ...stacked,
+      props: {
+        label: 'Телефон',
+        for: 'phone',
+        hint: 'Видно виконавцю після підтвердження',
+        control: text('i'),
+      },
+    })
+
+    expect(container.querySelector('label')?.getAttribute('for')).toBe('phone')
+    expect(container.innerHTML).toContain('max-w-110')
+    // Підказка — абзацом, а не кнопкою-тултипом.
+    expect(container.querySelector('button')).toBeNull()
+    expect(container.querySelector('p')?.textContent).toContain(
+      'Видно виконавцю після підтвердження',
+    )
+  })
+
+  it('рядок: роздільник ставить сам, без втоплення картки', () => {
+    const { container } = render(SettingsRow, {
+      ...stacked,
+      props: { label: 'x' },
+    })
+
+    const row = container.firstElementChild as HTMLElement
+    expect(row.className).toContain('first:border-t-0')
+    expect(row.className).not.toContain('mx-4')
+  })
+
+  it('блок без лінії й без mx-4', () => {
+    const { container } = render(SettingsBlock, {
+      ...stacked,
+      props: { children: text('a') },
+    })
+
+    const block = container.firstElementChild as HTMLElement
+    expect(block.className).not.toContain('border-t')
+    expect(block.className).not.toContain('mx-4')
   })
 })

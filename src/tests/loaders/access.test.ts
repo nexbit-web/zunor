@@ -3,13 +3,26 @@ import { prisma, resetPrisma } from '../helpers/prisma-mock'
 import { markOpened, resetInfra } from '../helpers/infra'
 import { makeEvent, sessionUser, anonymous, failure } from '../helpers/event'
 
-const getRecommendedIds = vi.fn(async () => [] as string[])
-
 vi.mock('$lib/server/prisma', async () => ({
   prisma: (await import('../helpers/prisma-mock')).prisma,
 }))
+vi.mock('$lib/server/reference', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('$lib/server/reference')>()),
+  getDistricts: (await import('../helpers/districts')).getDistricts,
+  getCities: async () => [
+    { id: 'c1', slug: 'odesa', name: 'Одеса', region: null, isCapital: false },
+  ],
+  getCategories: async () => [
+    {
+      id: 'k1',
+      slug: 'cleaning',
+      name: 'Прибирання',
+      description: null,
+      icon: null,
+    },
+  ],
+}))
 vi.mock('$lib/server/dispatch', async () => await import('../helpers/infra'))
-vi.mock('$lib/server/ranking', () => ({ getRecommendedIds }))
 
 const jobPage =
   await import('../../routes/(auth)/dashboard/jobs/[id]/+page.server')
@@ -47,7 +60,6 @@ async function redirectOf(run: () => unknown): Promise<string> {
 beforeEach(() => {
   resetPrisma()
   resetInfra()
-  getRecommendedIds.mockClear()
 })
 
 describe('сторінка заявки /dashboard/jobs/[id]', () => {
@@ -205,6 +217,12 @@ describe('сторінка замовлення /dashboard/orders/[id]', () => {
     prisma.order.findUnique.mockResolvedValue(order)
   })
 
+  it('службова відмітка нагадування в «Історію подій» не йде', async () => {
+    await orderPage.load(orderEvent(CLIENT))
+    const include = prisma.order.findUnique.mock.calls[0][0].include
+    expect(include.events.where).toEqual({ type: { notIn: ['REMINDER_SENT'] } })
+  })
+
   it('гість — редірект на логін', async () => {
     const location = await redirectOf(() =>
       orderPage.load(
@@ -250,29 +268,37 @@ describe('сторінка замовлення /dashboard/orders/[id]', () => {
 })
 
 describe('сторінка чату /dashboard/messages/[chatId]', () => {
+  const MY_READ = new Date('2026-10-30T10:00:00.000Z')
+  const PEER_READ = new Date('2026-10-30T09:00:00.000Z')
+  const PEER_SEEN = new Date('2026-10-30T09:30:00.000Z')
+
   function membership() {
     return {
-      lastReadAt: null,
+      lastReadAt: MY_READ,
       chat: {
         id: 'chat-1',
         members: [
           {
+            lastReadAt: MY_READ,
             user: {
               id: 'user-1',
               name: 'Я',
               username: null,
               avatar: null,
               role: 'CLIENT',
+              lastSeen: new Date(),
               masterProfile: null,
             },
           },
           {
+            lastReadAt: PEER_READ,
             user: {
               id: 'peer-1',
               name: 'Співрозмовник',
               username: 'peer',
               avatar: null,
               role: 'MASTER',
+              lastSeen: PEER_SEEN,
               masterProfile: { verificationStatus: 'VERIFIED' },
             },
           },
@@ -359,6 +385,62 @@ describe('сторінка чату /dashboard/messages/[chatId]', () => {
 
     expect(data.initialMessages).toHaveLength(50)
     expect(data.initialNextCursor).toBe('m-49')
+  })
+
+  // ✓✓ на моїх повідомленнях означає «співрозмовник прочитав». Раніше
+  // сюди брався МІЙ lastReadAt, і після перезавантаження галочки брехали.
+  it('галочки — від lastReadAt співрозмовника, а не мого', async () => {
+    const data = (await chatPage.load(chatEvent('user-1'))) as {
+      chat: { peerLastReadAt: string | null; myLastReadAt: string | null }
+    }
+
+    expect(data.chat.peerLastReadAt).toBe(PEER_READ.toISOString())
+    expect(data.chat.myLastReadAt).toBe(MY_READ.toISOString())
+  })
+
+  it('«був у мережі» — час співрозмовника', async () => {
+    const data = (await chatPage.load(chatEvent('user-1'))) as {
+      chat: { peerLastSeen: string | null }
+    }
+
+    expect(data.chat.peerLastSeen).toBe(PEER_SEEN.toISOString())
+  })
+
+  it('реакції приходять згрупованими', async () => {
+    prisma.message.findMany.mockResolvedValue([
+      message({
+        reactions: [
+          { emoji: '❤️', userId: 'peer-1' },
+          { emoji: '❤️', userId: 'user-1' },
+        ],
+      }),
+    ])
+
+    const data = (await chatPage.load(chatEvent('user-1'))) as {
+      initialMessages: { reactions: unknown }[]
+    }
+    expect(data.initialMessages[0].reactions).toEqual([
+      { emoji: '❤️', userIds: ['peer-1', 'user-1'] },
+    ])
+  })
+
+  // Видалене не має жити далі в цитаті відповіді на нього.
+  it('цитата видаленого повідомлення приходить без тексту', async () => {
+    prisma.message.findMany.mockResolvedValue([
+      message({
+        replyToId: 'old',
+        replyTo: {
+          id: 'old',
+          text: 'секрет',
+          senderId: 'peer-1',
+          type: 'TEXT',
+          deletedAt: new Date(),
+        },
+      }),
+    ])
+
+    const data = await chatPage.load(chatEvent('user-1'))
+    expect(JSON.stringify(data)).not.toContain('секрет')
   })
 
   // У шапці чату видно ім'я й аватар — телефону там немає й бути не може:
@@ -501,10 +583,28 @@ describe('публічний профіль /@handle', () => {
   beforeEach(() => {
     prisma.user.findUnique.mockResolvedValue(master)
     prisma.review.findMany.mockResolvedValue([])
-    prisma.city.findUnique.mockResolvedValue({ name: 'Одеса' })
-    prisma.category.findMany.mockResolvedValue([
-      { slug: 'cleaning', name: 'Прибирання' },
-    ])
+  })
+
+  // Сторінку читають боти — назви міста й послуг беруться з кешу
+  // довідників, а не окремими запитами на кожен перегляд.
+  it('назви міста й послуг — із довідників, без запитів у базу', async () => {
+    const data = (await handlePage.load(handleEvent('@ivan'))) as {
+      user: { city?: string; categories: string[] }
+    }
+
+    expect(data.user.city).toBe('Одеса')
+    expect(data.user.categories).toEqual(['Прибирання'])
+    expect(prisma.city.findUnique).not.toHaveBeenCalled()
+    expect(prisma.category.findMany).not.toHaveBeenCalled()
+  })
+
+  // Перейменований майстер: дані під старим username уже з новим — сторінка
+  // за старим посиланням зникає одразу, а не після TTL кешу.
+  it('username у даних інший, ніж у посиланні, — 404', async () => {
+    prisma.user.findUnique.mockResolvedValue({ ...master, username: 'petro' })
+    expect(
+      (await failure(() => handlePage.load(handleEvent('@ivan')))).status,
+    ).toBe(404)
   })
 
   it('username поза форматом — 404 без запиту в базу', async () => {

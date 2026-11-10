@@ -1,6 +1,8 @@
 <script lang="ts">
   import { goto } from '$app/navigation'
-  import { BarChart3, CalendarDays, Star } from 'lucide-svelte'
+  import BarChart3 from '$lib/components/icons/set/analytics.svelte'
+  import CalendarDays from '$lib/components/icons/set/calendar-days.svelte'
+  import Star from '$lib/components/icons/set/star.svelte'
   import {
     CalendarDate,
     getLocalTimeZone,
@@ -147,7 +149,9 @@
   <title>Аналітика · Zunor</title>
 </svelte:head>
 
-<div class="mx-auto flex min-h-svh w-full max-w-230 flex-col px-4 py-8 sm:px-6">
+<div
+  class="mx-auto flex min-h-(--app-h) w-full max-w-230 flex-col px-4 py-8 sm:px-6"
+>
   <header class="mb-6 flex items-center justify-between gap-3 sm:mb-8">
     <div class="flex min-w-0 items-center gap-2.5">
       <h1 class="truncate text-2xl font-semibold tracking-tight sm:text-3xl">

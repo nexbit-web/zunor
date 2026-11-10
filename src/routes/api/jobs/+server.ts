@@ -2,15 +2,17 @@ import { json, error } from '@sveltejs/kit'
 import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
 import { limit } from '$lib/server/rate-limit'
-import { dispatchJob } from '$lib/server/dispatch'
-import { scheduleWaves } from '$lib/server/dispatch/scheduler'
+import { startWaves } from '$lib/server/dispatch'
+import { JOB_LIFETIME_MS } from '$lib/server/job-lifetime'
 import { CATEGORY_SLUG } from '$lib/categories/cleaning/presets'
 import { validateCleaningMetadata } from '$lib/categories/cleaning/validate'
 import { generateTitle } from '$lib/categories/cleaning/title-gen'
 import { sanitizeJobTitle, sanitizeJobDescription } from '$lib/server/job-copy'
+import { getDistricts } from '$lib/server/reference'
+import { cityDistricts, findDistrict } from '$lib/geo/districts'
+import { matchingFor } from '$lib/categories/matching'
+import { findDuplicateJob } from '$lib/server/job-duplicates'
 import type { RequestHandler } from './$types'
-
-const JOB_EXPIRES_DAYS = 7
 
 // GET тут навмисно немає: пагіновану видачу заявок (і «мої», і стрічку
 // майстра) віддає /api/jobs/feed — саме в нього ходять master-feed.svelte
@@ -22,13 +24,16 @@ const JOB_EXPIRES_DAYS = 7
  *
  * Категорія фіксована (прибирання). metadata валідується конфігом категорії,
  * title генерується сервером із metadata (клієнтському title не довіряємо),
- * місто береться з профілю клієнта. Бюджет не питаємо.
+ * місто й район беруться з профілю клієнта. Бюджет не питаємо.
+ *
+ * Схожа відкрита заявка вже є — 409 `{ message, duplicate }` без створення;
+ * повтор із `allowDuplicate: true` створює (`$lib/server/job-duplicates`).
  */
 export const POST: RequestHandler = async ({ request, locals }) => {
   const user = requireApiUser(locals)
 
   // 10 заявок на годину на користувача — захист від спаму стрічки майстрів.
-  const rl = limit(`job:create:${user.id}`, {
+  const rl = await limit(`job:create:${user.id}`, {
     points: 10,
     duration: 60 * 60_000,
   })
@@ -69,33 +74,59 @@ export const POST: RequestHandler = async ({ request, locals }) => {
   // потрапила б не до тих майстрів. Гард у hooks.server.ts це теж не пускає.
   const me = await prisma.user.findUnique({
     where: { id: user.id },
-    select: { city: true },
+    select: { city: true, district: true },
   })
   const city = me?.city
   if (!city) throw error(400, 'Спочатку вкажіть місто у профілі')
 
-  const [categoryExists, cityExists] = await Promise.all([
-    prisma.category.findUnique({
-      where: { slug: CATEGORY_SLUG },
-      select: { id: true },
-    }),
-    prisma.city.findUnique({ where: { slug: city }, select: { id: true } }),
-  ])
+  // Дубль питаємо, доки людина не сказала «Все одно створити»
+  // ($lib/server/job-duplicates). Явний `true`, не будь-яке truthy.
+  const allowDuplicate = body.allowDuplicate === true
+
+  const [categoryExists, cityExists, allDistricts, duplicate] =
+    await Promise.all([
+      prisma.category.findUnique({
+        where: { slug: CATEGORY_SLUG },
+        select: { id: true },
+      }),
+      prisma.city.findUnique({ where: { slug: city }, select: { id: true } }),
+      getDistricts(),
+      allowDuplicate
+        ? null
+        : findDuplicateJob(user.id, CATEGORY_SLUG, metadata),
+    ])
+
+  // Район — теж із профілю, а не з тіла запиту: з нього рахуються кільця
+  // розсилки, і підставити чужий район означало б покликати не тих майстрів.
+  // Немає району (старий профіль) — заявка піде всім, як і раніше.
+  const district =
+    findDistrict(cityDistricts(allDistricts, city), me?.district)?.slug ?? null
   if (!categoryExists) throw error(500, 'Категорію прибирання не налаштовано')
   if (!cityExists) throw error(400, 'Місто не знайдено')
 
-  const expiresAt = new Date(
-    Date.now() + JOB_EXPIRES_DAYS * 24 * 60 * 60 * 1000,
-  )
+  // Після решти перевірок: «Все одно створити» не має впертись у помилку,
+  // яку можна було показати одразу. Заявку не створено — розсилки немає.
+  if (duplicate) {
+    return json(
+      { message: 'Схожа заявка вже шукає майстра', duplicate },
+      { status: 409 },
+    )
+  }
+
+  const expiresAt = new Date(Date.now() + JOB_LIFETIME_MS)
 
   const job = await prisma.job.create({
     data: {
       clientId: user.id,
       category: CATEGORY_SLUG,
       city,
+      district,
       title,
       description: aiDescription ?? (note || null),
       metadata: metadata as unknown as object,
+      // Обсяг рахує сервер із перевіреної metadata — від нього залежить,
+      // кого розсилка кличе першим (dispatch/core/score.ts, crewFit).
+      effort: matchingFor(CATEGORY_SLUG).effort(metadata),
       currency: 'UAH',
       attachments,
       attachmentsPublicIds,
@@ -111,16 +142,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     },
   })
 
-  // Dispatch (хвиля 1) — мозок вирішує, кого сповістити. Чекаємо на завершення
-  // (await), щоб помилку було видно тут; саму помилку лише логуємо — заявка
-  // вже створена, відповідь клієнту не валимо.
-  await dispatchJob(job.id, job.title).catch((err) =>
-    console.error('[job:dispatch]', err),
-  )
-
-  // Хвилі 2-3 плануємо в пам'яті процесу, а не кроном щохвилини: інакше
-  // база (Neon) не засинала б ніколи й вигоряла квоту навіть без трафіку.
-  scheduleWaves(job.id, job.title)
+  // Перша хвиля — одразу, решта — таймерами від createdAt. Не кидає: збій
+  // хвилі повторюється, а заявка вже створена — відповідь клієнту не валимо.
+  await startWaves(job)
 
   return json({ job }, { status: 201 })
 }

@@ -1,12 +1,18 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { prisma, resetPrisma } from '../helpers/prisma-mock'
-import { dispatchJob, resetInfra } from '../helpers/infra'
+import { resumeDispatch, resetInfra } from '../helpers/infra'
 import { makeEvent, failure, okJson } from '../helpers/event'
 
 vi.mock('$lib/server/prisma', async () => ({
   prisma: (await import('../helpers/prisma-mock')).prisma,
 }))
 vi.mock('$lib/server/dispatch', async () => await import('../helpers/infra'))
+// Саму розсилку нагадувань покриває reminders.test.ts; тут — лише що крон
+// її кличе й не падає разом із нею.
+const { sendDayBeforeReminders } = vi.hoisted(() => ({
+  sendDayBeforeReminders: vi.fn(async (): Promise<number> => 0),
+}))
+vi.mock('$lib/server/reminders', () => ({ sendDayBeforeReminders }))
 
 const { GET } = await import('../../routes/api/cron/+server')
 
@@ -31,6 +37,7 @@ beforeEach(() => {
   resetInfra()
   prisma.job.updateMany.mockResolvedValue({ count: 0 })
   prisma.job.findMany.mockResolvedValue([])
+  sendDayBeforeReminders.mockReset().mockResolvedValue(0)
 })
 
 describe('авторизація', () => {
@@ -92,46 +99,51 @@ describe('задачі', () => {
 
   it('task=auto-expire не запускає хвилі', async () => {
     await GET(cronEvent(auth, 'auto-expire'))
-    expect(prisma.job.findMany).not.toHaveBeenCalled()
+    expect(resumeDispatch).not.toHaveBeenCalled()
+    expect(sendDayBeforeReminders).not.toHaveBeenCalled()
   })
 
-  // Страховка не має права перетворитись на повне сканування таблиці:
-  // вікно за часом + стеля take. Інакше один тік крона тягне всю базу.
-  it('dispatch-waves сканує вікном і зі стелею', async () => {
-    await GET(cronEvent(auth, 'dispatch-waves'))
+  it('reminders шле нагадування й рахує замовлення', async () => {
+    sendDayBeforeReminders.mockResolvedValue(4)
 
-    const args = prisma.job.findMany.mock.calls[0][0]
-    expect(args.take).toBe(100)
-    expect(args.where.status).toBe('OPEN')
-    expect(args.where.createdAt.gte).toBeInstanceOf(Date)
-    // Поріг «досить відгуків» — той самий, за яким зупиняється диспетчер.
-    expect(args.where.proposalsCount.lt).toBeGreaterThan(0)
+    const body = await okJson<{ results: { task: string; affected: number }[] }>(
+      () => GET(cronEvent(auth, 'reminders')),
+    )
+    expect(sendDayBeforeReminders).toHaveBeenCalledTimes(1)
+    expect(body.results).toEqual([{ task: 'reminders', ok: true, affected: 4 }])
   })
 
-  it('dispatch-waves будить диспетчер по знайдених заявках', async () => {
-    prisma.job.findMany.mockResolvedValue([
-      { id: 'job-1', title: 'Прибирання' },
-      { id: 'job-2', title: 'Вікна' },
-    ])
-    dispatchJob.mockResolvedValue({ notified: 2, wave: 2 })
+  it('збій нагадувань — ok:false, а не 500', async () => {
+    sendDayBeforeReminders.mockRejectedValue(new Error('neon timeout'))
+
+    const body = await okJson<{ ok: boolean; results: { task: string }[] }>(() =>
+      GET(cronEvent(auth, 'reminders')),
+    )
+    expect(body.ok).toBe(false)
+    expect(body.results[0].task).toBe('reminders')
+  })
+
+  // Крон — та сама страховка, що й старт процесу: одне відновлення, а не
+  // окреме сканування, яке розійшлося б із ним правилами.
+  it('dispatch-waves кличе відновлення розсилки й рахує наздогнані', async () => {
+    resumeDispatch.mockResolvedValueOnce({ checked: 4, caughtUp: 2 })
 
     const body = await okJson<{ results: { affected: number }[] }>(() =>
       GET(cronEvent(auth, 'dispatch-waves')),
     )
 
-    expect(dispatchJob).toHaveBeenCalledTimes(2)
+    expect(resumeDispatch).toHaveBeenCalledTimes(1)
     expect(body.results[0].affected).toBe(2)
   })
 
-  // Крон — фонова задача: збій однієї заявки не має ронити весь тік.
-  it('падіння диспетчера по одній заявці не валить відповідь', async () => {
-    prisma.job.findMany.mockResolvedValue([{ id: 'job-1', title: 'x' }])
-    dispatchJob.mockRejectedValue(new Error('neon timeout'))
+  it('збій відновлення — ok:false з причиною, а не 500', async () => {
+    resumeDispatch.mockRejectedValueOnce(new Error('neon timeout'))
 
-    const body = await okJson<{ ok: boolean }>(() =>
-      GET(cronEvent(auth, 'dispatch-waves')),
+    const body = await okJson<{ ok: boolean; results: { error?: string }[] }>(
+      () => GET(cronEvent(auth, 'dispatch-waves')),
     )
-    expect(body.ok).toBe(true)
+    expect(body.ok).toBe(false)
+    expect(body.results[0].error).toContain('neon timeout')
   })
 
   it('падіння бази повертає ok:false, а не 500', async () => {

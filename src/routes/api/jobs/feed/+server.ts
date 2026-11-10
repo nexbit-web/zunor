@@ -3,6 +3,9 @@ import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
 import { clientRatingSelect, flattenClientRating } from '$lib/server/user-dto'
 import { moneyParam } from '$lib/server/query'
+import { getDistricts } from '$lib/server/reference'
+import { cityDistricts, jobPlace } from '$lib/geo/districts'
+import { bestMatches, masterFeedScope } from '$lib/server/dispatch'
 import type { RequestHandler } from './$types'
 
 const PAGE_SIZE = 20
@@ -42,11 +45,17 @@ export const GET: RequestHandler = async ({ locals, url }) => {
     select: {
       role: true,
       city: true,
+      district: true,
       masterProfile: {
         select: {
           isActive: true,
           verificationStatus: true,
           categories: true,
+          travelRadiusKm: true,
+          metadata: true,
+          // Для «Топ для тебе» (bestMatches): авто й формат роботи.
+          hasVehicle: true,
+          crew: true,
         },
       },
     },
@@ -64,6 +73,9 @@ export const GET: RequestHandler = async ({ locals, url }) => {
         id: true,
         title: true,
         description: true,
+        // Картка заявки бере з неї послугу, день і теги — без неї друга
+        // сторінка «Моїх заявок» малювалась би без них.
+        metadata: true,
         category: true,
         city: true,
         status: true,
@@ -121,12 +133,18 @@ export const GET: RequestHandler = async ({ locals, url }) => {
     ]
   }
 
-  // Заявки, від яких майстер відмовився (чорна мітка) — приховуємо
-  const declined = await prisma.dispatchEvent.findMany({
-    where: { masterId: userId, declined: true },
-    select: { jobId: true },
+  // Відмови (чорна мітка), хвилі розсилки й межа виїзду — тим самим
+  // правилом, що й перша сторінка з SSR: стрічка не обганяє розсилку.
+  const allDistricts = await getDistricts()
+  const scope = await masterFeedScope({
+    masterId: userId,
+    masterDistrict: user.district,
+    travelRadiusKm: mp.travelRadiusKm,
+    districts: cityDistricts(allDistricts, user.city),
+    categories: mp.categories,
+    masterMeta: mp.metadata,
   })
-  const declinedJobIds = declined.map((d) => d.jobId)
+  const declinedJobIds = scope.declinedIds
 
   const jobs = await prisma.job.findMany({
     where: {
@@ -142,16 +160,19 @@ export const GET: RequestHandler = async ({ locals, url }) => {
           { budgetMinCents: null },
         ],
       }),
-      ...(minPriceCents !== null && {
-        AND: [
-          {
-            OR: [
-              { budgetMaxCents: { gte: minPriceCents } },
-              { budgetMaxCents: null },
-            ],
-          },
-        ],
-      }),
+      AND: [
+        ...scope.where,
+        ...(minPriceCents !== null
+          ? [
+              {
+                OR: [
+                  { budgetMaxCents: { gte: minPriceCents } },
+                  { budgetMaxCents: null },
+                ],
+              },
+            ]
+          : []),
+      ],
     },
     orderBy: { createdAt: 'desc' },
     ...(cursor && { skip: 1, cursor: { id: cursor } }),
@@ -163,7 +184,9 @@ export const GET: RequestHandler = async ({ locals, url }) => {
       metadata: true,
       category: true,
       city: true,
+      district: true,
       status: true,
+      effort: true,
       budgetMinCents: true,
       budgetMaxCents: true,
       currency: true,
@@ -187,11 +210,35 @@ export const GET: RequestHandler = async ({ locals, url }) => {
   const items = hasMore ? jobs.slice(0, PAGE_SIZE) : jobs
   const nextCursor = hasMore ? items[items.length - 1].id : null
 
+  // Той самий район і відстань, що в першій сторінці з SSR. Фільтр
+  // ?cities= може дати заявку з чужого міста — тоді без відстані, а отже
+  // й без «Топ для тебе».
+  const placed = items.map((j) => ({
+    job: j,
+    place: jobPlace(
+      cityDistricts(allDistricts, j.city),
+      j.district,
+      j.city === user.city ? user.district : null,
+    ),
+  }))
+  const matches = bestMatches(
+    placed.map(({ job, place }) => ({
+      id: job.id,
+      category: job.category,
+      metadata: job.metadata,
+      effort: job.effort,
+      distanceKm: place.distanceKm,
+    })),
+    mp,
+  )
+
   return json({
-    jobs: items.map((j) => ({
+    jobs: placed.map(({ job: j, place }) => ({
       ...j,
       // Автор заявки — це замовник, тому показуємо його клієнтський рейтинг.
       client: flattenClientRating(j.client),
+      place,
+      match: matches.get(j.id) ?? null,
       createdAt: j.createdAt.toISOString(),
       expiresAt: j.expiresAt.toISOString(),
     })),

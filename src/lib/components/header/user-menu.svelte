@@ -9,16 +9,13 @@
   } from '$lib/components/ui/avatar'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
   import { Button } from '$lib/components/ui/button'
-  import LayoutDashboard from '@lucide/svelte/icons/layout-dashboard'
-  import CircleUserRound from '@lucide/svelte/icons/circle-user-round'
-  import Settings from '@lucide/svelte/icons/settings'
-  import LogOut from '@lucide/svelte/icons/log-out'
-  import { signOut } from '$lib/auth-client'
-  import { goto, invalidateAll } from '$app/navigation'
+  import LayoutDashboard from '$lib/components/icons/set/layout-dashboard.svelte'
+  import CircleUserRound from '$lib/components/icons/set/circle-user-round.svelte'
+  import Settings from '$lib/components/icons/set/settings.svelte'
+  import LogOut from '$lib/components/icons/set/log-out.svelte'
   import { page } from '$app/state'
-  import { chatStore } from '$lib/stores/chat-store.svelte'
-  import { disconnectPusher } from '$lib/pusher-client'
   import toast from 'svelte-hot-french-toast'
+  import { signOutAndGo } from '$lib/utils/sign-out'
 
   let { onnavigate }: { onnavigate: (url: string) => void } = $props()
 
@@ -43,14 +40,7 @@
     signingOut = true
 
     try {
-      // Спершу рвемо реалтайм: інакше лишиться відкритий сокет
-      // на канал користувача, якого вже немає в сесії.
-      chatStore.unsubscribeAll()
-      disconnectPusher()
-
-      await signOut()
-      await invalidateAll()
-      await goto('/')
+      await signOutAndGo('/')
       toast('До зустрічі!', { icon: '👋' })
     } catch {
       signingOut = false

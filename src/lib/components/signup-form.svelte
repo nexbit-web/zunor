@@ -1,15 +1,22 @@
 <script lang="ts">
+  // Форма реєстрації — та сама подача, що й вхід, і той самий склад, що в
+  // ClickUp: Google зверху, під «або» — імʼя, пошта, пароль і кнопка.
+  // Заголовок, посилання на вхід і юридичний рядок унизу малює AuthShell.
+  //
+  // Поля «Повторіть пароль» немає, як і в ClickUp: перемикач «показати»
+  // дає побачити введене, а друге поле подвоювало роботу заради
+  // перевірки, яку він робить краще.
   import { cn } from '$lib/utils.js'
   import type { HTMLFormAttributes } from 'svelte/elements'
   import { signUp, signIn } from '$lib/auth-client'
-  import { goto, invalidateAll } from '$app/navigation'
+  import { goto } from '$app/navigation'
   import { dev } from '$app/environment'
-  import { Eye, EyeOff } from 'lucide-svelte'
   import { Button } from './ui/button'
   import { Input } from './ui/input'
   import { Spinner } from './ui/spinner'
-  import * as Field from './ui/field'
-  import toast from 'svelte-hot-french-toast'
+  import FieldError from './forms/field-error.svelte'
+  import GoogleButton from './auth/google-button.svelte'
+  import PasswordInput from './auth/password-input.svelte'
 
   let { class: className, ...restProps }: HTMLFormAttributes = $props()
   const id = $props.id()
@@ -18,16 +25,13 @@
   let name = $state('')
   let email = $state('')
   let password = $state('')
-  let confirmPassword = $state('')
   let loading = $state(false)
   let googleLoading = $state(false)
   let serverError = $state('')
-  let showPassword = $state(false)
   let touched = $state({
     name: false,
     email: false,
     password: false,
-    confirm: false,
   })
 
   // ─── Валідація (UX; авторитет — сервер) ───
@@ -49,26 +53,20 @@
   const passwordError = $derived(
     touched.password && !isValidPassword(password) ? 'Мінімум 8 символів' : '',
   )
-  const confirmError = $derived(
-    touched.confirm && confirmPassword !== password
-      ? 'Паролі не збігаються'
-      : '',
-  )
   const formValid = $derived(
-    isValidName(name) &&
-      isValidEmail(email) &&
-      isValidPassword(password) &&
-      confirmPassword === password,
+    isValidName(name) && isValidEmail(email) && isValidPassword(password),
   )
 
   async function handleSubmit(e: SubmitEvent) {
     e.preventDefault()
-    if (loading) return
-    touched = { name: true, email: true, password: true, confirm: true }
-    if (!formValid) {
-      serverError = 'Перевірте правильність заповнення полів'
-      return
-    }
+    if (loading || googleLoading) return
+
+    // Перевірка спрацьовує на натиск, а не на blur: кнопка лишається
+    // активною, і людина дізнається про проблему з конкретного поля,
+    // а не з сірого прямокутника, який мовчки не натискається.
+    touched = { name: true, email: true, password: true }
+    if (!formValid) return
+
     loading = true
     serverError = ''
 
@@ -99,7 +97,7 @@
   }
 
   async function handleGoogle() {
-    if (googleLoading) return
+    if (loading || googleLoading) return
     googleLoading = true
     serverError = ''
     try {
@@ -119,44 +117,49 @@
 </script>
 
 <form
-  class={cn('flex flex-col gap-6', className)}
+  class={cn('flex flex-col', className)}
   onsubmit={handleSubmit}
   novalidate
   autocomplete="on"
   {...restProps}
 >
-  <Field.Group>
-    <div class="flex flex-col items-center gap-1 text-center">
-      <h1 class="text-2xl font-bold">Створіть акаунт</h1>
-      <p class="text-sm text-balance text-muted-foreground">
-        Заповніть форму, щоб приєднатися до Zunor
-      </p>
-    </div>
+  <GoogleButton
+    onclick={handleGoogle}
+    loading={googleLoading}
+    disabled={loading}
+  />
 
-    <!-- Ім'я -->
-    <Field.Field>
-      <Field.Label for="name-{id}">Ім'я</Field.Label>
+  <div
+    class="my-4 flex items-center gap-3 text-[13px] leading-5 text-muted-foreground"
+    role="separator"
+  >
+    <span class="h-px flex-1 bg-border"></span>
+    або
+    <span class="h-px flex-1 bg-border"></span>
+  </div>
+
+  <!-- Підпис полів — у плейсхолдері, як у ClickUp; aria-label дублює
+       його для скрінрідера, бо плейсхолдер підписом не вважається. -->
+  <div class="flex flex-col gap-3">
+    <div>
       <Input
         id="name-{id}"
         type="text"
-        placeholder="Іван Петренко"
+        placeholder="Повне ім'я"
+        aria-label="Повне ім'я"
         bind:value={name}
-        onblur={() => (touched.name = true)}
         autocomplete="name"
         autocapitalize="words"
         maxlength={50}
         aria-invalid={!!nameError}
-        aria-describedby={nameError ? `name-err-${id}` : undefined}
+        aria-describedby={nameError ? `name-${id}-error` : undefined}
+        class="h-9 rounded-[8px]"
         required
       />
-      {#if nameError}
-        <Field.Error id="name-err-{id}">{nameError}</Field.Error>
-      {/if}
-    </Field.Field>
+      <FieldError id="name-{id}-error" text={nameError} />
+    </div>
 
-    <!-- Email -->
-    <Field.Field>
-      <Field.Label for="email-{id}">Email</Field.Label>
+    <div>
       <Input
         id="email-{id}"
         type="email"
@@ -164,173 +167,49 @@
         autocapitalize="none"
         autocomplete="email"
         spellcheck="false"
-        placeholder="ivan@example.com"
+        placeholder="Робоча електронна пошта"
+        aria-label="Робоча електронна пошта"
         bind:value={email}
-        onblur={() => (touched.email = true)}
         maxlength={254}
         aria-invalid={!!emailError}
-        aria-describedby={emailError ? `email-err-${id}` : undefined}
+        aria-describedby={emailError ? `email-${id}-error` : undefined}
+        class="h-9 rounded-[8px]"
         required
       />
-      {#if emailError}
-        <Field.Error id="email-err-{id}">{emailError}</Field.Error>
-      {:else}
-        <Field.Description>Використаємо для входу та звʼязку.</Field.Description
-        >
-      {/if}
-    </Field.Field>
+      <FieldError id="email-{id}-error" text={emailError} />
+    </div>
 
-    <!-- Пароль -->
-    <Field.Field>
-      <Field.Label for="password-{id}">Пароль</Field.Label>
-      <div class="relative">
-        <Input
-          id="password-{id}"
-          type={showPassword ? 'text' : 'password'}
-          placeholder="Мінімум 8 символів"
-          bind:value={password}
-          onblur={() => (touched.password = true)}
-          autocomplete="new-password"
-          maxlength={128}
-          aria-invalid={!!passwordError}
-          aria-describedby={passwordError ? `pw-err-${id}` : undefined}
-          class="pr-10"
-          required
-        />
-        <button
-          type="button"
-          onclick={() => (showPassword = !showPassword)}
-          class="absolute top-1/2 right-0.5 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          aria-label={showPassword ? 'Сховати пароль' : 'Показати пароль'}
-          aria-pressed={showPassword}
-        >
-          {#if showPassword}
-            <EyeOff class="size-4" aria-hidden="true" />
-          {:else}
-            <Eye class="size-4" aria-hidden="true" />
-          {/if}
-        </button>
-      </div>
-      {#if passwordError}
-        <Field.Error id="pw-err-{id}">{passwordError}</Field.Error>
-      {/if}
-    </Field.Field>
+    <div>
+      <PasswordInput
+        id="password-{id}"
+        bind:value={password}
+        autocomplete="new-password"
+        maxlength={128}
+        errorId={passwordError ? `password-${id}-error` : undefined}
+      />
+      <FieldError id="password-{id}-error" text={passwordError} />
+    </div>
 
-    <!-- Підтвердження пароля -->
-    <Field.Field>
-      <Field.Label for="confirm-{id}">Підтвердіть пароль</Field.Label>
-      <div class="relative">
-        <Input
-          id="confirm-{id}"
-          type={showPassword ? 'text' : 'password'}
-          placeholder="Повторіть пароль"
-          bind:value={confirmPassword}
-          onblur={() => (touched.confirm = true)}
-          autocomplete="new-password"
-          maxlength={128}
-          aria-invalid={!!confirmError}
-          aria-describedby={confirmError ? `confirm-err-${id}` : undefined}
-          class="pr-10"
-          required
-        />
-      </div>
-      {#if confirmError}
-        <Field.Error id="confirm-err-{id}">{confirmError}</Field.Error>
-      {/if}
-    </Field.Field>
-
-    <!-- Server error -->
     {#if serverError}
-      <Field.Field>
-        <Field.Error role="alert">{serverError}</Field.Error>
-      </Field.Field>
+      <div class="flex justify-center">
+        <FieldError text={serverError} />
+      </div>
     {/if}
 
-    <!-- Submit -->
-    <Field.Field>
-      <Button
-        class="relative py-6"
-        type="submit"
-        disabled={loading || googleLoading || !formValid}
-        aria-busy={loading}
-      >
-        <span>{loading ? 'Створення...' : 'Створити акаунт'}</span>
-        {#if loading}
-          <Spinner class="absolute right-4 animate-spin" aria-hidden="true" />
-        {/if}
-      </Button>
-    </Field.Field>
-
-    <Field.Separator>або</Field.Separator>
-
-    <!-- Google -->
-    <Field.Field>
-      <Button
-        class="relative py-6"
-        variant="outline"
-        type="button"
-        onclick={handleGoogle}
-        disabled={loading || googleLoading}
-        aria-busy={googleLoading}
-      >
-        {#if googleLoading}
-          <Spinner class="animate-spin" aria-hidden="true" />
-          Переходимо до Google...
-        {:else}
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            class="size-4.5"
-            aria-hidden="true"
-          >
-            <path
-              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1Z"
-              fill="#4285F4"
-            />
-            <path
-              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23Z"
-              fill="#34A853"
-            />
-            <path
-              d="M5.84 14.1a6.6 6.6 0 0 1 0-4.2V7.06H2.18a11 11 0 0 0 0 9.88l3.66-2.84Z"
-              fill="#FBBC05"
-            />
-            <path
-              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1A11 11 0 0 0 2.18 7.06l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38Z"
-              fill="#EA4335"
-            />
-          </svg>
-          Продовжити з Google
-        {/if}
-      </Button>
-
-      <Field.Description class="text-center">
-        Вже маєте акаунт?
-        <a href="/user/login" class="underline underline-offset-4">Увійти</a>
-      </Field.Description>
-    </Field.Field>
-  </Field.Group>
-
-  <p
-    class="-mt-2 text-center text-xs leading-relaxed text-balance text-muted-foreground/80"
-  >
-    Створюючи акаунт, ви погоджуєтесь із
-    <a
-      href="/terms"
-      target="_blank"
-      rel="noopener noreferrer"
-      class="underline underline-offset-4 transition-colors hover:text-foreground"
+    <Button
+      variant="primary"
+      size="lg"
+      class="relative w-full"
+      type="submit"
+      disabled={loading || googleLoading}
+      aria-busy={loading}
     >
-      Умовами використання
-    </a>
-    та
-    <a
-      href="/privacy"
-      target="_blank"
-      rel="noopener noreferrer"
-      class="underline underline-offset-4 transition-colors hover:text-foreground"
-    >
-      Політикою конфіденційності
-    </a>
-  </p>
+      {#if loading}
+        <Spinner class="animate-spin" aria-hidden="true" />
+        <span class="sr-only">Створення...</span>
+      {:else}
+        <span>Зареєструватися з електронною поштою</span>
+      {/if}
+    </Button>
+  </div>
 </form>

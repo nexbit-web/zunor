@@ -163,10 +163,10 @@ beforeEach(() => {
 
 describe('звичайна відповідь', () => {
   it('текст моделі стає повідомленням клієнту', async () => {
-    chatCompletion.mockResolvedValue(textResponse('  Скільки кімнат?  '))
+    chatCompletion.mockResolvedValue(textResponse('  Яка приблизно площа?  '))
 
     const res = await turn(history('Треба прибрати'), 'odesa')
-    expect(res).toEqual({ kind: 'message', reply: 'Скільки кімнат?' })
+    expect(res).toEqual({ kind: 'message', reply: 'Яка приблизно площа?' })
   })
 
   it('порожня відповідь без інструмента — модель штовхають ще раз', async () => {
@@ -228,11 +228,98 @@ describe('чіпси (кнопки)', () => {
     const res = await turn(history('Привіт'), 'odesa')
     expect(res.suggestions).toBeUndefined()
   })
+
+  // Модель дописувала «або напиши свій варіант» ПІСЛЯ рядка кнопок: вони
+  // губились, а сирий «>>> …» лишався в тексті.
+  it('рядок >>> не останнім — теж кнопки, і з тексту він зникає', async () => {
+    chatCompletion.mockResolvedValue(
+      textResponse(
+        'Коли зручно?\n>>> Завтра | Субота\n\nАбо напиши свою дату.',
+      ),
+    )
+
+    const res = await turn(history('Привіт'), 'odesa')
+    expect(res.suggestions).toEqual(['Завтра', 'Субота'])
+    expect(res.reply).toBe('Коли зручно?\n\nАбо напиши свою дату.')
+  })
+})
+
+// Модель губить рядок >>> на закритих питаннях: «На какую дату?» приходило
+// без кнопок, і клієнт друкував дату руками. Самі шаблони питань — у
+// zunor-chips.test.ts, тут — що страховка стоїть на ВСІХ шляхах ходу.
+describe('страховка кнопок на закритих питаннях', () => {
+  function streamText(text: string) {
+    chatCompletionStream.mockReturnValue(
+      makeStream([{ type: 'text', delta: text }], {
+        content: text,
+        toolCall: null,
+        finishReason: 'stop',
+      }),
+    )
+  }
+
+  it('питання про дату без >>> отримує кнопки мовою розмови', async () => {
+    streamText('Понял, однокомнатная. На какую дату планируете уборку?')
+
+    const res = await turnStream(
+      history('Нужна обычная уборка квартиры'),
+      'odesa',
+      () => {},
+    )
+    expect(res.suggestions?.[0]).toBe('Завтра')
+    expect(res.suggestions?.[1]).toBe('Послезавтра')
+  })
+
+  it('кнопки моделі не підміняються', async () => {
+    streamText('На яку дату?\n>>> Завтра | В неділю')
+
+    const res = await turnStream(history('Привіт'), 'odesa', () => {})
+    expect(res.suggestions).toEqual(['Завтра', 'В неділю'])
+  })
+
+  it('синхронний фолбек теж отримує кнопки', async () => {
+    chatCompletion.mockResolvedValue(textResponse('Скільки кімнат у квартирі?'))
+
+    const res = await turn(history('Треба прибрати квартиру'), 'odesa')
+    expect(res.suggestions).toEqual(['1', '2', '3', '4+'])
+  })
+
+  it('сторона миття залежить від обраної послуги', async () => {
+    const q = 'Should we wash them from the inside, the outside, or both?'
+    streamText(q)
+    const windows = await turnStream(
+      history('Hello, I need my windows washed, 6 windows'),
+      'odesa',
+      () => {},
+    )
+    expect(windows.suggestions).toEqual(['Inside', 'Outside', 'Both sides'])
+
+    streamText(q)
+    const deep = await turnStream(
+      history('Hello, I need a deep cleaning of my apartment'),
+      'odesa',
+      () => {},
+    )
+    expect(deep.suggestions).toBeUndefined()
+  })
+
+  it('питання після невалідного драфта теж із кнопками', async () => {
+    chatCompletion
+      .mockResolvedValueOnce(
+        toolResponse({ ...validDraft, when: '2020-01-01' }),
+      )
+      .mockResolvedValueOnce(textResponse('Ця дата вже минула. На яку дату?'))
+
+    const res = await turn(history('Прибрати квартиру'), 'odesa')
+    expect(res.kind).toBe('message')
+    expect(res.suggestions?.[0]).toBe('Завтра')
+  })
 })
 
 describe('модель зривається в Markdown', () => {
-  // Промпт забороняє Markdown, але модель регулярно віддає '* ' або '- '.
-  // Клієнт малює список за протоколом «— », тож маркери нормалізуємо.
+  // Промпт дозволяє лише **жирне** й «1. », але модель регулярно віддає
+  // '* ' або '- '. Клієнт малює список за протоколом «— », тож маркери
+  // нормалізуємо.
   it('маркери списку приводяться до протокольного «— »', async () => {
     chatCompletion.mockResolvedValue(
       textResponse('Уточню:\n* скільки кімнат\n- чи є тварини\n• поверх'),
@@ -250,6 +337,17 @@ describe('модель зривається в Markdown', () => {
 
     const res = await turn(history('Привіт'), 'odesa')
     expect(res.reply).toBe('Ціна 5*5 метрів кімнати')
+  })
+
+  // Жирне — дозволене форматування. «**Дата**» на початку рядка схоже на
+  // маркер '* ', і зламаний нормалізатор зробив би з нього «— *Дата**».
+  it('**жирне** на початку рядка маркером списку не стає', async () => {
+    chatCompletion.mockResolvedValue(
+      textResponse('**Генеральне** прибирання\n1. Кімнати\n2. Дата'),
+    )
+
+    const res = await turn(history('Привіт'), 'odesa')
+    expect(res.reply).toBe('**Генеральне** прибирання\n1. Кімнати\n2. Дата')
   })
 })
 
@@ -403,6 +501,68 @@ describe('модель віддала сміття замість драфта',
     expect(res.kind).toBe('message')
   })
 
+  // Заявку читає майстер в українському інтерфейсі. У російському діалозі
+  // модель інколи писала опис російською («Ковер 3×4 м. Есть собака»).
+  it('російський опис повертається на переклад один раз', async () => {
+    chatCompletion
+      .mockResolvedValueOnce(
+        toolResponse({
+          ...validDraft,
+          title: 'Химчистка ковра',
+          description: 'Ковер 3×4 м. Есть собака, пятна от кофе.',
+        }),
+      )
+      .mockResolvedValueOnce(
+        toolResponse({
+          ...validDraft,
+          title: 'Хімчистка килима',
+          description: 'Килим 3×4 м. Є собака, плями від кави.',
+        }),
+      )
+
+    const res = await turn(history('Нужна химчистка ковра'), 'odesa')
+
+    expect(res.kind).toBe('draft')
+    expect(res.draft?.description).toBe(
+      'Килим 3×4 м. Є собака, плями від кави.',
+    )
+    expect(chatCompletion).toHaveBeenCalledTimes(2)
+  })
+
+  // «Немає і/ї/є/ґ» — хибний сигнал: це чиста українська, і зайвий
+  // платний повтор тут був би марною тратою.
+  it('український опис без «і/ї/є/ґ» не йде на повтор', async () => {
+    chatCompletion.mockResolvedValueOnce(
+      toolResponse({
+        ...validDraft,
+        title: 'Прибирання квартири',
+        description: 'Площа 50 м², два санвузли.',
+      }),
+    )
+
+    const res = await turn(history('Прибрати двушку'), 'odesa')
+
+    expect(res.kind).toBe('draft')
+    expect(chatCompletion).toHaveBeenCalledTimes(1)
+  })
+
+  // Через мову клієнт не має лишитись без заявки: другий російський
+  // варіант приймається як є.
+  it('уперто російський опис не блокує заявку', async () => {
+    chatCompletion.mockResolvedValue(
+      toolResponse({
+        ...validDraft,
+        title: 'Химчистка ковра',
+        description: 'Ковер 3×4 м. Есть собака.',
+      }),
+    )
+
+    const res = await turn(history('Нужна химчистка ковра'), 'odesa')
+
+    expect(res.kind).toBe('draft')
+    expect(chatCompletion).toHaveBeenCalledTimes(2)
+  })
+
   // Уперте сміття не має крутити модель нескінченно: є стеля раундів
   // і людський фолбек.
   it('нескінченно невалідний драфт впирається в стелю раундів', async () => {
@@ -442,6 +602,34 @@ describe('мова діалогу', () => {
       history('привіт, треба прибрати квартиру, скільки це коштує'),
       'odesa',
     )
+    expect(sentSystemPrompt()).toContain('ВІДПОВІДАЙ ТІЛЬКИ УКРАЇНСЬКОЮ')
+  })
+
+  // «Розкажи анекдот» не має жодного маркера й жодної «і/ї/є». Нічия
+  // віддавалась російській — і українець отримував відповідь російською.
+  it('нічия — українська', async () => {
+    await turn(history('Розкажи анекдот'), 'odesa')
+    expect(sentSystemPrompt()).toContain('ВІДПОВІДАЙ ТІЛЬКИ УКРАЇНСЬКОЮ')
+  })
+
+  // Із прогону: «Химчистка дивана» без жодного маркера йшла нічиєю в
+  // українську, і перші ходи російськомовний клієнт читав українською.
+  it('назва послуги по-російськи — російська', async () => {
+    for (const text of ['Химчистка дивана', 'Помыть окна', 'Генеральная']) {
+      chatCompletion.mockClear()
+      await turn(history(text), 'odesa')
+      expect(sentSystemPrompt()).toContain('ОТВЕЧАЙ ТОЛЬКО НА РУССКОМ')
+    }
+  })
+
+  it('латиниця → англійська, заявка все одно українською', async () => {
+    await turn(history('Hi! I need an apartment cleaning tomorrow'), 'odesa')
+    expect(sentSystemPrompt()).toContain('REPLY ONLY IN ENGLISH')
+    expect(sentSystemPrompt()).toMatch(/title and description .*Ukrainian/i)
+  })
+
+  it('одиничне «ok» у кириличній репліці мову не міняє', async () => {
+    await turn(history('ok, треба прибрати квартиру'), 'odesa')
     expect(sentSystemPrompt()).toContain('ВІДПОВІДАЙ ТІЛЬКИ УКРАЇНСЬКОЮ')
   })
 
@@ -693,5 +881,25 @@ describe('страховка фото-чіпсів', () => {
 
     const res = await turnStream(history('Привіт'), 'odesa', () => {})
     expect(res.suggestions).toEqual(['Додати фото', 'Продовжити без фото'])
+  })
+
+  // Українські «Додати фото» в російському діалозі виглядали як збій, а
+  // англомовному клієнтові були просто незрозумілі.
+  it('підставні кнопки — мовою розмови', async () => {
+    streamText('Можете добавить фото комнат — мастеру будет проще.')
+    const ru = await turnStream(
+      history('Привет, нужна уборка'),
+      'odesa',
+      () => {},
+    )
+    expect(ru.suggestions).toEqual(['Добавить фото', 'Продолжить без фото'])
+
+    streamText('You can add photos of the rooms — it helps the cleaner.')
+    const en = await turnStream(
+      history('Hi! I need an apartment cleaning tomorrow'),
+      'odesa',
+      () => {},
+    )
+    expect(en.suggestions).toEqual(['Add photos', 'Continue without photos'])
   })
 })

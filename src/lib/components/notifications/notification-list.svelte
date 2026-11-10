@@ -7,13 +7,11 @@
   import { Spinner } from '$lib/components/ui/spinner'
   import * as AlertDialog from '$lib/components/ui/alert-dialog'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
-  import {
-    BellOff,
-    Check,
-    CheckCheck,
-    ChevronDown,
-    Trash2,
-  } from 'lucide-svelte'
+  import BellOff from '$lib/components/icons/set/bell-off.svelte'
+  import Check from '$lib/components/icons/set/check.svelte'
+  import CheckCheck from '$lib/components/icons/set/check-check.svelte'
+  import ChevronDown from '$lib/components/icons/set/chevron-down.svelte'
+  import Trash2 from '$lib/components/icons/set/trash-2.svelte'
   import { notifications } from '$lib/notifications'
   import { linkFor, type Notification } from '$lib/notifications/types'
   import { formatRelative, formatFull } from '$lib/utils/time'
@@ -240,15 +238,17 @@
           </Button>
         {/snippet}
       </DropdownMenu.Trigger>
-      <DropdownMenu.Content align="end" class="w-44 rounded-2xl p-1.5">
+      <!-- Вигляд меню й пунктів — зі спільного ui/dropdown-menu (як у
+           референсі в docs/); тут лише ширина. -->
+      <DropdownMenu.Content align="end" class="w-auto min-w-56">
         {#each ['all', 'unread'] as const as value (value)}
           <DropdownMenu.Item
-            class="flex cursor-pointer items-center justify-between gap-2 rounded-xl px-3 py-2 text-sm outline-none data-highlighted:bg-accent"
+            class="cursor-pointer justify-between"
             onclick={() => setFilter(value)}
           >
             <span>{FILTER_LABELS[value]}</span>
             {#if filter === value}
-              <Check class="size-4 text-ring" />
+              <Check class="size-4 text-primary" />
             {/if}
           </DropdownMenu.Item>
         {/each}
@@ -283,7 +283,7 @@
   <div
     class="flex flex-1 flex-col items-center justify-center px-6 py-20 text-center"
   >
-    <BellOff class="size-14 text-muted-foreground/70" strokeWidth={1} />
+    <BellOff class="size-24 text-primary " strokeWidth={1} />
     <h2 class="mt-6 text-lg font-medium">
       {filter === 'unread' ? 'Непрочитаних немає' : 'Сповіщень поки немає'}
     </h2>

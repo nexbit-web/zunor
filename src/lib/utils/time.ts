@@ -34,6 +34,36 @@ export function formatRelative(value: string | Date): string {
   return date.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' })
 }
 
+/**
+ * День у календарі Києва (ISO «YYYY-MM-DD») — «Сьогодні», «Завтра»,
+ * «Учора», далі «Пт, 30 жовт.».
+ *
+ * Не formatRelative: той відповідає «коли це сталося» й рахує години, а
+ * тут календарний день, зазвичай у майбутньому. «через 3 дн» читалось би
+ * гірше за день тижня, з яким людина звіряє свій тиждень.
+ */
+export function formatDay(iso: string, now: Date = new Date()): string {
+  const day = Date.parse(`${iso}T00:00:00Z`)
+  if (Number.isNaN(day)) return ''
+
+  const today = Date.parse(
+    `${now.toLocaleDateString('sv-SE', { timeZone: 'Europe/Kyiv' })}T00:00:00Z`,
+  )
+  const diff = Math.round((day - today) / 86_400_000)
+  if (diff === 0) return 'Сьогодні'
+  if (diff === 1) return 'Завтра'
+  if (diff === -1) return 'Учора'
+
+  // timeZone UTC: день уже календарний, зсув пояса переніс би його.
+  const label = new Date(day).toLocaleDateString('uk-UA', {
+    timeZone: 'UTC',
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  })
+  return label.charAt(0).toUpperCase() + label.slice(1)
+}
+
 /** Точна дата з часом — для `title`, де відносний час недостатній. */
 export function formatFull(value: string | Date): string {
   const date = new Date(value)

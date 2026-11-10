@@ -1,71 +1,8 @@
-import { defineConfig, type Plugin } from 'vitest/config'
+import { defineConfig } from 'vitest/config'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import { fileURLToPath } from 'node:url'
-import { readFileSync } from 'node:fs'
 
 const at = (rel: string) => fileURLToPath(new URL(rel, import.meta.url))
-
-/**
- * Підміна бочки lucide-svelte однією заглушкою.
- *
- * Причина суто механічна: бочка реекспортує ~1700 окремих .svelte-іконок, і
- * SSR-трансформ vite не робить tree-shaking — тобто КОЖЕН файл тестів, що
- * імпортує хоч одну іконку, тягнув компіляцію всіх. Один такий файл ішов
- * понад хвилину; з заглушкою — секунди.
- *
- * Ціна: компонентний тест не може перевірити, ЯКА саме іконка намальована.
- * Це прийнятно — іконка не має поведінки, а підпис поруч однаково важливіший
- * і перевіряється текстом. Пер-іконні шляхи (`@lucide/svelte/icons/check`)
- * плагін не чіпає: вони й так дешеві.
- */
-function lucideStub(): Plugin {
-  const VIRTUAL = '\0lucide-stub'
-  const STUB = at('./src/tests/mocks/icon-stub.svelte')
-
-  /**
-   * Імена з `default as X` у файлі пакета. Регекс навмисно не вимагає
-   * `export {` в тому ж рядку: файли аліасів переносять реекспорт на два
-   * рядки, і суворіший шаблон мовчки пропускав половину імен (AlertCircle
-   * і решта feather-сумісних).
-   */
-  const namesFrom = (rel: string): string[] => {
-    try {
-      const src = readFileSync(at(rel), 'utf8')
-      return [...src.matchAll(/default as (\w+)/g)].map((m) => m[1])
-    } catch {
-      return []
-    }
-  }
-
-  return {
-    name: 'zunor:lucide-stub',
-    enforce: 'pre',
-    resolveId(id) {
-      if (id === 'lucide-svelte' || id === 'lucide-svelte/icons') return VIRTUAL
-      if (id === VIRTUAL) return VIRTUAL
-      return null
-    },
-    load(id) {
-      if (id !== VIRTUAL) return null
-
-      const names = new Set([
-        ...namesFrom('./node_modules/lucide-svelte/dist/icons/index.js'),
-        ...namesFrom('./node_modules/lucide-svelte/dist/aliases/aliases.js'),
-        ...namesFrom('./node_modules/lucide-svelte/dist/aliases/prefixed.js'),
-        ...namesFrom('./node_modules/lucide-svelte/dist/aliases/suffixed.js'),
-        'Icon',
-        'defaultAttributes',
-      ])
-
-      return [
-        `import Stub from ${JSON.stringify(STUB)}`,
-        [...names].map((n) => `export const ${n} = Stub`).join('\n'),
-        'export const icons = {}',
-        'export default Stub',
-      ].join('\n')
-    },
-  }
-}
 
 // Два проєкти в одному конфізі: `server` і `components`. Розділені вони не
 // заради краси — у них несумісні вимоги:
@@ -135,7 +72,6 @@ export default defineConfig({
       },
       {
         plugins: [
-          lucideStub(),
           // configFile: false — svelte.config.js тягне за собою секцію kit,
           // яку цей плагін без sveltekit() не розуміє. Режим рун
           // відтворюємо тим самим правилом, що й у справжньому конфізі:

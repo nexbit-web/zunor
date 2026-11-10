@@ -1,233 +1,387 @@
+<!--
+  Шапка публічних сторінок (лендинг, «Про нас», «Майстрам», профілі
+  майстрів). На /dashboard її немає — там своя панель.
+
+  Розміри — один в один із шапкою ClickUp (зняті з їхнього CSS):
+  контейнер 1120px з полями 20px, смуга 14 + 32 + 14 = 60px, Inter 14px.
+  Пункти — сірий текст вагою 500 на кнопці 32px з радіусом 8px, що
+  підсвічується під курсором. Праворуч «Стати майстром» таким самим
+  пунктом, сіра «Увійти» й чорна «Зареєструватися» — 32px, вага 600.
+  Тло — біле на 90% з розмиттям 6px: сторінка під шапкою ледь просвічує.
+  На лендингу шапка стоїть над першим екраном (його тло заходить під неї)
+  і до прокрутки прозора — тло зʼявляється, щойно сторінку зрушили.
+
+  «Послуги» розкривають широку панель на всю ширину контейнера, як
+  меню ClickUp: смуга стає суцільною, під нею плитки послуг. Відкриття —
+  наведенням мишею (із затримкою на закриття) і кліком: на дотик
+  наведення немає. Закриття — Escape, клік повз, перехід.
+
+  До 820px пункти й «Увійти» ховаються, лишаються «Зареєструватися» й
+  гамбургер; меню на телефоні — на весь екран, великим кеглем.
+-->
 <script lang="ts">
-  import { onMount } from 'svelte'
-  import { fade } from 'svelte/transition'
-  import { goto } from '$app/navigation'
+  import { fade, slide } from 'svelte/transition'
+  import { afterNavigate, goto } from '$app/navigation'
   import { page } from '$app/state'
-  // Точкові імпорти, а не barrel 'lucide-svelte': цей компонент у кореневому
-  // лейауті, тобто в чанку КОЖНОЇ сторінки. Barrel тягнув туди всю бібліотеку.
-  import Menu from '@lucide/svelte/icons/menu'
-  import X from '@lucide/svelte/icons/x'
+  import ChevronDown from '$lib/components/icons/set/chevron-down.svelte'
+  import X from '$lib/components/icons/set/x.svelte'
+  import ServiceGlyph from '$lib/categories/cleaning/service-glyph.svelte'
+  import ZunorMark from '$lib/components/icons/zunor-mark.svelte'
+  import {
+    LANDING_SERVICES,
+    ORDER_HREF,
+    ORDER_HREF_SIGNED_IN,
+  } from '$lib/components/landing/content'
   import UserMenu from './user-menu.svelte'
   import Logo from './logo.svelte'
-  import MobileNav from './mobile-nav.svelte'
 
-  const NAV_LINKS = [
-    { href: '/how-it-works', label: 'Як це працює' },
+  const LINKS = [
+    { href: '/#how', label: 'Як це працює' },
+    { href: '/#faq', label: 'Питання' },
     { href: '/about', label: 'Про нас' },
-    { href: '/master/about', label: 'Стати майстром ' },
   ]
 
+  const isLoggedIn = $derived(!!page.data.session?.user)
+  const orderHref = $derived(isLoggedIn ? ORDER_HREF_SIGNED_IN : ORDER_HREF)
+
+  // Сторінки, чий перший екран заходить під шапку: там вона прозора, доки
+  // сторінку не прокрутили. На сервері scrollY = 0 — тобто прозора, як і
+  // буде на першому кадрі.
+  const OVERLAY_PATHS = new Set(['/'])
+  let scrollY = $state(0)
+  const solid = $derived(
+    !OVERLAY_PATHS.has(page.url.pathname) || scrollY > 4,
+  )
+
+  let root = $state<HTMLElement | null>(null)
+  let servicesOpen = $state(false)
   let mobileOpen = $state(false)
+  let mobileServices = $state(false)
+  let closeTimer: ReturnType<typeof setTimeout> | undefined
 
-  // ─── Прозорий хедер вгорі сторінки, фон з'являється при скролі ───
-  // Поріг у пікселях — після якого хедер вважається "прижатим" і
-  // отримує фон/блюр/тінь. Трохи більше за 0, щоб не мигало на
-  // мікроскопічних侵 колейбаунсах скролу (напр. на iOS).
-  const SCROLL_THRESHOLD = 8
-  let scrolled = $state(false)
-
-  function handleScroll() {
-    scrolled = window.scrollY > SCROLL_THRESHOLD
-  }
-
-  onMount(() => {
-    handleScroll() // врахувати стан одразу (напр. якщо сторінка відкрита не з самого верху)
-    window.addEventListener('scroll', handleScroll, { passive: true })
-    return () => window.removeEventListener('scroll', handleScroll)
+  afterNavigate(() => {
+    servicesOpen = false
+    mobileOpen = false
   })
 
-  // Головна відрізняється: точна відповідність "/", решта — startsWith
-  function isActive(href: string): boolean {
-    return href === '/'
-      ? page.url.pathname === '/'
-      : page.url.pathname.startsWith(href)
+  function hoverOpen(e: PointerEvent) {
+    if (e.pointerType !== 'mouse') return
+    clearTimeout(closeTimer)
+    servicesOpen = true
+  }
+  function hoverClose(e: PointerEvent) {
+    if (e.pointerType !== 'mouse') return
+    closeTimer = setTimeout(() => (servicesOpen = false), 150)
   }
 
-  function navigate(url: string) {
-    mobileOpen = false
-    goto(url)
+  function onDocPointer(e: PointerEvent) {
+    if (servicesOpen && root && !root.contains(e.target as Node)) {
+      servicesOpen = false
+    }
   }
+
+  function onKey(e: KeyboardEvent) {
+    if (e.key !== 'Escape') return
+    servicesOpen = false
+    mobileOpen = false
+  }
+
+  // Без display у базових рядках: `hidden` на вузькому екрані інакше
+  // сперечався б з `flex` у тому самому класі, і виграв би не той.
+  /** Пункт меню ClickUp: 32px, 14/20, вага 500, сірий, підкладка під курсором. */
+  const NAV_ITEM =
+    'h-8 cursor-pointer items-center gap-1 rounded-[8px] px-2.5 text-[14px] leading-5 font-medium tracking-[-0.15px] whitespace-nowrap text-[#646464] transition-colors hover:bg-black/4 dark:text-[#b4b4b4] dark:hover:bg-white/10'
+  /** Кнопки праворуч: 32px, 14/16, вага 600, радіус 8px. */
+  const BUTTON =
+    'h-8 items-center justify-center rounded-[8px] px-3 text-[14px] leading-4 font-semibold tracking-[-0.15px] whitespace-nowrap transition-colors'
+  const LOGIN = `${BUTTON} bg-[#f0f0f0] text-black hover:bg-[#dedede] dark:bg-white/10 dark:text-[#eee] dark:hover:bg-white/15`
+  /** Головна кнопка — пласка заливка акцентом, як у ui/button. */
+  const ACCENT_FILL =
+    'bg-primary text-primary-foreground hover:bg-[color-mix(in_srgb,var(--primary)_88%,black)]'
+  const SIGNUP = `${BUTTON} ${ACCENT_FILL}`
+  /** Меню «Послуги»: заголовок колонки — моно, капітель, сірий. */
+  const COLUMN_HEADER =
+    'px-1.5 font-mono text-[14px] leading-4.5 font-medium tracking-[0.5px] text-[#838383] uppercase dark:text-[#7b7b7b]'
+  const MENU_TITLE =
+    'text-[14px] leading-5 font-medium tracking-[-0.15px] text-black dark:text-[#eee]'
+  const MENU_TEXT =
+    'text-[14px] leading-5 tracking-[-0.15px] text-[#646464] dark:text-[#b4b4b4]'
 </script>
 
-<div class="sticky top-0 z-50">
-  <header
-    class="h-14 transition-[background-color,backdrop-filter,box-shadow] duration-300 ease-out"
-    class:header-scrolled={scrolled}
+<svelte:document onpointerdown={onDocPointer} />
+<svelte:window onkeydown={onKey} bind:scrollY />
+
+<nav
+  bind:this={root}
+  class="sticky top-0 z-50 w-full"
+  aria-label="Основна навігація"
+>
+  <!-- Тло окремим шаром, як у ClickUp: розмиття на самій смузі
+       розмивало б і її вміст. З відкритим меню — суцільне. Прозора
+       шапка — без розмиття теж: інакше по картинці під нею йшла б
+       розмита смуга. -->
+  <div
+    class={[
+      'absolute inset-0 transition-[background-color,backdrop-filter] duration-300',
+      servicesOpen
+        ? 'bg-background backdrop-blur-[6px]'
+        : solid
+          ? 'bg-background/90 backdrop-blur-[6px]'
+          : 'bg-transparent',
+    ]}
+  ></div>
+
+  <div
+    class="relative mx-auto flex max-w-[1120px] items-center justify-between gap-4 px-5 py-3.5 min-[1101px]:gap-13"
   >
-    <div
-      class="mx-auto flex h-full w-full max-w-6xl items-center justify-between gap-6 px-6"
-    >
-      <!-- Лево -->
-      <div class="flex w-full justify-between items-center gap-8">
-        <Logo />
-        <nav
-          class="hidden items-center gap-0.5 md:flex"
-          aria-label="Основна навігація"
-        >
-          {#each NAV_LINKS as link (link.href)}
-            <a
-              href={link.href}
-              class="nav-link rounded-md"
-              class:is-active={isActive(link.href)}
-              aria-current={isActive(link.href) ? 'page' : undefined}
-            >
-              {link.label}
-            </a>
-          {/each}
-        </nav>
-      </div>
+    <div class="flex items-center gap-5">
+      <Logo size="lg" />
 
-      <!-- Право десктоп -->
-      <div class="hidden items-center gap-2 md:flex">
-        <UserMenu onnavigate={navigate} />
-      </div>
+      <div class="hidden items-center gap-2 min-[821px]:flex">
+        <div
+          role="presentation"
+          onpointerenter={hoverOpen}
+          onpointerleave={hoverClose}
+        >
+          <button
+            type="button"
+            class={[NAV_ITEM, 'flex', servicesOpen && 'bg-black/6 dark:bg-white/10']}
+            aria-haspopup="true"
+            aria-expanded={servicesOpen}
+            aria-controls="services-menu"
+            onclick={() => (servicesOpen = !servicesOpen)}
+          >
+            Послуги
+            <ChevronDown
+              class={[
+                'size-3.5 transition-transform duration-200',
+                servicesOpen && 'rotate-180',
+              ]}
+              strokeWidth={2.25}
+              aria-hidden="true"
+            />
+          </button>
+        </div>
 
-      <!-- Право мобайл -->
-      <div class="flex items-center gap-1 md:hidden">
-        <button
-          onclick={() => navigate('/user/login')}
-          class="h-8 cursor-pointer rounded-full px-3 text-[13px] text-foreground/80 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-        >
-          Увійти
-        </button>
-        <button
-          onclick={() => navigate('/user/register')}
-          class="h-8 cursor-pointer rounded-full bg-primary px-3 text-[13px] font-medium text-primary-foreground transition-colors hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-        >
-          Реєстрація
-        </button>
-        <button
-          class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full text-foreground/80 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          onclick={() => (mobileOpen = !mobileOpen)}
-          aria-label={mobileOpen ? 'Закрити меню' : 'Відкрити меню'}
-          aria-expanded={mobileOpen}
-        >
-          {#if mobileOpen}
-            <X class="size-5" aria-hidden="true" />
-          {:else}
-            <Menu class="size-5" aria-hidden="true" />
-          {/if}
-        </button>
+        {#each LINKS as link (link.href)}
+          <a href={link.href} class="{NAV_ITEM} flex">{link.label}</a>
+        {/each}
       </div>
     </div>
-  </header>
 
-  <!-- Мобільне меню -->
-  {#if mobileOpen}
+    <div class="flex items-center gap-2.5">
+      {#if isLoggedIn}
+        <a href="/dashboard" class="{SIGNUP} flex">Кабінет</a>
+        <UserMenu onnavigate={goto} />
+      {:else}
+        <a href="/master/about" class="{NAV_ITEM} hidden min-[1101px]:flex">
+          Стати майстром
+        </a>
+        <a href="/user/login" class="{LOGIN} hidden min-[821px]:flex">Увійти</a>
+        <a href="/user/register" class="{SIGNUP} flex">Зареєструватися</a>
+      {/if}
+
+      <!-- Гамбургер — три риски 2px, як у ClickUp, а не іконка. -->
+      <button
+        type="button"
+        class="flex size-8 cursor-pointer flex-col justify-between p-2 min-[821px]:hidden"
+        aria-label="Відкрити меню"
+        aria-expanded={mobileOpen}
+        aria-controls="mobile-menu"
+        onclick={() => (mobileOpen = true)}
+      >
+        <span class="h-0.5 w-full rounded-[1px] bg-[#646464]"></span>
+        <span class="h-0.5 w-full rounded-[1px] bg-[#646464]"></span>
+        <span class="h-0.5 w-full rounded-[1px] bg-[#646464]"></span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Меню «Послуги» — на всю ширину контейнера під смугою. -->
+  {#if servicesOpen}
     <div
-      transition:fade={{ duration: 150 }}
-      class="border-b border-border bg-background px-6 pb-4 md:hidden"
+      id="services-menu"
+      role="presentation"
+      class="absolute inset-x-0 top-full bg-background pb-8 shadow-[0_10px_15px_-3px_#0000001a,0_4px_6px_-4px_#0000001a] dark:shadow-[0_10px_15px_-3px_#00000066]"
+      transition:slide={{ duration: 220 }}
+      onpointerenter={hoverOpen}
+      onpointerleave={hoverClose}
     >
-      <nav class="flex flex-col gap-1 pt-2" aria-label="Мобільна навігація">
-        {#each NAV_LINKS as link (link.href)}
+      <div class="mx-auto flex max-w-[1120px] items-stretch">
+        <!-- Послуги — дві колонки по три, з великими іконками -->
+        <div class="menu-col flex min-w-0 flex-1 flex-col gap-3 px-3.5 py-4">
+          <p class={COLUMN_HEADER}>Послуги</p>
+          <ul class="grid grid-cols-2 gap-x-6 gap-y-3">
+            {#each LANDING_SERVICES as s (s.key)}
+              <li>
+                <a
+                  href={orderHref}
+                  class="group flex items-center gap-3 rounded-[12px] p-1.5 transition-colors hover:bg-black/4 dark:hover:bg-white/11"
+                  style="--tint: {s.tint}"
+                >
+                  <ServiceGlyph
+                    service={s.key}
+                    class="size-10 shrink-0 text-[#202020] transition-colors duration-200 group-hover:text-(--tint) dark:text-[#eee]"
+                  />
+                  <span class="h-10 min-w-0 flex-1">
+                    <span class="block {MENU_TITLE}">{s.label}</span>
+                    <span class="block truncate {MENU_TEXT}">{s.short}</span>
+                  </span>
+                </a>
+              </li>
+            {/each}
+          </ul>
+        </div>
+
+        <!-- Картка праворуч — як «Customer stories» у меню ClickUp:
+             для тих, хто не знає, яке прибирання обрати. -->
+        <div class="menu-col flex w-80 shrink-0 flex-col px-3.5 py-4">
           <a
-            href={link.href}
-            onclick={() => (mobileOpen = false)}
-            class="mob-link"
-            class:is-active={isActive(link.href)}
-            aria-current={isActive(link.href) ? 'page' : undefined}
+            href={orderHref}
+            class="flex flex-1 flex-col gap-4 rounded-[12px] bg-[#f8f9fa] p-5 transition-colors hover:bg-black/9 dark:border dark:border-[#2a2a2a] dark:bg-transparent dark:hover:bg-white/5"
           >
-            {link.label}
+            <span class="flex items-center gap-3">
+              <span
+                class="flex size-10 shrink-0 items-center justify-center rounded-[8px] bg-[#202020] text-white dark:bg-[#eee] dark:text-[#111]"
+              >
+                <ZunorMark class="h-5 w-auto" />
+              </span>
+              <span class="min-w-0">
+                <span class="block {MENU_TITLE}">Асистент Zunor</span>
+                <span class="block {MENU_TEXT}">Підкаже, що обрати</span>
+              </span>
+            </span>
+            <span
+              class="text-[18px] leading-6 font-medium tracking-[-0.15px] text-[#202020] dark:text-[#eee]"
+            >
+              Не знаєш, яке саме прибирання? Просто опиши задачу своїми
+              словами.
+            </span>
+            <span
+              class="mt-auto text-[14px] leading-5 font-semibold tracking-[-0.15px] text-[#202020] dark:text-[#eee]"
+            >
+              Описати задачу →
+            </span>
           </a>
-        {/each}
-      </nav>
+        </div>
+      </div>
     </div>
   {/if}
-</div>
+</nav>
 
-<!-- Оверлей -->
+<!-- Меню на телефоні — на весь екран, як у ClickUp: своя смуга з лого
+     й хрестиком, пункти великим кеглем, дії внизу. -->
 {#if mobileOpen}
-  <button
+  <div
+    id="mobile-menu"
+    class="fixed inset-0 z-60 flex h-svh flex-col bg-background min-[821px]:hidden"
     transition:fade={{ duration: 150 }}
-    class="fixed inset-0 z-40 w-full cursor-default border-none p-0 md:hidden"
-    style="background-color: color-mix(in oklch, var(--foreground) 45%, transparent)"
-    onclick={() => (mobileOpen = false)}
-    aria-label="Закрити меню"
-  ></button>
+  >
+    <div
+      class="flex items-center justify-between border-b border-[#e8e8e8] px-5 py-3.5 dark:border-[#2a2a2a]"
+    >
+      <Logo size="lg" />
+      <button
+        type="button"
+        class="flex size-8 cursor-pointer items-center justify-center rounded-[8px] text-foreground transition-colors hover:bg-black/4 dark:hover:bg-white/10"
+        aria-label="Закрити меню"
+        onclick={() => (mobileOpen = false)}
+      >
+        <X class="size-4.5" aria-hidden="true" />
+      </button>
+    </div>
+
+    <div class="flex flex-1 flex-col gap-1.5 overflow-y-auto p-3">
+      <button
+        type="button"
+        class="flex w-full cursor-pointer items-center justify-between rounded-[6px] p-2.5 text-left text-[26px] leading-[1.25] font-[650] tracking-[-0.91px] transition-colors hover:bg-black/4 dark:hover:bg-white/8"
+        aria-expanded={mobileServices}
+        onclick={() => (mobileServices = !mobileServices)}
+      >
+        Послуги
+        <ChevronDown
+          class={[
+            'size-6 text-[#646464] transition-transform duration-200',
+            mobileServices && 'rotate-180',
+          ]}
+          aria-hidden="true"
+        />
+      </button>
+      {#if mobileServices}
+        <ul class="flex flex-col gap-3 px-2.5 pb-3" transition:slide={{ duration: 180 }}>
+          {#each LANDING_SERVICES as s (s.key)}
+            <li>
+              <a
+                href={orderHref}
+                class="flex items-center gap-3 rounded-[6px] p-1.5 transition-colors hover:bg-black/4 dark:hover:bg-white/8"
+              >
+                <ServiceGlyph service={s.key} class="size-10 shrink-0" />
+                <span class="min-w-0">
+                  <span
+                    class="block text-[18px] leading-6 font-medium tracking-[-0.15px]"
+                  >
+                    {s.label}
+                  </span>
+                  <span class="block {MENU_TEXT}">{s.short}</span>
+                </span>
+              </a>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+
+      {#each [...LINKS, { href: '/master/about', label: 'Стати майстром' }] as link (link.href)}
+        <a
+          href={link.href}
+          class="flex w-full items-center rounded-[6px] p-2.5 text-[26px] leading-[1.25] font-[650] tracking-[-0.91px] transition-colors hover:bg-black/4 dark:hover:bg-white/8"
+        >
+          {link.label}
+        </a>
+      {/each}
+    </div>
+
+    <div
+      class="flex flex-col gap-2.5 border-t border-[#e8e8e8] p-5.5 dark:border-[#2a2a2a]"
+    >
+      {#if isLoggedIn}
+        <a
+          href="/dashboard"
+          class="flex items-center justify-center rounded-[8px] px-5 py-3.5 text-[18px] leading-6 font-[650] tracking-[-0.36px] {ACCENT_FILL}"
+        >
+          Кабінет
+        </a>
+      {:else}
+        <a
+          href="/user/login"
+          class="flex items-center justify-center rounded-[8px] bg-[#f0f0f0] px-5 py-3.5 text-[18px] leading-6 font-[650] tracking-[-0.36px] text-[#646464] dark:bg-white/10 dark:text-[#eee]"
+        >
+          Увійти
+        </a>
+        <a
+          href="/user/register"
+          class="flex items-center justify-center rounded-[8px] px-5 py-3.5 text-[18px] leading-6 font-[650] tracking-[-0.36px] {ACCENT_FILL}"
+        >
+          Зареєструватися
+        </a>
+      {/if}
+    </div>
+  </div>
 {/if}
 
-<MobileNav onnavigate={navigate} />
-
 <style>
-  /* За замовчуванням хедер повністю прозорий — фон hero-секції видно
-     наскрізь. Клас .header-scrolled додається лише після того, як
-     сторінку проскролили за SCROLL_THRESHOLD. */
-  .header-scrolled {
-    background-color: color-mix(in oklch, var(--background) 85%, transparent);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+  /* Вміст колонок проявляється слідом за «завісою», як у ClickUp. */
+  .menu-col > :global(*) {
+    animation: menu-col-in 260ms ease-out 60ms backwards;
   }
-
-  .nav-link {
-    padding: 4px 12px;
-    font-size: 15px;
-    font-weight: 500;
-    color: var(--foreground);
-    position: relative;
-    transition:
-      color 0.15s,
-      background 0.15s;
-    text-decoration: none;
-    white-space: nowrap;
+  @keyframes menu-col-in {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
   }
-  .nav-link:hover::after {
-    content: '';
-    position: absolute;
-    left: 12px;
-    right: 12px;
-    bottom: -1px;
-    height: 2px;
-    background: var(--color-text);
-    border-radius: 1px;
-  }
-  .nav-link:focus-visible {
-    outline: 2px solid var(--ring);
-    outline-offset: 2px;
-  }
-  .nav-link.is-active {
-    font-weight: 600;
-  }
-  .nav-link.is-active::after {
-    content: '';
-    position: absolute;
-    left: 12px;
-    right: 12px;
-    bottom: -1px;
-    height: 2px;
-    background: var(--color-text);
-    border-radius: 1px;
-  }
-
-  .mob-link {
-    padding: 10px 12px;
-    font-size: 15px;
-    font-weight: 500;
-    color: var(--foreground);
-    border-radius: 8px;
-    transition:
-      color 0.15s,
-      background 0.15s;
-    text-decoration: none;
-  }
-  .mob-link:hover {
-    color: var(--primary);
-    background: var(--muted);
-  }
-  .mob-link:focus-visible {
-    outline: 2px solid var(--ring);
-    outline-offset: 2px;
-  }
-  .mob-link.is-active {
-    color: var(--primary);
-    font-weight: 700;
-    background: color-mix(in oklch, var(--primary) 8%, transparent);
-  }
-
   @media (prefers-reduced-motion: reduce) {
-    .nav-link,
-    .mob-link,
-    header {
-      transition: none;
+    .menu-col > :global(*) {
+      animation: none;
     }
   }
 </style>

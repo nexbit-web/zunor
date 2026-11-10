@@ -2,6 +2,8 @@ import { json } from '@sveltejs/kit'
 import { env } from '$env/dynamic/private'
 import { cloudinary } from '$lib/server/cloudinary'
 import { prisma } from '$lib/server/prisma'
+import { forgetMasterPage } from '$lib/server/master-page'
+import { refreshSessionUser } from '$lib/server/sessions'
 import { limit } from '$lib/server/rate-limit'
 import type { RequestHandler } from './$types'
 
@@ -10,7 +12,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
   const user = locals.user
   if (!user) return json({ error: 'Unauthorized' }, { status: 401 })
 
-  const rl = limit(`user-media:${user.id}`, {
+  const rl = await limit(`user-media:${user.id}`, {
     points: 30,
     duration: 60_000,
   })
@@ -86,6 +88,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
       where: { id: userId },
       data: { avatar: body.url, avatarPublicId: body.publicId },
     })
+    await Promise.all([refreshSessionUser(userId), forgetMasterPage(userId)])
 
     if (user?.avatarPublicId && user.avatarPublicId !== body.publicId) {
       try {
@@ -94,6 +97,40 @@ export const POST: RequestHandler = async ({ request, locals }) => {
         console.error('[media:delete-old-avatar]', err)
       }
     }
+
+    return json({ ok: true })
+  }
+
+  // ── AVATAR REMOVE ─────────────────────────────────────────────────────
+  // Фото зникає і з профілю, і з хмари. Що видаляти, вирішує СЕРВЕР за
+  // userId із сесії, а не тіло запиту: чужий файл так не зачепити.
+  if (body.kind === 'avatar-remove') {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { avatarPublicId: true },
+    })
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { avatar: null, avatarPublicId: null },
+    })
+    await Promise.all([refreshSessionUser(userId), forgetMasterPage(userId)])
+
+    // Завантажувач пише аватар у фіксований publicId (upload/signature),
+    // і файл там уже може бути, навіть якщо в базу він не потрапив
+    // (завантажили на онбордингу й не зберегли). Плюс старий id із бази,
+    // якщо він наш. invalidate — щоб CDN перестав віддавати копію.
+    const ids = new Set([`zunor/users/${userId}/avatar/profile`])
+    if (user?.avatarPublicId?.startsWith(`zunor/users/${userId}/`)) {
+      ids.add(user.avatarPublicId)
+    }
+    await Promise.all(
+      [...ids].map((id) =>
+        cloudinary.uploader
+          .destroy(id, { resource_type: 'image', invalidate: true })
+          .catch((err) => console.error('[media:delete-avatar]', err)),
+      ),
+    )
 
     return json({ ok: true })
   }
@@ -144,6 +181,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
       })
     }
 
+    await forgetMasterPage(userId)
     return json({ ok: true })
   }
 
@@ -172,6 +210,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
           ),
         },
       })
+      await forgetMasterPage(userId)
     }
 
     // видаляємо з Cloudinary завжди

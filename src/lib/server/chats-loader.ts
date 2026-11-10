@@ -24,6 +24,8 @@ export async function loadChatsForUser(userId: string): Promise<ChatPreview[]> {
           members: {
             where: { userId: { not: userId } },
             select: {
+              // ✓✓ у списку біля мого останнього повідомлення.
+              lastReadAt: true,
               user: {
                 select: {
                   id: true,
@@ -71,7 +73,8 @@ export async function loadChatsForUser(userId: string): Promise<ChatPreview[]> {
   return memberships
     .filter((m) => m.chat.members.length > 0)
     .map((m) => {
-      const peerUser = m.chat.members[0].user
+      const peerMember = m.chat.members[0]
+      const peerUser = peerMember.user
       return {
         id: m.chat.id,
         peer: {
@@ -84,6 +87,7 @@ export async function loadChatsForUser(userId: string): Promise<ChatPreview[]> {
         lastMessageText: m.chat.lastMessageText,
         lastMessageAt: m.chat.lastMessageAt?.toISOString() ?? null,
         lastSenderId: m.chat.lastSenderId,
+        peerLastReadAt: peerMember.lastReadAt?.toISOString() ?? null,
         unreadCount: unreadByChatId.get(m.chat.id) ?? 0,
         updatedAt: m.chat.updatedAt.toISOString(),
       }

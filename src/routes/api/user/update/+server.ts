@@ -5,6 +5,8 @@ import {
   Role,
 } from '../../../../generated/prisma/client'
 import { prisma } from '$lib/server/prisma'
+import { forgetMasterPage } from '$lib/server/master-page'
+import { refreshSessionUser } from '$lib/server/sessions'
 import type { RequestHandler } from './$types'
 
 // role та onboarded у цьому типі НЕМАЄ навмисно. Клієнт може їх прислати —
@@ -273,6 +275,12 @@ export const POST: RequestHandler = async ({ request, locals }) => {
       select: { id: true },
     })
   }
+
+  // Імʼя й аватар живуть і в сесіях, профіль — на публічній сторінці.
+  await Promise.all([
+    Object.keys(userData).length > 0 ? refreshSessionUser(userId) : null,
+    forgetMasterPage(userId),
+  ])
 
   return json({ ok: true })
 }

@@ -1,4 +1,4 @@
-import { prisma } from '$lib/server/prisma'
+import { getAccountState } from '$lib/server/account-cache'
 import { redirect } from '@sveltejs/kit'
 import type { PageServerLoad } from './$types'
 
@@ -11,10 +11,8 @@ export const load: PageServerLoad = async ({ locals }) => {
   // Неавторизований або клієнт — бачить клієнтську головну
   if (!session) return {}
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { role: true },
-  })
+  // Роль — із кешу стану акаунта, а не окремим SELECT.
+  const user = await getAccountState(session.user.id)
 
   // Майстер працює зі стрічкою заявок — це його дім, не клієнтський лендинг
   if (user?.role === 'MASTER') {

@@ -33,6 +33,14 @@ describe('мова тримається на обох кінцях', () => {
     expect(lines[lines.length - 1]).toContain('УКРАЇНСЬКОЮ')
   })
 
+  it('англійський промпт — так само', () => {
+    const p = buildSystemPrompt('odesa', anyService, 'en')
+    const lines = p.split('\n')
+
+    expect(lines[0]).toContain('REPLY ONLY IN ENGLISH')
+    expect(lines[lines.length - 1]).toContain('English')
+  })
+
   it('старий плейсхолдер мови в тіло промпту не тече', () => {
     for (const lang of ['ru', 'uk'] as const) {
       expect(buildSystemPrompt('odesa', null, lang)).not.toContain('__LANG__')
@@ -74,6 +82,22 @@ describe('рамки продукту', () => {
   // не має права його порушувати.
   it('агенту заборонено називати ціну', () => {
     expect(buildSystemPrompt('odesa', null, 'uk')).toContain('Ціну не називай')
+  })
+
+  // Без фактів модель дописувала правдоподібне: «майстри проходять
+  // перевірку», «зі скасуванням допоможе підтримка». Клієнт ішов шукати
+  // те, чого немає.
+  it('факти про сервіс є, і вигадувати гарантії заборонено', () => {
+    const p = buildSystemPrompt('odesa', null, 'uk')
+    expect(p).toContain('ЯК ПРАЦЮЄ СЕРВІС')
+    expect(p).toContain('«Мої заявки»')
+    expect(p).toMatch(/Страховки, гарантій.*немає/)
+  })
+
+  it('адресу й телефон агент не «записує»', () => {
+    expect(buildSystemPrompt('odesa', null, 'uk')).toMatch(
+      /адресу, телефон.*НЕ пиши/,
+    )
   })
 
   it('імʼя інструмента в промпті збігається зі справжнім', () => {

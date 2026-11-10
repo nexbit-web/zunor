@@ -14,6 +14,17 @@ vi.mock('$lib/server/prisma', async () => ({
 }))
 vi.mock('$lib/server/pusher', async () => await import('../helpers/infra'))
 
+// Мережі в тестах немає: за карткою посилання «ходить» мок.
+const { fetchLinkPreview, cachedLinkPreview } = vi.hoisted(() => ({
+  fetchLinkPreview: vi.fn(),
+  cachedLinkPreview: vi.fn(),
+}))
+vi.mock('$lib/server/link-preview', () => ({
+  fetchLinkPreview,
+  cachedLinkPreview,
+}))
+
+const { Prisma } = await import('../../generated/prisma/client')
 const { GET, POST } =
   await import('../../routes/api/chats/[id]/messages/+server')
 
@@ -40,6 +51,7 @@ function messageRow(patch: Record<string, unknown> = {}) {
     senderId: USER,
     replyToId: null,
     replyTo: null,
+    linkPreview: null,
     sender: { name: 'Оля', avatar: null },
     ...patch,
   }
@@ -62,7 +74,20 @@ beforeEach(() => {
   })
   prisma.message.findMany.mockResolvedValue([])
   prisma.message.create.mockResolvedValue(messageRow())
+  prisma.message.updateMany.mockResolvedValue({ count: 1 })
+  fetchLinkPreview.mockReset().mockResolvedValue(CARD)
+  cachedLinkPreview.mockReset().mockReturnValue(undefined)
 })
+
+const CARD = {
+  url: 'https://privat24.ua/',
+  siteName: 'next.privat24.ua',
+  title: 'Інтернет-банк | Приват24',
+  description: 'Усі фінансові послуги за кілька кліків',
+}
+
+/** Дати дописатись тому, що роут запустив без await. */
+const settle = () => new Promise((r) => setTimeout(r, 0))
 
 describe('членство в чаті', () => {
   it('гість не читає повідомлення', async () => {
@@ -296,5 +321,111 @@ describe('успішна відправка', () => {
 
     const data = prisma.chat.update.mock.calls[0][0].data
     expect(data.lastMessageText.length).toBe(200)
+  })
+})
+
+// Картка посилання, як у Telegram. Сервер іде за адресою з чату — тож
+// стережемо, що ходить він лише по посилання з ТЕКСТУ, не тримає ним
+// відправку і не пише картку на повідомлення, яке за цей час змінилось.
+describe('картка посилання', () => {
+  const TEXT = 'Оплата тут: https://privat24.ua/'
+
+  it('по картку йдемо після відповіді й дописуємо в повідомлення', async () => {
+    await POST(postEvent(USER, { text: TEXT }))
+
+    // Саме повідомлення пишеться без картки — вона ще невідома.
+    const created = prisma.message.create.mock.calls[0][0].data
+    expect(created.linkPreview).toBe(Prisma.DbNull)
+
+    await vi.waitFor(() =>
+      expect(safeTrigger).toHaveBeenCalledWith(
+        'private-chat-chat-1',
+        'message:preview',
+        { chatId: 'chat-1', messageId: 'msg-1', linkPreview: CARD },
+      ),
+    )
+    expect(fetchLinkPreview).toHaveBeenCalledWith('https://privat24.ua/')
+    expect(prisma.message.updateMany.mock.calls[0][0]).toEqual({
+      where: { id: 'msg-1', chatId: 'chat-1', text: TEXT, deletedAt: null },
+      data: { linkPreview: CARD },
+    })
+  })
+
+  it('відома з кешу — пишеться разом із повідомленням, без походу', async () => {
+    cachedLinkPreview.mockReturnValue(CARD)
+    prisma.message.create.mockResolvedValue(messageRow({ linkPreview: CARD }))
+
+    const body = await okJson<{ message: { linkPreview: unknown } }>(() =>
+      POST(postEvent(USER, { text: TEXT })),
+    )
+    await settle()
+
+    expect(prisma.message.create.mock.calls[0][0].data.linkPreview).toEqual(
+      CARD,
+    )
+    expect(body.message.linkPreview).toEqual(CARD)
+    expect(fetchLinkPreview).not.toHaveBeenCalled()
+  })
+
+  it('без посилання — нікуди не ходимо', async () => {
+    await POST(postEvent(USER, { text: 'Привіт, коли зручно?' }))
+    await settle()
+
+    expect(fetchLinkPreview).not.toHaveBeenCalled()
+    expect(prisma.message.create.mock.calls[0][0].data.linkPreview).toBe(
+      Prisma.DbNull,
+    )
+  })
+
+  it('підпис до фото картки не має', async () => {
+    await POST(
+      postEvent(USER, {
+        type: 'PHOTO',
+        text: TEXT,
+        attachment: { url: 'https://res.cloudinary.com/demo/x.jpg' },
+      }),
+    )
+    await settle()
+
+    expect(fetchLinkPreview).not.toHaveBeenCalled()
+  })
+
+  it('поки ходили, повідомлення змінили чи видалили — картка не розсилається', async () => {
+    prisma.message.updateMany.mockResolvedValue({ count: 0 })
+
+    await POST(postEvent(USER, { text: TEXT }))
+    await vi.waitFor(() => expect(prisma.message.updateMany).toHaveBeenCalled())
+    await settle()
+
+    const events = safeTrigger.mock.calls.map((c) => c[1])
+    expect(events).not.toContain('message:preview')
+  })
+
+  it('сайт картки не дав — нічого не пишемо', async () => {
+    fetchLinkPreview.mockResolvedValue(null)
+
+    await POST(postEvent(USER, { text: TEXT }))
+    await vi.waitFor(() => expect(fetchLinkPreview).toHaveBeenCalled())
+    await settle()
+
+    expect(prisma.message.updateMany).not.toHaveBeenCalled()
+  })
+
+  it('читання: картка віддається, бита — null, у видаленого — null', async () => {
+    prisma.message.findMany.mockResolvedValue([
+      messageRow({ id: 'ok', linkPreview: CARD }),
+      messageRow({ id: 'broken', linkPreview: { url: 'javascript:alert(1)' } }),
+      messageRow({ id: 'gone', linkPreview: CARD, deletedAt: new Date() }),
+    ])
+
+    const body = await okJson<{
+      messages: { id: string; linkPreview: unknown }[]
+    }>(() =>
+      GET(makeEvent({ params: { id: 'chat-1' }, locals: sessionUser(USER) })),
+    )
+    const byId = Object.fromEntries(
+      body.messages.map((m) => [m.id, m.linkPreview]),
+    )
+    expect(byId).toEqual({ ok: CARD, broken: null, gone: null })
   })
 })

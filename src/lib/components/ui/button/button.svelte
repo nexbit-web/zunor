@@ -6,15 +6,37 @@
   } from 'svelte/elements'
   import { type VariantProps, tv } from 'tailwind-variants'
 
+  // Одна кнопка на весь застосунок: 32px заввишки, 14px середньої ваги,
+  // заокруглення 8px. Розміри й кольори — тільки тут: доки кожна сторінка
+  // дописувала свої h-10/h-11, text-[15px] і заокруглення, кнопки на
+  // сусідніх екранах розійшлись за розміром.
+  //
+  // Кнопки пласкі, як у референсі в docs/: суцільна заливка без
+  // градієнта, відблиску й тіні; рамка — лише в outline.
+
+  // Акцентна кнопка: колір з налаштувань «Вигляду». Нею ж малюється й
+  // default — чорних кнопок у застосунку немає: усе, що не сіре, —
+  // акцентного кольору (зі «Чорно-білим» акцентом вона й так чорна).
+  // Під курсором трохи темніє.
+  const PRIMARY =
+    'bg-primary text-primary-foreground hover:bg-[color-mix(in_srgb,var(--primary)_88%,black)]'
+
   export const buttonVariants = tv({
-    base: "focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 rounded-xl border border-transparent bg-clip-padding text-sm font-medium focus-visible:ring-3 active:not-aria-[haspopup]:translate-y-px aria-invalid:ring-3 [&_svg:not([class*='size-'])]:size-4 group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 cursor-pointer disabled:cursor-not-allowed aria-disabled:cursor-not-allowed",
+    base: "focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 rounded-[8px] border border-transparent bg-clip-padding text-[14px] font-medium focus-visible:ring-3 active:not-aria-[haspopup]:translate-y-px aria-invalid:ring-3 [&_svg:not([class*='size-'])]:size-4 group/button inline-flex shrink-0 items-center justify-center whitespace-nowrap transition-all outline-none select-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 cursor-pointer disabled:cursor-not-allowed aria-disabled:cursor-not-allowed",
     variants: {
       variant: {
-        default: 'bg-foreground text-background hover:bg-foreground/80',
+        // Головна дія. default — те саме: кнопка без variant (і дія
+        // діалогу підтвердження) теж акцентна.
+        default: PRIMARY,
+        primary: PRIMARY,
+        // Тонка рамка на прозорому тлі; під курсором — сіра заливка.
         outline:
-          'border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground shadow-xs',
+          'border-border bg-transparent text-foreground hover:bg-secondary aria-expanded:bg-secondary dark:border-input',
+        // Друга дія поруч із головною («Скасувати»): сіра заливка без
+        // рамки. Синя лишається одна — так очима одразу видно, яка з двох
+        // кнопок головна.
         secondary:
-          'bg-secondary text-secondary-foreground hover:bg-secondary/80 aria-expanded:bg-secondary aria-expanded:text-secondary-foreground',
+          'bg-secondary text-secondary-foreground hover:bg-[color-mix(in_srgb,var(--secondary)_92%,var(--foreground))] aria-expanded:bg-[color-mix(in_srgb,var(--secondary)_92%,var(--foreground))]',
         ghost:
           'hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground',
         destructive:
@@ -23,15 +45,15 @@
       },
       size: {
         default:
-          'h-9 gap-1.5 px-2.5 in-data-[slot=button-group]:rounded-xl has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2',
-        xs: "h-6 gap-1 rounded-[min(var(--radius-md),8px)] px-2 text-xs in-data-[slot=button-group]:rounded-xl has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
-        sm: 'h-8 gap-1 rounded-[min(var(--radius-md),10px)] px-2.5 in-data-[slot=button-group]:rounded-md has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5',
-        lg: 'h-10 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2',
+          'h-8 gap-1.5 px-3 has-data-[icon=inline-end]:pr-2.5 has-data-[icon=inline-start]:pl-2.5',
+        xs: "h-6 gap-1 rounded-[6px] px-2 text-xs has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
+        sm: 'h-7 gap-1 px-2.5 text-[13px] has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5',
+        // Сторінки входу й реєстрації: 36px, як кнопка «Log In» у ClickUp,
+        // — урівень із полями над нею.
+        lg: 'h-9 gap-1.5 px-4 has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3',
         icon: 'size-9',
-        'icon-xs':
-          "size-6 rounded-[min(var(--radius-md),8px)] in-data-[slot=button-group]:rounded-xl [&_svg:not([class*='size-'])]:size-3",
-        'icon-sm':
-          'size-8 rounded-[min(var(--radius-md),10px)] in-data-[slot=button-group]:rounded-xl',
+        'icon-xs': "size-6 rounded-[6px] [&_svg:not([class*='size-'])]:size-3",
+        'icon-sm': 'size-8',
         'icon-lg': 'size-10',
       },
     },

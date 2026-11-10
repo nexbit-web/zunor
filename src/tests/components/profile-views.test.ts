@@ -170,6 +170,49 @@ describe('профіль майстра — вітрина', () => {
     expect(container.textContent).not.toContain('Категорія')
   })
 
+  // Клієнт має одразу бачити, кличе він людину чи клінінгову компанію.
+  it('компанія підписана як компанія, людина — як майстер', () => {
+    const company = masterView({ crew: 'COMPANY', name: 'Чисто Сервіс' })
+    const person = masterView({ crew: 'TEAM' })
+
+    expect(company.container.textContent).toContain('Клінінгова компанія')
+    expect(company.container.textContent).toContain('Про компанію')
+    expect(person.container.textContent).toContain('Приватний майстер')
+    expect(person.container.textContent).toContain('Про себе')
+  })
+
+  // Старий профіль без відповіді — без підпису, а не з вигаданим.
+  it('профіль без формату роботи — без підпису', () => {
+    const { container } = masterView({ crew: null })
+
+    expect(container.textContent).not.toContain('Клінінгова компанія')
+    expect(container.textContent).not.toContain('Приватний майстер')
+  })
+
+  it('поруч із категорією — послуги й обʼєкти з анкети', () => {
+    const { container } = masterView({
+      services: [
+        { key: 'deep', label: 'Генеральне' },
+        { key: 'windows', label: 'Миття вікон' },
+      ],
+      premises: [{ key: 'business', label: 'Офіси й комерція' }],
+    })
+
+    expect(container.textContent).toContain('Прибирання')
+    expect(container.textContent).toContain('Генеральне')
+    expect(container.textContent).toContain('Миття вікон')
+    expect(container.textContent).toContain('Офіси й комерція')
+  })
+
+  // «0.0» читається як погана оцінка, прочерк — як збій.
+  it('без відгуків замість рейтингу — «Новий», без прочерку', () => {
+    const { container } = masterView({ avgRating: 0, reviewsCount: 0 })
+
+    expect(container.textContent).toContain('Новий')
+    expect(container.textContent).toContain('ще без оцінок')
+    expect(container.textContent).not.toContain('—')
+  })
+
   // Ім'я приходить від користувача — розмітка в ньому лишається текстом.
   it('розмітка в імені не виконується', () => {
     const { container } = masterView({ name: '<img src=x onerror=alert(1)>' })

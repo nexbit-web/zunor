@@ -1,7 +1,8 @@
 <script lang="ts">
   import { invalidateAll } from '$app/navigation'
   import toast from 'svelte-hot-french-toast'
-  import { Star, Loader2 } from 'lucide-svelte'
+  import Star from '$lib/components/icons/set/star.svelte'
+  import Loader2 from '$lib/components/icons/set/loader-circle.svelte'
   import { Button } from '$lib/components/ui/button'
   import { Textarea } from '$lib/components/ui/textarea'
 

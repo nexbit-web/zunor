@@ -1,3 +1,12 @@
+<!--
+  Профіль майстра — публічна сторінка (/@handle), тому мікророзмітка й
+  JSON-LD лишаються: саме з неї пошук бере ім'я, місто й рейтинг.
+
+  Карток більше немає. Кожен розділ жив у рамці зі скругленням 28px, і
+  сторінка читалась як стос віджетів. Тут одна колонка: хто це → що
+  робить → як працював → приклади → відгуки. Розділи тримає повітря й
+  волосяна лінія, а не рамка.
+-->
 <script lang="ts">
   import {
     Avatar,
@@ -6,27 +15,19 @@
   } from '$lib/components/ui/avatar'
   import { Skeleton } from '$lib/components/ui/skeleton'
   import { safeJsonLd } from '$lib/utils/json-ld'
-  import { goto } from '$app/navigation'
-  import {
-    BadgeCheck,
-    Copy,
-    Check,
-    MapPin,
-    Star,
-    Calendar,
-    Zap,
-    MessageSquare,
-    User,
-    Pencil,
-    Sparkles,
-    Image,
-  } from 'lucide-svelte'
+  import BadgeCheck from '$lib/components/icons/set/badge-check.svelte'
+  import Building2 from '$lib/components/icons/set/building-2.svelte'
+  import Copy from '$lib/components/icons/set/copy.svelte'
+  import Check from '$lib/components/icons/set/check.svelte'
+  import House from '$lib/components/icons/set/house.svelte'
+  import Star from '$lib/components/icons/set/star.svelte'
+  import User from '$lib/components/icons/set/user.svelte'
   import type { FreelancerProfileData as ProfileData } from '$lib/components/profile/types'
-  import { getBannerForCategories } from '$lib/categories/registry'
   import PhotoGallery from '$lib/components/photo-gallery.svelte'
-  import { Button } from '../ui/button'
-
-  import toast from 'svelte-hot-french-toast'
+  import ServiceIcon from '$lib/categories/cleaning/service-icon.svelte'
+  import { getBannerForCategories } from '$lib/categories/registry'
+  import { kindLabel, kindOfCrew } from '$lib/masters/meta'
+  import { copyToClipboard } from '$lib/utils/clipboard'
 
   interface Props {
     user: ProfileData
@@ -34,13 +35,8 @@
     /** Зарезервовано: гейт для CTA «написати майстру», коли зʼявиться чат із профілю. */
     isAuthenticated: boolean
   }
-  // isAuthenticated поки не використовується у в'ю — не деструктуруємо, щоб не плодити m's warning.
+  // isAuthenticated поки не використовується у в'ю — не деструктуруємо, щоб не плодити warning.
   let { user, isOwner }: Props = $props()
-
-  // Безпечний JSON-LD — спільна реалізація в $lib/utils/json-ld, вона ж
-  // покрита тестами. Локальна копія жила тільки тут, і другий компонент
-  // із JSON-LD (seo/JsonLd.svelte) про неї не знав — там стояв голий
-  // JSON.stringify.
 
   /** Дата у локалі uk-UA. Невалідне значення не роняє рендер. */
   function formatDate(
@@ -53,6 +49,23 @@
       display: d.toLocaleDateString('uk-UA', opts),
       iso: d.toISOString(),
     }
+  }
+
+  /**
+   * «березня 2025» — місяць у родовому відмінку. Місяць із роком Intl
+   * віддає в називному («березень 2025 р.»), і «з березень» читалось з
+   * помилкою; з днем — у родовому, тож день просто відкидаємо.
+   */
+  function monthYear(value: string | Date): string {
+    const d = new Date(value)
+    if (Number.isNaN(d.getTime())) return ''
+    const parts = new Intl.DateTimeFormat('uk-UA', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    }).formatToParts(d)
+    const part = (type: string) => parts.find((p) => p.type === type)?.value
+    return `${part('month')} ${part('year')}`
   }
 
   /** Рейтинг → рядок. Захист від NaN. */
@@ -76,22 +89,31 @@
     return 'відгуків'
   }
 
-  const created = $derived(
-    formatDate(user.createdAt, {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-    }),
-  )
+  // Хто це — людина чи компанія (компанія — crew = COMPANY). Профіль,
+  // старший за питання (crew = null), підпису не має.
+  const kind = $derived(kindOfCrew(user.crew))
+  const isCompany = $derived(kind === 'company')
+  const KindIcon = $derived(isCompany ? Building2 : User)
+
+  const since = $derived(monthYear(user.createdAt))
+  const services = $derived(user.services ?? [])
+  const premises = $derived(user.premises ?? [])
   const profileUrl = $derived(
     user.username ? `/@${user.username}` : `/dashboard`,
   )
+  const hasRating = $derived(user.reviewsCount > 0)
+  const bannerUrl = $derived(
+    user.categorySlugs.length > 0
+      ? getBannerForCategories(user.categorySlugs)
+      : null,
+  )
 
-  // SEO: Person schema. Безпечно — проходить через safeJsonLd().
+  // SEO: компанія — LocalBusiness, людина — Person. Безпечно — проходить
+  // через safeJsonLd().
   const personJsonLd = $derived(
     safeJsonLd({
       '@context': 'https://schema.org',
-      '@type': 'Person',
+      '@type': isCompany ? 'LocalBusiness' : 'Person',
       name: user.name,
       ...(user.username && {
         alternateName: `@${user.username}`,
@@ -125,15 +147,11 @@
 
   async function copyUsername(): Promise<void> {
     if (!user.username) return
-    try {
-      await navigator.clipboard.writeText('@' + user.username)
-      copied = true
-      clearTimeout(copyTimer)
-      copyTimer = setTimeout(() => (copied = false), 2000)
-      toast.success('Скопійовано', { duration: 2000 })
-    } catch {
-      // Clipboard недоступний (HTTP / дозволи) — мовчки ігноруємо.
-    }
+    if (!(await copyToClipboard('@' + user.username, 'Нікнейм скопійовано')))
+      return
+    copied = true
+    clearTimeout(copyTimer)
+    copyTimer = setTimeout(() => (copied = false), 2000)
   }
   // Чистимо таймер при розмонтуванні.
   $effect(() => () => clearTimeout(copyTimer))
@@ -146,12 +164,6 @@
       .map((w) => w[0]?.toUpperCase() ?? '')
       .join('') || '?',
   )
-  const isTopPerformer = $derived(user.completedOrders >= 50)
-  const bannerUrl = $derived(
-    user.categorySlugs.length > 0
-      ? getBannerForCategories(user.categorySlugs)
-      : null,
-  )
 
   // Показуємо ВСІ категорії, а не лише першу. На сьогодні вона одна
   // («Прибирання»), але додавання другої має бути додаванням контенту, а
@@ -160,10 +172,6 @@
   const categoryLabel = $derived(
     user.categories.length > 1 ? 'Категорії' : 'Категорія',
   )
-
-  function goEdit(): void {
-    goto('dashboard/settings/profile')
-  }
 </script>
 
 <svelte:head>
@@ -171,351 +179,318 @@
 </svelte:head>
 
 <article
-  class=" min-h-svh px-5 pt-4 pb-20 md:pb-12"
+  class="mx-auto w-full max-w-150 px-5 pt-10 pb-16"
   itemscope
-  itemtype="https://schema.org/Person"
+  itemtype={isCompany
+    ? 'https://schema.org/LocalBusiness'
+    : 'https://schema.org/Person'}
 >
-  <div class="mx-auto flex max-w-[620px] flex-col gap-4">
-    <!-- ═══ HERO: banner + avatar ═══ -->
-    <div class="card overflow-hidden">
-      <div class="relative h-[180px] bg-gradient-to-br from-muted to-secondary">
-        {#if bannerUrl}
-          <img
-            src={bannerUrl}
-            alt=""
-            aria-hidden="true"
-            loading="eager"
-            decoding="async"
-            class="absolute inset-0 size-full object-cover"
-          />
-        {/if}
-        <div
-          class="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 to-transparent"
-        ></div>
-      </div>
+  <!-- ═══ Банер ═══
+       Нижчий за попередній (180px) і без темного градієнта поверх:
+       градієнт існував, щоб на картинці читався текст, а тексту на ній
+       більше немає. Скруглення — спільні 8px. -->
+  {#if bannerUrl}
+    <div class="h-32 overflow-hidden rounded-[8px] bg-muted sm:h-40">
+      <img
+        src={bannerUrl}
+        alt=""
+        aria-hidden="true"
+        loading="eager"
+        decoding="async"
+        class="size-full object-cover"
+      />
+    </div>
+  {/if}
 
-      <div class="px-7 pb-[26px]">
-        <div class="mt-[-52px] mb-4 flex items-end justify-between gap-4">
-          <div class="relative">
-            {#if user.avatar && !avatarLoaded}
-              <div
-                class="absolute inset-0 z-10 size-[104px] overflow-hidden rounded-full border-4 border-card"
-              >
-                <Skeleton class="size-full rounded-full" />
-              </div>
-            {/if}
-            <Avatar class="size-[104px] border-4 border-card shadow-md">
-              {#if user.avatar}
-                <AvatarImage
-                  src={user.avatar}
-                  alt="Аватар {user.name}"
-                  loading="eager"
-                  fetchpriority="high"
-                  decoding="async"
-                  onload={() => (avatarLoaded = true)}
-                  onerror={() => (avatarLoaded = true)}
-                />
-                <meta itemprop="image" content={user.avatar} />
-              {/if}
-              <AvatarFallback
-                class="cursor-default bg-foreground text-[38px] font-bold text-background"
-              >
-                {initials}
-              </AvatarFallback>
-            </Avatar>
+  <!-- ═══ Хто це ═══
+       Як профіль у Twitter: аватар ліворуч, наполовину на банері, а імʼя
+       й підписи — під ним, по лівому краю. По центру шапка займала пів
+       екрана, і до суті доводилось гортати. «Редагувати» — праворуч на
+       рівні аватара. -->
+  <header>
+    <div
+      class="flex items-end justify-between gap-4 {bannerUrl ? '-mt-10' : ''}"
+    >
+      <div class="relative ml-4 shrink-0">
+        {#if user.avatar && !avatarLoaded}
+          <div
+            class="absolute inset-0 z-10 size-20 overflow-hidden rounded-full ring-4 ring-background"
+          >
+            <Skeleton class="size-full rounded-full" />
           </div>
-
-          {#if isOwner}
-            <Button
-              type="button"
-              onclick={goEdit}
-              class="mb-1 inline-flex h-[42px] items-center gap-[7px] rounded-xl bg-primary px-[18px] text-[13.5px] font-semibold text-white transition-transform   focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground/40 motion-reduce:transition-none"
-            >
-              <Pencil class="size-[15px]" aria-hidden="true" /> Редагувати
-            </Button>
-          {/if}
-        </div>
-
-        <div class="flex items-center gap-[7px]">
-          <h1
-            class="truncate text-[25px] font-bold tracking-[-0.03em] text-foreground"
-            itemprop="name"
-          >
-            {user.name}
-          </h1>
-          {#if user.verificationStatus === 'VERIFIED'}
-            <BadgeCheck
-              class="size-5 shrink-0 fill-primary stroke-primary-foreground"
-              aria-label="Верифікований"
+        {/if}
+        <Avatar class="size-20 ring-4 ring-background">
+          {#if user.avatar}
+            <AvatarImage
+              src={user.avatar}
+              alt={isCompany ? `Логотип ${user.name}` : `Аватар ${user.name}`}
+              loading="eager"
+              fetchpriority="high"
+              decoding="async"
+              onload={() => (avatarLoaded = true)}
+              onerror={() => (avatarLoaded = true)}
             />
+            <meta itemprop="image" content={user.avatar} />
           {/if}
-        </div>
-
-        {#if user.username}
-          <p
-            class="mt-1 flex items-center gap-[7px] text-sm text-muted-foreground"
+          <AvatarFallback
+            class="cursor-default bg-muted text-2xl font-medium text-muted-foreground"
           >
-            <span itemprop="alternateName">@{user.username}</span>
-            <button
-              type="button"
-              onclick={copyUsername}
-              class="rounded-sm cursor-pointer text-muted-foreground/70 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground/40"
-              aria-label={copied ? 'Нікнейм скопійовано' : 'Скопіювати нікнейм'}
-            >
-              {#if copied}
-                <Check class="size-4 text-emerald-500" aria-hidden="true" />
-              {:else}
-                <Copy class="size-4" aria-hidden="true" />
-              {/if}
-            </button>
-          </p>
-        {/if}
-
-        <div class="my-3.5 flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
-          <span
-            class="inline-flex items-center gap-1.5 text-[13px] font-medium text-muted-foreground"
-          >
-            <Calendar class="size-[13px]" aria-hidden="true" />
-            <time datetime={created.iso}>З нами з {created.display}</time>
-          </span>
-          {#if user.city}
-            <span class="text-muted-foreground/50" aria-hidden="true">·</span>
-            <span
-              class="inline-flex items-center gap-1.5 text-[13px] font-medium text-muted-foreground"
-              itemprop="address"
-              itemscope
-              itemtype="https://schema.org/PostalAddress"
-            >
-              <MapPin class="size-[13px]" aria-hidden="true" />
-              <span itemprop="addressLocality">{user.city}</span>
-            </span>
-          {/if}
-        </div>
-
-        <div class="flex flex-wrap gap-2">
-          <span
-            class="inline-flex h-[30px] items-center gap-1.5 rounded-full bg-secondary px-[13px] text-[12.5px] font-semibold text-secondary-foreground"
-          >
-            <Sparkles class="size-3" aria-hidden="true" /> Майстер
-          </span>
-          {#if isTopPerformer}
-            <span
-              class="inline-flex h-[30px] items-center gap-1.5 rounded-full bg-amber-500/10 px-[13px] text-[12.5px] font-semibold text-amber-700 dark:text-amber-400"
-            >
-              <Star class="size-3" aria-hidden="true" /> Топ виконавець
-            </span>
-          {/if}
-        </div>
-
-        {#if isOwner}
-          <button
-            type="button"
-            onclick={goEdit}
-            class="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-foreground text-[14.5px] font-semibold text-background transition-transform hover:-translate-y-px active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground/40 motion-reduce:transition-none sm:hidden"
-          >
-            <Pencil class="size-4" aria-hidden="true" /> Редагувати профіль
-          </button>
-        {/if}
+            {initials}
+          </AvatarFallback>
+        </Avatar>
       </div>
+
+      {#if isOwner}
+        <a
+          href="/dashboard/settings/profile"
+          class="inline-flex h-9 shrink-0 items-center rounded-[8px] border border-primary px-4 text-[14px] text-primary transition-colors hover:bg-primary hover:text-primary-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          Редагувати профіль
+        </a>
+      {/if}
     </div>
 
-    <!-- ═══ ABOUT + CATEGORY ═══ -->
-    <section aria-labelledby="about-heading" class="card p-7">
-      <h2
-        id="about-heading"
-        class="mb-4 inline-flex items-center gap-[7px] text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase"
+    <div class="mt-3 flex items-center gap-1.5">
+      <h1
+        class="text-2xl font-semibold [overflow-wrap:anywhere]"
+        itemprop="name"
       >
-        <User class="size-3.5" aria-hidden="true" /> Про себе
-      </h2>
-
-      {#if user.bio}
-        <p
-          class="text-[14.5px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]"
-          itemprop="description"
-        >
-          {user.bio}
-        </p>
-      {:else}
-        <p class="text-[14.5px] text-muted-foreground/60 italic">
-          {isOwner ? 'Ти ще не додав опис.' : 'Майстер ще не додав опис.'}
-        </p>
+        {user.name}
+      </h1>
+      {#if user.verificationStatus === 'VERIFIED'}
+        <BadgeCheck
+          class="size-5 shrink-0 fill-primary stroke-primary-foreground"
+          aria-label="Верифікований"
+        />
       {/if}
+    </div>
 
-      {#if user.categories.length > 0}
-        <!-- flex-wrap: із кількома категоріями рядок не має виїжджати
-             за картку на вузькому екрані. -->
-        <div class="mt-5 flex flex-wrap items-center gap-2.5">
-          <span class="text-[13px] text-muted-foreground">{categoryLabel}</span>
-          {#each user.categories as category (category)}
-            <span
-              class="inline-flex h-8 items-center rounded-full bg-secondary px-3.5 text-[13px] font-medium text-secondary-foreground"
-            >
-              {category}
-            </span>
-          {/each}
-        </div>
-      {/if}
-    </section>
-
-    <!-- ═══ PORTFOLIO ═══ -->
-    {#if user.portfolioImages.length > 0}
-      <section aria-labelledby="portfolio-heading" class="card p-7">
-        <h2
-          id="portfolio-heading"
-          class="mb-4 inline-flex items-center gap-[7px] text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase"
+    {#if user.username}
+      <p
+        class="mt-0.5 flex items-center gap-1.5 text-[15px] text-muted-foreground"
+      >
+        <span itemprop="alternateName">@{user.username}</span>
+        <button
+          type="button"
+          onclick={copyUsername}
+          class="cursor-pointer rounded-sm text-muted-foreground/70 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          aria-label={copied ? 'Нікнейм скопійовано' : 'Скопіювати нікнейм'}
         >
-          <Image class="size-3.5" aria-hidden="true" /> Приклади робіт
-        </h2>
-        <PhotoGallery images={user.portfolioImages} />
-      </section>
+          {#if copied}
+            <Check class="size-4 text-emerald-500" aria-hidden="true" />
+          {:else}
+            <Copy class="size-4" aria-hidden="true" />
+          {/if}
+        </button>
+      </p>
     {/if}
 
-    <!-- ═══ STATS ═══ -->
-    <section aria-labelledby="stats-heading" class="card p-7">
-      <h2
-        id="stats-heading"
-        class="mb-4 inline-flex items-center gap-[7px] text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase"
-      >
-        <Zap class="size-3.5" aria-hidden="true" /> Статистика
-      </h2>
-      <dl class="grid grid-cols-2 gap-2.5">
-        <div class="rounded-2xl bg-muted px-[18px] py-4">
-          <dt
-            class="mb-1.5 inline-flex items-center gap-1.5 text-[12.5px] text-muted-foreground"
-          >
-            <Star
-              class="size-3 fill-amber-400 text-amber-400"
-              aria-hidden="true"
-            /> Рейтинг
-          </dt>
-          <dd
-            class="m-0 text-2xl font-bold tracking-[-0.03em] text-foreground tabular-nums"
-          >
-            {fmtRating(user.avgRating)}
-            <span class="text-[13px] font-medium text-muted-foreground"
-              >/ 5.0</span
-            >
-          </dd>
-        </div>
-        <div class="rounded-2xl bg-muted px-[18px] py-4">
-          <dt
-            class="mb-1.5 inline-flex items-center gap-1.5 text-[12.5px] text-muted-foreground"
-          >
-            <BadgeCheck class="size-3" aria-hidden="true" /> Виконано
-          </dt>
-          <dd
-            class="m-0 text-2xl font-bold tracking-[-0.03em] text-foreground tabular-nums"
-          >
-            {user.completedOrders ?? 0}
-            <span class="text-[13px] font-medium text-muted-foreground"
-              >замовлень</span
-            >
-          </dd>
-        </div>
-      </dl>
-    </section>
-
-    <!-- ═══ REVIEWS ═══ -->
-    <section aria-labelledby="reviews-heading" class="card p-7">
-      <div class="mb-4 flex items-center justify-between">
-        <h2
-          id="reviews-heading"
-          class="inline-flex items-center gap-[7px] text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase"
+    <!-- Хто це — пігулкою кольору акценту: клієнту варто одразу бачити,
+         кличе він людину чи клінінгову компанію. Поруч — місто й дата,
+         без піктограм: це підпис, а не дані, заради яких потрібні значки. -->
+    <div
+      class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[15px] text-muted-foreground"
+    >
+      {#if kind}
+        <span
+          class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-0.5 text-[12.5px] font-semibold text-primary"
         >
-          <MessageSquare class="size-3.5" aria-hidden="true" /> Відгуки
-        </h2>
-        {#if user.reviewsCount > 0}
-          <span
-            class="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-muted-foreground"
-          >
-            <Star
-              class="size-3 fill-amber-400 text-amber-400"
-              aria-hidden="true"
-            />
-            <b class="font-semibold text-foreground"
-              >{fmtRating(user.avgRating)}</b
-            >
-            · {user.reviewsCount}
-            {reviewsLabel(user.reviewsCount)}
-          </span>
-        {/if}
-      </div>
+          <KindIcon class="size-3.5 shrink-0" aria-hidden="true" />
+          {kindLabel(kind)}
+        </span>
+      {/if}
+      <span>
+        {#if user.city}<span
+            itemprop="address"
+            itemscope
+            itemtype="https://schema.org/PostalAddress"
+            ><span itemprop="addressLocality">{user.city}</span></span
+          >{/if}{#if user.city && since}{' · '}{/if}{#if since}на Zunor з {since}{/if}
+      </span>
+    </div>
+  </header>
 
-      {#if user.reviews.length > 0}
-        <ul class="m-0 list-none p-0">
-          {#each user.reviews as review, i (review.id ?? i)}
-            {@const stars = starCount(review.rating)}
-            {@const reviewDate = formatDate(review.createdAt, {
-              day: 'numeric',
-              month: 'long',
-              year: 'numeric',
-            })}
-            <li
-              class="border-t border-border py-[18px] first:border-t-0 first:pt-0"
-              itemprop="review"
-              itemscope
-              itemtype="https://schema.org/Review"
-            >
-              <div class="mb-2.5 flex items-center gap-2.5">
-                <div
-                  class="flex size-[30px] shrink-0 items-center justify-center rounded-full bg-muted text-[11.5px] font-semibold text-foreground"
-                  aria-hidden="true"
-                >
-                  {review.authorInitials}
-                </div>
-                <span
-                  class="flex-1 truncate text-sm font-semibold text-foreground"
-                  itemprop="author"
-                >
-                  {review.authorName}
-                </span>
-                <div
-                  class="ml-auto flex gap-0.5"
-                  itemprop="reviewRating"
-                  itemscope
-                  itemtype="https://schema.org/Rating"
-                  aria-label={`Рейтинг: ${stars} з 5`}
-                >
-                  <meta itemprop="ratingValue" content={String(stars)} />
-                  <meta itemprop="bestRating" content="5" />
-                  {#each Array(stars) as _, j (j)}
-                    <Star
-                      class="size-3 fill-amber-400 text-amber-400"
-                      aria-hidden="true"
-                    />
-                  {/each}
-                </div>
-              </div>
-              <p
-                class="pl-10 text-sm leading-relaxed text-muted-foreground [overflow-wrap:anywhere]"
-                itemprop="reviewBody"
-              >
-                {review.text}
-              </p>
-              <p class="mt-2 pl-10 text-[11.5px] text-muted-foreground/70">
-                <time datetime={reviewDate.iso}>{reviewDate.display}</time>
-              </p>
-            </li>
+  <!-- ═══ Як працював ═══
+       Значка «Топ виконавець» немає: він вмикався на 50 виконаних
+       замовленнях, а саме це число стоїть поруч у цифрах. Без відгуків
+       замість рейтингу — «Новий»: «0.0» читається як погана оцінка, а
+       прочерк — як збій, хоча насправді оцінок просто ще немає (так
+       робить і Airbnb). -->
+  <div
+    class="mt-8 grid grid-cols-3 divide-x divide-border/60 border-y border-border/60 py-5 text-center"
+  >
+    <div>
+      <div
+        class="inline-flex items-center gap-1.5 text-[22px] font-semibold tabular-nums"
+      >
+        <Star class="size-4 fill-amber-400 text-amber-400" aria-hidden="true" />
+        {hasRating ? fmtRating(user.avgRating) : isCompany ? 'Нова' : 'Новий'}
+      </div>
+      <div class="mt-0.5 text-[13px] text-muted-foreground">
+        {hasRating ? 'рейтинг' : 'ще без оцінок'}
+      </div>
+    </div>
+    <div>
+      <div class="text-[22px] font-semibold tabular-nums">
+        {user.completedOrders ?? 0}
+      </div>
+      <div class="mt-0.5 text-[13px] text-muted-foreground">виконано</div>
+    </div>
+    <div>
+      <div class="text-[22px] font-semibold tabular-nums">
+        {user.reviewsCount}
+      </div>
+      <div class="mt-0.5 text-[13px] text-muted-foreground">
+        {reviewsLabel(user.reviewsCount)}
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Що робить ═══ -->
+  {#if user.categories.length > 0}
+    <section class="mt-8">
+      <h2 class="text-[15px] font-semibold">{categoryLabel}</h2>
+      <!-- flex-wrap: із кількома категоріями рядок не має виїжджати за
+           колонку на вузькому екрані. -->
+      <!-- Категорія — тоном акценту, послуги поруч — сірими з іконками
+           тими самими, що в заявках: «Прибирання» саме по собі нічого не
+           каже, а «Генеральне · Миття вікон» — те, що клієнт і шукає. -->
+      <div class="mt-2 flex flex-wrap gap-2">
+        {#each user.categories as category (category)}
+          <span
+            class="inline-flex h-8 items-center rounded-[8px] bg-primary/10 px-3 text-[14px] font-medium text-primary"
+          >
+            {category}
+          </span>
+        {/each}
+        {#each services as s (s.key)}
+          <span
+            class="inline-flex h-8 items-center gap-1.5 rounded-[8px] bg-muted px-3 text-[14px]"
+          >
+            <ServiceIcon service={s.key} class="size-4.5 shrink-0" />
+            {s.label}
+          </span>
+        {/each}
+      </div>
+      {#if premises.length > 0}
+        <p
+          class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[14px] text-muted-foreground"
+        >
+          {#each premises as p (p.key)}
+            {@const Icon = p.key === 'business' ? Building2 : House}
+            <span class="inline-flex items-center gap-1.5">
+              <Icon class="size-4" aria-hidden="true" />
+              {p.label}
+            </span>
           {/each}
-        </ul>
-      {:else}
-        <div class="rounded-2xl bg-muted py-8 text-center">
-          <p class="text-sm text-muted-foreground">
-            {isOwner
-              ? 'Поки що немає відгуків. Виконай перше замовлення — і клієнти почнуть лишати відгуки.'
-              : 'Ще немає відгуків'}
-          </p>
-        </div>
+        </p>
       {/if}
     </section>
-  </div>
-</article>
+  {/if}
 
-<style>
-  /* Єдине джерело правди для картки: радіус, рамка, фон, тінь. Тінь — alpha-чорний (працює в обох темах). */
-  .card {
-    border-radius: 28px;
-    border: 1px solid var(--border);
-    background-color: var(--card);
-  }
-</style>
+  <!-- ═══ Про себе / про компанію ═══ -->
+  <section aria-labelledby="about-heading" class="mt-8">
+    <h2 id="about-heading" class="text-[15px] font-semibold">
+      {isCompany ? 'Про компанію' : 'Про себе'}
+    </h2>
+    {#if user.bio}
+      <p
+        class="mt-2 leading-relaxed text-muted-foreground [overflow-wrap:anywhere]"
+        itemprop="description"
+      >
+        {user.bio}
+      </p>
+    {:else}
+      <p class="mt-2 text-muted-foreground">
+        {isOwner
+          ? 'Ти ще не додав опис.'
+          : isCompany
+            ? 'Компанія ще не додала опис.'
+            : 'Майстер ще не додав опис.'}
+      </p>
+    {/if}
+  </section>
+
+  <!-- ═══ Приклади робіт ═══ -->
+  {#if user.portfolioImages.length > 0}
+    <section aria-labelledby="portfolio-heading" class="mt-8">
+      <h2 id="portfolio-heading" class="mb-3 text-[15px] font-semibold">
+        Приклади робіт
+      </h2>
+      <PhotoGallery images={user.portfolioImages} />
+    </section>
+  {/if}
+
+  <!-- ═══ Відгуки ═══ -->
+  <section aria-labelledby="reviews-heading" class="mt-8">
+    <h2 id="reviews-heading" class="text-[15px] font-semibold">Відгуки</h2>
+
+    {#if user.reviews.length > 0}
+      <ul class="mt-1 list-none p-0">
+        {#each user.reviews as review, i (review.id ?? i)}
+          {@const stars = starCount(review.rating)}
+          {@const reviewDate = formatDate(review.createdAt, {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+          })}
+          <li
+            class="border-b border-border/60 py-5"
+            itemprop="review"
+            itemscope
+            itemtype="https://schema.org/Review"
+          >
+            <div class="flex items-center gap-3">
+              <div
+                class="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground"
+                aria-hidden="true"
+              >
+                {review.authorInitials}
+              </div>
+              <span
+                class="min-w-0 flex-1 truncate text-[15px]"
+                itemprop="author"
+              >
+                {review.authorName}
+              </span>
+              <div
+                class="flex shrink-0 gap-0.5"
+                itemprop="reviewRating"
+                itemscope
+                itemtype="https://schema.org/Rating"
+                aria-label={`Рейтинг: ${stars} з 5`}
+              >
+                <meta itemprop="ratingValue" content={String(stars)} />
+                <meta itemprop="bestRating" content="5" />
+                {#each Array(stars) as _, j (j)}
+                  <Star
+                    class="size-3 fill-amber-400 text-amber-400"
+                    aria-hidden="true"
+                  />
+                {/each}
+              </div>
+            </div>
+
+            <p
+              class="mt-2 leading-relaxed text-muted-foreground [overflow-wrap:anywhere]"
+              itemprop="reviewBody"
+            >
+              {review.text}
+            </p>
+            <p class="mt-2 text-[13px] text-muted-foreground/70">
+              <time datetime={reviewDate.iso}>{reviewDate.display}</time>
+            </p>
+          </li>
+        {/each}
+      </ul>
+    {:else}
+      <!-- Без сірої плашки: порожній список — не подія, на яку треба
+           дивитись. -->
+      <p class="mt-2 text-muted-foreground">
+        {isOwner
+          ? 'Клієнти лишають відгук після виконаного замовлення.'
+          : 'Ще немає відгуків'}
+      </p>
+    {/if}
+  </section>
+</article>

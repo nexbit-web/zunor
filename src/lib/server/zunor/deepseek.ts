@@ -143,11 +143,15 @@ export async function* chatCompletionStream(
   messages: DsMessage[],
   tools: DsTool[],
   thinking = false,
+  /** Клієнт пішов («Стоп», закрита вкладка): дочитувати відповідь — платити за те, чого ніхто не побачить. */
+  signal?: AbortSignal,
 ): AsyncGenerator<StreamChunk, StreamResult, void> {
   turnLog().request('stream', messages, thinking)
   const t0 = Date.now()
 
   const ac = new AbortController()
+  if (signal?.aborted) ac.abort()
+  signal?.addEventListener('abort', () => ac.abort(), { once: true })
   let idleTimer: ReturnType<typeof setTimeout> | null = null
   const armIdle = () => {
     if (idleTimer) clearTimeout(idleTimer)

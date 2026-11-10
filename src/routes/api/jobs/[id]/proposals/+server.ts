@@ -16,7 +16,7 @@ import type { RequestHandler } from './$types'
 export const POST: RequestHandler = async ({ params, request, locals }) => {
   const user = requireApiUser(locals)
 
-  const rl = limit(`proposal:${user.id}`, {
+  const rl = await limit(`proposal:${user.id}`, {
     points: 30,
     duration: 60 * 60_000,
   })
