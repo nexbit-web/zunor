@@ -15,6 +15,10 @@ const PAGE_SIZE = 20
  *
  * Універсальний endpoint для пагінованої видачі заявок.
  * Повертає { jobs, nextCursor }.
+ *
+ * `limit` (лише для view=mine, 1…PAGE_SIZE) — менша сторінка: бічна
+ * панель застосунку показує кілька останніх заявок, а решту тягне вже
+ * звичайними сторінками, коли людина натисне «Усі».
  */
 export const GET: RequestHandler = async ({ locals, url }) => {
   // Нижче в цьому ж хендлері `user` — це рядок із БД (роль, місто,
@@ -22,6 +26,11 @@ export const GET: RequestHandler = async ({ locals, url }) => {
   const userId = requireApiUser(locals).id
   const view = url.searchParams.get('view') ?? 'mine'
   const cursor = url.searchParams.get('cursor')
+  const limitParam = Number(url.searchParams.get('limit'))
+  const minePageSize =
+    Number.isInteger(limitParam) && limitParam > 0
+      ? Math.min(limitParam, PAGE_SIZE)
+      : PAGE_SIZE
 
   const categoriesParam = url.searchParams.get('categories') ?? ''
   const citiesParam = url.searchParams.get('cities') ?? ''
@@ -68,7 +77,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
       where: { clientId: userId },
       orderBy: { createdAt: 'desc' },
       ...(cursor && { skip: 1, cursor: { id: cursor } }),
-      take: PAGE_SIZE + 1,
+      take: minePageSize + 1,
       select: {
         id: true,
         title: true,
@@ -89,8 +98,8 @@ export const GET: RequestHandler = async ({ locals, url }) => {
       },
     })
 
-    const hasMore = jobs.length > PAGE_SIZE
-    const items = hasMore ? jobs.slice(0, PAGE_SIZE) : jobs
+    const hasMore = jobs.length > minePageSize
+    const items = hasMore ? jobs.slice(0, minePageSize) : jobs
     const nextCursor = hasMore ? items[items.length - 1].id : null
 
     return json({
