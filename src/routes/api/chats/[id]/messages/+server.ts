@@ -203,18 +203,19 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
   const payload = toChatMessage(message)
 
   // ─── Безпечний broadcast: помилки логуються, не падають ───
-
-  await safeTrigger(channels.chat(chatId), events.messageNew, {
-    message: payload,
-    chatId,
-    senderName: message.sender.name ?? '',
-    senderAvatar: message.sender.avatar,
-  })
-
-  // Персональні канали інших учасників
-  const otherMembers = membership.chat.members
-  await Promise.all(
-    otherMembers.map((m) =>
+  // Усі події — одночасно, а не по черзі: інакше chat:update (рядок у
+  // списку й число на вкладці) чекав відповіді Pusher на message:new і
+  // приходив на ~200 мс пізніше за саме повідомлення, а відповідь
+  // відправникові (годинник → галочка) — ще на стільки ж пізніше.
+  await Promise.all([
+    safeTrigger(channels.chat(chatId), events.messageNew, {
+      message: payload,
+      chatId,
+      senderName: message.sender.name ?? '',
+      senderAvatar: message.sender.avatar,
+    }),
+    // Персональні канали інших учасників
+    ...membership.chat.members.map((m) =>
       safeTrigger(channels.user(m.userId), events.chatUpdate, {
         chatId,
         lastMessageText: previewText,
@@ -222,7 +223,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
         lastSenderId: user.id,
       }),
     ),
-  )
+  ])
 
   // Без await: сторонній сайт не має тримати відправку.
   if (linkPreview.fetchLater)
