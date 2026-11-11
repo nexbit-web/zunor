@@ -17,9 +17,25 @@ import type { RequestHandler } from './$types'
 export const POST: RequestHandler = async ({ request, locals }) => {
   const user = requireApiUser(locals)
 
-  const formData = await request.formData()
-  const socketId = formData.get('socket_id')?.toString()
-  const channel = formData.get('channel_name')?.toString()
+  // pusher-js у браузері шле форму; застосунок (mobile/src/lib/realtime.ts)
+  // — JSON: у нативного запиту немає Origin, і форму без нього відхиляє
+  // CSRF-перевірка SvelteKit. JSON цієї перевірки не потребує — з чужого
+  // сайту його без CORS не надіслати.
+  let socketId: string | undefined
+  let channel: string | undefined
+  if (request.headers.get('content-type')?.includes('application/json')) {
+    const body = (await request.json().catch(() => null)) as {
+      socket_id?: unknown
+      channel_name?: unknown
+    } | null
+    socketId = typeof body?.socket_id === 'string' ? body.socket_id : undefined
+    channel =
+      typeof body?.channel_name === 'string' ? body.channel_name : undefined
+  } else {
+    const formData = await request.formData()
+    socketId = formData.get('socket_id')?.toString()
+    channel = formData.get('channel_name')?.toString()
+  }
 
   if (!socketId || !channel) {
     throw error(400, 'Missing socket_id or channel_name')
