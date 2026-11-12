@@ -19,7 +19,10 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 
   const membership = await prisma.chatMember.findUnique({
     where: { chatId_userId: { chatId, userId } },
-    select: { id: true },
+    select: {
+      id: true,
+      chat: { select: { members: { select: { userId: true } } } },
+    },
   })
   if (!membership) throw error(403, 'Not a member')
 
@@ -41,12 +44,19 @@ export const POST: RequestHandler = async ({ params, locals }) => {
     }),
   ])
 
-  // Safe trigger — не падає при помилці Pusher
-  await safeTrigger(channels.chat(chatId), events.messageRead, {
-    chatId,
-    readerId: userId,
-    lastReadAt: now.toISOString(),
-  })
+  // Safe trigger — не падає при помилці Pusher. Усе одночасно:
+  //   message:read — відкритому чату (✓✓ у бульбашках);
+  //   chat:read    — особистим каналам учасників: списку чатів, де розмова
+  //                  закрита. Співрозмовник бачить ✓✓ біля свого
+  //                  останнього, а сам читач на інших пристроях — згаслий
+  //                  лічильник. Без цього список чекав перезавантаження.
+  const read = { chatId, readerId: userId, lastReadAt: now.toISOString() }
+  await Promise.all([
+    safeTrigger(channels.chat(chatId), events.messageRead, read),
+    ...(membership.chat?.members ?? []).map((m) =>
+      safeTrigger(channels.user(m.userId), events.chatRead, read),
+    ),
+  ])
 
   return json({ ok: true })
 }

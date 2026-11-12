@@ -138,6 +138,9 @@ export interface MessageReadPayload {
   lastReadAt: string
 }
 
+/** chat:read — те саме, особистими каналами учасників (для списку чатів). */
+export type ChatReadPayload = MessageReadPayload
+
 export interface ChatUpdatePayload {
   chatId: string
   lastMessageText: string
