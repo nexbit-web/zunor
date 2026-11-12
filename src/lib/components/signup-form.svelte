@@ -8,7 +8,7 @@
   // перевірки, яку він робить краще.
   import { cn } from '$lib/utils.js'
   import type { HTMLFormAttributes } from 'svelte/elements'
-  import { signUp, signIn } from '$lib/auth-client'
+  import { registration, signIn } from '$lib/auth-client'
   import { goto } from '$app/navigation'
   import { dev } from '$app/environment'
   import { Button } from './ui/button'
@@ -73,20 +73,23 @@
     const normalizedEmail = email.trim().toLowerCase()
 
     try {
-      const { error: err } = await signUp.email({
+      // Користувача ще НЕМАЄ: сервер лише шле код
+      // ($lib/server/registration). Акаунт зʼявиться з вірним кодом.
+      // Відповідь однакова, є акаунт із цією поштою чи ні.
+      const { error: err } = await registration.start({
         name: name.trim(),
         email: normalizedEmail,
         password,
       })
       if (err) {
-        if (err.status === 422) serverError = 'Акаунт із таким email вже існує'
-        else if (err.status === 429)
-          serverError = 'Забагато спроб. Спробуйте пізніше.'
-        else serverError = 'Не вдалося створити акаунт'
+        serverError =
+          err.status === 429
+            ? 'Забагато спроб. Спробуйте пізніше.'
+            : 'Не вдалося створити акаунт'
         return
       }
       await goto(
-        `/user/verify-email?email=${encodeURIComponent(normalizedEmail)}`,
+        `/user/verify-email?email=${encodeURIComponent(normalizedEmail)}&flow=signup`,
       )
     } catch (err) {
       if (dev) console.error('[register] failed:', err)
