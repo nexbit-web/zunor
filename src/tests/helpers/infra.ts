@@ -47,6 +47,7 @@ export const events = {
   messageReaction: 'message:reaction',
   messagePreview: 'message:preview',
   chatUpdate: 'chat:update',
+  chatRead: 'chat:read',
   orderStatus: 'order:status',
   typing: 'client-typing',
   moderationNew: 'moderation:new',

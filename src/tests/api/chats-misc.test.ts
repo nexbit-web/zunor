@@ -134,6 +134,28 @@ describe('POST /api/chats/[id]/read', () => {
       expect.objectContaining({ chatId: 'chat-1', readerId: USER }),
     )
   })
+
+  // Список чатів слухає лише особистий канал: без chat:read ✓✓ у
+  // співрозмовника й лічильник на інших пристроях читача чекали
+  // перезавантаження сторінки.
+  it('шле chat:read в особисті канали обох учасників', async () => {
+    prisma.chatMember.findUnique.mockResolvedValue({
+      id: 'cm-1',
+      chat: { members: [{ userId: USER }, { userId: 'user-2' }] },
+    })
+
+    await chatRead.POST(
+      makeEvent({ params: { id: 'chat-1' }, locals: sessionUser(USER) }),
+    )
+
+    for (const channel of ['private-user-user-2', `private-user-${USER}`]) {
+      expect(safeTrigger).toHaveBeenCalledWith(
+        channel,
+        'chat:read',
+        expect.objectContaining({ chatId: 'chat-1', readerId: USER }),
+      )
+    }
+  })
 })
 
 describe('PATCH повідомлення', () => {

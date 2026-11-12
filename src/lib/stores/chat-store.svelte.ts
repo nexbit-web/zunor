@@ -3,6 +3,7 @@ import { getPusher } from '$lib/pusher-client'
 import { playMessageSound } from '$lib/sound/notification'
 import type {
   ChatPreview,
+  ChatReadPayload,
   MessageNewPayload,
   ChatUpdatePayload,
 } from '$lib/components/chat/types'
@@ -13,7 +14,9 @@ import type {
  *  • Список чатів на /messages синхронізується автоматично коли приходить
  *    повідомлення в інший чат
  *
- * Підписується на private-user-{userId} і слухає chat:update події.
+ * Підписується на private-user-{userId} і слухає chat:update (нове
+ * повідомлення) і chat:read (хтось прочитав: ✓✓ співрозмовника, а своє
+ * прочитане на іншому пристрої гасить лічильник).
  * Викликати subscribeToUserEvents(userId) один раз у root +layout.svelte.
  */
 
@@ -44,6 +47,7 @@ class ChatStore {
   private channel: Channel | null = null
   private onChatUpdate: ((data: ChatUpdatePayload) => void) | null = null
   private onMessageNew: ((data: MessageNewPayload) => void) | null = null
+  private onChatRead: ((data: ChatReadPayload) => void) | null = null
 
   /** ID активно відкритого чату — щоб не звукувати на нього */
   activeChatId = $state<string | null>(null)
@@ -60,7 +64,10 @@ class ChatStore {
    */
   markPeerRead(chatId: string, lastReadAt: string) {
     const chat = this.chats.find((c) => c.id === chatId)
-    if (chat) chat.peerLastReadAt = lastReadAt
+    if (!chat) return
+    // Події можуть прийти не по черзі — межа прочитаного назад не їде.
+    if (chat.peerLastReadAt && chat.peerLastReadAt > lastReadAt) return
+    chat.peerLastReadAt = lastReadAt
   }
 
   /** Локально позначити чат як прочитаний (коли юзер його відкриває) */
@@ -91,8 +98,16 @@ class ChatStore {
       this.handleIncomingMessage(data, userId)
     }
 
+    // Прочитали чат (подія сервера з api/chats/[id]/read). Чат закритий
+    // — інакше то саме приносить message:read у вікні розмови.
+    this.onChatRead = (data: ChatReadPayload) => {
+      if (data.readerId === userId) this.markReadElsewhere(data)
+      else this.markPeerRead(data.chatId, data.lastReadAt)
+    }
+
     channel.bind('chat:update', this.onChatUpdate)
     channel.bind('message:new', this.onMessageNew)
+    channel.bind('chat:read', this.onChatRead)
 
     this.channel = channel
     this.boundUserId = userId
@@ -121,10 +136,24 @@ class ChatStore {
       this.channel?.unbind('chat:update', this.onChatUpdate)
     if (this.onMessageNew)
       this.channel?.unbind('message:new', this.onMessageNew)
+    if (this.onChatRead) this.channel?.unbind('chat:read', this.onChatRead)
 
     this.channel = null
     this.onChatUpdate = null
     this.onMessageNew = null
+    this.onChatRead = null
+  }
+
+  /**
+   * Людина прочитала чат на іншому пристрої (телефон, друга вкладка) —
+   * лічильник гасне й тут. Якщо після прочитаного вже прийшло нове
+   * повідомлення, лічильник лишаємо: воно ще не прочитане.
+   */
+  private markReadElsewhere({ chatId, lastReadAt }: ChatReadPayload) {
+    const chat = this.chats.find((c) => c.id === chatId)
+    if (!chat || chat.unreadCount === 0) return
+    if (chat.lastMessageAt && chat.lastMessageAt > lastReadAt) return
+    chat.unreadCount = 0
   }
 
   private handleChatUpdate(data: ChatUpdatePayload, currentUserId: string) {
