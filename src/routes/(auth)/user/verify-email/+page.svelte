@@ -27,6 +27,6 @@
   </a>
 
   <div class="w-full max-w-[480px]">
-    <OtpForm email={data.email} />
+    <OtpForm email={data.email} flow={data.flow} />
   </div>
 </div>

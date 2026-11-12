@@ -19,6 +19,7 @@ import { sendResetPasswordEmail } from './email'
 import { sendOtpEmail } from './email/otp-email'
 import { serverless } from './runtime'
 import { background } from './background'
+import { registration } from './registration'
 
 const OTP_TTL_SECONDS = 600 // 10 хв — довше, ніж середня затримка SMTP
 
@@ -27,6 +28,13 @@ export const auth = betterAuth({
   secret: BETTER_AUTH_SECRET,
 
   database: prismaAdapter(prisma, { provider: 'postgresql' }),
+
+  // Стандартна реєстрація створює користувача ДО підтвердження пошти —
+  // у базі лишались непідтверджені акаунти з чужими адресами. Реєстрація
+  // тепер — плагін registration (./registration.ts): користувач
+  // зʼявляється лише з кодом із листа. Старий шлях закритий для всіх
+  // (404), щоб його не можна було смикнути в обхід.
+  disabledPaths: ['/sign-up/email'],
 
   // Сесії й одноразові коди — у Redis (auth-storage.ts): перевірка сесії
   // на кожен запит не будить Neon. Без Redis — undefined, усе в базі.
@@ -85,6 +93,14 @@ export const auth = betterAuth({
       }
     },
     resetPasswordTokenExpiresIn: 3600,
+    // Новий пароль — усі сесії людини геть (Redis і база; better-auth кличе
+    // deleteUserSessions(userId), не deleteSessions — див. sessions.ts).
+    // Пароль скидають і тоді, коли його вкрали: без цього той, хто вже
+    // увійшов, лишався б в акаунті й після зміни. Діє на обидва шляхи —
+    // посилання сайту й код застосунку (emailOTP); застосунок одразу
+    // входить заново новим паролем. Кеш сесії в cookie (cookieCache, 5 хв)
+    // на чужому пристрої може протриматись до кінця свого строку.
+    revokeSessionsOnPasswordReset: true,
   },
 
   // ─── Верифікація email ───
@@ -132,7 +148,6 @@ export const auth = betterAuth({
     max: 60,
     customRules: {
       '/sign-in/email': { window: 60, max: 5 },
-      '/sign-up/email': { window: 3600, max: 5 },
       '/email-otp/send-verification-otp': { window: 60, max: 2 },
       '/email-otp/verify-email': { window: 60, max: 5 },
       '/request-password-reset': { window: 3600, max: 5 },
@@ -193,6 +208,16 @@ export const auth = betterAuth({
         // голий void: на Vercel функцію заморозили б до відправки листа.
         background(sendOtpEmail({ email, otp, type }), 'otp email')
       },
+    }),
+    // Реєстрація з кодом ДО створення користувача (див. disabledPaths).
+    registration({
+      otpExpiresIn: OTP_TTL_SECONDS,
+      // Той самий лист «Код підтвердження», що й підтвердження пошти.
+      sendCode: ({ email, otp }) =>
+        background(
+          sendOtpEmail({ email, otp, type: 'email-verification' }),
+          'registration otp',
+        ),
     }),
     // Вхід із мобільного застосунку: у нативного запиту немає Origin —
     // плагін бере його з заголовка expo-origin (перевіряється trustedOrigins).

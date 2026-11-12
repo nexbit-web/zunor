@@ -2,7 +2,7 @@
   import * as InputOTP from '$lib/components/ui/input-otp/index.js'
   import { Spinner } from '$lib/components/ui/spinner/index.js'
   import CircleAlert from '$lib/components/icons/set/circle-alert.svelte'
-  import { emailOtp } from '$lib/auth-client'
+  import { emailOtp, registration } from '$lib/auth-client'
   import { goto, invalidateAll } from '$app/navigation'
   import { cn } from '$lib/utils.js'
   import toast from 'svelte-hot-french-toast'
@@ -10,10 +10,15 @@
   interface Props {
     /** Адреса, на яку відправлено код. Приходить із load, не з інпута. */
     email: string
+    /**
+     * signup — код реєстрації: вірний створює акаунт ($lib/server/registration);
+     * verify — підтвердження пошти вже наявного акаунта (emailOTP).
+     */
+    flow?: 'signup' | 'verify'
     class?: string
   }
 
-  let { email, class: className }: Props = $props()
+  let { email, flow = 'verify', class: className }: Props = $props()
 
   const CODE_LENGTH = 6
   const RESEND_COOLDOWN_SEC = 60
@@ -43,7 +48,10 @@
     verifying = true
     serverError = ''
     try {
-      const { error: err } = await emailOtp.verifyEmail({ email, otp: code })
+      const { error: err } =
+        flow === 'signup'
+          ? await registration.verify({ email, otp: code })
+          : await emailOtp.verifyEmail({ email, otp: code })
 
       if (err) {
         // TOO_MANY_ATTEMPTS: код згорів після 5 промахів, потрібен новий.
@@ -51,6 +59,14 @@
           serverError = 'Забагато спроб. Запросіть новий код.'
           code = ''
           cooldown = 0
+        } else if (err.code === 'OTP_EXPIRED') {
+          serverError = 'Код застарів. Запросіть новий.'
+          code = ''
+          cooldown = 0
+        } else if (err.code === 'USER_ALREADY_EXISTS') {
+          // Поки вводили код, акаунт зʼявився іншим шляхом (Google).
+          serverError = 'Акаунт із цією поштою вже є. Увійдіть.'
+          code = ''
         } else if (err.status === 429) {
           serverError = 'Забагато запитів. Спробуйте за хвилину.'
         } else {
@@ -83,10 +99,13 @@
     resending = true
     serverError = ''
     try {
-      const { error: err } = await emailOtp.sendVerificationOtp({
-        email,
-        type: 'email-verification',
-      })
+      const { error: err } =
+        flow === 'signup'
+          ? await registration.resend({ email })
+          : await emailOtp.sendVerificationOtp({
+              email,
+              type: 'email-verification',
+            })
       if (err) {
         serverError =
           err.status === 429
