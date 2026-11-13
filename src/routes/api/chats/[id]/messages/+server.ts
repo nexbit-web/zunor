@@ -11,6 +11,7 @@ import {
 } from '$lib/server/chat-link-preview'
 import type { RequestHandler } from './$types'
 import { background } from '$lib/server/background'
+import { sendMessagePush } from '$lib/server/push'
 
 const MESSAGE_PAGE_SIZE = 50
 const MAX_TEXT_LENGTH = 4000
@@ -214,16 +215,40 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
       senderName: message.sender.name ?? '',
       senderAvatar: message.sender.avatar,
     }),
-    // Персональні канали інших учасників
+    // Персональні канали інших учасників. Хто написав (імʼя, фото) —
+    // для банера «вам написали» в застосунку (mobile, message-banner);
+    // поля лише додаються, список чатів сайту їх не читає.
     ...membership.chat.members.map((m) =>
       safeTrigger(channels.user(m.userId), events.chatUpdate, {
         chatId,
         lastMessageText: previewText,
         lastMessageAt: payload.createdAt,
         lastSenderId: user.id,
+        messageId: payload.id,
+        senderName: message.sender.name ?? '',
+        senderAvatar: message.sender.avatar,
       }),
     ),
   ])
+
+  // Push на телефони співрозмовників ($lib/server/push) — після відповіді:
+  // запит до Expo не має тримати галочку «надіслано».
+  background(
+    sendMessagePush({
+      recipients: membership.chat.members.map((m) => m.userId),
+      chatId,
+      messageId: payload.id,
+      senderName: message.sender.name,
+      // Фото з підписом — значок і підпис, без підпису — «📷 Фото».
+      text:
+        type === 'TEXT'
+          ? text.slice(0, 180)
+          : text
+            ? `${type === 'PHOTO' ? '📷' : '📎'} ${text.slice(0, 170)}`
+            : previewText,
+    }),
+    'chat push',
+  )
 
   // Без await: сторонній сайт не має тримати відправку.
   if (linkPreview.fetchLater)
