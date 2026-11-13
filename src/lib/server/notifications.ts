@@ -1,5 +1,6 @@
 import { prisma } from './prisma'
 import { safeTrigger } from './pusher'
+import { sendPush } from './push'
 import { formatDistance } from '$lib/geo/districts'
 import type { Notification, Prisma } from '../../generated/prisma/client'
 
@@ -48,12 +49,13 @@ export function jobOfferNotice(
 }
 
 /**
- * Подія в особистий канал і копія в Telegram, якщо людина його
- * підключила. Лише для сповіщення, яке вже в базі.
+ * Подія в особистий канал, push на телефони з застосунком
+ * ($lib/server/push) і копія в Telegram, якщо людина його підключила.
+ * Лише для сповіщення, яке вже в базі.
  *
  * Telegram — ліниво: модуль тягне grammY, а pushNotification імпортують
  * диспетчер і роути (і їхні тести), яким бот ні до чого. Без токена бота
- * sendToTelegram одразу виходить. Обидва шляхи нічого не кидають.
+ * sendToTelegram одразу виходить. Жоден шлях нічого не кидає.
  */
 export async function pushNotification(
   notification: Notification,
@@ -62,6 +64,7 @@ export async function pushNotification(
     safeTrigger(`private-user-${notification.userId}`, 'notification:new', {
       notification,
     }),
+    sendPush(notification),
     import('./telegram').then(({ sendToTelegram }) =>
       sendToTelegram(notification),
     ),

@@ -175,6 +175,8 @@ export async function deleteAccount(userId: string): Promise<DeleteResult> {
     // пошта вже вільна для нової реєстрації.
     await tx.account.deleteMany({ where: { userId } })
     await tx.notification.deleteMany({ where: { userId } })
+    // Пристрої з застосунком: push цього акаунта більше нікуди не йде.
+    await tx.pushToken.deleteMany({ where: { userId } })
     // Коди підтвердження й посилання на скидання пароля, видані на пошту.
     // Коди better-auth лежать як «<тип>-otp-<пошта>»: endsWith із дефісом,
     // а не contains — інакше a@b.co зачепило б і коди xa@b.co. Посилання

@@ -129,6 +129,9 @@ export async function banUser(
       where: { id: targetId },
       data: { banned: true, banReason: text, isOnline: false },
     })
+    // Push на телефони — геть разом із сесіями: після розбану пристрій
+    // без сесії не мав би отримувати сповіщення цього акаунта.
+    await tx.pushToken.deleteMany({ where: { userId: targetId } })
   })
   afterOpenWorkClosed(work)
 
