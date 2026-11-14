@@ -54,6 +54,7 @@
   import TravelRadiusPicker from './travel-radius.svelte'
   import ChoiceTiles from './choice-tiles.svelte'
   import StageArt from './stage-art.svelte'
+  import CatScene from '$lib/components/mascot/cat-scene.svelte'
   import { cityDistricts, findDistrict } from '$lib/geo/districts'
   import {
     isTravelRadius,
@@ -131,8 +132,8 @@
         id: 'you',
         title: company ? 'Про компанію' : 'Познайомимось',
         lead: company
-          ? 'Назва, логотип і телефон. Клієнти бачать вивіску, а номер — лише той, хто обере саме вас.'
-          : 'Імʼя, фото й телефон. Клієнти обирають людей, а не нікнейми, а номер побачить лише той, хто обере саме вас.',
+          ? 'Назва, логотип і телефон. Клієнти бачать вивіску, а номер — у ваших пропозиціях, щоб подзвонити й домовитись.'
+          : 'Імʼя, фото й телефон. Клієнти обирають людей, а не нікнейми, а номер бачать у ваших пропозиціях, щоб подзвонити й домовитись.',
       },
       {
         id: 'work',
@@ -211,7 +212,7 @@
         phase: 'you',
         title: company ? 'Телефон компанії' : 'Ваш номер телефону',
         subtitle:
-          'Його побачить лише клієнт, який обрав саме вас, — і лише після підтвердження замовлення.',
+          'Клієнт побачить його у вашій пропозиції — щоб подзвонити й домовитись про ціну й деталі.',
       },
       {
         id: 'intro-work',
@@ -997,8 +998,23 @@
   <ServiceIcon service={key} class="size-6" />
 {/snippet}
 
+<!-- Заставка етапу — рудий кіт-талісман із хмаринкою, як у мобільному
+     застосунку (власник): вітається, думає, яку роботу обрати, показує
+     свій профіль на планшеті. Мініатюри в огляді етапів лишились
+     шматочками інтерфейсу (StageArt): кіт у 72px не читається. -->
 {#snippet stageArt(id: string, size: 'lg' | 'sm')}
-  <StageArt kind={id} {size} company={isCompany} />
+  {#if size === 'sm'}
+    <StageArt kind={id} {size} company={isCompany} />
+  {:else if id === 'you'}
+    <CatScene scene="hello" say="Познайомимось!" />
+  {:else if id === 'work'}
+    <CatScene scene="think" say="Яку роботу обрати?" />
+  {:else}
+    <CatScene
+      scene="show"
+      say={isCompany ? 'Покажіть компанію!' : 'Покажіть себе!'}
+    />
+  {/if}
 {/snippet}
 
 {#snippet servicesControl()}
@@ -1328,7 +1344,7 @@
         footnote="Ці дані бачать клієнти. Зміни пройдуть повторну перевірку."
       >
         <SettingsBlock>
-          <p class="mb-2 text-sm">Хто ви</p>
+          <p class="mb-3 text-[15px] font-medium">Хто ви</p>
           {@render whoControl()}
         </SettingsBlock>
 
@@ -1360,7 +1376,7 @@
         <SettingsField
           label="Телефон"
           for="phone"
-          hint="Видно клієнту після підтвердження"
+          hint="Клієнт бачить його у ваших пропозиціях"
           error={phoneError}
           control={phoneControl}
         />
@@ -1382,19 +1398,19 @@
           />
 
           <SettingsBlock>
-            <p class="mb-2 text-sm">Як далеко готові їздити</p>
+            <p class="mb-3 text-[15px] font-medium">Як далеко готові їздити</p>
             {@render radiusControl()}
           </SettingsBlock>
         {/if}
 
         <SettingsBlock>
-          <p class="mb-2 text-sm">Як добираєтесь на замовлення</p>
+          <p class="mb-3 text-[15px] font-medium">Як добираєтесь на замовлення</p>
           {@render transportControl()}
         </SettingsBlock>
 
         {#if !isCompany}
           <SettingsBlock>
-            <p class="mb-2 text-sm">Працюєте самі чи з напарником</p>
+            <p class="mb-3 text-[15px] font-medium">Працюєте самі чи з напарником</p>
             {@render crewControl()}
           </SettingsBlock>
         {/if}
@@ -1416,12 +1432,12 @@
 
         {#if cleans}
           <SettingsBlock>
-            <p class="mb-2 text-sm">Які прибирання робите</p>
+            <p class="mb-3 text-[15px] font-medium">Які прибирання робите</p>
             {@render servicesControl()}
           </SettingsBlock>
 
           <SettingsBlock>
-            <p class="mb-2 text-sm">Де готові прибирати</p>
+            <p class="mb-3 text-[15px] font-medium">Де готові прибирати</p>
             {@render premisesControl()}
           </SettingsBlock>
         {/if}

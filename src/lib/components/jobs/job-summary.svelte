@@ -4,7 +4,8 @@
 
     1. смуга дій: головна кнопка (`actions`) і меню ⋮ (`menu`) — їх дає
        сторінка; без головної кнопки меню стає праворуч у рядок нижче;
-    2. «Опубліковано … · N переглядів» і плашки (стан, «Терміново»);
+    2. «Заявка №… · Опубліковано … · N переглядів» і плашки (стан,
+       «Терміново»);
     3. велика назва, праворуч — іконка послуги (як логотип компанії);
     4. факти з сірими іконками: замовник, де, коли, що, обсяг, бюджет,
        телефон — головне, з дрібним поясненням під рядком;
@@ -37,9 +38,16 @@
   import { formatDay, formatFull } from '$lib/utils/time'
   import { pluralUk } from '$lib/utils/plural'
   import PhotoGallery from '$lib/components/photo-gallery.svelte'
-  import { expiresIn, formatMoney, formatRelative, memberSince } from './display'
+  import {
+    expiresIn,
+    formatMoney,
+    formatRelative,
+    memberSince,
+  } from './display'
 
   type Job = {
+    /** Номер для людей (Job.number) — за ним підтримка знаходить заявку. */
+    number?: number
     title: string
     description: string | null
     status: string
@@ -167,6 +175,8 @@
   // Прострочено»: про строк тоді просто мовчимо.
   const published = $derived.by(() => {
     const parts = [
+      // Номер — першим: його диктують підтримці.
+      ...(job.number ? [`Заявка №${job.number}`] : []),
       `Опубліковано ${formatRelative(job.createdAt)}`,
       ...(job.editedAt ? [`змінено ${formatRelative(job.editedAt)}`] : []),
       `${job.viewsCount} ${pluralUk(job.viewsCount, 'перегляд', 'перегляди', 'переглядів')}`,
@@ -185,7 +195,10 @@
      дрібним сірим під ним. -->
 {#snippet fact(Icon: Component<IconProps>, main: string, sub?: string)}
   <li class="flex gap-3">
-    <Icon class="mt-px size-5 shrink-0 text-muted-foreground" strokeWidth={1.75} />
+    <Icon
+      class="mt-px size-5 shrink-0 text-muted-foreground"
+      strokeWidth={1.75}
+    />
     <div class="min-w-0">
       <p class="text-[15.5px] leading-snug wrap-break-word text-foreground">
         {main}
@@ -251,9 +264,14 @@
 <ul class="mt-6 flex flex-col gap-4">
   {#if client}
     <li class="flex gap-3">
-      <User class="mt-px size-5 shrink-0 text-muted-foreground" strokeWidth={1.75} />
+      <User
+        class="mt-px size-5 shrink-0 text-muted-foreground"
+        strokeWidth={1.75}
+      />
       <div class="min-w-0">
-        <p class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[15.5px] leading-snug">
+        <p
+          class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[15.5px] leading-snug"
+        >
           <a
             href="/dashboard/client/{client.id}"
             class="font-medium text-foreground underline decoration-foreground/30 underline-offset-4 transition-colors hover:decoration-foreground"
@@ -287,7 +305,9 @@
 
   {#if serviceName}
     <li class="flex gap-3">
-      <span class="mt-px flex size-5 shrink-0 items-center justify-center text-muted-foreground">
+      <span
+        class="mt-px flex size-5 shrink-0 items-center justify-center text-muted-foreground"
+      >
         <ServiceIcon service={meta.service} class="size-5" />
       </span>
       <div class="min-w-0">
@@ -302,7 +322,11 @@
   {/if}
 
   {#if effortLabel}
-    {@render fact(Timer, effortLabel, 'Оцінка обсягу роботи за деталями заявки')}
+    {@render fact(
+      Timer,
+      effortLabel,
+      'Оцінка обсягу роботи за деталями заявки',
+    )}
   {/if}
 
   {#if budget}
@@ -356,7 +380,9 @@
               />
             {/if}
             <span class="min-w-0">
-              <span class="block text-[12.5px] leading-tight text-muted-foreground">
+              <span
+                class="block text-[12.5px] leading-tight text-muted-foreground"
+              >
                 {d.label}
               </span>
               <span

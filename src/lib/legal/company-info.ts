@@ -14,7 +14,7 @@ export const COMPANY = {
 } as const
 
 export const LAST_UPDATED_TERMS = '2026-07-01'
-export const LAST_UPDATED_PRIVACY = '2026-07-01'
+export const LAST_UPDATED_PRIVACY = '2026-11-14'
 
 /** Назва оператора для підстановки в текст; нейтральна, поки юрособа не зареєстрована. */
 export function operatorName(): string {

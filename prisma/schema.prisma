@@ -96,6 +96,11 @@ model MasterProfile {
 
 model Job {
   id                   String     @id @default(cuid())
+  /// Номер заявки для людей — цифрами, з 100001 по порядку (власник):
+  /// його бачать клієнт і майстер на заявці й замовленні, за ним
+  /// підтримка знаходить заявку. Видає база при створенні (послідовність
+  /// Job_number_seq), не змінюється.
+  number               Int        @unique @default(autoincrement())
   clientId             String
   category             String
   city                 String
@@ -187,6 +192,12 @@ model Proposal {
 
 model Order {
   id            String       @id @default(cuid())
+  /// Номер заявки, з якої замовлення (Job.number) — копією: після
+  /// відмови майстра заявка відкривається знову, зв'язок (selectedOrderId)
+  /// зі старим замовленням рветься, а номер у ньому має лишитись. Не
+  /// унікальний: у заявки, відкритої знову, замовлень кілька. null —
+  /// замовлення без заявки.
+  jobNumber     Int?
   clientId      String
   masterId      String
   title         String
@@ -217,6 +228,8 @@ model Order {
   @@index([masterId, status])
   @@index([status, createdAt])
   @@index([removedAt])
+  // Пошук замовлень за номером заявки (підтримка).
+  @@index([jobNumber])
 }
 
 model OrderEvent {

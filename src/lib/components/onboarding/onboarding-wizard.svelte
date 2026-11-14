@@ -225,11 +225,31 @@
                 {/each}
               </ol>
             </div>
+          {:else if kind === 'intro' && phase && art}
+            <!-- Заставка етапу з ілюстрацією — як у мобільному застосунку:
+                 по центру кіт-талісман із хмаринкою (вона й є заголовок на
+                 око), під ним «Етап N з M» і навіщо етап. Справжній
+                 заголовок для скрінрідера й фокусу — прихований h1 з
+                 назвою етапу: хмаринка — частина малюнка. -->
+            <div class="flex flex-col items-center text-center">
+              <h1 bind:this={heading} tabindex="-1" class="sr-only">
+                {phase.title}
+              </h1>
+              {@render art(phase.id, 'lg')}
+              <p class="mt-5 text-[16px] font-semibold text-muted-foreground">
+                Етап {phaseNumber} з {phases.length}
+              </p>
+              <p
+                class="mt-3 max-w-xl text-[17px] leading-relaxed text-muted-foreground"
+              >
+                {phase.lead}
+              </p>
+            </div>
           {:else if kind === 'intro' && phase}
-            <!-- Заставка етапу: «Етап 2», тема й навіщо вона. Ілюстрація на
-                 телефоні — першою: вона й каже, про що етап. -->
-            <div class="grid items-center gap-8 md:grid-cols-2 md:gap-16">
-              <div>
+            <!-- Заставка етапу без ілюстрації: «Етап 2», тема й навіщо
+                 вона. -->
+            <div>
+              <div class="max-w-2xl">
                 <p class="text-[16px] font-semibold">Етап {phaseNumber}</p>
                 <h1
                   bind:this={heading}
@@ -244,11 +264,6 @@
                   {phase.lead}
                 </p>
               </div>
-              {#if art}
-                <div class="order-first md:order-0">
-                  {@render art(phase.id, 'lg')}
-                </div>
-              {/if}
             </div>
           {:else}
             <h1

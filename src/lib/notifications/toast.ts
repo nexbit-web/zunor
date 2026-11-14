@@ -23,6 +23,7 @@ import BellIcon from '$lib/components/icons/set/bell.svelte'
 import BadgeCheckIcon from '$lib/components/icons/set/badge-check.svelte'
 import CircleAlertIcon from '$lib/components/icons/set/circle-alert.svelte'
 import FlagIcon from '$lib/components/icons/set/flag.svelte'
+import WalletIcon from '$lib/components/icons/set/wallet.svelte'
 
 /** Довше за звичайний тост: тут є що прочитати й на що натиснути. */
 const DURATION = 10_000
@@ -46,6 +47,11 @@ interface IslandKind extends KindText {
 const KINDS: Record<string, IslandKind> = {
   NEW_JOB: { ...KIND_TEXT.NEW_JOB, icon: ClipboardIcon, tone: 'accent' },
   NEW_PROPOSAL: { ...KIND_TEXT.NEW_PROPOSAL, icon: MessageIcon, tone: 'accent' },
+  PROPOSAL_UPDATED: {
+    ...KIND_TEXT.PROPOSAL_UPDATED,
+    icon: WalletIcon,
+    tone: 'accent',
+  },
   PROPOSAL_ACCEPTED: {
     ...KIND_TEXT.PROPOSAL_ACCEPTED,
     icon: HandshakeIcon,

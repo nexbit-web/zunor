@@ -77,7 +77,13 @@
     isMaster && order.status === 'COMPLETED' && !reviewFromMaster,
   )
 
-  const orderShortId = $derived(order.id.slice(-8).toUpperCase())
+  // Номер для людей — номер заявки (Job.number; копія в замовленні, бо
+  // зв'язок fromJob рветься, коли заявку відкривають знову). Старі без
+  // нього — хвіст id, як було.
+  const orderNumber = $derived(order.jobNumber ?? order.fromJob?.number ?? null)
+  const orderShortId = $derived(
+    orderNumber ? `№${orderNumber}` : `#${order.id.slice(-8).toUpperCase()}`,
+  )
 
   function formatDate(iso: string | Date): string {
     return new Date(iso).toLocaleDateString('uk-UA', {
@@ -183,7 +189,7 @@
         class="inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-semibold tabular-nums text-muted-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         aria-label="Скопіювати ID замовлення"
       >
-        <span>#{orderShortId}</span>
+        <span>{orderShortId}</span>
         {#if copyConfirm}<Check
             class="size-3 text-emerald-600"
             aria-hidden="true"

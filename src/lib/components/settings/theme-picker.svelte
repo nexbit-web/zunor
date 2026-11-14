@@ -39,18 +39,18 @@
   // самі, що в layout.css для відповідної теми.
   const TONES = {
     light: {
-      frame: '#f3f3f3',
+      frame: '#f6f6f7',
       panel: '#ffffff',
-      rail: '#ebebeb',
-      line: '#e3e5e6',
-      strong: '#d8dcde',
+      rail: '#eaeaed',
+      line: '#e6e6e7',
+      strong: '#d6d6d8',
     },
     dark: {
-      frame: '#15171b',
-      panel: '#1b1d21',
-      rail: '#212327',
-      line: '#282b2f',
-      strong: '#36383c',
+      frame: '#141414',
+      panel: '#222222',
+      rail: '#2e2e2e',
+      line: '#323232',
+      strong: '#3e3e3e',
     },
   } as const
 
@@ -104,10 +104,12 @@
 
 <!-- Roving tabindex: у групу один вхід табом, далі стрілками. Інакше три
      кнопки поспіль змушували б тричі тиснути Tab, щоб проминути блок. -->
+<!-- Ширину задає рядок, у якому стоїть група (SettingsRow wide); сама
+     група лише ділить її на три. -->
 <div
   role="radiogroup"
   aria-label="Тема оформлення"
-  class="grid max-w-[540px] grid-cols-3 gap-3 sm:gap-4"
+  class="grid w-full max-w-135 grid-cols-3 gap-3 @3xl:w-120"
 >
   {#each OPTIONS as opt, i (opt.value)}
     {@const selected = current === opt.value}
@@ -122,15 +124,16 @@
       onkeydown={(e) => handleKeydown(e, i)}
       class="group flex min-w-0 cursor-pointer flex-col items-center gap-2 rounded-[10px] outline-none"
     >
-      <!-- Обрана — рамка акцентного кольору з проміжком, як у ClickUp.
-           Невибрані мають тонку межу: світле превʼю на білому тлі без неї
-           зливалося б зі сторінкою. -->
+      <!-- Обрана — майже чорна (у темній — майже біла) рамка кольору
+           тексту з проміжком, як у ClickUp: акцентна рамка сперечалась
+           би з акцентом у самій мініатюрі. Невибрані мають тонку межу:
+           світле превʼю на білому тлі без неї зливалося б зі сторінкою. -->
       <span
         class={cn(
-          'relative block aspect-[16/9] w-full overflow-hidden rounded-[8px] ring-offset-2 ring-offset-background transition-shadow',
+          'relative block aspect-video w-full overflow-hidden rounded-[10px] ring-offset-2 ring-offset-background transition-shadow',
           selected
-            ? 'ring-2 ring-primary'
-            : 'ring-1 ring-border group-hover:ring-input group-focus-visible:ring-2 group-focus-visible:ring-primary',
+            ? 'ring-2 ring-foreground'
+            : 'ring-1 ring-border group-hover:ring-input group-focus-visible:ring-2 group-focus-visible:ring-foreground/60',
         )}
       >
         {#if opt.value === 'system'}

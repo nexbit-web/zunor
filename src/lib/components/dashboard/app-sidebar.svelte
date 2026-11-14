@@ -529,8 +529,8 @@
     transition-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
   }
   /* Тло — і на контейнері, не лише на внутрішньому шарі: лінія border-e
-     напівпрозора (border-soft) і мусить лягати на тло ПАНЕЛІ, як у
-     референсі (#e3e5e6 / #282b2f), а не просвічувати сторінку. */
+     напівпрозора (7%) і мусить лягати на тло ПАНЕЛІ, а не просвічувати
+     сторінку. */
   :global([data-slot='sidebar-container']) {
     transition-property: left, right, width, transform;
     background-color: var(--sidebar);

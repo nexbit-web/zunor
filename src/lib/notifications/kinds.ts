@@ -16,6 +16,7 @@ export interface KindText {
 export const KIND_TEXT: Record<string, KindText> = {
   NEW_JOB: { label: 'Нова заявка', action: 'Переглянути заявку' },
   NEW_PROPOSAL: { label: 'Новий відгук', action: 'Переглянути відгук' },
+  PROPOSAL_UPDATED: { label: 'Нова ціна', action: 'Переглянути відгук' },
   PROPOSAL_ACCEPTED: { label: 'Вас обрали', action: 'Відкрити замовлення' },
   ORDER_STARTED: { label: 'Робота почалась', action: 'Відкрити замовлення' },
   ORDER_COMPLETED: { label: 'Роботу завершено', action: 'Залишити відгук' },

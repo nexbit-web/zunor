@@ -115,6 +115,27 @@ export const Notify = {
       jobId,
       proposalId,
     }),
+  /**
+   * Майстер змінив ціну в пропозиції (PATCH /api/proposals/[id]) —
+   * зазвичай після дзвінка, коли домовились. Клієнтові — стара й нова
+   * ціна: він обирає вже за новою.
+   */
+  proposalPriceChanged: (
+    clientId: string,
+    jobId: string,
+    proposalId: string,
+    masterName: string | null,
+    oldPrice: string,
+    newPrice: string,
+  ) =>
+    notify({
+      userId: clientId,
+      type: 'PROPOSAL_UPDATED',
+      title: 'Майстер змінив ціну',
+      body: `${masterName ?? 'Майстер'}: ${oldPrice} → ${newPrice}`,
+      jobId,
+      proposalId,
+    }),
   proposalAccepted: (masterId: string, jobId: string, orderId: string) =>
     notify({
       userId: masterId,

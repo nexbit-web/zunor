@@ -166,9 +166,23 @@ describe('GET /api/orders/[id] — деталі', () => {
     )
   })
 
-  it('стороння людина не бачить чужу угоду', async () => {
+  it('стороння людина не бачить чужу угоду — 404, а не 403', async () => {
     const res = await failure(() => orderItem.GET(itemEvent('stranger')))
-    expect(res.status).toBe(403)
+    expect(res.status).toBe(404)
+  })
+
+  it('сторона угоди бачить телефон іншої — угода вже є', async () => {
+    prisma.order.findUnique.mockResolvedValue(
+      order({
+        client: { ...order().client, phone: '+380671111111' },
+        master: { ...order().master, phone: '+380672222222' },
+      }),
+    )
+    const body = await okJson<{
+      order: { client: { phone: string }; master: { phone: string } }
+    }>(() => orderItem.GET(itemEvent(MASTER)))
+    expect(body.order.client.phone).toBe('+380671111111')
+    expect(body.order.master.phone).toBe('+380672222222')
   })
 
   it('клієнт і майстер бачать свою угоду', async () => {
