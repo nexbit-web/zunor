@@ -431,7 +431,15 @@ Vercel: або спільне сховище, або гілка `serverless`.
   перевірка «лише клієнт і майстер», не сторона — 404) для сторінки
   `dashboard/orders/[id]` і `GET /api/orders/[id]` (екран замовлення в
   застосунку; відповідь — `orderDetailDto`, явні поля без `removed*`,
-  рейтинги плоскі, телефони обох сторін — угода вже є).
+  рейтинги плоскі, телефони обох сторін — угода вже є). **Профілі** —
+  так само: клієнт — `$lib/server/client-profile.ts` (`loadClientProfile`
+  — лише майстер, роль глядача з бази, без телефону; інакше null → 404)
+  для сторінки `dashboard/client/[id]` і `GET /api/clients/[id]`;
+  майстер — `$lib/server/master-page.ts` (той самий кеш Redis, що
+  `/@handle`; за id — `loadMasterPageById`, порожнє не кешується) для
+  `/@handle` і `GET /api/masters/[id]` (застосунок відкриває профіль із
+  пропозиції чи замовлення; лише поля публічної сторінки, без телефону й
+  пошти). Шляху «усі майстри» немає й не буде — Zunor не каталог.
 - **Реєстрація поштою — лише через `$lib/server/registration`** (плагін
   better-auth `registration`: `/registration/start`, `resend`, `verify`;
   клієнт — `registration` у `$lib/auth-client`, у застосунку —

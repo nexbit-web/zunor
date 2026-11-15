@@ -82,6 +82,18 @@ export async function loadMasterPage(
   return null
 }
 
+/**
+ * Та сама сторінка за id — для застосунку (GET /api/masters/[id]): там
+ * майстра відкривають із пропозиції чи замовлення, де є id, а не username.
+ * Той самий ключ кешу, що й /@handle. Порожнє не кешуємо: інакше
+ * випадкові id засмічували б Redis на PAGE_TTL_SEC.
+ */
+export function loadMasterPageById(userId: string): Promise<MasterPage | null> {
+  return cached(`master:${userId}`, PAGE_TTL_SEC, () => readPage(userId), {
+    cacheNull: false,
+  })
+}
+
 /** Профіль, портфоліо чи відгуки змінились — сторінку перечитати. */
 export function forgetMasterPage(userId: string): Promise<void> {
   return forget(`master:${userId}`)
