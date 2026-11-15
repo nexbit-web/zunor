@@ -17,15 +17,16 @@
   const layout = getSettingsLayout()
 </script>
 
-<!-- У split і stacked ліній між блоками немає: там вони стоять серед
-     полів, а поля в цих подачах розділяє повітря, не риска. -->
+<!-- У split ліній між блоками немає: там вони стоять серед полів, а
+     поля в цій подачі розділяє повітря, не риска. -->
 {#if layout === 'stacked'}
-  <!-- Свій підпис блоку (<Label> над textarea) — жирний, як підписи
-       полів поруч; інакше «Про себе» читалось би слабше за «Імʼя». -->
+  <!-- Рядок картки ClickUp на всю ширину: ті самі відступи й лінія, що в
+       SettingsRow. Свій підпис блоку (<Label>) — як підписи рядків поруч,
+       інакше він читався б слабше за «Імʼя». -->
   <div
-    class="*:data-[slot=label]:font-semibold first:pt-0 last:pb-0 {roomy
-      ? 'py-4'
-      : 'py-2'}"
+    class="border-t border-(--settings-line) px-5 first:border-t-0 *:data-[slot=label]:text-[15px] *:data-[slot=label]:font-medium {roomy
+      ? 'py-5'
+      : 'py-4.5'}"
   >
     {@render children()}
   </div>

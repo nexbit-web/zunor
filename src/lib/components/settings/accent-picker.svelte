@@ -23,10 +23,12 @@
   }
 </script>
 
+<!-- Квадратні плитки з галочкою на обраній — наша фішка (власник): у
+     ClickUp тут кружечки, але квадрати лишаємо навмисно. -->
 <div
   role="radiogroup"
   aria-label="Акцентний колір"
-  class="flex flex-wrap gap-2.5 sm:gap-3"
+  class="flex flex-wrap items-center gap-2.5 sm:gap-3"
 >
   {#each ACCENTS as accent, i (accent.id)}
     {@const selected = appearance.accent === accent.id}
@@ -44,7 +46,7 @@
       onclick={() => appearance.setAccent(accent.id)}
       onkeydown={(e) => handleKeydown(e, i)}
       class={cn(
-        'swatch flex size-10 cursor-pointer items-center justify-center rounded-[8px] bg-primary text-white ring-primary ring-offset-2 ring-offset-background transition-[box-shadow,filter] outline-none hover:brightness-110 focus-visible:ring-2',
+        'swatch flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-[8px] bg-primary text-white ring-primary ring-offset-2 ring-offset-background transition-[box-shadow,filter] outline-none hover:brightness-110 focus-visible:ring-2',
         selected && 'ring-2',
       )}
     >

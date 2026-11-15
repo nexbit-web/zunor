@@ -1,31 +1,9 @@
-import { prisma } from '$lib/server/prisma'
 import { error, redirect } from '@sveltejs/kit'
+import { loadClientProfile } from '$lib/server/client-profile'
 import type { PageServerLoad } from './$types'
-import type {
-  ClientProfileData,
-  ProfileReview,
-} from '$lib/components/profile/types'
 
-async function loadClientReviews(clientId: string): Promise<ProfileReview[]> {
-  const reviews = await prisma.review.findMany({
-    where: { direction: 'MASTER_TO_CLIENT', order: { clientId } },
-    orderBy: { createdAt: 'desc' },
-    take: 30,
-    include: { author: { select: { id: true, name: true } } },
-  })
-  return reviews.map((r) => {
-    const name = r.author.name ?? 'Користувач'
-    return {
-      id: r.id,
-      authorName: name,
-      authorInitials: name[0]?.toUpperCase() ?? '?',
-      rating: r.rating,
-      text: r.comment ?? '',
-      createdAt: r.createdAt.toISOString(),
-    }
-  })
-}
-
+// Хто й що бачить — $lib/server/client-profile (той самий код, що в
+// GET /api/clients/[id] для застосунку).
 export const load: PageServerLoad = async ({ params, locals, setHeaders }) => {
   // Навмисно 404, а не редірект на логін: гість не має дізнатись навіть
   // те, що такий профіль існує. Тому тут не requireUser.
@@ -35,68 +13,14 @@ export const load: PageServerLoad = async ({ params, locals, setHeaders }) => {
   // Свій профіль → на дашборд
   if (params.id === viewerUser.id) throw redirect(302, '/dashboard')
 
-  // Дивитися профіль клієнта може лише майстер
-  const viewer = await prisma.user.findUnique({
-    where: { id: viewerUser.id },
-    select: { role: true },
-  })
-  if (viewer?.role !== 'MASTER') throw error(404, 'Користувача не знайдено')
-
-  // Клієнт за id (БЕЗ телефону — приватний до вибору)
-  const [client, reviews, totalOrders, completedOrders] = await Promise.all([
-    prisma.user.findUnique({
-      where: { id: params.id },
-      select: {
-        id: true,
-        role: true,
-        name: true,
-        avatar: true,
-        bio: true,
-        city: true,
-        createdAt: true,
-        avgRatingAsClient: true,
-        reviewsCountAsClient: true,
-      },
-    }),
-    loadClientReviews(params.id),
-    prisma.order.count({ where: { clientId: params.id } }),
-    prisma.order.count({
-      where: { clientId: params.id, status: 'COMPLETED' },
-    }),
-  ])
-
-  if (!client || client.role !== 'CLIENT') {
-    throw error(404, 'Користувача не знайдено')
-  }
-
-  // Назва міста українською (slug → name)
-  const cityRow = client.city
-    ? await prisma.city.findUnique({
-        where: { slug: client.city },
-        select: { name: true },
-      })
-    : null
-  const cityName = cityRow?.name ?? client.city ?? undefined
+  // Дивитися профіль клієнта може лише майстер; телефону немає.
+  const user = await loadClientProfile(viewerUser.id, params.id)
+  if (!user) throw error(404, 'Користувача не знайдено')
 
   setHeaders({
     'cache-control': 'private, no-store',
     'x-robots-tag': 'noindex, nofollow',
   })
-
-  const user: ClientProfileData = {
-    id: client.id,
-    name: client.name ?? '',
-    avatar: client.avatar ?? undefined,
-    bio: client.bio ?? undefined,
-    phone: null,
-    city: cityName,
-    createdAt: client.createdAt.toISOString(),
-    totalOrders,
-    completedOrders,
-    avgRating: client.avgRatingAsClient,
-    reviewsCount: client.reviewsCountAsClient,
-    reviews,
-  }
 
   return {
     user,

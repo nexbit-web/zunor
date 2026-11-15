@@ -239,10 +239,10 @@ describe('сторінка замовлення /dashboard/orders/[id]', () => {
     ).toBe(404)
   })
 
-  it('стороння людина — 403', async () => {
+  it('стороння людина — 404, а не 403', async () => {
     expect(
       (await failure(() => orderPage.load(orderEvent('stranger')))).status,
-    ).toBe(403)
+    ).toBe(404)
   })
 
   // ГОЛОВНА обіцянка з маніфесту: контакти відкриваються ЛИШЕ після угоди.

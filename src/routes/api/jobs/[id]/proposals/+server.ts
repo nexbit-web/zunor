@@ -5,6 +5,7 @@ import { limit } from '$lib/server/rate-limit'
 import { Notify } from '$lib/server/notifications'
 import { markResponded } from '$lib/server/dispatch'
 import { masterRatingSelect, flattenMasterRating } from '$lib/server/user-dto'
+import { proposalPhone } from '$lib/server/job-detail'
 import type { RequestHandler } from './$types'
 
 /**
@@ -173,6 +174,7 @@ export const GET: RequestHandler = async ({ params, locals }) => {
           username: true,
           avatar: true,
           city: true,
+          phone: true,
           ...masterRatingSelect,
           masterProfile: {
             select: {
@@ -188,7 +190,10 @@ export const GET: RequestHandler = async ({ params, locals }) => {
   return json({
     proposals: proposals.map((p) => ({
       ...p,
-      master: flattenMasterRating(p.master),
+      master: {
+        ...flattenMasterRating(p.master),
+        phone: proposalPhone(p.status, p.master.phone),
+      },
     })),
   })
 }

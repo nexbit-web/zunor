@@ -1,7 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { invalidateAll } from '$app/navigation'
-  import { SettingsGroup, SettingsRow } from '$lib/components/settings'
+  import {
+    SettingsGroup,
+    SettingsRow,
+    SettingsTile,
+  } from '$lib/components/settings'
   import { Switch } from '$lib/components/ui/switch/index.js'
   import { Button } from '$lib/components/ui/button'
   import { notificationSound } from '$lib/notifications'
@@ -80,6 +84,9 @@
         label="Telegram підключено"
         description="Нові заявки, відгуки й зміни замовлень приходять у чат із ботом Zunor."
       >
+        {#snippet icon()}
+          <SettingsTile kind="telegram" />
+        {/snippet}
         {#snippet control()}
           <Button
             variant="secondary"
@@ -98,6 +105,9 @@
           ? 'Натисніть «Start» у Telegram і поверніться сюди.'
           : 'Нові заявки, відгуки й зміни замовлень — навіть коли сайт закрито.'}
       >
+        {#snippet icon()}
+          <SettingsTile kind="telegram" />
+        {/snippet}
         {#snippet control()}
           {#if data.telegram?.linkUrl}
             <Button
@@ -109,7 +119,7 @@
               Підключити
             </Button>
           {:else}
-            <span class="text-[13px] text-muted-foreground">
+            <span class="text-[14px] text-muted-foreground">
               Тимчасово недоступно
             </span>
           {/if}
@@ -125,10 +135,14 @@
     description="Сигнал про нові відгуки й замовлення."
     for="notif-sound"
   >
+    {#snippet icon()}
+      <SettingsTile kind="sound" />
+    {/snippet}
     {#snippet control()}
       <!-- checked + onCheckedChange, а не bind:checked: enabled не
            $bindable, а toggle() ще й пише в localStorage. -->
       <Switch
+        size="lg"
         id="notif-sound"
         checked={notificationSound.enabled}
         onCheckedChange={handleToggle}

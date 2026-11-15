@@ -15,8 +15,8 @@
     label: string
     /**
      * Підказка: обмеження, формат, хто це побачить. Показується іконкою
-     * біля підпису з тултипом, а не рядком під ним; у stacked — рядком
-     * під полем, як у GitHub.
+     * біля підпису з тултипом, а не рядком під ним; у stacked — сірим
+     * текстом під підписом, як пояснення в рядках ClickUp.
      */
     hint?: string
     /**
@@ -38,7 +38,7 @@
   const stacked = layout === 'stacked'
 
   const captionClass = stacked
-    ? 'text-sm font-semibold'
+    ? 'text-[15px] font-medium'
     : split
       ? 'text-[14px] font-medium'
       : 'text-sm font-normal'
@@ -77,23 +77,28 @@
 {/snippet}
 
 {#if stacked}
-  <!-- Як поле в налаштуваннях GitHub: жирний підпис, під ним поле не
-       ширше 440px (рядок на всю колонку читався б як поле для абзацу), а
-       підказка — текстом під полем: у колонці на всю сторінку місця
-       вистачає, і тултип тут лише ховав би її. -->
-  <div class="py-2 first:pt-0 last:pb-0">
-    {@render caption()}
+  <!-- Рядок картки ClickUp, як SettingsRow: підпис і підказка ліворуч
+       (підказка — сірим текстом під підписом, як пояснення в рядках
+       ClickUp; тултип тут лише ховав би її), поле праворуч шириною 400px.
+       На вузькій картці — стовпчиком, поле на всю ширину: ширина
+       рахується від картки (@container у SettingsGroup). -->
+  <div
+    class="flex flex-col gap-2.5 border-t border-(--settings-line) px-5 py-4.5 first:border-t-0 @2xl:flex-row @2xl:items-start @2xl:justify-between @2xl:gap-8"
+  >
+    <div class="min-w-0 @2xl:pt-2">
+      {@render caption()}
 
-    <div class="mt-1.5 max-w-110">
+      {#if hint}
+        <p class="mt-1 text-[13.5px] leading-[1.45] text-muted-foreground">
+          {hint}
+        </p>
+      {/if}
+    </div>
+
+    <div class="w-full @2xl:w-100 @2xl:shrink-0">
       {@render control()}
       {@render errorLine()}
     </div>
-
-    {#if hint}
-      <p class="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-        {hint}
-      </p>
-    {/if}
   </div>
 {:else if split}
   <!-- Підпис НАД полем, як у ClickUp: права колонка розділу вузька, і

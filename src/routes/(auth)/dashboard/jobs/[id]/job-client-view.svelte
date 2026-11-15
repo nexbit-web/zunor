@@ -16,6 +16,11 @@
   Логіка 1:1: cancelJob / acceptProposal (з модалками), showAll
   (recommended vs others). Усе клієнтське — UX; сервер валідує власність і
   права повторно.
+
+  Телефон майстра — просто в пропозиції (власник): клієнт обирає за
+  описом, дзвонить і домовляється про ціну, майстер оновлює її у своїй
+  пропозиції, і тоді клієнт його обирає. Чат — лише після вибору, у
+  замовленні.
 -->
 <script lang="ts">
   import { goto } from '$app/navigation'
@@ -34,6 +39,7 @@
   import MoreVertical from '$lib/components/icons/set/more-vertical.svelte'
   import Trash2 from '$lib/components/icons/set/trash-2.svelte'
   import Pencil from '$lib/components/icons/set/pencil.svelte'
+  import Phone from '$lib/components/icons/set/phone.svelte'
   import PageHead from '$lib/components/dashboard/page-head.svelte'
   import JobSummary from '$lib/components/jobs/job-summary.svelte'
   import JobState from '$lib/components/jobs/job-state.svelte'
@@ -56,6 +62,13 @@
   let cancelDialogOpen = $state(false)
   let acceptDialogOpen = $state(false)
   let pendingAcceptId = $state<string | null>(null)
+
+  // Пропозиція, яку зараз підтверджують у діалозі «Обрати», — щоб
+  // назвати в ньому ціну: обирають саме за нею, і після дзвінка вона
+  // могла змінитись.
+  const pendingAccept = $derived(
+    data.proposals.find((p) => p.id === pendingAcceptId),
+  )
 
   const recommended = $derived(data.proposals.filter((p) => p.recommended))
   const othersCount = $derived(data.proposals.length - recommended.length)
@@ -148,7 +161,9 @@
       </div>
       {#if data.job.status === 'OPEN'}
         <p class="mt-1 text-[13px] text-muted-foreground">
-          Порівняйте ціну, відгуки й повідомлення — і оберіть одного майстра.
+          Порівняйте пропозиції й подзвоніть майстру, щоб домовитись про ціну.
+          Домовились — майстер оновить ціну у своїй пропозиції, а ви оберіть
+          його.
         </p>
       {/if}
 
@@ -157,6 +172,7 @@
           {@const profile = p.master.username
             ? `/@${p.master.username}`
             : undefined}
+          {@const canAccept = p.status === 'SENT' && data.job.status === 'OPEN'}
           <li class="border-t border-border/60 py-4 last:pb-0">
             <div class="flex items-start gap-3">
               <!-- Без @handle профілю немає — тоді й посилання немає, а не
@@ -241,23 +257,38 @@
               {p.message}
             </p>
 
-            {#if p.status === 'SENT' && data.job.status === 'OPEN'}
-              <div class="mt-3 sm:pl-13">
-                <Button
-                  variant="primary"
-                  disabled={acceptingId !== null}
-                  aria-busy={acceptingId === p.id}
-                  onclick={() => {
-                    pendingAcceptId = p.id
-                    acceptDialogOpen = true
-                  }}
-                >
-                  {#if acceptingId === p.id}
-                    <Spinner /> Обираємо…
-                  {:else}
-                    <Check aria-hidden="true" /> Обрати майстра
-                  {/if}
-                </Button>
+            {#if canAccept || p.master.phone}
+              <!-- Дзвінок — поруч із вибором: спершу домовитись, потім
+                   обрати. Номер видно на самій кнопці — його можна й
+                   переписати з компʼютера, а не лише набрати. -->
+              <div class="mt-3 flex flex-wrap items-center gap-2 sm:pl-13">
+                {#if canAccept}
+                  <Button
+                    variant="primary"
+                    disabled={acceptingId !== null}
+                    aria-busy={acceptingId === p.id}
+                    onclick={() => {
+                      pendingAcceptId = p.id
+                      acceptDialogOpen = true
+                    }}
+                  >
+                    {#if acceptingId === p.id}
+                      <Spinner /> Обираємо…
+                    {:else}
+                      <Check aria-hidden="true" /> Обрати майстра
+                    {/if}
+                  </Button>
+                {/if}
+                {#if p.master.phone}
+                  <Button
+                    variant="secondary"
+                    href="tel:{p.master.phone}"
+                    aria-label="Подзвонити: {p.master.phone}"
+                  >
+                    <Phone aria-hidden="true" />
+                    <span class="tabular-nums">{p.master.phone}</span>
+                  </Button>
+                {/if}
               </div>
             {/if}
           </li>
@@ -361,8 +392,11 @@
     <AlertDialog.Header>
       <AlertDialog.Title>Обрати цього майстра?</AlertDialog.Title>
       <AlertDialog.Description>
+        {#if pendingAccept}
+          Ціна — {formatMoney(pendingAccept.priceCents, data.job.currency)}.
+        {/if}
         Інші пропозиції буде відхилено, а ви перейдете до замовлення: там
-        телефон майстра й чат, щоб домовитись про деталі.
+        відкриється чат із майстром.
       </AlertDialog.Description>
     </AlertDialog.Header>
     <AlertDialog.Footer>

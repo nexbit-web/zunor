@@ -50,7 +50,26 @@ export interface JobDetailProposal {
     avatar: string | null
     avgRating: number
     reviewsCount: number
+    /**
+     * Телефон майстра — лише власникові заявки й лише в живій або
+     * прийнятій пропозиції (proposalPhone). Клієнт дзвонить, щоб
+     * домовитись про ціну ще до вибору (власник), а відкликана чи
+     * відхилена пропозиція номера вже не показує.
+     */
+    phone?: string | null
   }
+}
+
+/**
+ * Номер майстра в пропозиції: видно, поки пропозиція жива (SENT) або
+ * прийнята. Відкликаний чи відхилений відгук — це вже не пропозиція, і
+ * номер у ньому ні до чого.
+ */
+export function proposalPhone(
+  status: string,
+  phone: string | null | undefined,
+): string | null {
+  return status === 'SENT' || status === 'ACCEPTED' ? (phone ?? null) : null
 }
 
 export async function loadJobDetail(
@@ -86,6 +105,8 @@ export async function loadJobDetail(
     where: { id: jobId },
     select: {
       id: true,
+      // Номер для людей (schema.prisma, Job.number).
+      number: true,
       title: true,
       description: true,
       category: true,
@@ -168,6 +189,7 @@ export async function loadJobDetail(
             name: true,
             username: true,
             avatar: true,
+            phone: true,
             avgRatingAsMaster: true,
             reviewsCountAsMaster: true,
             lastSeen: true,
@@ -236,6 +258,7 @@ export async function loadJobDetail(
         avatar: p.master.avatar,
         avgRating: p.master.avgRatingAsMaster,
         reviewsCount: p.master.reviewsCountAsMaster,
+        phone: proposalPhone(p.status, p.master.phone),
       },
     }))
   } else if (isMaster) {

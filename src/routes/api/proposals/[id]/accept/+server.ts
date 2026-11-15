@@ -38,6 +38,7 @@ export const POST: RequestHandler = async ({ params, locals }) => {
       job: {
         select: {
           id: true,
+          number: true,
           title: true,
           description: true,
           metadata: true,
@@ -75,6 +76,9 @@ export const POST: RequestHandler = async ({ params, locals }) => {
         priceCents: proposal.priceCents,
         currency: 'UAH',
         status: 'CREATED',
+        // Номер заявки — копією: лишається й після того, як заявка
+        // відкриється знову (schema.prisma, Order.jobNumber).
+        jobNumber: proposal.job.number,
       },
       select: {
         id: true,

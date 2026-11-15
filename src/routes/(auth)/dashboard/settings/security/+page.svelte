@@ -11,6 +11,7 @@
     SettingsRow,
     SettingsField,
     SettingsBlock,
+    SettingsTile,
   } from '$lib/components/settings'
   import { Button } from '$lib/components/ui/button'
   import { Input } from '$lib/components/ui/input'
@@ -265,33 +266,36 @@
           {/snippet}
         </SettingsField>
 
-        <!-- Кнопка всередині розділу, під полями: у дві колонки вона
-             інакше опинялась би під лінією, вже в наступному розділі. -->
+        <!-- Кнопка — останнім рядком картки, праворуч, під колонкою полів:
+             поза карткою вона висіла б окремо від форми. Помилка сервера —
+             ліворуч від неї, у тому ж рядку. -->
         <SettingsBlock>
-          {#if serverError}
-            <p
-              class="mb-3 flex items-center gap-1.5 text-[12px] text-destructive"
-              role="alert"
-            >
-              <CircleAlert class="size-3.5 shrink-0" aria-hidden="true" />
-              {serverError}
-            </p>
-          {/if}
-
-          <Button
-            type="submit"
-            disabled={saving || !formValid}
-            aria-busy={saving}
-            variant="primary"
-            class="relative min-w-35"
-          >
-            {#if saving}
-              <Spinner class="animate-spin" aria-hidden="true" />
-              <span class="sr-only">Зберігаємо...</span>
-            {:else}
-              <span>Змінити пароль</span>
+          <div class="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
+            {#if serverError}
+              <p
+                class="mr-auto flex items-center gap-1.5 text-[13px] text-destructive"
+                role="alert"
+              >
+                <CircleAlert class="size-3.5 shrink-0" aria-hidden="true" />
+                {serverError}
+              </p>
             {/if}
-          </Button>
+
+            <Button
+              type="submit"
+              disabled={saving || !formValid}
+              aria-busy={saving}
+              variant="primary"
+              class="relative min-w-35"
+            >
+              {#if saving}
+                <Spinner class="animate-spin" aria-hidden="true" />
+                <span class="sr-only">Зберігаємо...</span>
+              {:else}
+                <span>Змінити пароль</span>
+              {/if}
+            </Button>
+          </div>
         </SettingsBlock>
       </SettingsGroup>
     </form>
@@ -318,18 +322,38 @@
     </SettingsGroup>
   {/if}
 
+  <!-- Як «Способи входу» в мобільному застосунку: пошта, пароль і Google
+       — окремими рядками, кожен зі своєю кольоровою плиткою, стан
+       праворуч. -->
   <SettingsGroup title="Способи входу">
-    <SettingsRow label="Пошта і пароль">
+    <SettingsRow label="Пошта">
+      {#snippet icon()}
+        <SettingsTile kind="mail" />
+      {/snippet}
       {#snippet control()}
-        <span class="text-[13px] text-muted-foreground">
+        <span class="text-[14px] break-all text-muted-foreground">
+          {data.email}
+        </span>
+      {/snippet}
+    </SettingsRow>
+
+    <SettingsRow label="Пароль">
+      {#snippet icon()}
+        <SettingsTile kind="key" />
+      {/snippet}
+      {#snippet control()}
+        <span class="text-[14px] text-muted-foreground">
           {data.hasPassword ? 'Увімкнено' : 'Не налаштовано'}
         </span>
       {/snippet}
     </SettingsRow>
 
     <SettingsRow label="Google">
+      {#snippet icon()}
+        <SettingsTile kind="google" />
+      {/snippet}
       {#snippet control()}
-        <span class="text-[13px] text-muted-foreground">
+        <span class="text-[14px] text-muted-foreground">
           {data.hasGoogle ? 'Прив’язано' : 'Не прив’язано'}
         </span>
       {/snippet}

@@ -1,9 +1,10 @@
 <script lang="ts">
-  // Налаштування — повноцінна сторінка в подачі GitHub: ліворуч меню
-  // розділів (активний пункт — сіра плашка з синьою смужкою збоку),
-  // праворуч одна колонка — заголовок розділу з лінією, поля одне під
-  // одним. Шапки з аватаром та імʼям немає: вони й так у формі профілю,
-  // а над кожним розділом лише відсували його вниз.
+  // Налаштування — повноцінна сторінка в подачі ClickUp (власник дав
+  // скриншот): ліворуч меню розділів на всю висоту з лінією праворуч,
+  // «Вийти» притиснуте донизу; активний пункт — сіра плашка без смужок і
+  // без жирного. Праворуч — розділи картками з тонкою рамкою (stacked у
+  // SettingsGroup). Шапки з аватаром та імʼям немає: вони й так у формі
+  // профілю, а над кожним розділом лише відсували його вниз.
   //
   // Модалкою це вже було, і вона не годилась: вміст розділів (форма
   // профілю, анкета асистента) просив ширини, якої модалці бракувало, а
@@ -25,8 +26,8 @@
 
   let { children } = $props()
 
-  // Розділи тут — одна колонка, як у GitHub. Кроки онбордингу мають
-  // свою подачу (split), її задає вже не цей лейаут.
+  // Розділи тут — картки ClickUp. Кроки онбордингу мають свою подачу
+  // (split), її задає вже не цей лейаут.
   setSettingsLayout('stacked')
 
   const role = $derived(page.data.role ?? null)
@@ -73,96 +74,58 @@
     // до того показує «Виходимо...».
   }
 
-  // Пункт меню, як в ActionList GitHub: 32px, іконка приглушена, текст
-  // звичайний. Активний — сіра плашка й жирний текст, а синя смужка
-  // збоку малюється окремо (див. розмітку). Колір тексту — у самих
-  // пунктах: «Вийти» червоний.
+  // Пункт меню, як у ClickUp: 36px, іконка 18 кольору тексту, текст
+  // звичайної ваги. Невибраний — сірий, активний — сіра плашка й
+  // яскравий текст. Кольори — палітра ClickUp (.settings-scope у
+  // layout.css).
   const ITEM =
-    'relative flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm transition-colors'
+    'flex h-9 w-full items-center gap-3 rounded-lg px-2.5 text-left text-[15px] transition-colors'
+  const IDLE = 'text-(--settings-nav-ink) hover:bg-(--settings-hover)'
+  const ACTIVE = 'bg-(--settings-active) text-foreground'
 </script>
 
 <svelte:head><title>{sectionLabel} · Налаштування · Zunor</title></svelte:head>
 
 {#snippet signOutIcon()}
   {#if signingOut}
-    <Spinner class="size-4 animate-spin" aria-hidden="true" />
+    <Spinner class="size-4.5 shrink-0 animate-spin" aria-hidden="true" />
   {:else}
-    <LogOut size={16} strokeWidth={1.75} class="shrink-0" aria-hidden="true" />
+    <LogOut size={18} strokeWidth={1.75} class="shrink-0" aria-hidden="true" />
   {/if}
 {/snippet}
 
-<div class="mx-auto w-full max-w-300 px-4 pt-3 pb-16 sm:px-6 md:pt-8 lg:px-10">
-  <!-- ─── Меню розділів (телефон) ───
-       Смуга розділів, що гортається вбік: окремий екран зі списком був
-       би зайвим кроком перед кожним розділом. Ліворуч — місце під
-       кнопку панелі (mobile-trigger): вона плаває в тому самому куті. -->
-  <div
-    class="-mx-4 mb-6 flex items-center gap-1 border-b border-panel-border px-4 pb-3 sm:-mx-6 sm:px-6 md:hidden"
+<!-- settings-scope — палітра ClickUp для всієї сторінки: тло, панель
+     меню, картки, лінії, текст (layout.css). -->
+<div class="settings-scope flex min-h-svh">
+  <!-- ─── Меню розділів (компʼютер) ───
+       Як у ClickUp: колонка на всю висоту вікна з лінією праворуч, сама
+       стоїть, коли сторінка гортається (sticky). Зверху «Усі
+       налаштування», далі групи з сірими підзаголовками — без ліній між
+       ними, лише повітря. «Вийти» — окремо внизу, під лінією: це дія, а
+       не розділ. -->
+  <nav
+    class="sticky top-0 hidden h-svh w-64 shrink-0 flex-col border-r border-(--settings-panel-edge) bg-(--settings-panel) md:flex"
+    aria-label="Розділи налаштувань"
   >
-    <span class="size-10 shrink-0" aria-hidden="true"></span>
-
-    <nav
-      class="flex min-w-0 flex-1 gap-1 overflow-x-auto"
-      aria-label="Розділи налаштувань"
-    >
-      {#each sections as section (section.slug)}
-        {@const isActive = activeSlug === section.slug}
-        <a
-          href="/dashboard/settings/{section.slug}"
-          aria-current={isActive ? 'page' : undefined}
-          class="flex h-8 shrink-0 items-center gap-2 rounded-md px-2.5 text-sm whitespace-nowrap transition-colors {isActive
-            ? 'bg-accent font-semibold'
-            : 'hover:bg-accent/70'}"
-        >
-          <section.icon
-            size={16}
-            strokeWidth={1.75}
-            class="text-muted-foreground"
-            aria-hidden="true"
-          />
-          {section.label}
-        </a>
-      {/each}
-
-      <button
-        type="button"
-        onclick={() => (confirmSignOut = true)}
-        disabled={signingOut}
-        class="flex h-8 shrink-0 cursor-pointer items-center gap-2 rounded-md px-2.5 text-sm whitespace-nowrap text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-60"
-      >
-        {@render signOutIcon()}
-        Вийти
-      </button>
-    </nav>
-  </div>
-
-  <div class="flex gap-6 lg:gap-10">
-    <!-- ─── Меню розділів (компʼютер) ───
-         Як у GitHub: перша група без підзаголовка, наступні — після лінії
-         й зі своїм підзаголовком. Активний пункт — нейтральна сіра
-         плашка й синя смужка ліворуч (колір акценту): з неї видно, де
-         ти, навіть боковим зором. -->
-    <nav class="hidden w-60 shrink-0 md:block" aria-label="Розділи налаштувань">
-      <!-- Висота рядка — як у заголовка розділу праворуч (text-2xl),
-           тож «Налаштування» стоїть на одній лінії з ним. -->
-      <div class="mb-4 flex h-8 items-center px-2">
-        <p class="text-[15px] font-semibold">Налаштування</p>
-      </div>
+    <div class="min-h-0 flex-1 overflow-y-auto px-3 pt-6 pb-4">
+      <p class="px-2.5 pb-4 text-[19px] font-semibold tracking-[-0.01em]">
+        Усі налаштування
+      </p>
 
       {#each groups as group, i (group.id)}
-        {#if i > 0}
-          <div class="my-2 border-t border-panel-border"></div>
-          <p
-            id="settings-group-{group.id}"
-            class="px-2 pt-1.5 pb-1 text-xs font-semibold text-muted-foreground"
-          >
-            {group.label}
-          </p>
-        {/if}
+        <p
+          id="settings-group-{group.id}"
+          class="px-2.5 pb-1.5 text-[13.5px] font-medium text-(--settings-nav-label) {i >
+          0
+            ? 'pt-6'
+            : ''}"
+        >
+          {group.label}
+        </p>
 
         <ul
           class="flex flex-col gap-0.5"
-          aria-labelledby={i > 0 ? `settings-group-${group.id}` : undefined}
+          aria-labelledby="settings-group-{group.id}"
         >
           {#each group.sections as section (section.slug)}
             {@const isActive = activeSlug === section.slug}
@@ -170,20 +133,12 @@
               <a
                 href="/dashboard/settings/{section.slug}"
                 aria-current={isActive ? 'page' : undefined}
-                class="{ITEM} text-foreground {isActive
-                  ? 'bg-accent font-semibold'
-                  : 'hover:bg-accent/70'}"
+                class="{ITEM} {isActive ? ACTIVE : IDLE}"
               >
-                {#if isActive}
-                  <span
-                    class="absolute inset-y-1 -left-2 w-1 rounded-full bg-primary"
-                    aria-hidden="true"
-                  ></span>
-                {/if}
                 <section.icon
-                  size={16}
+                  size={18}
                   strokeWidth={1.75}
-                  class="shrink-0 text-muted-foreground"
+                  class="shrink-0"
                   aria-hidden="true"
                 />
                 {section.label}
@@ -192,23 +147,70 @@
           {/each}
         </ul>
       {/each}
+    </div>
 
-      <div class="my-2 border-t border-panel-border"></div>
+    <div class="border-t border-(--settings-panel-edge) px-3 py-2.5">
       <button
         type="button"
         onclick={() => (confirmSignOut = true)}
         disabled={signingOut}
-        class="{ITEM} cursor-pointer disabled:cursor-default text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-60"
+        class="{ITEM} {IDLE} cursor-pointer disabled:cursor-default disabled:opacity-60"
       >
         {@render signOutIcon()}
         Вийти
       </button>
-    </nav>
+    </div>
+  </nav>
 
-    <div class="min-w-0 max-w-3xl flex-1">
-      <h1
-        class="mb-6 border-b border-panel-border pb-2 text-2xl font-normal tracking-[-0.01em]"
+  <div class="min-w-0 flex-1 px-4 pt-3 pb-20 sm:px-6 md:px-10 md:pt-12 lg:px-14">
+    <div class="mx-auto w-full max-w-220">
+      <!-- ─── Меню розділів (телефон) ───
+           Смуга розділів, що гортається вбік: окремий екран зі списком був
+           би зайвим кроком перед кожним розділом. Ліворуч — місце під
+           кнопку панелі (mobile-trigger): вона плаває в тому самому куті. -->
+      <div
+        class="-mx-4 mb-6 flex items-center gap-1 border-b border-(--settings-panel-edge) px-4 pb-3 sm:-mx-6 sm:px-6 md:hidden"
       >
+        <span class="size-10 shrink-0" aria-hidden="true"></span>
+
+        <nav
+          class="flex min-w-0 flex-1 gap-1 overflow-x-auto"
+          aria-label="Розділи налаштувань"
+        >
+          {#each sections as section (section.slug)}
+            {@const isActive = activeSlug === section.slug}
+            <a
+              href="/dashboard/settings/{section.slug}"
+              aria-current={isActive ? 'page' : undefined}
+              class="flex h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-[15px] whitespace-nowrap transition-colors {isActive
+                ? ACTIVE
+                : IDLE}"
+            >
+              <section.icon
+                size={18}
+                strokeWidth={1.75}
+                class="shrink-0"
+                aria-hidden="true"
+              />
+              {section.label}
+            </a>
+          {/each}
+
+          <button
+            type="button"
+            onclick={() => (confirmSignOut = true)}
+            disabled={signingOut}
+            class="flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-lg px-3 text-[15px] whitespace-nowrap transition-colors {IDLE} disabled:opacity-60"
+          >
+            {@render signOutIcon()}
+            Вийти
+          </button>
+        </nav>
+      </div>
+
+      <!-- Без лінії під заголовком: розділи нижче й так у картках із
+           рамкою, і друга лінія над першою карткою лише двоїлась. -->
+      <h1 class="mb-8 text-[24px] font-semibold tracking-[-0.015em]">
         {sectionLabel}
       </h1>
 
@@ -217,8 +219,9 @@
   </div>
 </div>
 
-<!-- Діалог той самий, що й «Видалити фото профілю?». Дія червона, як і
-     пункт меню; «Скасувати» лишається на місці. Під час виходу обидві
+<!-- Діалог той самий, що й «Видалити фото профілю?». Пункт меню
+     звичайного кольору, як «Log out» у ClickUp, а червона — дія тут, у
+     підтвердженні; «Скасувати» лишається на місці. Під час виходу обидві
      кнопки неактивні, а напис каже, що відбувається. -->
 <AlertDialog.Root bind:open={confirmSignOut}>
   <AlertDialog.Content>

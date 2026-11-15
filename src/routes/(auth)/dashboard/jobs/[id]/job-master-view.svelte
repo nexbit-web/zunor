@@ -7,6 +7,10 @@
 
   Форма пропозиції — картка налаштувань (SettingsGroup + Field), як усі
   форми застосунку.
+
+  Ціну в надісланій пропозиції можна змінити, поки майстра не обрали
+  (власник): клієнт бачить його телефон просто в пропозиції, дзвонить, і
+  вони домовляються — нова ціна йде в пропозицію, а з неї в замовлення.
 -->
 <script lang="ts">
   import { tick } from 'svelte'
@@ -152,6 +156,54 @@
     errorMsg = null
   }
 
+  // ─── Зміна ціни в надісланій пропозиції ───
+  // Поле на місці ціни, а не окрема форма: міняється одне число.
+  let editingPrice = $state(false)
+  let newPrice = $state<number | ''>('')
+  let savingPrice = $state(false)
+  let priceError = $state<string | null>(null)
+
+  const newPriceOk = $derived(
+    typeof newPrice === 'number' && newPrice >= 50 && newPrice <= 500_000,
+  )
+
+  async function startPriceEdit(priceCents: number) {
+    newPrice = Math.round(priceCents / 100)
+    priceError = null
+    editingPrice = true
+    await tick()
+    const input = document.getElementById('proposal-new-price')
+    if (input instanceof HTMLInputElement) {
+      input.focus()
+      input.select()
+    }
+  }
+
+  async function savePrice(proposalId: string) {
+    if (!newPriceOk || savingPrice) return
+    savingPrice = true
+    priceError = null
+    try {
+      const res = await fetch(`/api/proposals/${proposalId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ priceUah: newPrice }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        priceError = json?.message ?? 'Не вдалось змінити ціну'
+        return
+      }
+      await invalidateAll()
+      editingPrice = false
+      toast.success('Ціну змінено — клієнт отримав сповіщення')
+    } catch {
+      priceError = 'Помилка зʼєднання'
+    } finally {
+      savingPrice = false
+    }
+  }
+
   // Кнопка вгорі й кнопка в картці внизу відкривають ту саму форму — і
   // підводять до неї: інакше з верхньої кнопки форма розкрилась би десь
   // під згином екрана, і здавалось би, що нічого не сталося.
@@ -258,10 +310,13 @@
   {#if data.proposals.length > 0}
     <!-- Майстер уже подав пропозицію -->
     {#each data.proposals as p (p.id)}
+      {@const canEditPrice = p.status === 'SENT' && data.job.status === 'OPEN'}
       <div class="mt-8">
         <SettingsGroup
           title="Ваша пропозиція"
-          footnote="Надіслано {formatRelative(p.createdAt)}"
+          footnote={canEditPrice
+            ? `Надіслано ${formatRelative(p.createdAt)}. Клієнт бачить ваш номер і може подзвонити, щоб домовитись. Домовились про іншу ціну — змініть її тут, поки вас не обрали.`
+            : `Надіслано ${formatRelative(p.createdAt)}`}
         >
           <SettingsBlock>
             <p
@@ -271,9 +326,81 @@
             </p>
           </SettingsBlock>
           <InfoRow label="Ціна">
-            <span class="tabular-nums">
-              {formatMoney(p.priceCents, data.job.currency)}
-            </span>
+            {#if editingPrice && canEditPrice}
+              <form
+                class="flex flex-wrap items-center justify-end gap-2"
+                novalidate
+                onsubmit={(e) => {
+                  e.preventDefault()
+                  void savePrice(p.id)
+                }}
+              >
+                <div class="relative w-32">
+                  <Input
+                    id="proposal-new-price"
+                    type="number"
+                    inputmode="numeric"
+                    bind:value={newPrice}
+                    min={50}
+                    max={500000}
+                    aria-label="Нова ціна, грн"
+                    aria-invalid={newPrice !== '' && !newPriceOk}
+                    class="pr-7 text-right tabular-nums"
+                    onkeydown={(e) => {
+                      if (e.key === 'Escape') editingPrice = false
+                    }}
+                  />
+                  <span
+                    class="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-muted-foreground"
+                    aria-hidden="true">₴</span
+                  >
+                </div>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  disabled={!newPriceOk || savingPrice}
+                  aria-busy={savingPrice}
+                >
+                  {#if savingPrice}<Spinner />{/if} Зберегти
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={savingPrice}
+                  onclick={() => (editingPrice = false)}
+                >
+                  Скасувати
+                </Button>
+              </form>
+              {#if priceError}
+                <p
+                  class="mt-2 flex items-center justify-end gap-1.5 text-[12.5px] font-normal text-destructive"
+                  role="alert"
+                >
+                  <CircleAlert class="size-3.5 shrink-0" aria-hidden="true" />
+                  {priceError}
+                </p>
+              {:else if newPrice !== '' && !newPriceOk}
+                <p class="mt-2 text-[12.5px] font-normal text-muted-foreground">
+                  Від 50 до 500 000 ₴
+                </p>
+              {/if}
+            {:else}
+              <span class="inline-flex items-center gap-3">
+                <span class="tabular-nums">
+                  {formatMoney(p.priceCents, data.job.currency)}
+                </span>
+                {#if canEditPrice}
+                  <button
+                    type="button"
+                    class="cursor-pointer rounded text-[13.5px] font-medium text-primary hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+                    onclick={() => startPriceEdit(p.priceCents)}
+                  >
+                    Змінити
+                  </button>
+                {/if}
+              </span>
+            {/if}
           </InfoRow>
           <InfoRow label="Термін">{formatDays(p.estimatedDays)}</InfoRow>
           <InfoRow label="Стан">
@@ -301,8 +428,8 @@
           <p
             class="relative mx-auto mt-1.5 max-w-md text-[14.5px] leading-relaxed text-muted-foreground"
           >
-            Назвіть ціну й термін — клієнт одразу отримає сповіщення.
-            Телефонами обміняєтесь, щойно він вас обере.
+            Назвіть ціну й термін — клієнт одразу отримає сповіщення,
+            побачить ваш номер і зможе подзвонити, щоб домовитись.
           </p>
         </div>
 
@@ -370,7 +497,7 @@
       >
         <SettingsGroup
           title="Ваша пропозиція"
-          footnote="Клієнт побачить ціну, термін і повідомлення. Телефонами ви обміняєтесь, лише коли він вас обере."
+          footnote="Клієнт побачить ціну, термін, повідомлення й ваш номер телефону — зможе подзвонити й домовитись. Ціну потім можна змінити, поки вас не обрали."
         >
           <SettingsField label="Ціна" for="proposal-price">
             {#snippet control()}

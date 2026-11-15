@@ -1,77 +1,16 @@
-import { prisma } from '$lib/server/prisma'
 import { requireUser } from '$lib/server/guards'
+import { loadOrderDetail } from '$lib/server/order-detail'
 import { error } from '@sveltejs/kit'
-import { SERVICE_EVENTS } from '$lib/server/order-events'
 import type { PageServerLoad } from './$types'
 
 export const load: PageServerLoad = async ({ params, locals }) => {
   const sessionUser = requireUser(locals, `/dashboard/orders/${params.id}`)
-
-  const order = await prisma.order.findUnique({
-    where: { id: params.id },
-    include: {
-      client: {
-        select: {
-          id: true,
-          name: true,
-          username: true,
-          avatar: true,
-          city: true,
-          phone: true,
-          avgRatingAsClient: true,
-          reviewsCountAsClient: true,
-        },
-      },
-      master: {
-        select: {
-          id: true,
-          name: true,
-          username: true,
-          avatar: true,
-          city: true,
-          phone: true,
-          avgRatingAsMaster: true,
-          reviewsCountAsMaster: true,
-          masterProfile: {
-            select: {
-              verificationStatus: true,
-              completedOrders: true,
-            },
-          },
-        },
-      },
-      events: {
-        // Службова відмітка нагадування (server/reminders) — аудит, не
-        // подія для людей: в «Історії подій» їй не місце.
-        where: { type: { notIn: [...SERVICE_EVENTS] } },
-        orderBy: { createdAt: 'asc' },
-        select: {
-          id: true,
-          type: true,
-          actorId: true,
-          payload: true,
-          createdAt: true,
-        },
-      },
-      reviews: {
-        select: {
-          id: true,
-          rating: true,
-          comment: true,
-          direction: true,
-          authorId: true,
-          createdAt: true,
-        },
-      },
-    },
-  })
-
-  if (!order) throw error(404, 'Замовлення не знайдено')
-
   const userId = sessionUser.id
-  if (order.clientId !== userId && order.masterId !== userId) {
-    throw error(403, 'Доступ заборонено')
-  }
+
+  // Той самий завантажувач і та сама перевірка доступу, що в
+  // GET /api/orders/[id] (застосунок). Не сторона угоди — 404, не 403.
+  const order = await loadOrderDetail(params.id, userId)
+  if (!order) throw error(404, 'Замовлення не знайдено')
 
   return {
     order: {

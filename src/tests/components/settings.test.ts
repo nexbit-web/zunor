@@ -329,15 +329,16 @@ describe('подача split', () => {
 
 // ─────────────── Подача stacked (сторінка налаштувань) ───────────────
 //
-// Сторінка налаштувань — одна колонка, як у GitHub. Тримаємо те, на чому
-// стоїть вигляд: підпис над полем, поле не ширше 440px, підказка текстом
-// під полем (а не тултипом), і лінія між рядками не дублює лінію під
-// заголовком розділу.
+// Сторінка налаштувань — як у ClickUp: назва розділу над карткою з
+// рамкою, у картці рядки «назва й опис ліворуч, контрол праворуч».
+// Тримаємо те, на чому стоїть вигляд: картка — контейнер (рядки
+// розкладаються за її шириною), підказка поля — текстом під підписом (а
+// не тултипом), лінію між рядками ставить сам рядок.
 
 const stacked = { context: new Map([[SETTINGS_LAYOUT_KEY, 'stacked']]) }
 
 describe('подача stacked', () => {
-  it('група: заголовок і пояснення над лінією, без картки', () => {
+  it('група: заголовок і пояснення над карткою з рамкою', () => {
     const { container } = render(SettingsGroup, {
       ...stacked,
       props: {
@@ -348,9 +349,13 @@ describe('подача stacked', () => {
     })
 
     const head = container.querySelector('h2')?.parentElement as HTMLElement
-    expect(head.className).toContain('border-b')
     expect(head.textContent).toContain('Інші сеанси буде завершено')
-    expect(container.textContent).toContain('поля')
+
+    const card = container.querySelector('section')
+      ?.lastElementChild as HTMLElement
+    expect(card.className).toContain('border')
+    expect(card.className).toContain('@container')
+    expect(card.textContent).toContain('поля')
     expect(container.innerHTML).not.toContain('bg-muted/40')
   })
 
@@ -368,7 +373,7 @@ describe('подача stacked', () => {
     expect(body.firstElementChild?.textContent).toBe('рядок')
   })
 
-  it('поле: підпис над полем, ширина 440px, підказка текстом під ним', () => {
+  it('поле: підпис і підказка ліворуч, поле праворуч шириною 400px', () => {
     const { container } = render(SettingsField, {
       ...stacked,
       props: {
@@ -380,7 +385,7 @@ describe('подача stacked', () => {
     })
 
     expect(container.querySelector('label')?.getAttribute('for')).toBe('phone')
-    expect(container.innerHTML).toContain('max-w-110')
+    expect(container.innerHTML).toContain('@2xl:w-100')
     // Підказка — абзацом, а не кнопкою-тултипом.
     expect(container.querySelector('button')).toBeNull()
     expect(container.querySelector('p')?.textContent).toContain(

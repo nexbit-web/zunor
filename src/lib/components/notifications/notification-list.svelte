@@ -1,13 +1,14 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte'
   import { browser } from '$app/environment'
+  import { page } from '$app/state'
   import toast from 'svelte-hot-french-toast'
   import { Button } from '$lib/components/ui/button'
   import { Skeleton } from '$lib/components/ui/skeleton'
   import { Spinner } from '$lib/components/ui/spinner'
   import * as AlertDialog from '$lib/components/ui/alert-dialog'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
-  import BellOff from '$lib/components/icons/set/bell-off.svelte'
+  import QuietBell from '$lib/components/notifications/quiet-bell.svelte'
   import Check from '$lib/components/icons/set/check.svelte'
   import CheckCheck from '$lib/components/icons/set/check-check.svelte'
   import ChevronDown from '$lib/components/icons/set/chevron-down.svelte'
@@ -25,6 +26,9 @@
     initialNextCursor: string | null
     initialUnreadCount: number
   } = $props()
+
+  // Порожня стрічка каже, чого тут чекати, — у майстра й клієнта своє.
+  const master = $derived(page.data.role === 'MASTER')
 
   type Filter = 'all' | 'unread'
 
@@ -280,23 +284,28 @@
 {:else if items.length === 0}
   <!-- flex-1: порожній стан займає всю висоту, що лишилась під шапкою,
        і знак стоїть по центру сторінки, а не тулиться до заголовка. -->
+  <!-- Як у застосунку (власник): сіра плитка з дзвіночком, що раз
+       гойднеться, і тиха хвиля від неї; «Поки тихо» і одне речення —
+       чого тут чекати, своє для майстра й клієнта. -->
   <div
-    class="flex flex-1 flex-col items-center justify-center px-6 py-20 text-center"
+    class="flex flex-1 flex-col items-center justify-center gap-3 px-8 py-16 text-center"
   >
-    <BellOff class="size-24 text-primary " strokeWidth={1} />
-    <h2 class="mt-6 text-lg font-medium">
-      {filter === 'unread' ? 'Непрочитаних немає' : 'Сповіщень поки немає'}
+    <div class="mb-2"><QuietBell /></div>
+    <h2 class="text-[20px] font-bold tracking-tight text-foreground">
+      {filter === 'unread' ? 'Непрочитаних немає' : 'Поки тихо'}
     </h2>
-    <p class="mt-2 max-w-90 text-sm leading-relaxed text-muted-foreground">
+    <p class="max-w-90 text-[15px] leading-[21px] text-muted-foreground">
       {filter === 'unread'
         ? 'Ви все переглянули.'
-        : 'Тут зʼявляться оновлення по заявках, відгуках і замовленнях.'}
+        : master
+          ? 'Тут зʼявляться нові заявки поруч і рішення клієнтів.'
+          : 'Тут зʼявляться відгуки майстрів і новини про ваші замовлення.'}
     </p>
     {#if filter === 'unread'}
       <Button
         variant="secondary"
         size="sm"
-        class="mt-6  "
+        class="mt-4"
         onclick={() => setFilter('all')}
       >
         Показати всі

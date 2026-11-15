@@ -2,6 +2,10 @@ export { default as SettingsGroup } from './settings-group.svelte'
 export { default as SettingsRow } from './settings-row.svelte'
 export { default as SettingsField } from './settings-field.svelte'
 export { default as SettingsBlock } from './settings-block.svelte'
+export {
+  default as SettingsTile,
+  type SettingsTileKind,
+} from './settings-tile.svelte'
 
 export {
   SETTINGS_SECTIONS,

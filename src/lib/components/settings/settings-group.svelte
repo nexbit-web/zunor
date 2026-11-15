@@ -7,7 +7,7 @@
     /**
      * Пояснення до розділу. У картці — виноска під нею (застереження),
      * у split — опис під назвою в лівій колонці, у stacked — під
-     * заголовком, над лінією.
+     * назвою, над карткою.
      */
     footnote?: string
     children: Snippet
@@ -19,27 +19,40 @@
 </script>
 
 {#if layout === 'stacked'}
-  <!-- Як розділ налаштувань GitHub (Subhead): заголовок і пояснення,
-       під ними лінія, далі поля одне під одним. Перший розділ без
-       відступу зверху — над ним заголовок сторінки. -->
-  <section class="mt-10 first:mt-0">
+  <!-- Як розділ налаштувань ClickUp (власник дав скриншот): назва й
+       пояснення над карткою, картка — тонка рамка без тіні на тлі
+       сторінки, рядки в ній розділені лініями на всю ширину. Перший
+       розділ без відступу зверху — над ним заголовок сторінки. -->
+  <section class="mt-12 first:mt-0">
     {#if title || footnote}
-      <div class="mb-4 {title ? 'border-b border-panel-border pb-2' : ''}">
+      <div class="mb-3.5">
         {#if title}
-          <h2 class="text-xl font-normal tracking-[-0.01em]">{title}</h2>
+          <h2 class="text-[16px] font-semibold tracking-[-0.005em]">
+            {title}
+          </h2>
         {/if}
         {#if footnote}
-          <p class="mt-1 text-sm leading-relaxed text-muted-foreground">
+          <p class="mt-1 text-[14px] leading-snug text-muted-foreground">
             {footnote}
           </p>
         {/if}
       </div>
     {/if}
 
-    <!-- Окрема обгортка: рядки й поля рахують себе першими (first:) серед
-         сусідів, і без неї першим був би заголовок — під його лінією
-         стала б друга, від першого рядка. -->
-    <div>
+    <!-- Картка — окрема обгортка: рядки рахують себе першими (first:)
+         серед сусідів, і без неї першим був би заголовок.
+         @container: рядки розкладаються в «текст ліворуч, контрол
+         праворуч» за шириною КАРТКИ, а не вікна — поруч стоять дві
+         бічні панелі, і ширина вікна про місце в картці не каже нічого.
+         Без overflow-hidden: випадні списки полів (місто, район) не
+         мусять обрізатись краєм картки.
+         Кольори — палітра ClickUp зі сторінки налаштувань (.settings-scope
+         у layout.css). --background усередині — колір картки: проміжки
+         кілець у палітрі й мініатюрах теми мусять бути кольору картки, а
+         не сторінки під нею. -->
+    <div
+      class="@container rounded-xl border border-(--settings-card-edge) bg-(--settings-card) [--background:var(--settings-card)]"
+    >
       {@render children()}
     </div>
   </section>
