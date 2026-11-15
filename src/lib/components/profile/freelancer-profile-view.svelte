@@ -102,7 +102,7 @@
     user.username ? `/@${user.username}` : `/dashboard`,
   )
   const hasRating = $derived(user.reviewsCount > 0)
-  const bannerUrl = $derived(
+  const banner = $derived(
     user.categorySlugs.length > 0
       ? getBannerForCategories(user.categorySlugs)
       : null,
@@ -189,16 +189,22 @@
        Нижчий за попередній (180px) і без темного градієнта поверх:
        градієнт існував, щоб на картинці читався текст, а тексту на ній
        більше немає. Скруглення — спільні 8px. -->
-  {#if bannerUrl}
+  {#if banner}
+    <!-- AVIF — удвічі легший; браузер без нього бере WebP з <img>. -->
     <div class="h-32 overflow-hidden rounded-[8px] bg-muted sm:h-40">
-      <img
-        src={bannerUrl}
-        alt=""
-        aria-hidden="true"
-        loading="eager"
-        decoding="async"
-        class="size-full object-cover"
-      />
+      <picture class="block size-full">
+        {#if banner.avif}
+          <source srcset={banner.avif} type="image/avif" />
+        {/if}
+        <img
+          src={banner.src}
+          alt=""
+          aria-hidden="true"
+          loading="eager"
+          decoding="async"
+          class="size-full object-cover"
+        />
+      </picture>
     </div>
   {/if}
 
@@ -209,7 +215,7 @@
        рівні аватара. -->
   <header>
     <div
-      class="flex items-end justify-between gap-4 {bannerUrl ? '-mt-10' : ''}"
+      class="flex items-end justify-between gap-4 {banner ? '-mt-10' : ''}"
     >
       <div class="relative ml-4 shrink-0">
         {#if user.avatar && !avatarLoaded}

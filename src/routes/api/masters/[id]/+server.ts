@@ -40,6 +40,9 @@ export const GET: RequestHandler = async ({ params, locals }) => {
       categories: page.categories.map(
         (slug) => categories.find((c) => c.slug === slug)?.name ?? slug,
       ),
+      // Ті самі slug'и — за ними застосунок бере банер шапки, як сайт
+      // ($lib/categories/registry: getBannerForCategories).
+      categorySlugs: page.categories,
       services: page.services ?? [],
       premises: page.premises ?? [],
       portfolioImages: page.portfolioImages,
