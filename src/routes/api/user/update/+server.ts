@@ -12,10 +12,11 @@ import type { RequestHandler } from './$types'
 // role та onboarded у цьому типі НЕМАЄ навмисно. Клієнт може їх прислати —
 // роут просто не дивиться в ці поля. Тримати їх у типі означало б натякати,
 // що вони працюють: саме так вони колись і повернулись у код після
-// «прибирання».
+// «прибирання». username (нікнейм) — так само: його більше не пишемо
+// (публічної сторінки /@handle немає), старі збірки застосунку можуть його
+// прислати — поле просто ігнорується.
 interface UpdatePayload {
   // ─── Поля User ───
-  username?: string
   name?: string
   phone?: string
   city?: string
@@ -32,33 +33,8 @@ interface UpdatePayload {
   submitForReview?: boolean
 }
 
-const USERNAME_RE = /^[a-z][a-z0-9_]{2,19}$/
 const SLUG_RE = /^[a-z0-9-]{1,80}$/
 const PHONE_RE = /^[\d\s+()-]{8,20}$/
-
-const RESERVED = new Set([
-  'admin',
-  'root',
-  'api',
-  'support',
-  'help',
-  'zunor',
-  'system',
-  'user',
-  'users',
-  'profile',
-  'dashboard',
-  'settings',
-  'login',
-  'register',
-  'signup',
-  'logout',
-  'moderation',
-  'verified',
-  'null',
-  'undefined',
-  'anonymous',
-])
 
 const LIMITS = {
   BIO_MAX: 922,
@@ -166,30 +142,6 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     }
   }
 
-  // ─── Username ───
-  if (body.username !== undefined) {
-    if (!isString(body.username)) {
-      return json(
-        { error: 'Invalid username format', field: 'username' },
-        { status: 400 },
-      )
-    }
-    const u = body.username.trim().toLowerCase()
-    if (!USERNAME_RE.test(u)) {
-      return json(
-        { error: 'Invalid username format', field: 'username' },
-        { status: 400 },
-      )
-    }
-    if (RESERVED.has(u)) {
-      return json(
-        { error: 'Username is reserved', field: 'username' },
-        { status: 400 },
-      )
-    }
-    body.username = u
-  }
-
   // ─── Перевіряємо, що всі вказані категорії існують ───
   if (body.categories !== undefined && body.categories.length > 0) {
     const found = await prisma.category.count({
@@ -211,30 +163,15 @@ export const POST: RequestHandler = async ({ request, locals }) => {
   if (body.phone !== undefined) userData.phone = body.phone
   if (body.city) userData.city = body.city
   if (body.bio !== undefined) userData.bio = body.bio
-  if (body.username !== undefined) userData.username = body.username
   if (body.avatar !== undefined) userData.avatar = body.avatar
   if (body.avatarPublicId !== undefined)
     userData.avatarPublicId = body.avatarPublicId
 
   if (Object.keys(userData).length > 0) {
-    try {
-      await prisma.user.update({
-        where: { id: userId },
-        data: userData,
-      })
-    } catch (err) {
-      // Унікальний username уже зайнятий — віддаємо зрозумілий 409, а не 500
-      if (
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === 'P2002'
-      ) {
-        return json(
-          { error: 'Username already taken', field: 'username' },
-          { status: 409 },
-        )
-      }
-      throw err
-    }
+    await prisma.user.update({
+      where: { id: userId },
+      data: userData,
+    })
   }
 
   // ═══════════════════ Upsert MasterProfile ═══════════════════
@@ -276,7 +213,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     })
   }
 
-  // Імʼя й аватар живуть і в сесіях, профіль — на публічній сторінці.
+  // Імʼя й аватар живуть і в сесіях, профіль — у кеші сторінки майстра.
   await Promise.all([
     Object.keys(userData).length > 0 ? refreshSessionUser(userId) : null,
     forgetMasterPage(userId),

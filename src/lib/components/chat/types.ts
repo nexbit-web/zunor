@@ -10,18 +10,16 @@ import type { ReactionGroup } from './reactions'
 
 export type MessageType = 'TEXT' | 'PHOTO' | 'FILE'
 
-export type UserRole = 'CLIENT' | 'FREELANCER' | 'ADMIN'
+export type UserRole = 'CLIENT' | 'MASTER' | 'ADMIN' | 'MANAGER' | 'MODERATOR'
 
 export interface ChatUser {
   id: string
   name: string
-  username: string | null
   avatar: string | null
   isVerified: boolean
   /**
-   * Роль юзера. Опціонально — старі чати можуть не мати цього поля.
-   * Використовується для визначення чи показувати кнопку "Створити замовлення"
-   * (доступна тільки клієнту по відношенню до фрілансера).
+   * Роль юзера (з бази). Є в співрозмовника в шапці чату (chat-details):
+   * за нею — куди веде «Профіль» і на кого скарга. У списку чатів немає.
    */
   role?: UserRole
 }

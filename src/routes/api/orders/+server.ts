@@ -55,10 +55,10 @@ export const GET: RequestHandler = async ({ locals, url }) => {
       clientId: true,
       masterId: true,
       client: {
-        select: { id: true, name: true, username: true, avatar: true },
+        select: { id: true, name: true, avatar: true },
       },
       master: {
-        select: { id: true, name: true, username: true, avatar: true },
+        select: { id: true, name: true, avatar: true },
       },
       // «today/tomorrow» у metadata відносні до дня створення ЗАЯВКИ, а не
       // замовлення — без цієї дати день прибирання зсувався б.

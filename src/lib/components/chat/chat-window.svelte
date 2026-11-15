@@ -148,16 +148,19 @@
 
   const peer = $derived(chat.peer)
 
-  // Скарга зі шапки чату. Тип ролі тут старий (FREELANCER), а з бази
-  // приходить MASTER; у старих чатах роль може й не бути — тоді майстра
-  // видно з handle: публічна сторінка є лише в майстра.
+  // Скарга зі шапки чату — на майстра чи на клієнта (роль — з бази).
   let reportOpen = $state(false)
   const peerRole = $derived<'MASTER' | 'CLIENT'>(
-    String(peer.role) === 'MASTER' ||
-      peer.role === 'FREELANCER' ||
-      !!peer.username
-      ? 'MASTER'
-      : 'CLIENT',
+    peer.role === 'MASTER' ? 'MASTER' : 'CLIENT',
+  )
+  // Профіль співрозмовника — у дашборді: майстра бачить клієнт, клієнта —
+  // майстер. Співробітник підтримки профілю не має.
+  const peerProfile = $derived(
+    peer.role === 'MASTER'
+      ? `/dashboard/master/${peer.id}`
+      : peer.role === 'CLIENT'
+        ? `/dashboard/client/${peer.id}`
+        : null,
   )
 
   const isOnline = $derived(
@@ -1012,7 +1015,7 @@
 
               <button
                 type="button"
-                onclick={() => peer.username && goto(`/@${peer.username}`)}
+                onclick={() => peerProfile && goto(peerProfile)}
                 class="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-full text-left"
               >
                 <span class="relative shrink-0">
@@ -1091,10 +1094,10 @@
                   <MoreVertical class="size-5.25" />
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end" sideOffset={6} class="w-56">
-                  {#if peer.username}
+                  {#if peerProfile}
                     <DropdownMenu.Item
                       class="cursor-pointer"
-                      onSelect={() => goto(`/@${peer.username}`)}
+                      onSelect={() => goto(peerProfile)}
                     >
                       <UserIcon /> Профіль
                     </DropdownMenu.Item>

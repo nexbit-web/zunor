@@ -33,13 +33,11 @@ function order(over: Record<string, unknown> = {}) {
     client: {
       id: CLIENT,
       name: 'Ігор',
-      username: null,
       avatar: null,
     },
     master: {
       id: MASTER,
       name: 'Оля',
-      username: 'olya',
       avatar: null,
     },
     ...over,
@@ -74,7 +72,7 @@ describe('точка зору', () => {
 
   it('без імені показується заглушка, а не порожньо', () => {
     const { container } = card(CLIENT, {
-      master: { id: MASTER, name: null, username: null, avatar: null },
+      master: { id: MASTER, name: null, avatar: null },
     })
 
     expect(container.textContent).toContain('Без імені')
@@ -88,7 +86,7 @@ describe('точка зору', () => {
 
   it('без імені ініціал не ламається', () => {
     const { container } = card(CLIENT, {
-      master: { id: MASTER, name: null, username: null, avatar: null },
+      master: { id: MASTER, name: null, avatar: null },
     })
 
     expect(container.textContent).toContain('?')
@@ -100,7 +98,6 @@ describe('точка зору', () => {
       master: {
         id: MASTER,
         name: 'Оля',
-        username: 'olya',
         avatar: null,
         phone: '+380991234567',
       },

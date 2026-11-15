@@ -1,10 +1,11 @@
-// Публічна сторінка майстра (/@handle). Її читають і люди, і пошукові
-// боти — у будь-яку годину, тож дані беруться з Redis, а не будять Neon.
+// Профіль майстра очима клієнта: сторінка dashboard/master/[id] і
+// GET /api/masters/[id] для застосунку. Публічної сторінки (/@handle)
+// більше немає — профіль бачать лише з акаунтом. Дані — з Redis: профіль
+// відкривають часто (з кожної пропозиції), а будити Neon заради цього
+// не варто.
 //
-// Ключі за userId, а не за username: кожне місце, що міняє профіль, знає
-// id і скидає кеш одним викликом. Username → id — окремий ключ; якщо
-// username змінили, дані під ним уже з іншим username, і сторінка за
-// старим посиланням зникає одразу, без очікування TTL.
+// Ключ — за userId: кожне місце, що міняє профіль, знає id і скидає кеш
+// одним викликом.
 
 import { prisma } from './prisma'
 import { cached, forget } from './cache'
@@ -23,7 +24,6 @@ import type {
 
 /** Відгуки, рейтинг і лічильники оновлюються не миттєво — у межах цього. */
 const PAGE_TTL_SEC = 10 * 60
-const HANDLE_TTL_SEC = 60 * 60
 const REVIEWS_SHOWN = 30
 
 /** Відгук для сторінки; дата — рядком ISO, бо значення живе в Redis. */
@@ -32,7 +32,6 @@ type PageReview = Omit<ProfileReview, 'createdAt'> & { createdAt: string }
 export interface MasterPage {
   id: string
   role: Role
-  username: string
   name: string | null
   avatar: string | null
   bio: string | null
@@ -55,38 +54,10 @@ export interface MasterPage {
   premises?: SkillLabel[]
 }
 
-/** null — такого майстра немає (або username уже інший). */
-export async function loadMasterPage(
-  username: string,
-): Promise<MasterPage | null> {
-  const userId = await cached(
-    `handle:${username}`,
-    HANDLE_TTL_SEC,
-    async () =>
-      (
-        await prisma.user.findUnique({
-          where: { username },
-          select: { id: true },
-        })
-      )?.id ?? null,
-    { cacheNull: false },
-  )
-  if (!userId) return null
-
-  const page = await cached(`master:${userId}`, PAGE_TTL_SEC, () =>
-    readPage(userId),
-  )
-  if (page?.username === username) return page
-
-  await forget(`handle:${username}`)
-  return null
-}
-
 /**
- * Та сама сторінка за id — для застосунку (GET /api/masters/[id]): там
- * майстра відкривають із пропозиції чи замовлення, де є id, а не username.
- * Той самий ключ кешу, що й /@handle. Порожнє не кешуємо: інакше
- * випадкові id засмічували б Redis на PAGE_TTL_SEC.
+ * Профіль за id (null — такого користувача немає). Хто кличе, сам
+ * перевіряє роль: не майстер — 404. Порожнє не кешуємо: інакше випадкові
+ * id засмічували б Redis на PAGE_TTL_SEC.
  */
 export function loadMasterPageById(userId: string): Promise<MasterPage | null> {
   return cached(`master:${userId}`, PAGE_TTL_SEC, () => readPage(userId), {
@@ -106,7 +77,6 @@ async function readPage(userId: string): Promise<MasterPage | null> {
       select: {
         id: true,
         role: true,
-        username: true,
         name: true,
         avatar: true,
         bio: true,
@@ -139,7 +109,7 @@ async function readPage(userId: string): Promise<MasterPage | null> {
       },
     }),
   ])
-  if (!user?.username) return null
+  if (!user) return null
 
   const mp = user.masterProfile
   const skills = describeCleaningSkills(
@@ -148,7 +118,6 @@ async function readPage(userId: string): Promise<MasterPage | null> {
   return {
     id: user.id,
     role: user.role,
-    username: user.username,
     name: user.name,
     avatar: user.avatar,
     bio: user.bio,

@@ -46,7 +46,6 @@
   import * as AlertDialog from '$lib/components/ui/alert-dialog'
   import * as Avatar from '$lib/components/ui/avatar'
   import AvatarUploader from '$lib/components/avatar-uploader.svelte'
-  import UsernameInput from '$lib/components/username-input.svelte'
   import PortfolioUploader from '$lib/components/portfolio-uploader.svelte'
   import FieldError from '$lib/components/forms/field-error.svelte'
   import OnboardingWizard from './onboarding-wizard.svelte'
@@ -181,14 +180,14 @@
             phase: 'you',
             title: 'Як називається компанія?',
             subtitle:
-              'Так вас бачитимуть клієнти — у пропозиціях, чаті й відгуках. Username стане адресою сторінки компанії.',
+              'Так вас бачитимуть клієнти — у пропозиціях, чаті й відгуках.',
           }
         : {
             id: 'name',
             phase: 'you',
             title: 'Як вас звати?',
             subtitle:
-              'Справжнє імʼя — клієнти довіряють людям, а не нікнеймам. Username стане адресою вашої сторінки.',
+              'Справжнє імʼя — клієнти довіряють людям, а не нікнеймам.',
           },
       company
         ? {
@@ -348,8 +347,6 @@
     if (isCompany) companyTitle = v
     else personName = v
   }
-  let username = $state(initial.username ?? '')
-  let usernameValid = $state<boolean | null>(initial.username ? true : null)
 
   let city = $state(initial.city ?? '')
   let cityOpen = $state(false)
@@ -414,7 +411,6 @@
   let touched = $state({
     who: false,
     name: false,
-    username: false,
     phone: false,
     city: false,
     district: false,
@@ -550,7 +546,6 @@
 
   const formValid = $derived(
     nameValid &&
-      usernameValid === true &&
       phoneValid &&
       !!city &&
       districtValid &&
@@ -586,7 +581,7 @@
       case 'who':
         return who !== null
       case 'name':
-        return nameValid && usernameValid === true
+        return nameValid
       case 'services':
         return categories.length > 0 && (!cleans || services.length > 0)
       case 'premises':
@@ -619,7 +614,6 @@
         break
       case 'name':
         touched.name = true
-        touched.username = true
         break
       case 'services':
         touched.categories = true
@@ -715,7 +709,6 @@
     touched = {
       who: true,
       name: true,
-      username: true,
       phone: true,
       city: true,
       district: true,
@@ -738,7 +731,6 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: nameTrim,
-          username: username.trim(),
           phone: '+380' + phoneDigits,
           city,
           district: needsDistrict ? district : null,
@@ -848,15 +840,6 @@
     onpick={() => (touched.who = true)}
   />
   <FieldError text={whoError} />
-{/snippet}
-
-{#snippet usernameControl()}
-  <UsernameInput
-    bind:value={username}
-    bind:isValid={usernameValid}
-    bind:touched={touched.username}
-    currentUsername={initial.username ?? ''}
-  />
 {/snippet}
 
 {#snippet phoneControl()}
@@ -1170,13 +1153,6 @@
       error={nameError}
       control={nameControl}
     />
-    <SettingsField label="Username" for="username" control={usernameControl} />
-    <!-- Адреса сторінки — видимим рядком, а не підказкою: на цьому кроці
-         людина саме її й придумує, і бачити результат одразу — приємно. -->
-    <p class="mt-1 text-[13px] text-muted-foreground">
-      {isCompany ? 'Сторінка компанії' : 'Ваша сторінка'}: zunor.org/@{username ||
-        'username'}
-    </p>
   {:else if id === 'photo'}
     <div class="flex justify-center py-4">
       {@render photoControl(true)}
@@ -1246,19 +1222,15 @@
       </Avatar.Root>
       <div class="min-w-0">
         <p class="truncate text-[17px] font-semibold">{nameTrim}</p>
-        <p class="truncate text-[14px] text-muted-foreground">
-          @{username}{cityName ? ` · ${cityName}` : ''}
-        </p>
+        {#if cityName}
+          <p class="truncate text-[14px] text-muted-foreground">{cityName}</p>
+        {/if}
       </div>
     </div>
 
     <dl class="mt-5 divide-y divide-border border-y border-border">
       {@render reviewRow('Хто ви', 'who', kindLabel(who))}
-      {@render reviewRow(
-        isCompany ? 'Назва' : 'Імʼя',
-        'name',
-        `${nameTrim} · @${username}`,
-      )}
+      {@render reviewRow(isCompany ? 'Назва' : 'Імʼя', 'name', nameTrim)}
       {@render reviewRow(
         isCompany ? 'Логотип' : 'Фото',
         'photo',
@@ -1364,13 +1336,6 @@
           for="name"
           error={nameError}
           control={nameControl}
-        />
-
-        <SettingsField
-          label="Username"
-          for="username"
-          hint="Адреса вашого профілю: zunor.org/@{username || 'username'}"
-          control={usernameControl}
         />
 
         <SettingsField

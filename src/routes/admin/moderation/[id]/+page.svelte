@@ -30,7 +30,6 @@
   const facts = $derived(
     [
       ['Пошта', m.email],
-      ['Профіль', m.username ? `@${m.username}` : null],
       ['Місто й район', [m.city, m.district].filter(Boolean).join(', ') || null],
       ['Формат', m.crew ? crewLabel(m.crew) : null],
       ['Авто', m.hasVehicle === null ? null : m.hasVehicle ? 'Є' : 'Немає'],

@@ -32,7 +32,8 @@ const chatPage =
   await import('../../routes/(auth)/dashboard/messages/[chatId]/+page.server')
 const clientPage =
   await import('../../routes/(auth)/dashboard/client/[id]/+page.server')
-const handlePage = await import('../../routes/[handle=handle]/+page.server')
+const masterPage =
+  await import('../../routes/(auth)/dashboard/master/[id]/+page.server')
 
 // Лоадери сторінок — другий шлях до тих самих даних, що й API. Саме тому
 // правило доступу винесене в $lib/server/job-access: колись воно жило лише
@@ -551,7 +552,7 @@ describe('профіль клієнта /dashboard/client/[id]', () => {
   })
 })
 
-describe('публічний профіль /@handle', () => {
+describe('профіль майстра dashboard/master/[id]', () => {
   const master = {
     id: MASTER,
     role: 'MASTER',
@@ -573,9 +574,9 @@ describe('публічний профіль /@handle', () => {
     },
   }
 
-  function handleEvent(handle: string, viewerId: string | null = null) {
+  function masterEvent(viewerId: string | null, id = MASTER) {
     return makeEvent({
-      params: { handle },
+      params: { id },
       locals: viewerId ? sessionUser(viewerId) : anonymous,
     })
   }
@@ -585,10 +586,17 @@ describe('публічний профіль /@handle', () => {
     prisma.review.findMany.mockResolvedValue([])
   })
 
-  // Сторінку читають боти — назви міста й послуг беруться з кешу
-  // довідників, а не окремими запитами на кожен перегляд.
+  // Публічної сторінки немає (Zunor не каталог): гість не має дізнатись
+  // навіть те, що профіль існує, — 404, а не редірект на логін.
+  it('гість — 404', async () => {
+    expect((await failure(() => masterPage.load(masterEvent(null)))).status).toBe(
+      404,
+    )
+    expect(prisma.user.findUnique).not.toHaveBeenCalled()
+  })
+
   it('назви міста й послуг — із довідників, без запитів у базу', async () => {
-    const data = (await handlePage.load(handleEvent('@ivan'))) as {
+    const data = (await masterPage.load(masterEvent(CLIENT))) as {
       user: { city?: string; categories: string[] }
     }
 
@@ -598,77 +606,43 @@ describe('публічний профіль /@handle', () => {
     expect(prisma.category.findMany).not.toHaveBeenCalled()
   })
 
-  // Перейменований майстер: дані під старим username уже з новим — сторінка
-  // за старим посиланням зникає одразу, а не після TTL кешу.
-  it('username у даних інший, ніж у посиланні, — 404', async () => {
-    prisma.user.findUnique.mockResolvedValue({ ...master, username: 'petro' })
-    expect(
-      (await failure(() => handlePage.load(handleEvent('@ivan')))).status,
-    ).toBe(404)
-  })
-
-  it('username поза форматом — 404 без запиту в базу', async () => {
-    for (const h of ['@ab', '@1abc', '@a-b', '@../etc', '@' + 'a'.repeat(21)]) {
-      resetPrisma()
-      const res = await failure(() => handlePage.load(handleEvent(h)))
-      expect(res.status).toBe(404)
-      expect(prisma.user.findUnique).not.toHaveBeenCalled()
-    }
-  })
-
   it('неіснуючий користувач — 404', async () => {
     prisma.user.findUnique.mockResolvedValue(null)
     expect(
-      (await failure(() => handlePage.load(handleEvent('@ivan')))).status,
+      (await failure(() => masterPage.load(masterEvent(CLIENT)))).status,
     ).toBe(404)
   })
 
-  // Клієнт не «вітрина»: публічної сторінки в нього немає навмисно.
-  it('клієнт за @handle не відкривається', async () => {
+  // Профіль клієнта — інша сторінка (dashboard/client/[id]) з іншими
+  // правилами; тут його не видно.
+  it('клієнт за цією адресою не відкривається', async () => {
     prisma.user.findUnique.mockResolvedValue({ ...master, role: 'CLIENT' })
     expect(
-      (await failure(() => handlePage.load(handleEvent('@ivan')))).status,
+      (await failure(() => masterPage.load(masterEvent(CLIENT)))).status,
     ).toBe(404)
   })
 
   it('власний профіль веде на дашборд', async () => {
     const location = await redirectOf(() =>
-      handlePage.load(handleEvent('@ivan', MASTER)),
+      masterPage.load(masterEvent(MASTER)),
     )
     expect(location).toBe('/dashboard')
   })
 
-  // Сторінка публічна й потрапляє в пошук — телефон і пошта тут були б
-  // витоком назавжди.
-  it('у публічну відповідь не потрапляють телефон і пошта', async () => {
-    const data = await handlePage.load(handleEvent('@ivan'))
+  // Телефон — лише в пропозиції й замовленні, пошта — нікому.
+  it('у відповідь не потрапляють телефон, пошта й нікнейм', async () => {
+    const data = await masterPage.load(masterEvent(CLIENT))
     const dump = JSON.stringify(data)
 
     expect(dump).not.toContain('+380670000000')
     expect(dump).not.toContain('ivan@example.com')
+    expect(dump).not.toContain('"username"')
   })
 
-  it('перевірений майстер кешується публічно', async () => {
+  it('private, no-store і noindex — навіть для перевіреного', async () => {
     const headers: Record<string, string> = {}
-    await handlePage.load({
-      ...handleEvent('@ivan'),
-      setHeaders: (h: Record<string, string>) => Object.assign(headers, h),
-    })
-
-    expect(headers['cache-control']).toContain('public')
-  })
-
-  // Непідтверджений профіль не має потрапляти ні в кеш, ні в індекс:
-  // модерація ще не бачила, що там написано.
-  it('неперевірений майстер — private, no-store і noindex', async () => {
-    prisma.user.findUnique.mockResolvedValue({
-      ...master,
-      masterProfile: { ...master.masterProfile, verificationStatus: 'PENDING' },
-    })
-
-    const headers: Record<string, string> = {}
-    await handlePage.load({
-      ...handleEvent('@ivan'),
+    await masterPage.load({
+      ...masterEvent(CLIENT),
       setHeaders: (h: Record<string, string>) => Object.assign(headers, h),
     })
 
@@ -676,10 +650,12 @@ describe('публічний профіль /@handle', () => {
     expect(headers['x-robots-tag']).toContain('noindex')
   })
 
-  it('@ у параметрі не обов’язковий і регістр не важливий', async () => {
-    await handlePage.load(handleEvent('@IVAN'))
-    expect(prisma.user.findUnique.mock.calls[0][0].where).toEqual({
-      username: 'ivan',
-    })
+  // Нікнейм більше не обовʼязковий: майстер без нього теж має профіль.
+  it('майстер без username відкривається', async () => {
+    prisma.user.findUnique.mockResolvedValue({ ...master, username: null })
+    const data = (await masterPage.load(masterEvent(CLIENT))) as {
+      user: { name: string }
+    }
+    expect(data.user.name).toBe('Іван')
   })
 })

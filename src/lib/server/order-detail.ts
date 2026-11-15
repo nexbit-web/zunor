@@ -19,7 +19,6 @@ function query(orderId: string) {
         select: {
           id: true,
           name: true,
-          username: true,
           avatar: true,
           city: true,
           phone: true,
@@ -31,7 +30,6 @@ function query(orderId: string) {
         select: {
           id: true,
           name: true,
-          username: true,
           avatar: true,
           city: true,
           phone: true,
@@ -125,7 +123,6 @@ export function orderDetailDto(order: OrderDetailRow) {
     client: {
       id: client.id,
       name: client.name,
-      username: client.username,
       avatar: client.avatar,
       city: client.city,
       phone: client.phone ?? null,
@@ -135,7 +132,6 @@ export function orderDetailDto(order: OrderDetailRow) {
     master: {
       id: master.id,
       name: master.name,
-      username: master.username,
       avatar: master.avatar,
       city: master.city,
       phone: master.phone ?? null,

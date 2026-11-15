@@ -10,7 +10,6 @@ import { prisma } from './prisma'
 import { getCategories, getCities, getDistricts } from './reference'
 import { cloudinary } from './cloudinary'
 import { safeTrigger, channels, events } from './pusher'
-import { validateUsername } from '$lib/username'
 import { cityDistricts, findDistrict, type District } from '$lib/geo/districts'
 import { isTravelRadius } from '$lib/geo/travel'
 import { matchingFor } from '$lib/categories/matching'
@@ -99,7 +98,6 @@ export async function loadProfileData(userId: string) {
         id: true,
         email: true,
         name: true,
-        username: true,
         phone: true,
         avatar: true,
         avatarPublicId: true,
@@ -265,16 +263,10 @@ export async function saveMasterProfile(
     throw error(400, `${label}: ${NAME_MIN}–${NAME_MAX} символів`)
   }
 
-  const usernameResult = validateUsername(asString(input.username))
-  if (!usernameResult.ok) {
-    throw error(
-      400,
-      usernameResult.reason === 'reserved'
-        ? 'Цей username зарезервовано'
-        : 'Username: 3–20 символів, починається з літери (a-z, 0-9, _)',
-    )
-  }
-  const username = usernameResult.value
+  // Username (нікнейм) більше не питаємо й не пишемо: публічної сторінки
+  // /@handle немає, а клієнти бачать імʼя. Колонка в базі лишилась —
+  // старі значення лежать, як були; `username` у тілі від старих
+  // збірок застосунку просто ігнорується.
 
   const phone = asString(input.phone)
   if (!PHONE_RE.test(phone)) {
@@ -355,17 +347,12 @@ export async function saveMasterProfile(
     : []
 
   // ─── Перевірка існування довідників ───
-  const [usernameTaken, cityExists, categoriesValid] = await Promise.all([
-    prisma.user.findFirst({
-      where: { username, NOT: { id: userId } },
-      select: { id: true },
-    }),
+  const [cityExists, categoriesValid] = await Promise.all([
     prisma.city.findUnique({ where: { slug: citySlug }, select: { id: true } }),
     prisma.category.count({
       where: { slug: { in: categories }, isActive: true },
     }),
   ])
-  if (usernameTaken) throw error(409, 'Username вже зайнято')
   if (!cityExists) throw error(400, 'Місто не знайдено')
   if (categoriesValid !== categories.length) {
     throw error(400, 'Деякі категорії не існують')
@@ -398,7 +385,6 @@ export async function saveMasterProfile(
       data: {
         role: 'MASTER',
         name,
-        username,
         phone,
         city: citySlug,
         district,
@@ -453,7 +439,7 @@ export async function saveMasterProfile(
  *   • стан акаунта для guard (onboarded і роль) — інакше людина
  *     поверталась би на форму або бачила вкладки старої ролі;
  *   • копію користувача в сесіях — імʼя й аватар у меню;
- *   • публічну сторінку майстра.
+ *   • профіль майстра (кеш master-page).
  */
 async function afterProfileSaved(userId: string): Promise<void> {
   await Promise.all([

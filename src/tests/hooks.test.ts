@@ -120,7 +120,7 @@ describe('гість', () => {
   })
 
   it('публічні сторінки відкриті', async () => {
-    for (const path of ['/', '/privacy', '/terms', '/@ivan']) {
+    for (const path of ['/', '/privacy', '/terms', '/master/about']) {
       const res = await run(path, false)
       expect(res.status).toBe(200)
     }
@@ -226,8 +226,8 @@ describe('залогінений на гостьових сторінках', ()
     expect(res.status).toBe(200)
   })
 
-  it('публічний профіль майстра лишається відкритим', async () => {
-    const res = await run('/@ivan')
+  it('лендинг для майстрів лишається відкритим', async () => {
+    const res = await run('/master/about')
     expect(res.status).toBe(200)
   })
 })

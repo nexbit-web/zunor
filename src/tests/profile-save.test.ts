@@ -38,7 +38,6 @@ const validClient = {
 
 const validMaster = {
   name: 'Іван Коваль',
-  username: 'ivan_k',
   phone: '+380671234567',
   city: 'odesa',
   district: 'tairova',
@@ -219,8 +218,6 @@ describe('клієнт: запис', () => {
 describe('майстер: валідація', () => {
   const bad: [string, unknown][] = [
     ['коротке імʼя', { ...validMaster, name: 'І' }],
-    ['username зарезервований', { ...validMaster, username: 'admin' }],
-    ['username поза форматом', { ...validMaster, username: 'ab' }],
     ['телефон не український', { ...validMaster, phone: '+12125551234' }],
     ['без міста', { ...validMaster, city: '' }],
     ['без категорій', { ...validMaster, categories: [] }],
@@ -240,18 +237,13 @@ describe('майстер: валідація', () => {
     })
   }
 
-  it('зайнятий username — 409', async () => {
-    prisma.user.findFirst.mockResolvedValue({ id: 'someone-else' })
-    expect(await failsWith(() => saveMasterProfile(USER, validMaster))).toBe(
-      409,
+  // Нікнейм більше не питаємо (публічної сторінки /@handle немає). Старі
+  // збірки застосунку ще шлють його — не валідується й не пишеться.
+  it('username з тіла ігнорується', async () => {
+    await saveMasterProfile(USER, { ...validMaster, username: 'ab' })
+    expect(prisma.user.update.mock.calls[0][0].data).not.toHaveProperty(
+      'username',
     )
-  })
-
-  it('власний username не вважається зайнятим', async () => {
-    await saveMasterProfile(USER, validMaster)
-    expect(prisma.user.findFirst.mock.calls[0][0].where.NOT).toEqual({
-      id: USER,
-    })
   })
 
   it('неіснуюче місто — 400', async () => {

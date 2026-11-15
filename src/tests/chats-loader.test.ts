@@ -39,7 +39,6 @@ function membership(
             user: {
               id: 'peer-1',
               name: 'Оля',
-              username: 'olya',
               avatar: null,
               masterProfile: { verificationStatus: 'VERIFIED' },
               ...over.peer,
@@ -124,7 +123,6 @@ describe('запит за чатами', () => {
       'id',
       'masterProfile',
       'name',
-      'username',
     ])
   })
 })
@@ -286,7 +284,6 @@ describe('форма відповіді', () => {
       'id',
       'isVerified',
       'name',
-      'username',
     ])
   })
 

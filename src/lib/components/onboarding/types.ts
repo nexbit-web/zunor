@@ -39,7 +39,6 @@ export interface OnboardingUser {
   id: string
   email: string
   name: string | null
-  username: string | null
   phone: string | null
   avatar: string | null
   avatarPublicId: string | null

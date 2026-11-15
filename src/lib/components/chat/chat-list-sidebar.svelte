@@ -45,10 +45,7 @@
     return chats.filter((c) => {
       if (tab === 'unread' && c.unreadCount === 0) return false
       if (!q) return true
-      return (
-        c.peer.name.toLowerCase().includes(q) ||
-        (c.peer.username?.toLowerCase().includes(q) ?? false)
-      )
+      return c.peer.name.toLowerCase().includes(q)
     })
   })
 

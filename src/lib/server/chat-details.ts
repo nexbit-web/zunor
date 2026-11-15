@@ -35,7 +35,6 @@ export async function loadChatDetails(
                 select: {
                   id: true,
                   name: true,
-                  username: true,
                   avatar: true,
                   role: true,
                   lastSeen: true,
@@ -69,14 +68,13 @@ export async function loadChatDetails(
     peer: {
       id: peer.id,
       name: peer.name ?? '',
-      username: peer.username,
       avatar: peer.avatar,
+      role: peer.role,
       isVerified: peer.masterProfile?.verificationStatus === 'VERIFIED',
     },
     members: membership.chat.members.map((m) => ({
       id: m.user.id,
       name: m.user.name ?? '',
-      username: m.user.username,
       avatar: m.user.avatar,
       isVerified: m.user.masterProfile?.verificationStatus === 'VERIFIED',
     })),

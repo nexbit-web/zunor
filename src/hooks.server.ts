@@ -160,7 +160,7 @@ const guardHandle: Handle = async ({ event, resolve }) => {
   if (pathname === VERIFY_PATH) redirect(303, HOME_PATH)
 
   // ─── Guest-only і лендінг ───
-  // Точна перевірка pathname === '/': /privacy, /terms, /@username
+  // Точна перевірка pathname === '/': /privacy, /terms, /master/about
   // лишаються доступними залогіненому.
   if (pathname === '/' || GUEST_ONLY.has(pathname)) redirect(303, HOME_PATH)
 

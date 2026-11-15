@@ -29,7 +29,7 @@ const { touchPresence, lastSeenMany, freshest } =
 const { getAccountState, invalidateAccount, clearAccountCache } =
   await import('$lib/server/account-cache')
 const { isChatMember } = await import('$lib/server/chat-members')
-const { loadMasterPage, forgetMasterPage } =
+const { loadMasterPageById, forgetMasterPage } =
   await import('$lib/server/master-page')
 const { getDistricts, invalidateReference } =
   await import('$lib/server/reference')
@@ -299,11 +299,10 @@ describe('учасники чату (авторизація каналів Pushe
   })
 })
 
-describe('публічна сторінка майстра', () => {
-  const user = (username: string) => ({
+describe('сторінка майстра', () => {
+  const user = {
     id: 'm1',
     role: 'MASTER',
-    username,
     name: 'Іван',
     avatar: null,
     bio: null,
@@ -317,57 +316,45 @@ describe('публічна сторінка майстра', () => {
       portfolioImages: [],
       completedOrders: 5,
     },
-  })
+  }
 
   beforeEach(() => {
     prisma.review.findMany.mockResolvedValue([])
   })
 
   it('повторний перегляд — без жодного запиту в базу', async () => {
-    prisma.user.findUnique.mockResolvedValue(user('ivan'))
+    prisma.user.findUnique.mockResolvedValue(user)
 
-    expect((await loadMasterPage('ivan'))?.username).toBe('ivan')
+    expect((await loadMasterPageById('m1'))?.name).toBe('Іван')
     await settle()
     resetPrisma()
 
-    expect((await loadMasterPage('ivan'))?.username).toBe('ivan')
+    expect((await loadMasterPageById('m1'))?.name).toBe('Іван')
     expect(prisma.user.findUnique).not.toHaveBeenCalled()
   })
 
-  // Вільний сьогодні username завтра займуть — «немає» не кешуємо.
-  it('неіснуючий username не запамʼятовується', async () => {
+  // Випадкові id не мають засмічувати Redis — «немає» не кешуємо.
+  it('неіснуючий id не запамʼятовується', async () => {
     prisma.user.findUnique.mockResolvedValue(null)
-    expect(await loadMasterPage('nobody')).toBeNull()
+    expect(await loadMasterPageById('nobody')).toBeNull()
     await settle()
-    expect(store.has('zunor:handle:nobody')).toBe(false)
+    expect(store.has('zunor:master:nobody')).toBe(false)
   })
 
   it('після forgetMasterPage сторінка перечитується з бази', async () => {
-    prisma.user.findUnique.mockResolvedValue(user('ivan'))
-    await loadMasterPage('ivan')
+    prisma.user.findUnique.mockResolvedValue(user)
+    await loadMasterPageById('m1')
     await settle()
 
     await forgetMasterPage('m1')
-    prisma.user.findUnique.mockResolvedValue({
-      ...user('ivan'),
-      name: 'Іван П.',
-    })
+    prisma.user.findUnique.mockResolvedValue({ ...user, name: 'Іван П.' })
 
-    expect((await loadMasterPage('ivan'))?.name).toBe('Іван П.')
-  })
-
-  // Майстра перейменували: старе посилання не має жити до кінця TTL.
-  it('username змінився — за старим посиланням сторінки немає одразу', async () => {
-    store.set('zunor:handle:ivan', '"m1"')
-    prisma.user.findUnique.mockResolvedValue(user('petro'))
-
-    expect(await loadMasterPage('ivan')).toBeNull()
-    expect(store.has('zunor:handle:ivan')).toBe(false)
+    expect((await loadMasterPageById('m1'))?.name).toBe('Іван П.')
   })
 
   it('дата в кеші — рядок ISO, а не Date', async () => {
-    prisma.user.findUnique.mockResolvedValue(user('ivan'))
-    const page = await loadMasterPage('ivan')
+    prisma.user.findUnique.mockResolvedValue(user)
+    const page = await loadMasterPageById('m1')
     expect(page?.createdAt).toBe('2026-01-01T00:00:00.000Z')
   })
 })

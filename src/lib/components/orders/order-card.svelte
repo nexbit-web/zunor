@@ -46,13 +46,11 @@
       client: {
         id: string
         name: string | null
-        username: string | null
         avatar: string | null
       }
       master: {
         id: string
         name: string | null
-        username: string | null
         avatar: string | null
       }
     }

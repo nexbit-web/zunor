@@ -46,7 +46,6 @@ export interface JobDetailProposal {
   master: {
     id: string
     name: string | null
-    username: string | null
     avatar: string | null
     avgRating: number
     reviewsCount: number
@@ -130,7 +129,6 @@ export async function loadJobDetail(
         select: {
           id: true,
           name: true,
-          username: true,
           avatar: true,
           city: true,
           avgRatingAsClient: true,
@@ -187,7 +185,6 @@ export async function loadJobDetail(
           select: {
             id: true,
             name: true,
-            username: true,
             avatar: true,
             phone: true,
             avgRatingAsMaster: true,
@@ -254,7 +251,6 @@ export async function loadJobDetail(
       master: {
         id: p.master.id,
         name: p.master.name,
-        username: p.master.username,
         avatar: p.master.avatar,
         avgRating: p.master.avgRatingAsMaster,
         reviewsCount: p.master.reviewsCountAsMaster,
@@ -275,7 +271,6 @@ export async function loadJobDetail(
           select: {
             id: true,
             name: true,
-            username: true,
             avatar: true,
             avgRatingAsMaster: true,
             reviewsCountAsMaster: true,
@@ -295,7 +290,6 @@ export async function loadJobDetail(
           master: {
             id: mine.master.id,
             name: mine.master.name,
-            username: mine.master.username,
             avatar: mine.master.avatar,
             avgRating: mine.master.avgRatingAsMaster,
             reviewsCount: mine.master.reviewsCountAsMaster,

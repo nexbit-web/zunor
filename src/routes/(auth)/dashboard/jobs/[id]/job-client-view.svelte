@@ -169,17 +169,12 @@
 
       <ul class="mt-3">
         {#each visible as p (p.id)}
-          {@const profile = p.master.username
-            ? `/@${p.master.username}`
-            : undefined}
           {@const canAccept = p.status === 'SENT' && data.job.status === 'OPEN'}
           <li class="border-t border-border/60 py-4 last:pb-0">
             <div class="flex items-start gap-3">
-              <!-- Без @handle профілю немає — тоді й посилання немає, а не
-                   «#», що прокручував сторінку нагору. -->
-              <svelte:element
-                this={profile ? 'a' : 'div'}
-                href={profile}
+              <!-- Профіль майстра — у дашборді (публічної сторінки немає). -->
+              <a
+                href="/dashboard/master/{p.master.id}"
                 class="group/m flex min-w-0 flex-1 items-start gap-3 rounded-lg focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
               >
                 <Avatar class="size-10 shrink-0">
@@ -194,10 +189,7 @@
                 <span class="min-w-0">
                   <span class="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <span
-                      class={[
-                        'text-[15px] font-medium text-foreground',
-                        profile && 'group-hover/m:underline',
-                      ]}
+                      class="text-[15px] font-medium text-foreground group-hover/m:underline"
                     >
                       {p.master.name ?? 'Майстер'}
                     </span>
@@ -236,7 +228,7 @@
                     <span>{formatRelative(p.createdAt)}</span>
                   </span>
                 </span>
-              </svelte:element>
+              </a>
 
               <!-- Ціна праворуч, як у прайсі: клієнт порівнює пропозиції
                    саме за нею, і око має знаходити її на тому самому місці

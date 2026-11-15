@@ -55,9 +55,7 @@
   )
   const peerHref = $derived(
     isClient
-      ? order.master.username
-        ? `/@${order.master.username}`
-        : '#'
+      ? `/dashboard/master/${order.master.id}`
       : `/dashboard/client/${order.client.id}`,
   )
 

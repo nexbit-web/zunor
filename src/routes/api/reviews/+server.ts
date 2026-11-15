@@ -91,7 +91,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     { maxWait: 10000, timeout: 20000 },
   )
 
-  // Рейтинг і відгуки майстра — на його публічній сторінці.
+  // Рейтинг і відгуки майстра — у його профілі (кеш master-page).
   if (isClient) await forgetMasterPage(targetId)
 
   return json({ ok: true })

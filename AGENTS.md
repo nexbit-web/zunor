@@ -93,8 +93,7 @@ Vitest, конфіг — `vitest.config.ts`. Два проєкти в одном
 `zunor/dialog-storage.ts`, `components/chat/reactions.ts` і `linkify.ts`.
 
 Окремо — **безпекові** тести на тому ж чистому ядрі: `utils/redirect.ts`
-(open redirect), `username.ts` + `params/handle.ts` (підміна імені,
-узгодженість із маршрутом), `server/rate-limit.ts` (ліміти й стеля
+(open redirect), `server/rate-limit.ts` (ліміти й стеля
 пам'яті), `server/zunor/ai-profile.ts` (prompt injection в анкеті),
 `utils/json-ld.ts` (XSS у JSON-LD), `server/link-preview.ts` (SSRF:
 приватні адреси, DNS, порти; DNS у тесті підмінений).
@@ -189,16 +188,15 @@ Vitest, конфіг — `vitest.config.ts`. Два проєкти в одном
 - **Компонент зі снипетами** приймає їх через `createRawSnippet`, окремі
   фікстур-`.svelte` для цього не потрібні.
 - **Компонент із `setTimeout` тестуй на фейкових таймерах.** Не через
-  швидкість: якщо компонент не знімає таймер при демонтуванні (як
-  `username-input`), запит із попереднього тесту прилітає в наступний.
+  швидкість: якщо компонент не знімає таймер при демонтуванні, запит із
+  попереднього тесту прилітає в наступний.
 
 Покриті: обидва рунні стори (`notifications/store.svelte.ts`,
 `stores/chat-store.svelte.ts`), `settings/*` (чотири картки в обох подачах +
 `nav.ts` + `theme-picker` + `accent-picker` зі стором вигляду), `notification-list`,
 картка сповіщень (`notifications/island.svelte` + `toast.ts`), `zunor/MessageBody`,
 `chat/message-bubble` (реакції, посилання, цитата), чернетки чату (`chat/drafts.svelte.ts`),
-`orders/order-card`, `dashboard/app-sidebar`, `profile/*`, `seo/JsonLd`,
-`username-input`.
+`orders/order-card`, `dashboard/app-sidebar`, `profile/*`, `seo/JsonLd`.
 
 Панель дашборда (`dashboard-sidebar.test.ts`) вимагає власного батька —
 `fixtures/sidebar-host.svelte`. Причина: `AppSidebar` читає контекст
@@ -286,7 +284,6 @@ src/
 ├── routes/
 │   ├── (auth)/dashboard/   # захищена зона (guard: сесія + роль)
 │   ├── (auth)/user/        # логін/реєстрація/onboarding
-│   ├── [handle=handle]/    # публічний профіль майстра за @handle
 │   ├── api/                # REST-подібні ендпоінти, по одній теміці на теку
 │   │   (auth, categories, chats, cities, cron, jobs, me, notifications,
 │   │    orders, profile, proposals, pusher, reviews, upload, user, zunor)
@@ -435,11 +432,16 @@ Vercel: або спільне сховище, або гілка `serverless`.
   так само: клієнт — `$lib/server/client-profile.ts` (`loadClientProfile`
   — лише майстер, роль глядача з бази, без телефону; інакше null → 404)
   для сторінки `dashboard/client/[id]` і `GET /api/clients/[id]`;
-  майстер — `$lib/server/master-page.ts` (той самий кеш Redis, що
-  `/@handle`; за id — `loadMasterPageById`, порожнє не кешується) для
-  `/@handle` і `GET /api/masters/[id]` (застосунок відкриває профіль із
-  пропозиції чи замовлення; лише поля публічної сторінки, без телефону й
-  пошти). Шляху «усі майстри» немає й не буде — Zunor не каталог.
+  майстер — `$lib/server/master-page.ts` (`loadMasterPageById`, кеш
+  Redis за id, порожнє не кешується) для сторінки `dashboard/master/[id]`
+  і `GET /api/masters/[id]` (клієнт відкриває профіль із пропозиції,
+  замовлення чи чату; лише з акаунтом, без телефону й пошти). Шляху «усі
+  майстри» немає й не буде — Zunor не каталог. **Публічної сторінки
+  майстра (`/@handle`) більше немає** і нікнейм (`User.username`) не
+  питається й не показується ніде: колонка в базі лишилась зі старими
+  значеннями, але код її не читає й не пише (поле `username` у тілі від
+  старих збірок застосунку мовчки ігнорується). Не повертай ні те, ні
+  інше без рішення власника.
 - **Реєстрація поштою — лише через `$lib/server/registration`** (плагін
   better-auth `registration`: `/registration/start`, `resend`, `verify`;
   клієнт — `registration` у `$lib/auth-client`, у застосунку —
@@ -457,7 +459,7 @@ Vercel: або спільне сховище, або гілка `serverless`.
   дозволяє перебором зібрати карту бази. 404 не каже нічого.
 - **Ніякого `JSON.stringify` у `{@html}`.** Для JSON-LD є
   `$lib/utils/json-ld` (`safeJsonLd`) — він екранує `<`, інакше ім'я
-  майстра з `</script>` стає stored XSS на публічній сторінці. Інших
+  з бази з `</script>` стає stored XSS на сторінці. Інших
   `{@html}` у проєкті бути не повинно.
 - **Масив із тіла запиту завжди має стелю** перед тим, як піти в
   `{ in: [...] }`. Без неї один запит перетворюється на IN-список
@@ -499,7 +501,7 @@ Vercel: або спільне сховище, або гілка `serverless`.
   «Налаштування → Безпека» з підтвердженням своєю поштою). На
   користувача посилаються замовлення, повідомлення й відгуки ДРУГОЇ
   сторони, тож рядок лишається як «Видалений акаунт» (`DELETED_NAME`):
-  стираються імʼя, пошта (службова `deleted-<id>@deleted.invalid`), handle,
+  стираються імʼя, пошта (службова `deleted-<id>@deleted.invalid`), username,
   телефон, фото, анкети, способи входу, сесії, сповіщення, коди; файли —
   уся тека `zunor/users/<id>/` у Cloudinary. Відкриті заявки скасовуються
   (з `cancelWaves`), пропозиції відкликаються, `masterProfile.isActive =
@@ -1076,7 +1078,7 @@ localStorage + атрибут на `<html>` (`data-accent`, `data-contrast`). С
 лишались би синіми при будь-якому акценті.
 
 **Темна тема — лише в кабінеті (`/dashboard/**`).** Лендинг, вхід і
-реєстрація, профілі майстрів, «Про нас» — завжди світлі, хоч би що
+реєстрація, «Про нас» — завжди світлі, хоч би що
 людина обрала в налаштуваннях. Тому клас `dark` на `<html>` ставить не
 mode-watcher (у нього порожній `darkClassNames`, він лише памʼятає
 вибір), а скрипт в `app.html` до першого кадру і ефект у кореневому
@@ -1421,7 +1423,7 @@ ESLint у проєкті не налаштований — не додавай `
   `POST /api/reports`, діалог `components/reports/report-dialog.svelte`
   (і тиха кнопка з ним — `report-button.svelte`). Де вона є: сторінка
   замовлення (під «Перейти в чат»), меню ⋮ чату, меню ⋮ заявки майстра,
-  профіль майстра `/@handle` (лише з акаунтом) і профіль клієнта.
+  профіль майстра (`dashboard/master/[id]`) і профіль клієнта.
 - **Причини — закритий набір** `$lib/reports/reasons.ts`, спільний для
   браузера й сервера, як реакції чату. Ключі читає CRM: додавати можна,
   перейменовувати — ні. «Інше» — лише з поясненням.
@@ -1639,8 +1641,10 @@ CRM писала в базу напряму й тому обходила пра�
   тільки через `svelte-hot-french-toast`, підключений в кореневому
   `+layout.svelte`. Не імпортувати з `$lib/stores/toast-store.svelte.ts` чи
   `$lib/components/toast/*` — це мертвий легасі-код.
-- Не додавати публічний `username`/сторінку для клієнта — навмисно є тільки
-  у майстра (клієнт — не «вітрина», див. розділ «Профілі» маніфесту).
+- Не додавати публічних сторінок профілю й нікнейма (`username`) — ні
+  майстру, ні клієнту. Профілі живуть лише в дашборді
+  (`dashboard/master/[id]`, `dashboard/client/[id]`): Zunor — не каталог,
+  майстра підбирає платформа (див. розділ «Профілі» маніфесту).
 - **Не заводити локальний форматер часу.** «щойно / 5 хв тому / учора» живе
   в `$lib/utils/time` (`formatRelative`, `formatFull`). Ця функція вже була
   скопійована в шість місць і копії розійшлись: доба назад показувалась то

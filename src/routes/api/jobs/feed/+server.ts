@@ -207,7 +207,6 @@ export const GET: RequestHandler = async ({ locals, url }) => {
         select: {
           id: true,
           name: true,
-          username: true,
           avatar: true,
           ...clientRatingSelect,
         },

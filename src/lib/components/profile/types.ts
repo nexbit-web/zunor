@@ -17,7 +17,6 @@ export interface ProfileReview {
 export interface FreelancerProfileData {
   id: string
   name: string
-  username?: string
   avatar?: string | null
   bio?: string | null
   phone?: string | null
@@ -50,7 +49,6 @@ export interface FreelancerProfileData {
 export interface ClientProfileData {
   id: string
   name: string
-  username?: string
   avatar?: string | null
   bio?: string | null
   phone?: string | null

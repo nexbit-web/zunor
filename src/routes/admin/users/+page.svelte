@@ -22,7 +22,7 @@
       name="q"
       value={data.q}
       icon={Search}
-      placeholder="Пошта, імʼя чи @handle"
+      placeholder="Пошта чи імʼя"
       aria-label="Пошук"
     />
   </div>

@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { prisma, resetPrisma } from '../helpers/prisma-mock'
 import { makeEvent, sessionUser, anonymous } from '../helpers/event'
-import { Prisma } from '../../generated/prisma/client'
 
 vi.mock('$lib/server/prisma', async () => ({
   prisma: (await import('../helpers/prisma-mock')).prisma,
@@ -171,55 +170,21 @@ describe('категорії', () => {
   })
 })
 
+// Username (нікнейм) більше не пишемо: публічної сторінки /@handle немає.
+// Старі збірки застосунку ще шлють його — поле мовчки ігнорується.
 describe('username', () => {
-  it('не рядок — 400 з полем username', async () => {
-    const res = await post(USER, { username: 42 })
-    expect(res.status).toBe(400)
-    expect((await res.json()).field).toBe('username')
-  })
-
-  it('поза форматом — 400', async () => {
-    for (const u of ['ab', 'a'.repeat(21), '1abc', 'a-b', 'a.b', 'ad/min']) {
-      expect((await post(USER, { username: u })).status).toBe(400)
-    }
-  })
-
-  it('зарезервоване імʼя — 400', async () => {
-    const res = await post(USER, { username: 'admin' })
-    expect(res.status).toBe(400)
-    expect((await res.json()).error).toContain('reserved')
-  })
-
-  it('обхід регістром не працює', async () => {
-    expect((await post(USER, { username: 'AdMiN' })).status).toBe(400)
-  })
-
-  it('нормалізується до нижнього регістру перед записом', async () => {
-    await post(USER, { username: '  MiHaLcAnN ' })
-    expect(prisma.user.update.mock.calls[0][0].data.username).toBe('mihalcann')
-  })
-
-  // Гонка: перевірка зайнятості й запис не атомарні, тож остаточне слово —
-  // за унікальним індексом. Головне, щоб це був зрозумілий 409, а не 500.
-  it('зайнятий username → 409, а не 500', async () => {
-    prisma.user.update.mockRejectedValue(
-      new Prisma.PrismaClientKnownRequestError('duplicate', {
-        code: 'P2002',
-        clientVersion: 'test',
-      }),
+  it('ігнорується: не пишеться й не валідується', async () => {
+    const res = await post(USER, { username: 42, name: 'Оля' })
+    expect(res.status).toBe(200)
+    expect(prisma.user.update.mock.calls[0][0].data).not.toHaveProperty(
+      'username',
     )
+  })
 
+  it('лише username — у базу нічого не йде', async () => {
     const res = await post(USER, { username: 'mihalcann' })
-    expect(res.status).toBe(409)
-    expect((await res.json()).field).toBe('username')
-  })
-
-  it('інша помилка бази не маскується під 409', async () => {
-    prisma.user.update.mockRejectedValue(new Error('connection lost'))
-
-    await expect(post(USER, { username: 'mihalcann' })).rejects.toThrow(
-      'connection lost',
-    )
+    expect(res.status).toBe(200)
+    expect(prisma.user.update).not.toHaveBeenCalled()
   })
 })
 

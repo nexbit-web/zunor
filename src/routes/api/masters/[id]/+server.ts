@@ -9,10 +9,9 @@ import type { RequestHandler } from './$types'
  * його з пропозиції чи замовлення (фото, перевірка, рейтинг, виконані,
  * послуги, «про себе», приклади робіт, відгуки).
  *
- * Дані — ті самі, що на публічній сторінці /@handle ($lib/server/master-page,
- * з Redis), тож нічого понад неї тут немає: ні телефону, ні пошти. Сторінка
- * публічна, але застосунок — лише з акаунтом. Не майстер (чи немає такого)
- * — 404.
+ * Дані — ті самі, що на сторінці сайту dashboard/master/[id]
+ * ($lib/server/master-page, з Redis): ні телефону, ні пошти. Лише з
+ * акаунтом. Не майстер (чи немає такого) — 404.
  *
  * Каталогу за цим немає (MANIFESTO): шляху «усі майстри» не існує — сюди
  * приходять лише з конкретної пропозиції чи замовлення.
@@ -29,7 +28,6 @@ export const GET: RequestHandler = async ({ params, locals }) => {
     profile: {
       id: page.id,
       name: page.name,
-      username: page.username,
       avatar: page.avatar,
       bio: page.bio,
       city: cities.find((c) => c.slug === page.city)?.name ?? page.city,

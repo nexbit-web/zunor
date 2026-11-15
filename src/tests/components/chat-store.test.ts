@@ -45,7 +45,6 @@ function preview(over: Partial<ChatPreview> = {}): ChatPreview {
     peer: {
       id: 'peer-1',
       name: 'Оля',
-      username: 'olya',
       avatar: null,
       isVerified: true,
     },

@@ -2,7 +2,7 @@ import { requireStaff } from '$lib/server/admin/guard'
 import { prisma } from '$lib/server/prisma'
 import type { PageServerLoad } from './$types'
 
-// Пошук людей: за поштою, імʼям чи @handle. Без запиту — останні
+// Пошук людей: за поштою чи імʼям. Без запиту — останні
 // зареєстровані. Стеля — 50 рядків: це пошук, а не вивантаження бази.
 export const load: PageServerLoad = async ({ locals, url }) => {
   await requireStaff(locals, 'MANAGER')
@@ -18,7 +18,6 @@ export const load: PageServerLoad = async ({ locals, url }) => {
             OR: [
               { email: { contains: q, mode: 'insensitive' } },
               { name: { contains: q, mode: 'insensitive' } },
-              { username: { contains: q.replace(/^@/, ''), mode: 'insensitive' } },
             ],
           }
         : {}),

@@ -67,7 +67,6 @@ export const load: PageServerLoad = async ({
     select: {
       id: true,
       name: true,
-      username: true,
       avatar: true,
       bio: true,
       phone: true,
@@ -118,7 +117,6 @@ export const load: PageServerLoad = async ({
       user: {
         id: user.id,
         name: user.name ?? '',
-        username: user.username ?? undefined,
         avatar: user.avatar ?? undefined,
         bio: user.bio ?? undefined,
         phone: user.phone ?? undefined,
@@ -166,7 +164,6 @@ export const load: PageServerLoad = async ({
     user: {
       id: user.id,
       name: user.name ?? '',
-      username: user.username ?? undefined,
       avatar: user.avatar ?? undefined,
       bio: user.bio ?? undefined,
       city: cityName,

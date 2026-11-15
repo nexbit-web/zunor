@@ -33,7 +33,6 @@
     [
       ['Пошта', `${u.email}${u.emailVerified ? '' : ' (не підтверджена)'}`],
       ['Роль', roleLabel],
-      ['Профіль', u.username ? `@${u.username}` : null],
       ['Телефон', u.phone],
       ['Місто', u.city],
       ['Зареєструвався', formatFull(u.createdAt)],
@@ -80,11 +79,6 @@
       {/if}
       {#if u.verification}
         <a href="/admin/moderation/{u.id}" class="text-primary hover:underline">Анкета майстра</a>
-      {/if}
-      {#if u.username && !u.banned}
-        <a href="/@{u.username}" target="_blank" rel="noopener" class="text-primary hover:underline">
-          Публічна сторінка
-        </a>
       {/if}
     </p>
   </div>

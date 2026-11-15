@@ -7,7 +7,7 @@ import type {
   ClientProfileData,
 } from '$lib/components/profile/types'
 
-// Дві публічні сторінки профілю. Тут перевіряються дві обіцянки з
+// Дві сторінки профілю (майстра й клієнта). Тут перевіряються дві обіцянки з
 // маніфесту, і обидві коштують дорого, якщо їх порушити:
 //
 //   1. КОНТАКТИ ЗАКРИТІ ДО УГОДИ. Телефон є в типі профілю (`phone?:`), і
@@ -25,7 +25,6 @@ function master(
   return {
     id: 'master-1',
     name: 'Оля Клінер',
-    username: 'olya',
     avatar: null,
     bio: 'Прибираю квартири й офіси',
     phone: null,
@@ -48,7 +47,6 @@ function client(over: Partial<ClientProfileData> = {}): ClientProfileData {
   return {
     id: 'client-1',
     name: 'Ігор',
-    username: undefined,
     avatar: null,
     bio: null,
     phone: null,
@@ -96,8 +94,8 @@ describe('телефон не показується нікому', () => {
     expect(container.textContent).not.toContain(PHONE)
   })
 
-  // Власнику теж: сторінка публічна, і показувати на ній телефон — значить
-  // показувати його всім, хто відкриє посилання.
+  // Власнику теж: цю саму сторінку бачать інші, і показувати на ній
+  // телефон — значить показувати його всім, хто її відкриє.
   it('власнику свого профілю теж не показується', () => {
     const master = masterView({ phone: PHONE }, true)
     const cl = clientView({ phone: PHONE }, true)

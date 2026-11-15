@@ -30,7 +30,6 @@ export async function loadChatsForUser(userId: string): Promise<ChatPreview[]> {
                 select: {
                   id: true,
                   name: true,
-                  username: true,
                   avatar: true,
                   masterProfile: {
                     select: { verificationStatus: true },
@@ -80,7 +79,6 @@ export async function loadChatsForUser(userId: string): Promise<ChatPreview[]> {
         peer: {
           id: peerUser.id,
           name: peerUser.name ?? '',
-          username: peerUser.username,
           avatar: peerUser.avatar,
           isVerified: peerUser.masterProfile?.verificationStatus === 'VERIFIED',
         },

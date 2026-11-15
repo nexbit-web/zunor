@@ -77,7 +77,6 @@ export async function loadMasterProfileForm(userId: string) {
       select: {
         name: true,
         email: true,
-        username: true,
         phone: true,
         avatar: true,
         avatarPublicId: true,
