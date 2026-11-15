@@ -4,12 +4,31 @@
 // slug — той самий, що в БД (Category.slug).
 
 export interface CategoryMeta {
-  banner: string // шлях до банера (з /)
+  /** Шлях до банера (з /) — запасний формат, його читають усі браузери. */
+  banner: string
+  /**
+   * Той самий банер в AVIF — удвічі легший за WebP за тієї ж якості.
+   * Браузер бере його, якщо вміє (Safari — з iOS 16.4), інакше `banner`.
+   * У застосунку — лише WebP (Metro AVIF не бере, старі Android можуть не
+   * показати).
+   */
+  bannerAvif?: string
+}
+
+/** Банер для сторінки: `avif` — у <source>, `src` — у <img>. */
+export interface Banner {
+  src: string
+  avif: string | null
 }
 
 export const CATEGORY_META: Record<string, CategoryMeta> = {
   prybyrannya: {
-    banner: '/banners/cleaning.webp',
+    // 1800×520 (≈3,5 : 1): ілюстрація «прибирання у затишній вітальні»,
+    // сині підведені під фірмовий #1f6feb. Важливе — по центру: краї
+    // обрізаються (телефон — з боків, вузьке вікно — згори й знизу), лівий
+    // нижній кут закриває аватар. Копія — mobile/assets/images/banners.
+    banner: '/banners/cleaning-living-room.webp',
+    bannerAvif: '/banners/cleaning-living-room.avif',
   },
 }
 
@@ -17,14 +36,14 @@ export const CATEGORY_META: Record<string, CategoryMeta> = {
 export const DEFAULT_BANNER = '/banners/web-development.gif'
 
 /**
- * Повертає шлях до банера для категорії.
- * Якщо у мастера кілька категорій — беремо першу.
+ * Банер для категорії.
+ * Якщо у мастера кілька категорій — беремо першу, що має банер.
  * Якщо категорія невідома — дефолтний банер.
  */
-export function getBannerForCategories(categories: string[]): string {
+export function getBannerForCategories(categories: string[]): Banner {
   for (const slug of categories) {
     const meta = CATEGORY_META[slug]
-    if (meta) return meta.banner
+    if (meta) return { src: meta.banner, avif: meta.bannerAvif ?? null }
   }
-  return DEFAULT_BANNER
+  return { src: DEFAULT_BANNER, avif: null }
 }
