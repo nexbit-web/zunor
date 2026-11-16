@@ -35,6 +35,14 @@ const { GET, POST } =
 
 const USER = 'user-1'
 
+// Вкладення — лише файл із теки чату ЦІЄЇ людини в НАШІЙ хмарі (імʼя хмари
+// — із заглушки $env), рівно за адресою завантаження.
+const CLOUD = 'https://res.cloudinary.com/test-cloud'
+const photoId = `zunor/chat/${USER}/photo-1`
+const photoUrl = `${CLOUD}/image/upload/v1/${photoId}.jpg`
+const fileId = `zunor/chat/${USER}/doc-1.pdf`
+const fileUrl = `${CLOUD}/raw/upload/v1/${fileId}`
+
 function messageRow(patch: Record<string, unknown> = {}) {
   return {
     id: 'msg-1',
@@ -208,13 +216,75 @@ describe('вкладення', () => {
       'http://res.cloudinary.com/x.jpg', // http замість https
       'https://res.cloudinary.com.evil.com/x.jpg', // домен-двійник
       'javascript:alert(1)',
+      // Сам префікс res.cloudinary.com — ще не «наше»:
+      'https://res.cloudinary.com/ok.jpg',
+      // чужий акаунт Cloudinary зі «своїм» publicId у шляху — файл, який
+      // відправник підмінить уже після надсилання;
+      `https://res.cloudinary.com/attacker-cloud/image/upload/v1/${photoId}.jpg`,
+      // fetch — чужа адреса крізь нашу хмару;
+      `${CLOUD}/image/fetch/https://evil.com/${photoId}.jpg`,
+      // трансформація з накладанням чужої картинки.
+      `${CLOUD}/image/upload/l_fetch:aHR0cHM6Ly9ldmlsLmNvbQ/v1/${photoId}.jpg`,
     ]) {
       const res = await failure(() =>
-        POST(postEvent(USER, { type: 'PHOTO', attachment: { url } })),
+        POST(
+          postEvent(USER, {
+            type: 'PHOTO',
+            attachment: { url, publicId: photoId },
+          }),
+        ),
       )
       expect(res.status).toBe(400)
     }
     expect(prisma.$transaction).not.toHaveBeenCalled()
+  })
+
+  // publicId — не прикраса: файл мусить лежати в теці чату ЦІЄЇ людини.
+  it('чужа тека або відсутній publicId — 400', async () => {
+    const foreignId = 'zunor/chat/other-user/photo-1'
+    for (const attachment of [
+      { url: photoUrl },
+      { url: `${CLOUD}/image/upload/v1/${foreignId}.jpg`, publicId: foreignId },
+      // фото заявки іншої людини — теж не вкладення цього чату
+      {
+        url: `${CLOUD}/image/upload/v1/zunor/users/other-user/jobs/a.jpg`,
+        publicId: 'zunor/users/other-user/jobs/a',
+      },
+      // тека своя, а шлях веде в чужу
+      {
+        url: `${CLOUD}/image/upload/v1/zunor/chat/${USER}/../other-user/x.jpg`,
+        publicId: `zunor/chat/${USER}/../other-user/x`,
+      },
+    ]) {
+      const res = await failure(() =>
+        POST(postEvent(USER, { type: 'PHOTO', attachment })),
+      )
+      expect(res.status).toBe(400)
+    }
+    expect(prisma.$transaction).not.toHaveBeenCalled()
+  })
+
+  // «Фото» — лише картинка: інакше під виглядом фото їхав би довільний файл.
+  it('PHOTO з файлом не-картинкою — 400, FILE з ним же — проходить', async () => {
+    const res = await failure(() =>
+      POST(
+        postEvent(USER, {
+          type: 'PHOTO',
+          attachment: { url: fileUrl, publicId: fileId },
+        }),
+      ),
+    )
+    expect(res.status).toBe(400)
+
+    await POST(
+      postEvent(USER, {
+        type: 'FILE',
+        attachment: { url: fileUrl, publicId: fileId },
+      }),
+    )
+    const data = prisma.message.create.mock.calls[0][0].data
+    expect(data.attachmentUrl).toBe(fileUrl)
+    expect(data.attachmentPublicId).toBe(fileId)
   })
 
   it('PHOTO без вкладення — 400', async () => {
@@ -229,7 +299,8 @@ describe('вкладення', () => {
       postEvent(USER, {
         type: 'PHOTO',
         attachment: {
-          url: 'https://res.cloudinary.com/ok.jpg',
+          url: photoUrl,
+          publicId: photoId,
           size: 999 * 1024 * 1024,
         },
       }),
@@ -245,10 +316,10 @@ describe('вкладення', () => {
       postEvent(USER, {
         type: 'FILE',
         attachment: {
-          url: 'https://res.cloudinary.com/ok.pdf',
+          url: fileUrl,
           name: 'я'.repeat(500),
           mimeType: 'x'.repeat(500),
-          publicId: 'p'.repeat(500),
+          publicId: fileId,
         },
       }),
     )
@@ -256,7 +327,23 @@ describe('вкладення', () => {
     const data = prisma.message.create.mock.calls[0][0].data
     expect(data.attachmentName.length).toBe(255)
     expect(data.attachmentMimeType.length).toBe(120)
-    expect(data.attachmentPublicId.length).toBe(300)
+  })
+
+  // Довгий publicId не обрізається до «схожого» — він просто не наш.
+  it('publicId понад межу — 400', async () => {
+    const longId = `zunor/chat/${USER}/${'p'.repeat(500)}`
+    const res = await failure(() =>
+      POST(
+        postEvent(USER, {
+          type: 'FILE',
+          attachment: {
+            url: `${CLOUD}/raw/upload/v1/${longId}`,
+            publicId: longId,
+          },
+        }),
+      ),
+    )
+    expect(res.status).toBe(400)
   })
 })
 
@@ -382,7 +469,7 @@ describe('картка посилання', () => {
       postEvent(USER, {
         type: 'PHOTO',
         text: TEXT,
-        attachment: { url: 'https://res.cloudinary.com/demo/x.jpg' },
+        attachment: { url: photoUrl, publicId: photoId },
       }),
     )
     await settle()

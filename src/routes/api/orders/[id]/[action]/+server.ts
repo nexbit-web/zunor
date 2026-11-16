@@ -79,6 +79,20 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
         updatedAt: now,
       }
 
+      // Замок. canTransition вище читав статус ДО транзакції: два запити
+      // одночасно обидва бачили, наприклад, IN_PROGRESS і обидва
+      // «завершували» замовлення — лічильник completedOrders майстра ріс
+      // двічі (так накручувалась статистика), а «скасувати» й «завершити»
+      // могли пройти разом. Умовний запис пускає перехід рівно з того
+      // статусу, який ми перевірили: другий запит отримує 0 рядків.
+      const moved = await tx.order.updateMany({
+        where: { id: order.id, status: order.status },
+        data: { status: newStatus, updatedAt: now },
+      })
+      if (moved.count !== 1) {
+        throw error(409, 'Статус замовлення щойно змінився — оновіть сторінку')
+      }
+
       switch (transition) {
         case 'START': {
           data.startedAt = now

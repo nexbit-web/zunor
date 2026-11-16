@@ -1,16 +1,21 @@
-// Фото заявки при редагуванні: які пари «посилання + publicId» можна
-// записати в базу.
+// Фото заявки: які пари «посилання + publicId» можна записати в базу —
+// і при створенні (POST /api/jobs), і при редагуванні (PATCH).
 //
-// Правило — як для аватара й портфоліо (api/user/media): посилання лише
-// з НАШОЇ хмари Cloudinary і лише на файл із теки цього користувача. Без
-// перевірки хмари підходив би чужий акаунт Cloudinary з нашим publicId у
-// шляху — і фото помешкання можна було б підмінити вже після публікації.
-// Фото, що вже були в заявці, лишаються як є: вони пройшли перевірку,
-// коли їх додавали.
+// Правило — як для аватара й портфоліо, одне на всіх: `$lib/server/own-media`.
+// Посилання лише з НАШОЇ хмари Cloudinary і лише на файл із теки заявок
+// цього користувача. Без перевірки хмари підходив би чужий акаунт Cloudinary
+// з нашим publicId у шляху — і фото помешкання можна було б підмінити вже
+// після публікації. Фото, що вже були в заявці, лишаються як є: вони
+// пройшли перевірку, коли їх додавали.
 
-import { env } from '$env/dynamic/private'
+import {
+  acceptedPhotos,
+  isOwnUpload,
+  jobsFolder,
+  removedOwnIds,
+} from './own-media'
 
-/** Стеля, як у POST /api/jobs. */
+/** Стеля на кількість фото заявки. */
 export const MAX_JOB_PHOTOS = 10
 
 export interface JobPhotos {
@@ -18,24 +23,17 @@ export interface JobPhotos {
   attachmentsPublicIds: string[]
 }
 
+/** Заявка без фото — «існуючих» пар немає (створення). */
+export const NO_JOB_PHOTOS: JobPhotos = { attachments: [], attachmentsPublicIds: [] }
+
 /** Свіжо завантажене фото заявки цього користувача з нашої хмари. */
 export function isOwnJobPhoto(url: string, publicId: string, userId: string): boolean {
-  if (!publicId.startsWith(`zunor/users/${userId}/jobs/`)) return false
-  let parsed: URL
-  try {
-    parsed = new URL(url)
-  } catch {
-    return false
-  }
-  if (parsed.protocol !== 'https:' || parsed.hostname !== 'res.cloudinary.com') return false
-  const [, cloudName] = parsed.pathname.split('/')
-  if (!cloudName || cloudName !== env.CLOUDINARY_CLOUD_NAME) return false
-  return parsed.pathname.includes(publicId)
+  return isOwnUpload(url, publicId, jobsFolder(userId), { image: true })
 }
 
 /**
  * Фото з тіла запиту, що пройшли перевірку, у порядку з форми. Пара, якої
- * немає в заявці й яка не своя, мовчки відкидається — як і в POST.
+ * немає в заявці й яка не своя, мовчки відкидається.
  */
 export function acceptedJobPhotos(
   rawUrls: unknown,
@@ -43,30 +41,17 @@ export function acceptedJobPhotos(
   userId: string,
   existing: JobPhotos,
 ): JobPhotos {
-  const urls = Array.isArray(rawUrls) ? rawUrls.slice(0, MAX_JOB_PHOTOS) : []
-  const ids = Array.isArray(rawIds) ? rawIds.slice(0, MAX_JOB_PHOTOS) : []
-
-  const out: JobPhotos = { attachments: [], attachmentsPublicIds: [] }
-  for (let i = 0; i < Math.min(urls.length, ids.length); i++) {
-    const url = urls[i]
-    const id = ids[i]
-    if (typeof url !== 'string' || typeof id !== 'string') continue
-    if (out.attachmentsPublicIds.includes(id)) continue
-
-    const kept = existing.attachmentsPublicIds.indexOf(id)
-    const wasThere = kept !== -1 && existing.attachments[kept] === url
-    if (!wasThere && !isOwnJobPhoto(url, id, userId)) continue
-
-    out.attachments.push(url)
-    out.attachmentsPublicIds.push(id)
-  }
-  return out
+  const photos = acceptedPhotos(
+    rawUrls,
+    rawIds,
+    jobsFolder(userId),
+    { urls: existing.attachments, publicIds: existing.attachmentsPublicIds },
+    MAX_JOB_PHOTOS,
+  )
+  return { attachments: photos.urls, attachmentsPublicIds: photos.publicIds }
 }
 
 /** publicId, які були в заявці й зникли з неї, — лише з теки власника. */
 export function removedJobPhotos(before: JobPhotos, after: JobPhotos, userId: string): string[] {
-  return before.attachmentsPublicIds.filter(
-    (id) =>
-      !after.attachmentsPublicIds.includes(id) && id.startsWith(`zunor/users/${userId}/`),
-  )
+  return removedOwnIds(before.attachmentsPublicIds, after.attachmentsPublicIds, userId)
 }

@@ -54,6 +54,8 @@ beforeEach(() => {
   resetPrisma()
   resetInfra()
   prisma.order.findUnique.mockResolvedValue(order())
+  // Перехід «займає» замовлення умовним записом — рядок знайдено.
+  prisma.order.updateMany.mockResolvedValue({ count: 1 })
   prisma.order.update.mockResolvedValue({
     id: 'order-1',
     status: 'IN_PROGRESS',
@@ -132,6 +134,45 @@ describe('права на переходи', () => {
         (await failure(() => POST(actionEvent(MASTER, action)))).status,
       ).toBe(400)
     }
+  })
+})
+
+// Гонка: перевірка статусу читає базу ДО транзакції. Без умовного запису
+// два запити одночасно обидва бачили «можна» — і лічильник виконаних
+// замовлень майстра ріс двічі (накрутка статистики), а «скасувати» й
+// «завершити» проходили разом.
+describe('одночасні запити', () => {
+  it('перехід пишеться умовно — лише з того статусу, який перевірили', async () => {
+    await POST(actionEvent(MASTER, 'start'))
+
+    expect(prisma.order.updateMany).toHaveBeenCalledWith({
+      where: { id: 'order-1', status: 'CREATED' },
+      data: expect.objectContaining({ status: 'IN_PROGRESS' }),
+    })
+  })
+
+  it('статус уже змінив інший запит — 409, лічильники не чіпаємо', async () => {
+    prisma.order.findUnique.mockResolvedValue(order({ status: 'IN_PROGRESS' }))
+    prisma.order.updateMany.mockResolvedValue({ count: 0 })
+
+    const res = await failure(() => POST(actionEvent(MASTER, 'complete')))
+
+    expect(res.status).toBe(409)
+    expect(prisma.masterProfile.update).not.toHaveBeenCalled()
+    expect(prisma.order.update).not.toHaveBeenCalled()
+    expect(prisma.orderEvent.create).not.toHaveBeenCalled()
+    expect(Notify.orderCompleted).not.toHaveBeenCalled()
+  })
+
+  it('друга відмова майстра не перевідкриває заявку вдруге', async () => {
+    prisma.order.updateMany.mockResolvedValue({ count: 0 })
+
+    const res = await failure(() => POST(actionEvent(MASTER, 'cancel')))
+
+    expect(res.status).toBe(409)
+    expect(prisma.job.update).not.toHaveBeenCalled()
+    expect(prisma.proposal.deleteMany).not.toHaveBeenCalled()
+    expect(startWaves).not.toHaveBeenCalled()
   })
 })
 

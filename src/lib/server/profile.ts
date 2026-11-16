@@ -9,6 +9,13 @@ import { error } from '@sveltejs/kit'
 import { prisma } from './prisma'
 import { getCategories, getCities, getDistricts } from './reference'
 import { cloudinary } from './cloudinary'
+import {
+  acceptedAvatar,
+  acceptedPhotos,
+  isOwnPublicId,
+  removedOwnIds,
+  userFolder,
+} from './own-media'
 import { safeTrigger, channels, events } from './pusher'
 import { cityDistricts, findDistrict, type District } from '$lib/geo/districts'
 import { isTravelRadius } from '$lib/geo/travel'
@@ -30,14 +37,11 @@ const DESC_MAX = 2000
 const CATEGORIES_MAX = 5
 const PORTFOLIO_MAX = 6
 
-/** Аватар приймаємо лише з наших джерел — інакше це вектор для трекінг-пікселів. */
-function sanitizeAvatar(raw: unknown): string | null {
-  if (typeof raw !== 'string' || !raw) return null
-  const ok =
-    raw.startsWith('https://res.cloudinary.com/') ||
-    raw.startsWith('https://lh3.googleusercontent.com/')
-  return ok ? raw : null
-}
+// Фото профілю й портфоліо приймаємо лише через $lib/server/own-media:
+// пара «посилання + publicId» з теки цієї людини в НАШІЙ хмарі (або фото
+// з Google-акаунта). Доки вистачало префікса res.cloudinary.com, а publicId
+// писався з тіла як є, чужий id можна було покласти собі в профіль — і
+// наступне збереження стирало чужий файл із хмари.
 
 const asString = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
 
@@ -171,7 +175,7 @@ export async function saveClientProfile(
 
   const me = await prisma.user.findUnique({
     where: { id: userId },
-    select: { role: true, avatarPublicId: true },
+    select: { role: true, avatar: true, avatarPublicId: true },
   })
   if (!me) throw error(401, 'Unauthorized')
 
@@ -204,12 +208,20 @@ export async function saveClientProfile(
   const bio = asString(input.bio)
   if (bio.length > BIO_MAX) throw error(400, 'Опис занадто довгий')
 
-  const avatar = sanitizeAvatar(input.avatar)
-  const avatarPublicId =
-    typeof input.avatarPublicId === 'string' ? input.avatarPublicId : null
+  const { avatar, avatarPublicId } = acceptedAvatar(
+    input.avatar,
+    input.avatarPublicId,
+    userId,
+    { avatar: me.avatar, avatarPublicId: me.avatarPublicId },
+  )
 
-  // Старе фото в Cloudinary — прибираємо, не чекаючи результату.
-  if (me.avatarPublicId && me.avatarPublicId !== avatarPublicId) {
+  // Старе фото в Cloudinary — прибираємо, не чекаючи результату. Лише зі
+  // своєї теки: id у базі міг лишитись від часів, коли його не перевіряли.
+  if (
+    me.avatarPublicId &&
+    me.avatarPublicId !== avatarPublicId &&
+    isOwnPublicId(me.avatarPublicId, userId)
+  ) {
     cloudinary.uploader
       .destroy(me.avatarPublicId, { resource_type: 'image' })
       .catch((err) => console.error('[profile] cleanup avatar', err))
@@ -224,7 +236,7 @@ export async function saveClientProfile(
       district,
       bio,
       avatar,
-      avatarPublicId: avatar ? avatarPublicId : null,
+      avatarPublicId,
       role: 'CLIENT',
       // Виставляється ТІЛЬКИ тут, після повної валідації.
       onboarded: true,
@@ -246,8 +258,11 @@ export async function saveMasterProfile(
     where: { id: userId },
     select: {
       role: true,
+      avatar: true,
       avatarPublicId: true,
-      masterProfile: { select: { portfolioImagesPublicIds: true } },
+      masterProfile: {
+        select: { portfolioImages: true, portfolioImagesPublicIds: true },
+      },
     },
   })
   if (!me) throw error(401, 'Unauthorized')
@@ -330,21 +345,28 @@ export async function saveMasterProfile(
   // з рядків; unknown у типі лише тому, що форма умінь — справа категорії.
   const metadata = { skills } as unknown as Prisma.InputJsonObject
 
-  const avatar = sanitizeAvatar(input.avatar)
-  const avatarPublicId =
-    typeof input.avatarPublicId === 'string' ? input.avatarPublicId : null
+  const { avatar, avatarPublicId } = acceptedAvatar(
+    input.avatar,
+    input.avatarPublicId,
+    userId,
+    { avatar: me.avatar, avatarPublicId: me.avatarPublicId },
+  )
 
-  const portfolioImages = Array.isArray(input.portfolioImages)
-    ? (input.portfolioImages as unknown[])
-        .filter((s): s is string => typeof s === 'string')
-        .filter((s) => s.startsWith('https://res.cloudinary.com/'))
-        .slice(0, PORTFOLIO_MAX)
-    : []
-  const portfolioImagesPublicIds = Array.isArray(input.portfolioImagesPublicIds)
-    ? (input.portfolioImagesPublicIds as unknown[])
-        .filter((s): s is string => typeof s === 'string')
-        .slice(0, PORTFOLIO_MAX)
-    : []
+  // Приклади робіт — парами «посилання + publicId»: те, що вже лежить в
+  // анкеті, лишається; нове — лише своє завантаження з нашої хмари.
+  const oldPortfolio = {
+    urls: me.masterProfile?.portfolioImages ?? [],
+    publicIds: me.masterProfile?.portfolioImagesPublicIds ?? [],
+  }
+  const portfolio = acceptedPhotos(
+    input.portfolioImages,
+    input.portfolioImagesPublicIds,
+    userFolder(userId),
+    oldPortfolio,
+    PORTFOLIO_MAX,
+  )
+  const portfolioImages = portfolio.urls
+  const portfolioImagesPublicIds = portfolio.publicIds
 
   // ─── Перевірка існування довідників ───
   const [cityExists, categoriesValid] = await Promise.all([
@@ -359,19 +381,23 @@ export async function saveMasterProfile(
   }
 
   // ─── Прибирання Cloudinary (fire-and-forget) ───
+  // Стираємо лише файли з теки цієї людини (own-media): чужий id у старому
+  // рядку бази не має ставати способом стерти чужий файл.
   if (
     me.avatarPublicId &&
     avatarPublicId &&
-    me.avatarPublicId !== avatarPublicId
+    me.avatarPublicId !== avatarPublicId &&
+    isOwnPublicId(me.avatarPublicId, userId)
   ) {
     cloudinary.uploader
       .destroy(me.avatarPublicId, { resource_type: 'image' })
       .catch((err) => console.error('[profile] cleanup avatar', err))
   }
 
-  const oldPortfolio = me.masterProfile?.portfolioImagesPublicIds ?? []
-  for (const id of oldPortfolio.filter(
-    (i) => !portfolioImagesPublicIds.includes(i),
+  for (const id of removedOwnIds(
+    oldPortfolio.publicIds,
+    portfolioImagesPublicIds,
+    userId,
   )) {
     cloudinary.uploader
       .destroy(id, { resource_type: 'image' })
@@ -389,7 +415,7 @@ export async function saveMasterProfile(
         city: citySlug,
         district,
         avatar,
-        avatarPublicId: avatar ? avatarPublicId : null,
+        avatarPublicId,
         bio: description,
         onboarded: true,
       },

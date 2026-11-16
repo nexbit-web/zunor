@@ -3,6 +3,7 @@ import QRCode from 'qrcode'
 import { prisma } from '$lib/server/prisma'
 import { limit } from '$lib/server/rate-limit'
 import { requireStaffNoStepUp } from '$lib/server/admin/guard'
+import { isFreshSession } from '$lib/server/guards'
 import { forgetVerified, isVerified, markVerified } from '$lib/server/admin/step-up'
 import {
   decryptSecret,
@@ -26,6 +27,17 @@ function target(raw: string | null): string {
   return path === '/admin' || path.startsWith('/admin/') ? path : '/admin'
 }
 
+/**
+ * Перше налаштування другого фактора — лише одразу після входу. Доки QR
+ * показувався будь-якій живій сесії співробітника, чужа сесія (вкрадена
+ * cookie, не закритий чужий компʼютер) до того, як людина сама налаштувала
+ * застосунок, привʼязувала адмінку до ЧУЖОГО телефона. Свіжий вхід означає,
+ * що людина щойно довела пароль або Google-акаунт.
+ * Межа — FRESH_SESSION_MS ($lib/server/guards).
+ */
+const RELOGIN_TEXT =
+  'Другий фактор налаштовується одразу після входу. Вийдіть з акаунта й увійдіть ще раз.'
+
 export const load: PageServerLoad = async ({ locals, url }) => {
   const staff = await requireStaffNoStepUp(locals)
   if (await isVerified(staff.sessionId)) redirect(303, target(url.searchParams.get('redirectTo')))
@@ -35,6 +47,9 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     select: { secret: true, enabledAt: true },
   })
   if (row?.enabledAt) return { mode: 'verify' as const }
+
+  // Секрет і QR — лише свіжій сесії.
+  if (!isFreshSession(locals)) return { mode: 'relogin' as const }
 
   // Налаштування ще не завершене — той самий секрет, поки людина не
   // введе перший код (інакше кожне оновлення сторінки ламало б уже
@@ -79,17 +94,41 @@ export const actions: Actions = {
     const row = await prisma.staffTwoFactor.findUnique({ where: { userId: staff.id } })
     if (!row) return fail(400, { error: 'Оновіть сторінку й спробуйте ще раз.' })
 
+    const firstTime = !row.enabledAt
+    // Перший код завершує налаштування — теж лише зі свіжою сесією.
+    if (firstTime && !isFreshSession(locals)) {
+      return fail(403, { error: RELOGIN_TEXT })
+    }
+
     const step = verifyCode(decryptSecret(row.secret), code, row.lastStep)
     if (step === null) return fail(400, { error: 'Невірний код' })
 
-    const firstTime = !row.enabledAt
-    await prisma.staffTwoFactor.update({
-      where: { userId: staff.id },
+    // Умовний запис: код одноразовий. Два запити з тим самим кодом
+    // одночасно обидва проходили перевірку lastStep вище (читання й запис
+    // були окремо) — підглянутий код спрацьовував удруге. Тепер крок
+    // «займає» рівно один запит.
+    const claimed = await prisma.staffTwoFactor.updateMany({
+      where: {
+        userId: staff.id,
+        OR: [{ lastStep: null }, { lastStep: { lt: step } }],
+      },
       data: { lastStep: step, enabledAt: row.enabledAt ?? new Date() },
     })
+    if (claimed.count !== 1) return fail(400, { error: 'Невірний код' })
+
     await markVerified(staff.sessionId)
 
     await logAdmin(event, staff.id, firstTime ? 'auth.2fa_setup' : 'auth.2fa')
+
+    // Нова привʼязка автентифікатора — подія, про яку мають знати
+    // адміністратори: якщо це зробив не сам співробітник, його другий
+    // фактор скидають у «Співробітники».
+    if (firstTime) {
+      background(
+        alertAdminsAboutSetup(staff.id, locals.user?.email ?? ''),
+        'admin 2fa setup alert',
+      )
+    }
 
     // Вхід під твоїм акаунтом, який робив не ти, — видно одразу.
     let ip = ''
@@ -116,4 +155,22 @@ export const actions: Actions = {
     await forgetVerified(staff.sessionId)
     redirect(303, '/admin/2fa')
   },
+}
+
+/** Повідомлення в Telegram іншим адміністраторам (у кого він підключений). */
+async function alertAdminsAboutSetup(staffId: string, email: string): Promise<void> {
+  const admins = await prisma.user.findMany({
+    where: { role: 'ADMIN', banned: false, id: { not: staffId } },
+    select: { id: true },
+    take: 20,
+  })
+  await Promise.all(
+    admins.map((a) =>
+      sendTelegramText(
+        a.id,
+        `Співробітник${email ? ` ${email}` : ''} налаштував другий фактор адмінки Zunor. ` +
+          'Якщо ви цього не очікували — скиньте його другий фактор у розділі «Співробітники».',
+      ),
+    ),
+  )
 }

@@ -226,35 +226,79 @@ describe('недовірені тексти', () => {
 describe('вкладення', () => {
   // Чуже посилання у стрічці майстрів — це і фішинг, і витік IP майстра
   // на сторонній сервер.
-  it('приймаються лише наші Cloudinary-посилання', async () => {
+  // Фото заявки — пара «посилання + publicId» з теки заявок ЦІЄЇ людини в
+  // НАШІЙ хмарі (те саме правило, що при редагуванні). Сам префікс
+  // res.cloudinary.com пускав чужий акаунт Cloudinary: фото помешкання
+  // можна було підмінити вже в стрічці майстрів.
+  const UPLOAD = 'https://res.cloudinary.com/test-cloud/image/upload/v1'
+  const idOf = (user: string, name: string) => `zunor/users/${user}/jobs/${name}`
+  const urlOf = (publicId: string) => `${UPLOAD}/${publicId}.jpg`
+
+  it('приймаються лише свої завантаження з нашої хмари', async () => {
+    const user = freshUser()
+    const own = idOf(user, 'a')
+    const foreign = idOf('other-user', 'b')
+
     await POST(
-      createEvent(freshUser(), {
+      createEvent(user, {
         metadata: validMetadata,
         attachments: [
-          'https://res.cloudinary.com/ok/1.jpg',
+          urlOf(own),
           'https://evil.com/tracker.gif',
           'http://res.cloudinary.com/insecure.jpg',
           'javascript:alert(1)',
           42,
           null,
+          // «наш» префікс, але не наше завантаження
+          'https://res.cloudinary.com/ok/1.jpg',
+          // чужий акаунт Cloudinary зі своїм publicId у шляху
+          `https://res.cloudinary.com/attacker-cloud/image/upload/v1/${idOf(user, 'c')}.jpg`,
+          // чужа тека
+          urlOf(foreign),
+        ],
+        attachmentsPublicIds: [
+          own,
+          'x',
+          'x2',
+          'x3',
+          'x4',
+          'x5',
+          'x6',
+          idOf(user, 'c'),
+          foreign,
         ],
       }),
     )
 
-    expect(prisma.job.create.mock.calls[0][0].data.attachments).toEqual([
-      'https://res.cloudinary.com/ok/1.jpg',
-    ])
+    const data = prisma.job.create.mock.calls[0][0].data
+    expect(data.attachments).toEqual([urlOf(own)])
+    expect(data.attachmentsPublicIds).toEqual([own])
+  })
+
+  // publicId із заявки потім іде в стирання файлів — чужий сюди не
+  // потрапляє навіть «для краси».
+  it('посилання без пари publicId не зберігається', async () => {
+    const user = freshUser()
+    await POST(
+      createEvent(user, {
+        metadata: validMetadata,
+        attachments: [urlOf(idOf(user, 'a'))],
+      }),
+    )
+
+    const data = prisma.job.create.mock.calls[0][0].data
+    expect(data.attachments).toEqual([])
+    expect(data.attachmentsPublicIds).toEqual([])
   })
 
   it('масив вкладень має стелю в 10', async () => {
+    const user = freshUser()
+    const ids = Array.from({ length: 100 }, (_, i) => idOf(user, `p${i}`))
     await POST(
-      createEvent(freshUser(), {
+      createEvent(user, {
         metadata: validMetadata,
-        attachments: Array.from(
-          { length: 100 },
-          (_, i) => `https://res.cloudinary.com/x/${i}.jpg`,
-        ),
-        attachmentsPublicIds: Array.from({ length: 100 }, (_, i) => `id-${i}`),
+        attachments: ids.map(urlOf),
+        attachmentsPublicIds: ids,
       }),
     )
 

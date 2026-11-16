@@ -169,6 +169,8 @@
     fd.append('timestamp', String(sig.timestamp))
     fd.append('signature', sig.signature)
     fd.append('folder', sig.folder)
+    // Перелік форматів — частина підпису: надсилаємо дослівно.
+    if (sig.allowedFormats) fd.append('allowed_formats', sig.allowedFormats)
 
     const upRes = await fetch(
       `https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`,

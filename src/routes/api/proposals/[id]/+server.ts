@@ -162,13 +162,19 @@ export const DELETE: RequestHandler = async ({ params, locals }) => {
   }
 
   await prisma.$transaction(async (tx) => {
-    await tx.proposal.update({
-      where: { id: proposal.id },
+    // Умовний запис: два «відкликати» поспіль (або відкликання в мить,
+    // коли клієнт обирає майстра) інакше зменшили б лічильник заявки двічі
+    // чи відкликали б уже прийняту пропозицію.
+    const withdrawn = await tx.proposal.updateMany({
+      where: { id: proposal.id, status: 'SENT' },
       data: {
         status: 'WITHDRAWN',
         withdrawnAt: new Date(),
       },
     })
+    if (withdrawn.count !== 1) {
+      throw error(409, 'Відгук уже неактивний — оновіть сторінку')
+    }
 
     await tx.job.update({
       where: { id: proposal.jobId },

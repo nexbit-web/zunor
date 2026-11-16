@@ -50,6 +50,9 @@ beforeEach(() => {
   resetPrisma()
   resetInfra()
   prisma.proposal.findUnique.mockResolvedValue(proposal())
+  // Заявку й відгук «займає» умовний запис — обидва рядки знайдено.
+  prisma.job.updateMany.mockResolvedValue({ count: 1 })
+  prisma.proposal.updateMany.mockResolvedValue({ count: 1 })
   prisma.order.create.mockResolvedValue({
     id: 'order-1',
     title: 'Прибирання',
@@ -112,6 +115,34 @@ describe('стан', () => {
   })
 })
 
+// Гонка: перевірки вище читають базу ДО транзакції. Два запити одночасно
+// (подвійний клік, дві вкладки, скрипт) обидва бачили заявку відкритою і
+// створювали ДВА замовлення на одну заявку. Тепер заявку «займає» умовний
+// запис усередині транзакції — другий запит отримує 0 рядків.
+describe('одночасні запити', () => {
+  it('заявку вже зайняв інший запит — 409, другого замовлення немає', async () => {
+    prisma.job.updateMany.mockResolvedValue({ count: 0 })
+
+    const res = await failure(() => POST(acceptEvent(CLIENT)))
+
+    expect(res.status).toBe(409)
+    expect(prisma.order.create).not.toHaveBeenCalled()
+    expect(cancelWaves).not.toHaveBeenCalled()
+    expect(Notify.proposalAccepted).not.toHaveBeenCalled()
+  })
+
+  // Майстер відкликав відгук чи змінив ціну в ту саму мить: замовлення за
+  // ціною, якої клієнт не бачив, не створюється.
+  it('відгук змінився між читанням і записом — 409', async () => {
+    prisma.proposal.updateMany.mockResolvedValue({ count: 0 })
+
+    const res = await failure(() => POST(acceptEvent(CLIENT)))
+
+    expect(res.status).toBe(409)
+    expect(prisma.order.create).not.toHaveBeenCalled()
+  })
+})
+
 describe('успішний вибір', () => {
   it('повертає 201 і створене замовлення', async () => {
     const res = (await POST(acceptEvent(CLIENT))) as Response
@@ -126,8 +157,9 @@ describe('успішний вибір', () => {
   it('обраний відгук — ACCEPTED, решта — REJECTED', async () => {
     await POST(acceptEvent(CLIENT))
 
-    expect(prisma.proposal.update).toHaveBeenCalledWith({
-      where: { id: 'prop-1' },
+    // Умовно: лише живий відгук і лише за тією ціною, яку бачив клієнт.
+    expect(prisma.proposal.updateMany).toHaveBeenCalledWith({
+      where: { id: 'prop-1', status: 'SENT', priceCents: 80_000 },
       data: { status: 'ACCEPTED' },
     })
     expect(prisma.proposal.updateMany).toHaveBeenCalledWith({
@@ -139,9 +171,22 @@ describe('успішний вибір', () => {
   it('заявка закривається і посилається на замовлення', async () => {
     await POST(acceptEvent(CLIENT))
 
-    const data = prisma.job.update.mock.calls[0][0].data
-    expect(data.status).toBe('IN_PROGRESS')
-    expect(data.selectedOrderId).toBe('order-1')
+    const claim = prisma.job.updateMany.mock.calls[0][0]
+    expect(claim.where).toEqual({ id: 'job-1', status: 'OPEN' })
+    expect(claim.data.status).toBe('IN_PROGRESS')
+    expect(prisma.job.update.mock.calls[0][0].data.selectedOrderId).toBe(
+      'order-1',
+    )
+  })
+
+  // Заявку «займають» ДО створення замовлення: інакше другий одночасний
+  // запит устиг би створити своє.
+  it('заявка займається раніше, ніж створюється замовлення', async () => {
+    await POST(acceptEvent(CLIENT))
+
+    expect(prisma.job.updateMany.mock.invocationCallOrder[0]).toBeLessThan(
+      prisma.order.create.mock.invocationCallOrder[0],
+    )
   })
 
   // Чат навмисно не створюється: інакше кожен вибір майстра плодив би

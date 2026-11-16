@@ -12,6 +12,7 @@ import { getDistricts } from '$lib/server/reference'
 import { cityDistricts, findDistrict } from '$lib/geo/districts'
 import { matchingFor } from '$lib/categories/matching'
 import { findDuplicateJob } from '$lib/server/job-duplicates'
+import { acceptedJobPhotos, NO_JOB_PHOTOS } from '$lib/server/job-attachments'
 import type { RequestHandler } from './$types'
 
 // GET тут навмисно немає: пагіновану видачу заявок (і «мої», і стрічку
@@ -57,18 +58,17 @@ export const POST: RequestHandler = async ({ request, locals }) => {
   const note =
     typeof body.note === 'string' ? body.note.trim().slice(0, 1000) : ''
 
-  // Приймаємо лише наші Cloudinary-URL: чужі посилання у стрічці майстрів —
-  // це і фішинг-вектор, і витік IP майстрів на сторонній сервер.
-  const isOurUpload = (s: unknown): s is string =>
-    typeof s === 'string' && s.startsWith('https://res.cloudinary.com/')
-  const attachments = Array.isArray(body.attachments)
-    ? body.attachments.filter(isOurUpload).slice(0, 10)
-    : []
-  const attachmentsPublicIds = Array.isArray(body.attachmentsPublicIds)
-    ? body.attachmentsPublicIds
-        .filter((s: unknown) => typeof s === 'string')
-        .slice(0, 10)
-    : []
+  // Приймаємо лише пари «посилання + publicId» з теки заявок цієї людини
+  // в НАШІЙ хмарі — те саме правило, що й при редагуванні
+  // ($lib/server/job-attachments). Сам префікс res.cloudinary.com пускав
+  // чужий акаунт Cloudinary: фото помешкання можна було підмінити вже в
+  // стрічці майстрів, а чужий publicId — підкласти під пізніше стирання.
+  const { attachments, attachmentsPublicIds } = acceptedJobPhotos(
+    body.attachments,
+    body.attachmentsPublicIds,
+    user.id,
+    NO_JOB_PHOTOS,
+  )
 
   // Місто — з профілю клієнта. Без міста заявку не створюємо: інакше вона
   // потрапила б не до тих майстрів. Гард у hooks.server.ts це теж не пускає.

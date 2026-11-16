@@ -1,47 +1,55 @@
 import { json } from '@sveltejs/kit'
-import {
-  Prisma,
-  VerificationStatus,
-  Role,
-} from '../../../../generated/prisma/client'
+import type { Prisma } from '../../../../generated/prisma/client'
 import { prisma } from '$lib/server/prisma'
 import { forgetMasterPage } from '$lib/server/master-page'
 import { refreshSessionUser } from '$lib/server/sessions'
+import { limit } from '$lib/server/rate-limit'
 import type { RequestHandler } from './$types'
 
-// role та onboarded у цьому типі НЕМАЄ навмисно. Клієнт може їх прислати —
-// роут просто не дивиться в ці поля. Тримати їх у типі означало б натякати,
-// що вони працюють: саме так вони колись і повернулись у код після
-// «прибирання». username (нікнейм) — так само: його більше не пишемо
-// (публічної сторінки /@handle немає), старі збірки застосунку можуть його
-// прислати — поле просто ігнорується.
+// Старий ендпоінт «поправити кілька полів профілю». Ні сайт, ні застосунок
+// його вже не кличуть: профіль зберігає $lib/server/profile.ts
+// (POST /api/profile/client | master), фото — POST /api/user/media. Тут
+// лишилось тільки те, що не має власних правил деінде, — і кожне поле
+// перевіряється так само суворо, як там.
+//
+// Чого тут НЕМАЄ навмисно (поля з тіла мовчки ігноруються):
+//   • role, onboarded — пише лише profile.ts після повної валідації.
+//     Раніше приймались: майстер понижував себе до клієнта, а будь-хто
+//     ставив onboarded=true з порожнім профілем і обходив онбординг;
+//   • avatar, avatarPublicId — лише через /api/user/media, де посилання й
+//     publicId перевіряються ($lib/server/own-media). Тут вони писались у
+//     базу як є: аватаром ставало будь-яке посилання, а чужий publicId,
+//     записаний собі, наступною зміною фото стирав чужий файл із Cloudinary;
+//   • username — нікнейм більше не пишемо (публічної сторінки /@handle
+//     немає).
+//
+// Анкета майстра (категорії, опис, подача на перевірку) — це те, що бачить
+// модератор, і міняється вона лише формою профілю: кожна подача там — це
+// уміння для підбору й повторна перевірка. Тут такі поля — 400, а не тихий
+// запис в обхід модерації. Раніше цей шлях ще й створював анкету будь-кому
+// (навіть клієнту) і ставив її в чергу модерації.
 interface UpdatePayload {
   // ─── Поля User ───
   name?: string
   phone?: string
   city?: string
   bio?: string
-  avatar?: string | null
-  avatarPublicId?: string | null
 
-  // ─── Поля MasterProfile ───
-  categories?: string[]
-  description?: string
+  // ─── MasterProfile: лише пауза ───
   isActive?: boolean
-
-  // ─── Дія: відправити профіль на модерацію ───
-  submitForReview?: boolean
 }
 
-const SLUG_RE = /^[a-z0-9-]{1,80}$/
-const PHONE_RE = /^[\d\s+()-]{8,20}$/
+/** Поля анкети майстра, які міняє тільки форма профілю. */
+const PROFILE_ONLY = ['categories', 'description', 'submitForReview'] as const
+
+// Ті самі межі, що в $lib/server/profile.ts.
+const PHONE_RE = /^\+380\d{9}$/
 
 const LIMITS = {
   BIO_MAX: 922,
+  NAME_MIN: 2,
   NAME_MAX: 80,
   CITY_MAX: 60,
-  CATEGORIES_MAX: 10,
-  DESCRIPTION_MAX: 2000,
 } as const
 
 // Перевірка типу: гарантує, що значення — рядок, перш ніж звертатись до
@@ -54,21 +62,42 @@ export const POST: RequestHandler = async ({ request, locals }) => {
   const sessionUser = locals.user
   if (!sessionUser) return json({ error: 'Unauthorized' }, { status: 401 })
 
+  const userId = sessionUser.id
+
+  const rl = await limit(`user-update:${userId}`, {
+    points: 30,
+    duration: 60_000,
+  })
+  if (!rl.success) {
+    return new Response(JSON.stringify({ error: 'Too many requests' }), {
+      status: 429,
+      headers: {
+        'Content-Type': 'application/json',
+        'Retry-After': String(Math.ceil((rl.resetAt - Date.now()) / 1000)),
+      },
+    })
+  }
+
   let body: UpdatePayload
   try {
     body = (await request.json()) as UpdatePayload
   } catch {
     return json({ error: 'Invalid JSON' }, { status: 400 })
   }
-
-  const userId = sessionUser.id
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return json({ error: 'Invalid JSON' }, { status: 400 })
+  }
 
   // ═══════════════════ Валідація ═══════════════════
 
-  // role та onboarded НЕ приймаються з тіла запиту. Раніше приймались,
-  // і це давало дві дірки: майстер міг понизити себе до клієнта,
-  // а будь-хто — виставити onboarded=true з порожнім профілем,
-  // повністю обійшовши онбординг. Тепер їх пише лише $lib/server/profile.ts.
+  for (const field of PROFILE_ONLY) {
+    if ((body as Record<string, unknown>)[field] !== undefined) {
+      return json(
+        { error: 'Анкету майстра змінює форма профілю' },
+        { status: 400 },
+      )
+    }
+  }
 
   if (body.bio !== undefined) {
     if (!isString(body.bio))
@@ -78,10 +107,12 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     }
   }
 
+  let name: string | undefined
   if (body.name !== undefined) {
     if (!isString(body.name))
       return json({ error: 'Invalid name' }, { status: 400 })
-    if (body.name.length < 1 || body.name.length > LIMITS.NAME_MAX) {
+    name = body.name.trim()
+    if (name.length < LIMITS.NAME_MIN || name.length > LIMITS.NAME_MAX) {
       return json({ error: 'Invalid name length' }, { status: 400 })
     }
   }
@@ -100,56 +131,36 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     }
   }
 
-  if (body.description !== undefined) {
-    if (!isString(body.description)) {
-      return json({ error: 'Invalid description' }, { status: 400 })
-    }
-    if (body.description.length > LIMITS.DESCRIPTION_MAX) {
-      return json({ error: 'Description too long' }, { status: 400 })
-    }
-  }
-
   if (body.isActive !== undefined && typeof body.isActive !== 'boolean') {
     return json({ error: 'Invalid isActive' }, { status: 400 })
   }
 
-  // Аватар: рядок або null (скидання). Не-рядок → 400, а не падіння в Prisma.
-  if (
-    body.avatar !== undefined &&
-    body.avatar !== null &&
-    !isString(body.avatar)
-  ) {
-    return json({ error: 'Invalid avatar' }, { status: 400 })
-  }
-  if (
-    body.avatarPublicId !== undefined &&
-    body.avatarPublicId !== null &&
-    !isString(body.avatarPublicId)
-  ) {
-    return json({ error: 'Invalid avatar id' }, { status: 400 })
+  // Роль і місто — з бази, а не із сесії (AGENTS, 2): від них залежить, чи
+  // можна чіпати анкету майстра й чи змінилось місто.
+  const needsMe = Boolean(body.city) || body.isActive !== undefined
+  const me = needsMe
+    ? await prisma.user.findUnique({
+        where: { id: userId },
+        select: { role: true, city: true },
+      })
+    : null
+  if (needsMe && !me) return json({ error: 'Unauthorized' }, { status: 401 })
+
+  // Пауза — лише в майстра: анкети клієнтові тут не створюємо.
+  if (body.isActive !== undefined && me?.role !== 'MASTER') {
+    return json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  // ─── Категорії — масив slug'ів ───
-  if (body.categories !== undefined) {
-    if (
-      !Array.isArray(body.categories) ||
-      body.categories.length > LIMITS.CATEGORIES_MAX
-    ) {
-      return json({ error: 'Invalid categories' }, { status: 400 })
-    }
-    if (!body.categories.every((c) => isString(c) && SLUG_RE.test(c))) {
-      return json({ error: 'Invalid category slug' }, { status: 400 })
-    }
-  }
-
-  // ─── Перевіряємо, що всі вказані категорії існують ───
-  if (body.categories !== undefined && body.categories.length > 0) {
-    const found = await prisma.category.count({
-      where: { slug: { in: body.categories }, isActive: true },
+  // Місто — лише зі списку активних. Довільний рядок тут означав би заявки
+  // «в нікуди» і стрічку майстра за вигаданим містом.
+  let city: string | undefined
+  if (body.city) {
+    const found = await prisma.city.findFirst({
+      where: { slug: body.city, isActive: true },
+      select: { slug: true },
     })
-    if (found !== body.categories.length) {
-      return json({ error: 'Some categories not found' }, { status: 400 })
-    }
+    if (!found) return json({ error: 'City not found' }, { status: 400 })
+    city = found.slug
   }
 
   // ═══════════════════ Оновлення User ═══════════════════
@@ -159,13 +170,17 @@ export const POST: RequestHandler = async ({ request, locals }) => {
   // користувач проходить в дашборд повз онбординг. Прапорець ставить лише
   // $lib/server/profile.ts, і лише разом із реально збереженим профілем.
   const userData: Prisma.UserUpdateInput = {}
-  if (body.name) userData.name = body.name
-  if (body.phone !== undefined) userData.phone = body.phone
-  if (body.city) userData.city = body.city
+  if (name) userData.name = name
+  // Порожній телефон не стирає номер: за ним друга сторона замовлення
+  // звʼязується з людиною.
+  if (body.phone) userData.phone = body.phone
+  if (city) {
+    userData.city = city
+    // Район належить місту: з новим містом старий район уже нічого не
+    // означає, і кільця розсилки рахувались би від чужого міста.
+    if (city !== me?.city) userData.district = null
+  }
   if (body.bio !== undefined) userData.bio = body.bio
-  if (body.avatar !== undefined) userData.avatar = body.avatar
-  if (body.avatarPublicId !== undefined)
-    userData.avatarPublicId = body.avatarPublicId
 
   if (Object.keys(userData).length > 0) {
     await prisma.user.update({
@@ -174,46 +189,17 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     })
   }
 
-  // ═══════════════════ Upsert MasterProfile ═══════════════════
+  // ═══════════════════ MasterProfile: пауза ═══════════════════
 
-  const hasMasterData =
-    body.categories !== undefined ||
-    body.description !== undefined ||
-    body.isActive !== undefined ||
-    body.submitForReview === true
-
-  if (hasMasterData) {
-    const scalarUpdate: Prisma.MasterProfileUpdateInput = {}
-
-    if (body.categories !== undefined) scalarUpdate.categories = body.categories
-    if (body.description !== undefined)
-      scalarUpdate.description = body.description
-    if (body.isActive !== undefined) scalarUpdate.isActive = body.isActive
-
-    if (body.submitForReview === true) {
-      scalarUpdate.verificationStatus = VerificationStatus.PENDING
-      scalarUpdate.verificationRejectReason = null
-    }
-
-    const scalarCreate: Prisma.MasterProfileUncheckedCreateInput = {
-      userId,
-      ...(body.categories !== undefined && { categories: body.categories }),
-      ...(body.description !== undefined && { description: body.description }),
-      ...(body.isActive !== undefined && { isActive: body.isActive }),
-      ...(body.submitForReview === true && {
-        verificationStatus: VerificationStatus.PENDING,
-      }),
-    }
-
-    await prisma.masterProfile.upsert({
+  // updateMany, а не upsert: анкету створює лише profile.ts.
+  if (body.isActive !== undefined) {
+    await prisma.masterProfile.updateMany({
       where: { userId },
-      create: scalarCreate,
-      update: scalarUpdate,
-      select: { id: true },
+      data: { isActive: body.isActive },
     })
   }
 
-  // Імʼя й аватар живуть і в сесіях, профіль — у кеші сторінки майстра.
+  // Імʼя живе і в сесіях, профіль — у кеші сторінки майстра.
   await Promise.all([
     Object.keys(userData).length > 0 ? refreshSessionUser(userId) : null,
     forgetMasterPage(userId),

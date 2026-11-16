@@ -99,8 +99,11 @@
 />
 <NotificationsListener />
 <!-- Порожній darkClassNames: клас `dark` ставить ефект вище, а не
-     mode-watcher — інакше лендинг темнів би разом із кабінетом. -->
-<ModeWatcher darkClassNames={[]} />
+     mode-watcher — інакше лендинг темнів би разом із кабінетом.
+     disableHeadScriptInjection: свій скрипт «до першого кадру» компонент
+     вставляв би без nonce, і CSP його блокувала б. Той самий скрипт іде
+     через app.html з nonce сторінки (hooks.server.ts, MODE_SNIPPET). -->
+<ModeWatcher darkClassNames={[]} disableHeadScriptInjection />
 {#if !hideHeader}
   <Header />
 {/if}

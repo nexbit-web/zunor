@@ -28,6 +28,15 @@ const { saveClientProfile, saveMasterProfile } =
 
 const USER = 'user-1'
 
+// Посилання — рівно такі, які віддає завантаження в НАШУ хмару (імʼя хмари
+// — із заглушки $env): перевірка «файл свій» ($lib/server/own-media)
+// дивиться і на хмару, і на теку, і на publicId.
+const UPLOAD = 'https://res.cloudinary.com/test-cloud/image/upload/v1'
+const urlOf = (publicId: string) => `${UPLOAD}/${publicId}.jpg`
+const ownAvatarId = `zunor/users/${USER}/avatar/profile`
+const ownAvatarUrl = urlOf(ownAvatarId)
+const ownPhotoId = (name: string) => `zunor/users/${USER}/jobs/${name}`
+
 const validClient = {
   name: 'Оля Петренко',
   phone: '+380671234567',
@@ -167,7 +176,7 @@ describe('клієнт: запис', () => {
   })
 
   // Аватар — вектор для трекінг-пікселів: приймаємо лише свої джерела.
-  it('чужий аватар відкидається, а не зберігається', async () => {
+  it('чужий аватар не зберігається', async () => {
     await saveClientProfile(USER, {
       ...validClient,
       avatar: 'https://evil.com/tracker.gif',
@@ -176,15 +185,84 @@ describe('клієнт: запис', () => {
 
     const data = prisma.user.update.mock.calls[0][0].data
     expect(data.avatar).toBeNull()
-    // Без картинки і publicId зберігати нічого.
     expect(data.avatarPublicId).toBeNull()
   })
 
-  it('свої джерела аватара проходять', async () => {
-    for (const url of [
+  // Кривий запит не стирає людині фото: лишається те, що було.
+  it('недопустимий аватар лишає профіль як був', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      role: 'CLIENT',
+      avatar: ownAvatarUrl,
+      avatarPublicId: ownAvatarId,
+    })
+
+    await saveClientProfile(USER, {
+      ...validClient,
+      avatar: 'https://evil.com/tracker.gif',
+      avatarPublicId: 'x',
+    })
+
+    const data = prisma.user.update.mock.calls[0][0].data
+    expect(data.avatar).toBe(ownAvatarUrl)
+    expect(data.avatarPublicId).toBe(ownAvatarId)
+    expect(cloudinary.uploader.destroy).not.toHaveBeenCalled()
+  })
+
+  // Сам префікс res.cloudinary.com — не «наше»: це чужий акаунт Cloudinary,
+  // тип fetch чи трансформація, тобто вміст, який можна підмінити.
+  it('Cloudinary, але не наше завантаження, — не приймається', async () => {
+    for (const avatar of [
+      `https://res.cloudinary.com/attacker-cloud/image/upload/v1/${ownAvatarId}.jpg`,
+      `https://res.cloudinary.com/test-cloud/image/fetch/https://evil.com/${ownAvatarId}.jpg`,
+      `https://res.cloudinary.com/test-cloud/image/upload/l_fetch:aHR0cHM6Ly9ldmlsLmNvbQ/v1/${ownAvatarId}.jpg`,
       'https://res.cloudinary.com/c/a.jpg',
-      'https://lh3.googleusercontent.com/a',
     ]) {
+      resetPrisma()
+      prisma.user.findUnique.mockResolvedValue({ role: 'CLIENT', avatarPublicId: null })
+      prisma.city.findFirst.mockResolvedValue({ slug: 'odesa' })
+
+      await saveClientProfile(USER, {
+        ...validClient,
+        avatar,
+        avatarPublicId: ownAvatarId,
+      })
+      expect(prisma.user.update.mock.calls[0][0].data.avatar).toBeNull()
+    }
+  })
+
+  // Головна дірка, яку тут закрито: publicId з тіла писався в базу як є,
+  // і наступне збереження профілю стирало ЦЕЙ id із Cloudinary. Чужий id
+  // (аватар вгадується: zunor/users/<id>/avatar/profile) — і чужий файл
+  // зникав із хмари.
+  it('чужий publicId у профіль не записується', async () => {
+    const foreignId = 'zunor/users/other-user/avatar/profile'
+    await saveClientProfile(USER, {
+      ...validClient,
+      avatar: urlOf(foreignId),
+      avatarPublicId: foreignId,
+    })
+
+    const data = prisma.user.update.mock.calls[0][0].data
+    expect(data.avatar).toBeNull()
+    expect(data.avatarPublicId).toBeNull()
+  })
+
+  it('обхід теки через «..» не проходить', async () => {
+    const sneaky = `zunor/users/${USER}/avatar/../../other-user/avatar/profile`
+    await saveClientProfile(USER, {
+      ...validClient,
+      avatar: urlOf(sneaky),
+      avatarPublicId: sneaky,
+    })
+    expect(prisma.user.update.mock.calls[0][0].data.avatarPublicId).toBeNull()
+  })
+
+  it('своє завантаження й фото з Google проходять', async () => {
+    const cases: [string, string | null][] = [
+      [ownAvatarUrl, ownAvatarId],
+      ['https://lh3.googleusercontent.com/a', null],
+    ]
+    for (const [url, id] of cases) {
       resetPrisma()
       prisma.user.findUnique.mockResolvedValue({
         role: 'CLIENT',
@@ -192,26 +270,76 @@ describe('клієнт: запис', () => {
       })
       prisma.city.findFirst.mockResolvedValue({ slug: 'odesa' })
 
-      await saveClientProfile(USER, { ...validClient, avatar: url })
-      expect(prisma.user.update.mock.calls[0][0].data.avatar).toBe(url)
+      await saveClientProfile(USER, {
+        ...validClient,
+        avatar: url,
+        avatarPublicId: id,
+      })
+      const data = prisma.user.update.mock.calls[0][0].data
+      expect(data.avatar).toBe(url)
+      expect(data.avatarPublicId).toBe(id)
     }
   })
 
-  it('старе фото прибирається з Cloudinary', async () => {
+  // Старі профілі не ламаємо: пара, що вже лежить у базі, лишається.
+  it('те саме фото, що вже в профілі, зберігається як є', async () => {
+    const legacy = 'https://res.cloudinary.com/c/legacy.jpg'
     prisma.user.findUnique.mockResolvedValue({
       role: 'CLIENT',
-      avatarPublicId: 'old-id',
+      avatar: legacy,
+      avatarPublicId: 'legacy-id',
     })
 
     await saveClientProfile(USER, {
       ...validClient,
-      avatar: 'https://res.cloudinary.com/c/new.jpg',
-      avatarPublicId: 'new-id',
+      avatar: legacy,
+      avatarPublicId: 'legacy-id',
     })
 
-    expect(cloudinary.uploader.destroy).toHaveBeenCalledWith('old-id', {
+    const data = prisma.user.update.mock.calls[0][0].data
+    expect(data.avatar).toBe(legacy)
+    expect(data.avatarPublicId).toBe('legacy-id')
+    expect(cloudinary.uploader.destroy).not.toHaveBeenCalled()
+  })
+
+  it('старе фото прибирається з Cloudinary', async () => {
+    const oldId = `zunor/users/${USER}/avatar/old`
+    prisma.user.findUnique.mockResolvedValue({
+      role: 'CLIENT',
+      avatar: urlOf(oldId),
+      avatarPublicId: oldId,
+    })
+
+    await saveClientProfile(USER, {
+      ...validClient,
+      avatar: ownAvatarUrl,
+      avatarPublicId: ownAvatarId,
+    })
+
+    expect(cloudinary.uploader.destroy).toHaveBeenCalledWith(oldId, {
       resource_type: 'image',
     })
+  })
+
+  // У базі міг лишитись чужий id із часів, коли його не перевіряли.
+  // Стерти за ним чужий файл не можна ні зміною фото, ні його прибиранням.
+  it('чужий id зі старого рядка бази з хмари не стирається', async () => {
+    for (const next of [
+      { avatar: ownAvatarUrl, avatarPublicId: ownAvatarId },
+      { avatar: '', avatarPublicId: '' },
+    ]) {
+      resetPrisma()
+      resetInfra()
+      prisma.user.findUnique.mockResolvedValue({
+        role: 'CLIENT',
+        avatar: 'https://res.cloudinary.com/c/x.jpg',
+        avatarPublicId: 'zunor/users/other-user/avatar/profile',
+      })
+      prisma.city.findFirst.mockResolvedValue({ slug: 'odesa' })
+
+      await saveClientProfile(USER, { ...validClient, ...next })
+      expect(cloudinary.uploader.destroy).not.toHaveBeenCalled()
+    }
   })
 })
 
@@ -284,44 +412,112 @@ describe('майстер: запис', () => {
     )
   })
 
-  it('портфоліо приймає лише наші посилання і має стелю в 6', async () => {
+  it('портфоліо приймає лише свої завантаження і має стелю в 6', async () => {
+    const ids = Array.from({ length: 10 }, (_, i) => ownPhotoId(`p${i}`))
+    await saveMasterProfile(USER, {
+      ...validMaster,
+      portfolioImages: [...ids.map(urlOf), 'https://evil.com/x.jpg'],
+      portfolioImagesPublicIds: [...ids, 'evil'],
+    })
+
+    const update = prisma.masterProfile.upsert.mock.calls[0][0].update
+    expect(update.portfolioImages).toEqual(ids.slice(0, 6).map(urlOf))
+    expect(update.portfolioImagesPublicIds).toEqual(ids.slice(0, 6))
+  })
+
+  it('чужа хмара, чужа тека й посилання без пари відкидаються', async () => {
+    const own = ownPhotoId('ok')
+    const foreign = 'zunor/users/other-user/jobs/x'
     await saveMasterProfile(USER, {
       ...validMaster,
       portfolioImages: [
-        ...Array.from(
-          { length: 10 },
-          (_, i) => `https://res.cloudinary.com/c/${i}.jpg`,
-        ),
-        'https://evil.com/x.jpg',
+        urlOf(own),
+        // чужий акаунт Cloudinary зі «своїм» publicId у шляху
+        `https://res.cloudinary.com/attacker-cloud/image/upload/v1/${ownPhotoId('a')}.jpg`,
+        // чужа тека
+        urlOf(foreign),
+        // посилання не відповідає publicId
+        urlOf(ownPhotoId('other')),
       ],
+      portfolioImagesPublicIds: [own, ownPhotoId('a'), foreign, ownPhotoId('b')],
     })
 
-    const images =
-      prisma.masterProfile.upsert.mock.calls[0][0].update.portfolioImages
-    expect(images).toHaveLength(6)
-    expect(
-      images.every((u: string) => u.startsWith('https://res.cloudinary.com/')),
-    ).toBe(true)
+    const update = prisma.masterProfile.upsert.mock.calls[0][0].update
+    expect(update.portfolioImages).toEqual([urlOf(own)])
+    expect(update.portfolioImagesPublicIds).toEqual([own])
   })
 
-  it('прибрані з портфоліо файли видаляються з Cloudinary', async () => {
+  // Старі анкети не ламаємо: фото, що вже в портфоліо, лишаються як є.
+  it('фото, що вже були в анкеті, зберігаються', async () => {
     prisma.user.findUnique.mockResolvedValue({
       role: 'MASTER',
       avatarPublicId: null,
-      masterProfile: { portfolioImagesPublicIds: ['keep', 'drop'] },
+      masterProfile: {
+        portfolioImages: ['https://res.cloudinary.com/c/old.jpg'],
+        portfolioImagesPublicIds: ['legacy-id'],
+      },
     })
 
     await saveMasterProfile(USER, {
       ...validMaster,
-      portfolioImagesPublicIds: ['keep'],
+      portfolioImages: ['https://res.cloudinary.com/c/old.jpg'],
+      portfolioImagesPublicIds: ['legacy-id'],
     })
 
-    expect(cloudinary.uploader.destroy).toHaveBeenCalledWith('drop', {
+    const update = prisma.masterProfile.upsert.mock.calls[0][0].update
+    expect(update.portfolioImagesPublicIds).toEqual(['legacy-id'])
+    expect(cloudinary.uploader.destroy).not.toHaveBeenCalled()
+  })
+
+  it('прибрані з портфоліо файли видаляються з Cloudinary', async () => {
+    const keep = ownPhotoId('keep')
+    const drop = ownPhotoId('drop')
+    prisma.user.findUnique.mockResolvedValue({
+      role: 'MASTER',
+      avatarPublicId: null,
+      masterProfile: {
+        portfolioImages: [urlOf(keep), urlOf(drop)],
+        portfolioImagesPublicIds: [keep, drop],
+      },
+    })
+
+    await saveMasterProfile(USER, {
+      ...validMaster,
+      portfolioImages: [urlOf(keep)],
+      portfolioImagesPublicIds: [keep],
+    })
+
+    expect(cloudinary.uploader.destroy).toHaveBeenCalledWith(drop, {
       resource_type: 'image',
     })
-    expect(cloudinary.uploader.destroy).not.toHaveBeenCalledWith('keep', {
+    expect(cloudinary.uploader.destroy).not.toHaveBeenCalledWith(keep, {
       resource_type: 'image',
     })
+  })
+
+  // Те саме правило, що й для аватара: чужий id у старому рядку бази —
+  // не привід стирати чужий файл.
+  it('чужі id зі старої анкети з хмари не стираються', async () => {
+    const foreign = 'zunor/users/other-user/jobs/x'
+    prisma.user.findUnique.mockResolvedValue({
+      role: 'MASTER',
+      avatar: 'https://res.cloudinary.com/c/x.jpg',
+      avatarPublicId: 'zunor/users/other-user/avatar/profile',
+      masterProfile: {
+        portfolioImages: [urlOf(foreign), 'https://res.cloudinary.com/c/y.jpg'],
+        portfolioImagesPublicIds: [foreign, 'legacy-id'],
+      },
+    })
+
+    await saveMasterProfile(USER, {
+      ...validMaster,
+      avatar: ownAvatarUrl,
+      avatarPublicId: ownAvatarId,
+      portfolioImages: [],
+      portfolioImagesPublicIds: [],
+    })
+
+    expect(cloudinary.uploader.destroy).not.toHaveBeenCalled()
   })
 })
 

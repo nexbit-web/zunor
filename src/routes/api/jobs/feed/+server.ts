@@ -130,8 +130,15 @@ export const GET: RequestHandler = async ({ locals, url }) => {
       ? mp.categories.filter((c) => categoriesFilter.includes(c))
       : mp.categories
 
-  // Фільтр міст: за замовчуванням — місто мастера
-  const allowedCities = citiesFilter.length > 0 ? citiesFilter : [user.city]
+  // Місто — лише своє, як у правилі доступу до заявки ($lib/server/job-access)
+  // і в перевірці відгуку. Раніше `?cities=` підставлявся в запит як є, і
+  // майстер гортав заявки будь-якого міста (назва, опис, імʼя замовника),
+  // хоча відкрити чи відгукнутись на них не міг. Фільтр лишився в адресі
+  // для сумісності: без свого міста в ньому стрічка порожня.
+  if (citiesFilter.length > 0 && !citiesFilter.includes(user.city)) {
+    return json({ jobs: [], nextCursor: null })
+  }
+  const allowedCities = [user.city]
 
   // Ціновий фільтр — заявка проходить якщо її діапазон перетинається із заданим
   const priceWhere: Record<string, unknown> = {}
@@ -218,9 +225,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
   const items = hasMore ? jobs.slice(0, PAGE_SIZE) : jobs
   const nextCursor = hasMore ? items[items.length - 1].id : null
 
-  // Той самий район і відстань, що в першій сторінці з SSR. Фільтр
-  // ?cities= може дати заявку з чужого міста — тоді без відстані, а отже
-  // й без «Топ для тебе».
+  // Той самий район і відстань, що в першій сторінці з SSR.
   const placed = items.map((j) => ({
     job: j,
     place: jobPlace(

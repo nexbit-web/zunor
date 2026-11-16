@@ -93,9 +93,50 @@ describe('POST /api/upload/signature', () => {
     )
   })
 
-  it('невідомий resourceType падає у безпечний auto', async () => {
-    await sign(freshUser(), { kind: 'job', resourceType: 'video-exploit' })
+  it('невідомий resourceType у чаті падає у безпечний auto', async () => {
+    await sign(freshUser(), { kind: 'chat', resourceType: 'video-exploit' })
     expect(signUploadParams.mock.calls[0][0].resourceType).toBe('auto')
+  })
+
+  // Аватар і фото заявки — завжди картинка, хоч би що просив клієнт.
+  it('аватар і фото заявки — лише image', async () => {
+    for (const kind of ['avatar', 'job']) {
+      signUploadParams.mockClear()
+      await sign(freshUser(), { kind, resourceType: 'raw' })
+      expect(signUploadParams.mock.calls[0][0].resourceType).toBe('image')
+    }
+  })
+
+  // Підпис обмежує ще й формати: без цього за ним приймалось будь-що —
+  // exe, html, архів — у наше сховище й під нашим іменем.
+  it('у підпис входить перелік дозволених форматів', async () => {
+    const formatsOf = async (body: unknown): Promise<string[]> => {
+      signUploadParams.mockClear()
+      await sign(freshUser(), body)
+      return [...(signUploadParams.mock.calls[0][0].allowedFormats ?? [])]
+    }
+
+    const dangerous = ['svg', 'html', 'htm', 'exe', 'js', 'apk', 'php', 'bat']
+
+    for (const body of [
+      { kind: 'avatar' },
+      { kind: 'job' },
+      { kind: 'chat', resourceType: 'image' },
+    ]) {
+      const formats = await formatsOf(body)
+      expect(formats).toContain('jpg')
+      expect(formats).toContain('png')
+      expect(formats).not.toContain('pdf')
+      for (const bad of dangerous) expect(formats).not.toContain(bad)
+    }
+
+    // Файл у чаті — документи, але не виконуване й не розмітка.
+    for (const resourceType of ['raw', 'auto']) {
+      const formats = await formatsOf({ kind: 'chat', resourceType })
+      expect(formats).toContain('pdf')
+      expect(formats).toContain('docx')
+      for (const bad of dangerous) expect(formats).not.toContain(bad)
+    }
   })
 
   // Підпис — це право на запис у сховище: без ліміту одним скриптом можна

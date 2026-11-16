@@ -1,7 +1,10 @@
 // Порядок middleware критичний:
-//   1. securityHeaders — CSP/HSTS на ВСІ відповіді (обгортає ланцюжок)
+//   1. securityHeaders — HSTS та інші заголовки на ВСІ відповіді (обгортає
+//                        ланцюжок). CSP ставить сам SvelteKit — з nonce на
+//                        кожну сторінку (svelte.config.js, kit.csp)
 //   2. authHandle      — better-auth обробляє /api/auth/*
-//   3. sessionHandle   — резолвить сесію ОДИН раз → locals.session/user
+//   3. sessionHandle   — резолвить сесію ОДИН раз → locals.session/user;
+//                        для /api/* — ще й бан (сесія забаненого = гість)
 //   4. guardHandle     — banned → emailVerified → onboarded → маршрут
 //
 // Єдине джерело правди про сесію на запит — locals.
@@ -19,6 +22,7 @@ import { getAccountState, invalidateAccount } from '$lib/server/account-cache'
 import { resumeDispatch } from '$lib/server/dispatch'
 import { revokeSessions } from '$lib/server/sessions'
 import { productionDeploy, serverless } from '$lib/server/runtime'
+import { MODE_SNIPPET } from '$lib/theme-script.server'
 // ═══════════════════ Маршрути ═══════════════════
 
 const LOGIN_PATH = '/user/login'
@@ -48,9 +52,19 @@ const sessionHandle: Handle = async ({ event, resolve }) => {
     return resolve(event)
   }
 
-  const session = await auth.api
+  let session = await auth.api
     .getSession({ headers: event.request.headers })
     .catch(() => null) // збій auth-шару = аноним, а не 500 на весь сайт
+
+  // API guardHandle не проходить (він лише для сторінок), а сесія з
+  // cookie-кешу живе ще до 5 хв після відкликання. Тож бан і видалення
+  // акаунта перевіряємо тут: для API забанений — гість, і requireApiUser
+  // відповість 401. Стан — із кешу акаунта (account-cache): бан скидає
+  // його явно, тому діє на першому ж запиті, а не за TTL.
+  if (session && event.url.pathname.startsWith('/api/')) {
+    const account = await getAccountState(session.user.id)
+    if (!account || account.banned) session = null
+  }
 
   event.locals.session = session
   event.locals.user = session?.user ?? null
@@ -181,7 +195,7 @@ const guardHandle: Handle = async ({ event, resolve }) => {
   // лишається доступним онбордженому КЛІЄНТУ — це апгрейд ролі,
   // і його власний load сам розвертає мастера на /dashboard/profile.
   if (account.onboarded && pathname === ONBOARDING_PATH) {
-    redirect(303, '/dashboard ')
+    redirect(303, HOME_PATH)
   }
 
   // Віддаємо стан далі — load-функції не роблять той самий SELECT удруге.
@@ -196,42 +210,33 @@ const guardHandle: Handle = async ({ event, resolve }) => {
 }
 
 // ═══════════════════ Security headers ═══════════════════
+//
+// CSP тут немає навмисно: її ставить SvelteKit (svelte.config.js, kit.csp)
+// — з одноразовим nonce на кожну сторінку. Заголовок, зібраний руками,
+// nonce не знає, тому мусив дозволяти `script-src 'unsafe-inline'`, а з ним
+// CSP від XSS не захищає взагалі: будь-який вставлений <script> виконався б.
+// Вбудовані скрипти з app.html і скрипт теми mode-watcher тепер несуть
+// nonce сторінки (`%sveltekit.nonce%`).
 
 const securityHeaders: Handle = async ({ event, resolve }) => {
-  const response = await resolve(event)
+  const response = await resolve(event, {
+    // Скрипт теми mode-watcher — у тег із nonce в app.html
+    // ($lib/theme-script.server). Функція, а не рядок: у рядку-заміні
+    // `$&` і `$1` — службові.
+    transformPageChunk: ({ html }) =>
+      html.replace('%modewatcher.snippet%', () => MODE_SNIPPET),
+  })
 
   // Після logout браузер не має права дістати сторінку з дискового кешу.
   if (event.url.pathname.startsWith('/dashboard')) {
     response.headers.set('Cache-Control', 'no-store, must-revalidate')
   }
 
-  if (dev) {
-    response.headers.set('X-Content-Type-Options', 'nosniff')
-    response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
-    return response
-  }
-
-  const csp = [
-    `default-src 'self'`,
-    `script-src 'self' 'unsafe-inline' https://js.pusher.com`,
-    `style-src 'self' 'unsafe-inline'`,
-    `img-src 'self' data: blob: https://res.cloudinary.com https://*.googleusercontent.com`,
-    `media-src 'self' blob: https://res.cloudinary.com`,
-    `font-src 'self' data:`,
-    `connect-src 'self' https://api.cloudinary.com https://*.pusher.com wss://*.pusher.com https://sockjs-eu.pusher.com`,
-    // Google OAuth редіректить top-level, не в iframe — 'none' коректно.
-    `frame-src 'none'`,
-    `frame-ancestors 'none'`,
-    `base-uri 'self'`,
-    // 'self' достатньо: better-auth сам робить POST на /api/auth/*,
-    // редірект на accounts.google.com іде через 302, не через form.
-    `form-action 'self'`,
-  ].join('; ')
-
-  response.headers.set('Content-Security-Policy', csp)
   response.headers.set('X-Content-Type-Options', 'nosniff')
-  response.headers.set('X-Frame-Options', 'DENY')
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
+  if (dev) return response
+
+  response.headers.set('X-Frame-Options', 'DENY')
   response.headers.set(
     'Strict-Transport-Security',
     'max-age=31536000; includeSubDomains',

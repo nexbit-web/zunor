@@ -20,6 +20,31 @@ import { sendOtpEmail } from './email/otp-email'
 import { serverless } from './runtime'
 import { background } from './background'
 import { registration } from './registration'
+import {
+  authGuard,
+  DISABLED_AUTH_PATHS,
+  refuseBannedSession,
+} from './auth-guard'
+
+/**
+ * Звідки better-auth бере IP для своїх лімітів. За замовчуванням — лише
+ * заголовок X-Forwarded-For з ОДНІЄЮ адресою: ланцюжок із кількох він не
+ * довіряє, і всі такі запити ділять один лічильник на шлях. Якщо проксі
+ * хостингу дописує адресу клієнта до заголовка, що прийшов (так роблять
+ * майже всі), задай тут адреси самого проксі — тоді з ланцюжка береться
+ * перша недовірена адреса справа, і підставлений клієнтом лівий елемент
+ * нічого не дає. Значення — IP або CIDR через кому, напр. `10.0.0.0/8`.
+ * AUTH_IP_HEADERS — якщо хостинг кладе адресу клієнта у власний заголовок
+ * (`cf-connecting-ip`, `x-real-ip`): лише такий, який клієнт підробити не
+ * може.
+ */
+const list = (raw: string | undefined) =>
+  (raw ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+const trustedProxies = list(env.AUTH_TRUSTED_PROXIES)
+const ipHeaders = list(env.AUTH_IP_HEADERS).map((h) => h.toLowerCase())
 
 const OTP_TTL_SECONDS = 600 // 10 хв — довше, ніж середня затримка SMTP
 
@@ -33,8 +58,10 @@ export const auth = betterAuth({
   // у базі лишались непідтверджені акаунти з чужими адресами. Реєстрація
   // тепер — плагін registration (./registration.ts): користувач
   // зʼявляється лише з кодом із листа. Старий шлях закритий для всіх
-  // (404), щоб його не можна було смикнути в обхід.
-  disabledPaths: ['/sign-up/email'],
+  // (404), щоб його не можна було смикнути в обхід. Разом із ним закриті
+  // ще кілька шляхів better-auth, якими ми не користуємось, — список і
+  // причини в auth-guard.ts (DISABLED_AUTH_PATHS).
+  disabledPaths: [...DISABLED_AUTH_PATHS],
 
   // Сесії й одноразові коди — у Redis (auth-storage.ts): перевірка сесії
   // на кожен запит не будить Neon. Без Redis — undefined, усе в базі.
@@ -131,12 +158,23 @@ export const auth = betterAuth({
         },
       },
     },
+    // Заблокований (і видалений — це теж бан) нової сесії не отримує —
+    // auth-guard.ts, refuseBannedSession.
+    session: { create: { before: refuseBannedSession } },
   },
 
   advanced: {
     useSecureCookies: !dev,
     defaultCookieAttributes: { sameSite: 'lax', httpOnly: true, secure: !dev },
     cookiePrefix: 'zunor',
+    ...(trustedProxies.length > 0 || ipHeaders.length > 0
+      ? {
+          ipAddress: {
+            ...(ipHeaders.length > 0 ? { ipAddressHeaders: ipHeaders } : {}),
+            ...(trustedProxies.length > 0 ? { trustedProxies } : {}),
+          },
+        }
+      : {}),
   },
 
   // ─── Rate limiting ───
@@ -146,6 +184,8 @@ export const auth = betterAuth({
     enabled: true,
     window: 60,
     max: 60,
+    // Це ліміти за IP. Коди з листа додатково лімітуються за самою поштою
+    // (auth-guard.ts): за IP їх обходить будь-хто з пулом проксі.
     customRules: {
       '/sign-in/email': { window: 60, max: 5 },
       '/email-otp/send-verification-otp': { window: 60, max: 2 },
@@ -219,6 +259,8 @@ export const auth = betterAuth({
           'registration otp',
         ),
     }),
+    // Ліміт на пошту для всіх шляхів, що шлють чи перевіряють код.
+    authGuard(),
     // Вхід із мобільного застосунку: у нативного запиту немає Origin —
     // плагін бере його з заголовка expo-origin (перевіряється trustedOrigins).
     expo(),

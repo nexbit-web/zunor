@@ -9,11 +9,13 @@ import type { RequestHandler } from './$types'
  * POST /api/proposals/[id]/accept — клиент выбирает мастера.
  *
  * Атомарно:
+ *   0. Job → IN_PROGRESS і цей proposal → ACCEPTED умовним записом
+ *      (лише з OPEN / SENT): із двох одночасних запитів проходить один,
+ *      другий — 409 без другого замовлення
  *   1. Создаёт Order (status=CREATED, БЕЗ чата)
- *   2. Этот proposal → ACCEPTED
- *   3. Остальные proposals → REJECTED
- *   4. Job → IN_PROGRESS + selectedOrderId
- *   5. OrderEvent(CREATED)
+ *   2. Остальные proposals → REJECTED
+ *   3. Job.selectedOrderId
+ *   4. OrderEvent(CREATED)
  *
  * Чат тут НЕ створюється — інакше кожен вибір майстра плодив би порожній чат
  * у обох списках повідомлень. Його заводить перша спроба написати:
@@ -64,6 +66,32 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 
   // Атомарная транзакция
   const result = await prisma.$transaction(async (tx) => {
+    // 0. Замок. Перевірки вище зроблені ДО транзакції, тож два запити
+    //    одночасно (подвійний клік, дві вкладки, скрипт) обидва бачили
+    //    заявку відкритою — і створювали ДВА замовлення на одну заявку.
+    //    Умовний запис пускає рівно один: другий чекає на перший і бачить
+    //    уже закриту заявку (0 рядків) — усе відкочується.
+    const claimed = await tx.job.updateMany({
+      where: { id: proposal.jobId, status: 'OPEN' },
+      data: { status: 'IN_PROGRESS', closedAt: new Date() },
+    })
+    if (claimed.count !== 1) throw error(409, 'Заявка вже закрита')
+
+    // Відгук — так само: майстер міг щойно відкликати його або змінити
+    // ціну (PATCH /api/proposals/[id]). Замовлення створюється рівно за
+    // тією ціною, яку бачив клієнт, або не створюється зовсім.
+    const accepted = await tx.proposal.updateMany({
+      where: {
+        id: proposal.id,
+        status: 'SENT',
+        priceCents: proposal.priceCents,
+      },
+      data: { status: 'ACCEPTED' },
+    })
+    if (accepted.count !== 1) {
+      throw error(409, 'Пропозиція щойно змінилась — оновіть сторінку')
+    }
+
     // 1. Создаём Order. chatId лишається null — чат заведе перший, хто
     //    натисне «Написати» (POST /api/orders/[id]/chat).
     const order = await tx.order.create({
@@ -92,12 +120,6 @@ export const POST: RequestHandler = async ({ params, locals }) => {
       },
     })
 
-    // 3. Принятый proposal
-    await tx.proposal.update({
-      where: { id: proposal.id },
-      data: { status: 'ACCEPTED' },
-    })
-
     // 4. Остальные → REJECTED
     await tx.proposal.updateMany({
       where: {
@@ -108,14 +130,10 @@ export const POST: RequestHandler = async ({ params, locals }) => {
       data: { status: 'REJECTED' },
     })
 
-    // 5. Job → IN_PROGRESS
+    // 5. Заявка (вже IN_PROGRESS — крок 0) посилається на замовлення
     await tx.job.update({
       where: { id: proposal.jobId },
-      data: {
-        status: 'IN_PROGRESS',
-        closedAt: new Date(),
-        selectedOrderId: order.id,
-      },
+      data: { selectedOrderId: order.id },
     })
 
     // 6. Audit

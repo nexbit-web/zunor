@@ -14,6 +14,12 @@ export function signUploadParams(params: {
   folder: string
   resourceType?: 'image' | 'raw' | 'auto'
   publicId?: string // фіксований ID для overwrite
+  /**
+   * Які формати Cloudinary прийме за цим підписом (`allowed_formats`).
+   * Параметр ПІДПИСАНИЙ: клієнт мусить надіслати його дослівно, а прибрати
+   * чи змінити не може — підпис не зійдеться, і файл не приймуть.
+   */
+  allowedFormats?: readonly string[]
 }): {
   signature: string
   timestamp: number
@@ -22,6 +28,8 @@ export function signUploadParams(params: {
   folder: string
   resourceType: 'image' | 'raw' | 'auto'
   publicId?: string
+  /** Надіслати в Cloudinary полем `allowed_formats`, як є. */
+  allowedFormats?: string
 } {
   const timestamp = Math.round(Date.now() / 1000)
   const folder = params.folder
@@ -32,6 +40,10 @@ export function signUploadParams(params: {
     toSign.public_id = params.publicId
     toSign.overwrite = 1
   }
+  const allowedFormats = params.allowedFormats?.length
+    ? params.allowedFormats.join(',')
+    : undefined
+  if (allowedFormats) toSign.allowed_formats = allowedFormats
 
   const signature = cloudinary.utils.api_sign_request(
     toSign,
@@ -46,5 +58,6 @@ export function signUploadParams(params: {
     folder,
     resourceType,
     ...(params.publicId ? { publicId: params.publicId } : {}),
+    ...(allowedFormats ? { allowedFormats } : {}),
   }
 }

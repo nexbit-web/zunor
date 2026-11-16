@@ -1,5 +1,5 @@
 import { error, json } from '@sveltejs/kit'
-import { requireApiUser } from '$lib/server/guards'
+import { isFreshSession, requireApiUser } from '$lib/server/guards'
 import { limit } from '$lib/server/rate-limit'
 import { deleteAccount } from '$lib/server/account-deletion'
 import type { RequestHandler } from './$types'
@@ -10,8 +10,10 @@ import type { RequestHandler } from './$types'
  *
  * Тіло: { confirm: '<своя пошта>' }. Пошту людина вводить руками в
  * діалозі: дія незворотна, і випадковий клік чи підсунута кнопка не
- * повинні її запускати. Пароль не питаємо — у Google-акаунтів його немає.
+ * повинні її запускати. Пароль не питаємо — у Google-акаунтів його немає;
+ * замість нього — свіжий вхід (нижче).
  *
+ * 403 — сесія не свіжа: видалення лише протягом 15 хв після входу.
  * 409 — є активні замовлення: спершу їх треба завершити чи скасувати.
  * Сесію в браузері після успіху закриває сам клієнт (signOut).
  */
@@ -32,6 +34,18 @@ export const DELETE: RequestHandler = async ({ request, locals }) => {
 
   if (!confirm || confirm !== user.email.trim().toLowerCase()) {
     error(400, 'Пошта не збігається')
+  }
+
+  // Видалення незворотне, а пошту з профілю знає будь-хто, в кого в руках
+  // жива сесія: вкрадена cookie чи не закритий чужий телефон стирали б
+  // акаунт назавжди. Тому — лише одразу після входу (isFreshSession):
+  // людина щойно довела пароль або Google-акаунт. Текст показують і сайт,
+  // і застосунок (старі збірки теж — вони виводять message відповіді).
+  if (!isFreshSession(locals)) {
+    error(
+      403,
+      'Щоб видалити акаунт, вийдіть і увійдіть ще раз — так ми переконаємось, що це ви.',
+    )
   }
 
   const result = await deleteAccount(user.id)

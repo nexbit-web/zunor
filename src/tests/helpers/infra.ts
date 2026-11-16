@@ -109,7 +109,12 @@ export const cloudinary = {
 }
 
 export const signUploadParams = vi.fn(
-  (_params: { folder: string; resourceType?: string; publicId?: string }) => ({
+  (_params: {
+    folder: string
+    resourceType?: string
+    publicId?: string
+    allowedFormats?: readonly string[]
+  }) => ({
     signature: 'test-signature',
     timestamp: 1_700_000_000,
     apiKey: 'test-key',

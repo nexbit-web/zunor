@@ -167,6 +167,8 @@
       fd.append('timestamp', String(sig.timestamp))
       fd.append('signature', sig.signature)
       fd.append('folder', sig.folder)
+      // Перелік форматів — частина підпису: надсилаємо дослівно.
+      if (sig.allowedFormats) fd.append('allowed_formats', sig.allowedFormats)
       if (sig.publicId) {
         fd.append('public_id', sig.publicId)
         fd.append('overwrite', 'true')

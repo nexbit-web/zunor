@@ -13,7 +13,12 @@
 //        що в better-auth (internalAdapter, setSessionCookie).
 //
 // Відповіді start і resend однакові, є акаунт чи ні: інакше форма
-// реєстрації стала б оракулом «чия пошта зареєстрована». Коди помилок
+// реєстрації стала б оракулом «чия пошта зареєстрована».
+//
+// Лічильник спроб тут — на ОДИН код, і «Надіслати ще раз» починає його
+// заново. Скільки кодів і перевірок узагалі дістається одній пошті за
+// годину й добу, обмежує окремий замок — ./auth-guard.ts (він же рахує
+// спроби атомарно, тож паралельні запити не перевищують бюджет). Коди помилок
 // verify — ті самі, що в emailOTP (INVALID_OTP, OTP_EXPIRED,
 // TOO_MANY_ATTEMPTS): клієнти показують їх уже знайомими текстами.
 
@@ -283,6 +288,13 @@ export const registration = (opts: RegistrationOptions) =>
           // Одразу всередині, як було з autoSignInAfterVerification: пароль
           // удруге не вводити.
           const session = await adapter.createSession(user.id)
+          // Сесії немає — її відхилив замок у auth.ts (акаунт заблоковано).
+          if (!session) {
+            throw new APIError('UNAUTHORIZED', {
+              code: 'FAILED_TO_CREATE_SESSION',
+              message: 'Failed to create session',
+            })
+          }
           await setSessionCookie(ctx, { session, user })
           return ctx.json({
             status: true,

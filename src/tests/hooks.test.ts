@@ -25,6 +25,12 @@ vi.mock('better-auth/svelte-kit', () => ({
   }) => resolve(event),
 }))
 
+// Скрипт теми збирає mode-watcher — бібліотека компонентів (.svelte), яку
+// серверні тести не компілюють. Тут потрібен лише сам текст.
+vi.mock('$lib/theme-script.server', () => ({
+  MODE_SNIPPET: 'setInitialMode({"darkClassNames":[]});',
+}))
+
 // Справжній sequence() лізе у внутрішнє сховище запиту SvelteKit, якого поза
 // живим сервером не існує. Підміняємо еквівалентною композицією: кожен
 // наступний handle стає resolve для попереднього — саме та семантика, на якій
@@ -33,19 +39,30 @@ vi.mock('@sveltejs/kit/hooks', () => ({
   sequence:
     (...handlers: Handle[]) =>
     ({ event, resolve }: { event: RequestEvent; resolve: Resolve }) => {
+      // Параметри resolve (transformPageChunk) зовнішнього handle доходять
+      // до кінця ланцюжка, якщо внутрішні не задали своїх, — як у
+      // справжньому sequence.
       const next =
-        (i: number): Resolve =>
-        (ev) =>
+        (i: number, outer?: ResolveOptions): Resolve =>
+        (ev, opts) =>
           i === handlers.length
-            ? resolve(ev)
-            : (handlers[i]({ event: ev, resolve: next(i + 1) }) as
-                | Response
-                | Promise<Response>)
+            ? resolve(ev, opts ?? outer)
+            : (handlers[i]({
+                event: ev,
+                resolve: next(i + 1, opts ?? outer),
+              }) as Response | Promise<Response>)
       return next(0)(event)
     },
 }))
 
-type Resolve = (event: RequestEvent) => Response | Promise<Response>
+interface ResolveOptions {
+  transformPageChunk?: (input: { html: string; done: boolean }) => string
+}
+
+type Resolve = (
+  event: RequestEvent,
+  opts?: ResolveOptions,
+) => Response | Promise<Response>
 type Handle = (input: {
   event: RequestEvent
   resolve: Resolve
@@ -71,7 +88,8 @@ function account(patch: Record<string, unknown> = {}) {
 }
 
 const resolve = vi.fn(
-  async (_event: RequestEvent) => new Response('ok', { status: 200 }),
+  async (_event: RequestEvent, _opts?: ResolveOptions) =>
+    new Response('ok', { status: 200 }),
 )
 
 /** Проганяє повний ланцюжок hooks для заданого шляху. */
@@ -197,7 +215,8 @@ describe('замок 3: онбординг', () => {
 
   it('після онбордингу екран вибору ролі закритий', async () => {
     const r = await redirectOf('/dashboard/onboarding')
-    expect(r.location).toBe('/dashboard/profile')
+    // Рівно '/dashboard': у коді тут стояв рядок із пробілом у кінці.
+    expect(r.location).toBe('/dashboard')
   })
 
   // Точне порівняння, а не startsWith: дочірній /onboarding/master —
@@ -266,19 +285,85 @@ describe('locals.account передається далі', () => {
   })
 })
 
-describe('заголовки безпеки', () => {
-  it('CSP і решта заголовків стоять на кожній відповіді', async () => {
-    const res = await run('/', false)
+// API guardHandle не проходить, а сесія з cookie-кешу живе ще до 5 хв
+// після відкликання. Раніше бан і видалення акаунта на API діяли із цим
+// запізненням (а в застосунку, який сторінок не відкриває, — доки сесія
+// не спливе сама). Тепер для API забанений — гість.
+describe('API: бан діє одразу', () => {
+  /** locals, з якими запит дійшов до роуту. */
+  async function localsFor(pathname: string): Promise<App.Locals> {
+    await run(pathname)
+    return (resolve.mock.calls[0][0] as unknown as RequestEvent).locals
+  }
 
-    const csp = res.headers.get('Content-Security-Policy') ?? ''
-    expect(csp).toContain("default-src 'self'")
-    expect(csp).toContain("frame-ancestors 'none'")
-    expect(csp).toContain("base-uri 'self'")
-    expect(csp).toContain("form-action 'self'")
-    // Картинки — лише свої й Cloudinary: інакше будь-яке чуже посилання
-    // в профілі стає трекінг-пікселем.
-    expect(csp).toContain('img-src')
-    expect(csp).not.toContain('img-src *')
+  it('звичайний користувач лишається із сесією', async () => {
+    const locals = await localsFor('/api/jobs/feed')
+    expect(locals.user).toEqual({ id: 'u1' })
+    expect(locals.session).not.toBeNull()
+  })
+
+  it('забанений для API — гість', async () => {
+    prisma.user.findUnique.mockResolvedValue(account({ banned: true }))
+
+    const locals = await localsFor('/api/jobs/feed')
+
+    expect(locals.user).toBeNull()
+    expect(locals.session).toBeNull()
+  })
+
+  it('видалений акаунт із живою сесією — гість', async () => {
+    prisma.user.findUnique.mockResolvedValue(null)
+
+    const locals = await localsFor('/api/orders')
+
+    expect(locals.user).toBeNull()
+    expect(locals.session).toBeNull()
+  })
+
+  // Стан — із того самого кешу, що й у сторінок: API не будить базу на
+  // кожен запит.
+  it('стан акаунта для API кешується', async () => {
+    await run('/api/jobs/feed')
+    await run('/api/orders')
+    await run('/api/notifications')
+
+    expect(prisma.user.findUnique).toHaveBeenCalledTimes(1)
+  })
+
+  it('гостя API базу не читає', async () => {
+    await run('/api/categories', false)
+    expect(prisma.user.findUnique).not.toHaveBeenCalled()
+  })
+})
+
+describe('заголовки безпеки', () => {
+  // CSP тут немає навмисно: її ставить SvelteKit із nonce на кожну
+  // сторінку (svelte.config.js; csp.test.ts). Заголовок, зібраний руками,
+  // перезаписав би її — і знову мусив би дозволяти 'unsafe-inline'.
+  it('hooks не ставлять власну CSP поверх тієї, що з nonce', async () => {
+    const res = await run('/', false)
+    expect(res.headers.get('Content-Security-Policy')).toBeNull()
+  })
+
+  // Скрипт теми mode-watcher підставляється в app.html — у тег із nonce.
+  it('скрипт теми підставляється в сторінку, як є', async () => {
+    await run('/', false)
+
+    const options = resolve.mock.calls[0][1]
+    const out = options?.transformPageChunk?.({
+      html: '<script nonce="n">%modewatcher.snippet%</script>',
+      done: false,
+    })
+
+    expect(out).toBe('<script nonce="n">setInitialMode({"darkClassNames":[]});</script>')
+    // Сторінка без мітки лишається як була.
+    expect(
+      options?.transformPageChunk?.({ html: '<p>$& $1</p>', done: true }),
+    ).toBe('<p>$& $1</p>')
+  })
+
+  it('заголовки стоять на кожній відповіді', async () => {
+    const res = await run('/', false)
 
     expect(res.headers.get('X-Frame-Options')).toBe('DENY')
     expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff')

@@ -12,6 +12,7 @@ import {
 import type { RequestHandler } from './$types'
 import { background } from '$lib/server/background'
 import { sendMessagePush } from '$lib/server/push'
+import { chatFolder, isOwnUpload } from '$lib/server/own-media'
 
 const MESSAGE_PAGE_SIZE = 50
 const MAX_TEXT_LENGTH = 4000
@@ -102,18 +103,21 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
   let attachmentName: string | null = null
 
   if (attachment?.url) {
-    // Приймаємо тільки те, що реально завантажено через нашу підписану форму.
+    // Приймаємо тільки те, що реально завантажено через нашу підписану
+    // форму: файл із теки чату ЦІЄЇ людини в НАШІЙ хмарі
+    // ($lib/server/own-media). Самого префікса res.cloudinary.com мало: він
+    // пускав чужий акаунт Cloudinary й тип `fetch`, тобто вкладенням ставав
+    // файл, який відправник міг підмінити вже після надсилання. Фото —
+    // лише картинка; файл — будь-який тип завантаження.
     if (
-      typeof attachment.url !== 'string' ||
-      !attachment.url.startsWith('https://res.cloudinary.com/')
+      !isOwnUpload(attachment.url, attachment.publicId, chatFolder(user.id), {
+        image: type === 'PHOTO',
+      })
     ) {
       throw error(400, 'Недопустиме посилання на файл')
     }
-    attachmentUrl = attachment.url
-    attachmentPublicId =
-      typeof attachment.publicId === 'string'
-        ? attachment.publicId.slice(0, 300)
-        : null
+    attachmentUrl = attachment.url as string
+    attachmentPublicId = attachment.publicId as string
     attachmentMimeType =
       typeof attachment.mimeType === 'string'
         ? attachment.mimeType.slice(0, 120)

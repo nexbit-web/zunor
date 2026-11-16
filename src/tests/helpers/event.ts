@@ -43,11 +43,32 @@ export interface EventInit {
  * `session.user`, тому користувач доступний обома шляхами. Частина
  * лоадерів читає `locals.session.user.id`, частина — `locals.user.id`.
  */
-export function sessionUser(id: string): Record<string, unknown> {
+export function sessionUser(
+  id: string,
+  options: {
+    /**
+     * Скільки хвилин тому людина увійшла. За замовчуванням — щойно: дії,
+     * що вимагають свіжого входу (видалення акаунта, налаштування другого
+     * фактора — isFreshSession у $lib/server/guards), проходять. Тест на
+     * стару сесію передає, наприклад, 60.
+     */
+    signedInMinutesAgo?: number
+  } = {},
+): Record<string, unknown> {
   const user = { id, email: `${id}@example.com`, name: id }
+  const createdAt = new Date(
+    Date.now() - (options.signedInMinutesAgo ?? 0) * 60_000,
+  )
   return {
     user,
-    session: { id: `sess-${id}`, userId: id, user },
+    session: {
+      id: `sess-${id}`,
+      userId: id,
+      user,
+      // Справжня форма better-auth — { session, user }: звідси читаються
+      // id сесії й час входу.
+      session: { id: `sess-${id}`, userId: id, createdAt },
+    },
     account: null,
   }
 }

@@ -46,16 +46,20 @@
   // Вийти з акаунта — щоб зайти іншим (звичайним). «На сайт» є лише в
   // того, хто має анкету: без неї /dashboard веде назад сюди (hooks).
   let leaving = $state(false)
-  async function leave(): Promise<void> {
+  async function leaveTo(path: string): Promise<void> {
     if (leaving) return
     leaving = true
     try {
-      await signOutAndGo('/')
+      await signOutAndGo(path)
     } catch {
       leaving = false
       toast.error('Не вдалося вийти. Спробуйте ще раз.')
     }
   }
+  const leave = () => leaveTo('/')
+  // Налаштування другого фактора — лише одразу після входу (сервер,
+  // SETUP_FRESH_MS): виходимо й ведемо на вхід із поверненням в адмінку.
+  const relogin = () => leaveTo('/user/login?redirectTo=%2Fadmin')
 
   // Посилання — як «Увійти» / «Забули пароль?» на сторінках входу.
   const LINK =
@@ -68,19 +72,40 @@
 </svelte:head>
 
 <AuthShell
-  title={data.mode === 'setup' ? 'Захистіть вхід в адмінку' : 'Вхід в адмінку'}
+  title={data.mode === 'setup'
+    ? 'Захистіть вхід в адмінку'
+    : data.mode === 'relogin'
+      ? 'Увійдіть ще раз'
+      : 'Вхід в адмінку'}
   mark="blink"
 >
   {#snippet subtitle()}
     {#if data.mode === 'setup'}
       Відскануйте код у Google Authenticator, 1Password чи Authy й введіть
       шість цифр, які він покаже.
+    {:else if data.mode === 'relogin'}
+      Другий фактор налаштовується одразу після входу — так його не привʼяже
+      до свого телефона той, хто знайшов відкриту вкладку. Вийдіть з акаунта
+      й увійдіть ще раз.
     {:else}
       Введіть код <span class="text-foreground">Zunor Admin</span> із
       застосунку-автентифікатора.
     {/if}
   {/snippet}
 
+  {#if data.mode === 'relogin'}
+    <Button
+      variant="primary"
+      size="lg"
+      class="w-full"
+      type="button"
+      disabled={leaving}
+      aria-busy={leaving}
+      onclick={relogin}
+    >
+      {leaving ? 'Виходимо...' : 'Вийти й увійти ще раз'}
+    </Button>
+  {:else}
   {#if data.mode === 'setup'}
     <div class="mt-2 mb-5 flex flex-col items-center gap-3">
       <QrCode
@@ -189,6 +214,7 @@
       {/if}
     </Button>
   </form>
+  {/if}
 
   <div class="mt-4 flex items-center justify-center gap-4 text-[14px]">
     {#if data.staff.onSite}

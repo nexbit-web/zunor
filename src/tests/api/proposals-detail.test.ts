@@ -107,6 +107,8 @@ describe('DELETE — відкликати відгук', () => {
       jobId: 'job-1',
       status: 'SENT',
     })
+    // Відкликання — умовний запис: рядок знайдено.
+    prisma.proposal.updateMany.mockResolvedValue({ count: 1 })
   })
 
   it('гість — 401', async () => {
@@ -153,14 +155,27 @@ describe('DELETE — відкликати відгук', () => {
     expect(body.ok).toBe(true)
     expect(prisma.$transaction).toHaveBeenCalledTimes(1)
 
-    const data = prisma.proposal.update.mock.calls[0][0].data
-    expect(data.status).toBe('WITHDRAWN')
-    expect(data.withdrawnAt).toBeInstanceOf(Date)
+    const write = prisma.proposal.updateMany.mock.calls[0][0]
+    // Лише живий відгук: прийнятий у ту саму мить уже не відкликається.
+    expect(write.where).toEqual({ id: 'prop-1', status: 'SENT' })
+    expect(write.data.status).toBe('WITHDRAWN')
+    expect(write.data.withdrawnAt).toBeInstanceOf(Date)
 
     expect(prisma.job.update).toHaveBeenCalledWith({
       where: { id: 'job-1' },
       data: { proposalsCount: { decrement: 1 } },
     })
+  })
+
+  // Два «відкликати» поспіль або відкликання в мить, коли клієнт обирає
+  // майстра: лічильник заявки не зменшується двічі.
+  it('відгук уже неактивний на момент запису — 409, лічильник не чіпаємо', async () => {
+    prisma.proposal.updateMany.mockResolvedValue({ count: 0 })
+
+    const res = await failure(() => DELETE(propEvent(MASTER)))
+
+    expect(res.status).toBe(409)
+    expect(prisma.job.update).not.toHaveBeenCalled()
   })
 
   // М'яке відкликання, а не видалення: історія відгуків потрібна скорингу.

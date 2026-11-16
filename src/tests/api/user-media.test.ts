@@ -8,6 +8,11 @@ vi.mock('$lib/server/prisma', async () => ({
   prisma: (await import('../helpers/prisma-mock')).prisma,
 }))
 vi.mock('$lib/server/cloudinary', async () => await import('../helpers/infra'))
+// Ліміт запитів тримає стан у памʼяті модуля, а всі кейси тут — від одного
+// користувача: без заглушки 31-й запит файлу впирався б у 429.
+vi.mock('$lib/server/rate-limit', () => ({
+  limit: async () => ({ success: true, remaining: 1, resetAt: 0 }),
+}))
 
 const { POST } = await import('../../routes/api/user/media/+server')
 
@@ -32,7 +37,7 @@ const CLOUD = env.CLOUDINARY_CLOUD_NAME
 const at = (path: string) =>
   `https://res.cloudinary.com/${CLOUD}/image/upload/v1/${path}.jpg`
 
-const ownAvatarId = `zunor/users/${USER}/avatar`
+const ownAvatarId = `zunor/users/${USER}/avatar/profile`
 const ownAvatarUrl = at(ownAvatarId)
 
 beforeEach(() => {
@@ -106,6 +111,28 @@ describe('avatar: посилання', () => {
       'посилання без свого publicId',
       `https://res.cloudinary.com/${CLOUD}/image/upload/v1/other.jpg`,
     ],
+    // fetch віддає ЧУЖУ адресу крізь нашу хмару — вміст знову не наш.
+    [
+      'тип fetch замість upload',
+      `https://res.cloudinary.com/${CLOUD}/image/fetch/https://evil.com/${ownAvatarId}.jpg`,
+    ],
+    // Накладання тягне чужу картинку поверх нашої.
+    [
+      'трансформація перед файлом',
+      `https://res.cloudinary.com/${CLOUD}/image/upload/l_fetch:aHR0cHM6Ly9ldmlsLmNvbQ/v1/${ownAvatarId}.jpg`,
+    ],
+    [
+      'не картинка',
+      `https://res.cloudinary.com/${CLOUD}/raw/upload/v1/${ownAvatarId}.html`,
+    ],
+    [
+      'зайвий хвіст після файлу',
+      `https://res.cloudinary.com/${CLOUD}/image/upload/v1/${ownAvatarId}.jpg/../x`,
+    ],
+    [
+      'рядок запиту',
+      `https://res.cloudinary.com/${CLOUD}/image/upload/v1/${ownAvatarId}.jpg?x=1`,
+    ],
   ]
 
   for (const [label, url] of bad) {
@@ -135,9 +162,8 @@ describe('avatar: посилання', () => {
   })
 
   it('старий аватар видаляється з Cloudinary', async () => {
-    prisma.user.findUnique.mockResolvedValue({
-      avatarPublicId: 'old-avatar-id',
-    })
+    const oldId = `zunor/users/${USER}/avatar/old`
+    prisma.user.findUnique.mockResolvedValue({ avatarPublicId: oldId })
 
     await post(USER, {
       kind: 'avatar',
@@ -145,12 +171,38 @@ describe('avatar: посилання', () => {
       url: ownAvatarUrl,
     })
 
-    expect(cloudinary.uploader.destroy).toHaveBeenCalledWith('old-avatar-id')
+    expect(cloudinary.uploader.destroy).toHaveBeenCalledWith(oldId)
+  })
+
+  // Головна дірка, яку тут закрито. id у базі колись писався з тіла
+  // запиту без перевірки (/api/user/update, форма профілю): чужий id,
+  // підкладений собі, наступною зміною фото стирав ЧУЖИЙ файл із хмари —
+  // а id аватара вгадується (zunor/users/<id>/avatar/profile).
+  it('чужий id у базі при зміні фото з хмари не стирається', async () => {
+    for (const foreign of [
+      'zunor/users/other-user/avatar/profile',
+      'zunor/users/other-user/jobs/photo-1',
+      'zunor/chat/other-user/file',
+      `zunor/users/${USER}/../other-user/avatar/profile`,
+      'old-avatar-id',
+    ]) {
+      cloudinary.uploader.destroy.mockClear()
+      prisma.user.findUnique.mockResolvedValue({ avatarPublicId: foreign })
+
+      const res = await post(USER, {
+        kind: 'avatar',
+        publicId: ownAvatarId,
+        url: ownAvatarUrl,
+      })
+
+      expect(res.status).toBe(200)
+      expect(cloudinary.uploader.destroy).not.toHaveBeenCalled()
+    }
   })
 
   it('збій видалення старого файлу не валить запит', async () => {
     prisma.user.findUnique.mockResolvedValue({
-      avatarPublicId: 'old-avatar-id',
+      avatarPublicId: `zunor/users/${USER}/avatar/old`,
     })
     cloudinary.uploader.destroy.mockRejectedValueOnce(
       new Error('cloudinary down'),
@@ -309,12 +361,18 @@ describe('portfolio', () => {
   })
 
   it('видалення чужого publicId — 403, файл не чіпаємо', async () => {
-    const res = await post(USER, {
-      kind: 'portfolio-remove',
-      publicId: 'zunor/users/other/portfolio-1',
-    })
+    for (const foreign of [
+      'zunor/users/other/portfolio-1',
+      // startsWith пропускав би такий шлях: тека своя, а веде в чужу.
+      `zunor/users/${USER}/../other/portfolio-1`,
+    ]) {
+      const res = await post(USER, {
+        kind: 'portfolio-remove',
+        publicId: foreign,
+      })
 
-    expect(res.status).toBe(403)
+      expect(res.status).toBe(403)
+    }
     expect(cloudinary.uploader.destroy).not.toHaveBeenCalled()
   })
 

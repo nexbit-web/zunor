@@ -70,6 +70,59 @@ describe('DELETE /api/me', () => {
     expect(res.status).toBe(401)
   })
 
+  // Видалення незворотне, а пошту з профілю знає кожен, у кого в руках
+  // жива сесія. Тому — лише одразу після входу: вкрадена cookie чи не
+  // закритий чужий телефон акаунта не стирають.
+  it('стара сесія — 403: спершу увійти ще раз', async () => {
+    const res = await failure(() =>
+      DELETE(
+        makeEvent({
+          method: 'DELETE',
+          body: { confirm: 'u1@example.com' },
+          locals: sessionUser('u1', { signedInMinutesAgo: 16 }),
+        }),
+      ),
+    )
+
+    expect(res.status).toBe(403)
+    expect(res.message).toContain('увійдіть ще раз')
+    expect(prisma.$transaction).not.toHaveBeenCalled()
+    expect(revokeSessions).not.toHaveBeenCalled()
+    expect(cloud.deleteByPrefix).not.toHaveBeenCalled()
+  })
+
+  it('сесія без часу входу свіжою не вважається', async () => {
+    const res = await failure(() =>
+      DELETE(
+        makeEvent({
+          method: 'DELETE',
+          body: { confirm: 'u1@example.com' },
+          locals: {
+            user: { id: 'u1', email: 'u1@example.com' },
+            session: { user: { id: 'u1' }, session: { id: 's1' } },
+            account: null,
+          },
+        }),
+      ),
+    )
+
+    expect(res.status).toBe(403)
+    expect(prisma.$transaction).not.toHaveBeenCalled()
+  })
+
+  it('свіжа сесія (14 хв) — проходить', async () => {
+    const body = await okJson<{ ok: boolean }>(() =>
+      DELETE(
+        makeEvent({
+          method: 'DELETE',
+          body: { confirm: 'u1@example.com' },
+          locals: sessionUser('u1', { signedInMinutesAgo: 14 }),
+        }),
+      ),
+    )
+    expect(body.ok).toBe(true)
+  })
+
   it('без підтвердження поштою нічого не стирає', async () => {
     const res = await failure(() => del({}, 'u2'))
     expect(res.status).toBe(400)

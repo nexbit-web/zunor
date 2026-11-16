@@ -17,8 +17,10 @@
 
     <!-- Акцент і контраст — до першого кадру, інакше сторінка спершу
          малюється синьою. Ключі ті самі, що в stores/appearance.svelte.ts.
-         Значення перевіряється: у сховищі може лежати що завгодно. -->
-    <script>
+         Значення перевіряється: у сховищі може лежати що завгодно.
+         nonce — одноразовий, його підставляє SvelteKit: CSP (svelte.config.js)
+         вбудованих скриптів без nonce не виконує. -->
+    <script nonce="%sveltekit.nonce%">
       try {
         var accent = localStorage.getItem('zunor-accent')
         if (accent && /^[a-z]{2,16}$/.test(accent)) {
@@ -35,7 +37,7 @@
          сайту завжди світла й на своїй палітрі. Правило те саме, що в
          $lib/theme-scope.ts; ключ і «system» за замовчуванням — як у
          mode-watcher. -->
-    <script>
+    <script nonce="%sveltekit.nonce%">
       try {
         var path = location.pathname
         if (
@@ -55,6 +57,13 @@
           }
         }
       } catch (e) {}
+    </script>
+
+    <!-- Скрипт теми mode-watcher (color-scheme до першого кадру). Сам
+         <ModeWatcher> вставляв би його без nonce, тому вставка там вимкнена,
+         а текст підставляє hooks.server.ts. -->
+    <script nonce="%sveltekit.nonce%">
+      %modewatcher.snippet%
     </script>
 
     %sveltekit.head%
