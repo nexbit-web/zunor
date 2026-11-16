@@ -60,16 +60,8 @@ function uah(cents: number): string {
 }
 
 /**
- * PATCH /api/proposals/[id] — майстер змінює ціну у своєму відгуку.
- * Body: { priceUah: number }
- *
- * Навіщо (власник): клієнт бачить телефон майстра просто в пропозиції й
- * дзвонить домовитись; домовились про іншу ціну — майстер оновлює її тут,
- * і клієнт обирає вже за новою (accept копіює priceCents у замовлення).
- *
- * Лише поки відгук живий (SENT), а заявка відкрита: після вибору ціна —
- * умова замовлення, і одна сторона її не міняє. Межі — ті самі, що в
- * POST /api/jobs/[id]/proposals.
+ * PATCH — майстер міняє ціну у своєму відгуку після дзвінка клієнта.
+ * Лише поки відгук SENT, а заявка OPEN. Body: { priceUah }
  */
 export const PATCH: RequestHandler = async ({ params, request, locals }) => {
   const user = requireApiUser(locals)
@@ -109,13 +101,13 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
     throw error(400, 'Ціну можна змінити, лише поки вас не обрали')
   }
 
-  // Та сама ціна — нічого не пишемо й не турбуємо клієнта сповіщенням.
+  // * та сама ціна — нічого не пишемо й не турбуємо клієнта сповіщенням
   if (proposal.priceCents === priceCents) {
     return json({ proposal: { id: proposal.id, priceCents } })
   }
 
-  // Умовний запис: між читанням і записом клієнт міг уже обрати майстра
-  // (accept). Тоді ціна лишається тією, за якою його обрали.
+  // * умовний запис: між читанням і записом клієнт міг уже обрати майстра
+  // * (accept). Тоді ціна лишається тією, за якою його обрали
   const { count } = await prisma.proposal.updateMany({
     where: { id: proposal.id, status: 'SENT', job: { status: 'OPEN' } },
     data: { priceCents },
@@ -124,7 +116,7 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
     throw error(409, 'Клієнт уже обрав майстра — ціну змінити не можна')
   }
 
-  // Після запису, не в транзакції — як і решта сповіщень (notify).
+  // * після запису, не в транзакції — як і решта сповіщень (notify)
   await Notify.proposalPriceChanged(
     proposal.job.clientId,
     proposal.jobId,
@@ -162,9 +154,9 @@ export const DELETE: RequestHandler = async ({ params, locals }) => {
   }
 
   await prisma.$transaction(async (tx) => {
-    // Умовний запис: два «відкликати» поспіль (або відкликання в мить,
-    // коли клієнт обирає майстра) інакше зменшили б лічильник заявки двічі
-    // чи відкликали б уже прийняту пропозицію.
+    // * умовний запис: два «відкликати» поспіль (або відкликання в мить,
+    // * коли клієнт обирає майстра) інакше зменшили б лічильник заявки двічі
+    // * чи відкликали б уже прийняту пропозицію
     const withdrawn = await tx.proposal.updateMany({
       where: { id: proposal.id, status: 'SENT' },
       data: {

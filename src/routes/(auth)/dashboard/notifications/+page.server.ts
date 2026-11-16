@@ -7,7 +7,7 @@ const PAGE_SIZE = 20
 export const load: PageServerLoad = async ({ locals }) => {
   const userId = requireUser(locals).id
 
-  // Перша сторінка + лічильник непрочитаних — паралельно.
+  // * перша сторінка + лічильник непрочитаних — паралельно
   const [rows, unreadCount] = await Promise.all([
     prisma.notification.findMany({
       where: { userId },
@@ -33,8 +33,8 @@ export const load: PageServerLoad = async ({ locals }) => {
   const list = hasMore ? rows.slice(0, PAGE_SIZE) : rows
   const nextCursor = hasMore ? list[list.length - 1].id : null
 
-  // userId назовні не віддаємо: сторінка більше не заводить власної
-  // Pusher-підписки — події приходять зі спільного стору сповіщень.
+  // * userId назовні не віддаємо: сторінка більше не заводить власної
+  // * Pusher-підписки — події приходять зі спільного стору сповіщень
   return {
     notifications: list.map((n) => ({
       ...n,

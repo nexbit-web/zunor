@@ -1,17 +1,6 @@
-// Нагадування за день до прибирання — обом сторонам замовлення.
-//
-// Коли: щодня о 18:00 за Києвом. Таймер у памʼяті процесу (як хвилі
-// розсилки, AGENTS 2.1) і задача крона `reminders` як страховка. Це один
-// запит до бази на добу: Neon між ними спить (AGENTS 5.1).
-//
-// Кому: замовлення CREATED — домовились, але ще не почали, — чий день
-// роботи завтра. День дає категорія (`matchingFor(...).serviceDay`):
-// «завтра» в заявці рахується від дня її СТВОРЕННЯ, а не від сьогодні.
-//
-// Двічі не шлемо: відмітка — подія замовлення REMINDER_SENT (аудит; з
-// «Історії подій» її прибирає order-events.ts), і пишеться вона ДО
-// сповіщень. Таймер і крон
-// живуть в одному процесі, тож одночасний прогін розводить `running`.
+// * нагадування за день до прибирання обом сторонам: щодня о 18:00 за Києвом,
+// * таймер процесу плюс крон як страховка. Двічі не шлемо: відмітка
+// * REMINDER_SENT пишеться до сповіщень
 
 import { prisma } from './prisma'
 import { Notify } from './notifications'
@@ -45,7 +34,7 @@ export function kyivDay(at: Date, plusDays = 0): string {
 
 /** Зсув Києва від UTC у мс у момент `at` (+2 чи +3 год — літній час). */
 function kyivOffsetMs(at: Date): number {
-  // 'sv-SE' дає «YYYY-MM-DD HH:MM:SS» — той самий формат, що й ISO.
+  // * 'sv-SE' дає «YYYY-MM-DD HH:MM:SS» — той самий формат, що й ISO
   const wall = at.toLocaleString('sv-SE', { timeZone: TZ }).replace(' ', 'T')
   return Date.parse(`${wall}Z`) - Math.floor(at.getTime() / 1000) * 1000
 }
@@ -89,8 +78,8 @@ export async function sendDayBeforeReminders(now = new Date()): Promise<number> 
           gte: new Date(now.getTime() - STALE_MS),
         },
         events: { none: { type: REMINDER_EVENT } },
-        // Заблокованій стороні нагадувати нічого, а другій — «завтра
-        // прийде» про того, хто вже не прийде, — неправда.
+        // * заблокованій стороні нагадувати нічого, а другій — «завтра
+        // * прийде» про того, хто вже не прийде, — неправда
         client: { banned: false },
         master: { banned: false },
       },
@@ -109,8 +98,8 @@ export async function sendDayBeforeReminders(now = new Date()): Promise<number> 
       take: MAX_ORDERS,
     })
 
-    // День лежить у metadata (і часто відносно дня заявки), тож у WHERE
-    // його не висловити — відбираємо тут.
+    // * день лежить у metadata (і часто відносно дня заявки), тож у WHERE
+    // * його не висловити — відбираємо тут
     const due = orders.filter(
       (o) =>
         matchingFor(o.fromJob?.category ?? '').serviceDay(
@@ -120,13 +109,13 @@ export async function sendDayBeforeReminders(now = new Date()): Promise<number> 
     )
 
     for (const o of due) {
-      // Відмітка ДО сповіщень: краще недонагадати при збої, ніж слати
-      // двічі на кожен перезапуск.
+      // * відмітка ДО сповіщень: краще недонагадати при збої, ніж слати
+      // * двічі на кожен перезапуск
       await prisma.orderEvent.create({
         data: { orderId: o.id, type: REMINDER_EVENT, payload: { day: tomorrow } },
       })
-      // notify() сам нічого не кидає назовні з Pusher/Telegram, але запис
-      // у базу може впасти — одне невдале сповіщення не зупиняє решту.
+      // * notify() сам нічого не кидає назовні з Pusher/Telegram, але запис
+      // * у базу може впасти — одне невдале сповіщення не зупиняє решту
       await Promise.allSettled([
         Notify.orderReminderClient(o.clientId, o.id, o.title, o.master.name),
         Notify.orderReminderMaster(o.masterId, o.id, o.title, o.client.name),
@@ -159,15 +148,15 @@ export function startReminders(): void {
   if (g[STARTED]) return
   g[STARTED] = true
 
-  // Процес піднявся після 18:00 — сьогоднішній прогін міг пропасти.
-  // Відмітки не дадуть надіслати вдруге те, що вже пішло.
+  // * процес піднявся після 18:00 — сьогоднішній прогін міг пропасти.
+  // * Відмітки не дадуть надіслати вдруге те, що вже пішло
   if (pastTodaysRun(new Date())) void runLogged()
 
   const schedule = () => {
     const timer = setTimeout(() => {
       void runLogged().finally(schedule)
     }, msUntilNextRun(new Date()))
-    // Таймер не тримає процес живим сам по собі.
+    // * таймер не тримає процес живим сам по собі
     timer.unref?.()
   }
   schedule()

@@ -10,17 +10,17 @@ const PAGE_SIZE = 20
 type ViewMode = 'mine' | 'feed'
 
 export const load: PageServerLoad = async ({ locals, url, depends }) => {
-  // Стрічка майстра перезапитується, коли приходить сповіщення про нову
-  // заявку (master-feed.svelte, invalidate).
+  // * стрічка майстра перезапитується, коли приходить сповіщення про нову
+  // * заявку (master-feed.svelte, invalidate)
   depends('app:jobs-feed')
 
-  // Гостя сюди не пускає guardHandle (hooks.server.ts) — цей виклик і
-  // звужує тип, і лишається страховкою, якщо роут винесуть з /dashboard.
+  // * гостя сюди не пускає guardHandle (hooks.server.ts) — цей виклик і
+  // * звужує тип, і лишається страховкою, якщо роут винесуть з /dashboard
   const userId = requireUser(locals).id
 
-  // Профіль і довідники не залежать одне від одного — беремо разом.
-  // Довідники йдуть з кешу в пам'яті (reference.ts), тож у штатному випадку
-  // це один запит до БД на всю сторінку, а не три.
+  // * профіль і довідники не залежать одне від одного — беремо разом.
+  // * Довідники йдуть з кешу в пам'яті (reference.ts), тож у штатному випадку
+  // * це один запит до БД на всю сторінку, а не три
   const [user, categoryRows, cityRows, districtRows] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
@@ -35,7 +35,7 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
             categories: true,
             travelRadiusKm: true,
             metadata: true,
-            // Для «Топ для тебе» (bestMatches): авто й формат роботи.
+            // * для «Топ для тебе» (bestMatches): авто й формат роботи
             hasVehicle: true,
             crew: true,
           },
@@ -48,7 +48,7 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
   ])
   if (!user) throw redirect(302, '/user/login')
 
-  // ?view — параметр з URL, тож приймаємо лише відомі значення; інакше дефолт за роллю.
+  // * ?view — параметр з URL, тож приймаємо лише відомі значення; інакше дефолт за роллю
   const requestedView = url.searchParams.get('view')
   const view: ViewMode =
     requestedView === 'mine' || requestedView === 'feed'
@@ -57,8 +57,8 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
         ? 'feed'
         : 'mine'
 
-  // Довідники для фільтрів стрічки. Урізаємо до полів, які реально читає
-  // UI: усе зайве поїхало б у payload сторінки на кожній навігації.
+  // * довідники для фільтрів стрічки. Урізаємо до полів, які реально читає
+  // * UI: усе зайве поїхало б у payload сторінки на кожній навігації
   const allCategories = categoryRows.map((c) => ({
     slug: c.slug,
     name: c.name,
@@ -136,12 +136,12 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
     }
   }
 
-  // ─── FEED: відкриті заявки для майстра ───
+  // * FEED: відкриті заявки для майстра
   if (user.role !== 'MASTER') {
     throw redirect(302, '/jobs?view=mine')
   }
 
-  // Якщо майстер ще не налаштований — порожня стрічка з причиною, а не помилка.
+  // * якщо майстер ще не налаштований — порожня стрічка з причиною, а не помилка
   const mp = user.masterProfile
   if (!mp?.isActive || !user.city) {
     return {
@@ -169,11 +169,11 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
     }
   }
 
-  // Стрічка тут — лише місто майстра, тож і райони одного міста.
+  // * стрічка тут — лише місто майстра, тож і райони одного міста
   const districts = cityDistricts(districtRows, user.city)
 
-  // Відмови, хвилі розсилки й межа виїзду — тим самим правилом, що й
-  // догрузка в API: стрічка не обганяє розсилку.
+  // * відмови, хвилі розсилки й межа виїзду — тим самим правилом, що й
+  // * догрузка в API: стрічка не обганяє розсилку
   const scope = await masterFeedScope({
     masterId: userId,
     masterDistrict: user.district,
@@ -229,14 +229,14 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
   const items = hasMore ? jobs.slice(0, PAGE_SIZE) : jobs
   const nextCursor = hasMore ? items[items.length - 1].id : null
 
-  // У фільтрах показуємо лише ті категорії, у яких працює сам майстер.
+  // * У фільтрах показуємо лише ті категорії, у яких працює сам майстер
   const masterCategories = allCategories.filter((c) =>
     mp.categories.includes(c.slug),
   )
 
-  // Район заявки й відстань від району майстра — щоб «чи по дорозі»
-  // було видно ще до того, як відкрити заявку. З тієї ж відстані —
-  // «Топ для тебе» (той самий шлях, що й у догрузці).
+  // * район заявки й відстань від району майстра — щоб «чи по дорозі»
+  // * було видно ще до того, як відкрити заявку. З тієї ж відстані —
+  // * «Топ для тебе» (той самий шлях, що й у догрузці)
   const placed = items.map((j) => ({
     job: j,
     place: jobPlace(districts, j.district, user.district),
@@ -261,8 +261,8 @@ export const load: PageServerLoad = async ({ locals, url, depends }) => {
       expiresAt: j.expiresAt.toISOString(),
       place,
       match: matches.get(j.id) ?? null,
-      // Рейтинг клієнта віддаємо під єдиним імʼям (avgRating/reviewsCount),
-      // щоб картка заявки не залежала від ролі автора.
+      // * рейтинг клієнта віддаємо під єдиним імʼям (avgRating/reviewsCount),
+      // * щоб картка заявки не залежала від ролі автора
       client: {
         ...j.client,
         avgRating: j.client.avgRatingAsClient,

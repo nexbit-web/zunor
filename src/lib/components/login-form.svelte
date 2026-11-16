@@ -23,7 +23,7 @@
   let { class: className, ...restProps }: HTMLFormAttributes = $props()
   const id = $props.id()
 
-  // ─── State ───
+  // * State
   let email = $state('')
   let password = $state('')
   let loading = $state(false)
@@ -31,7 +31,7 @@
   let serverError = $state('')
   let touched = $state({ email: false, password: false })
 
-  // ─── Валідація (UX-рівень; авторитет — сервер) ───
+  // * валідація (UX-рівень; авторитет — сервер)
   const EMAIL_RE = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
   function isValidEmail(e: string): boolean {
     const t = e.trim()
@@ -46,7 +46,7 @@
   )
   const formValid = $derived(isValidEmail(email) && password.length > 0)
 
-  // Помилки з URL: banned ставить guardHandle, oauth — errorCallbackURL нижче.
+  // * помилки з URL: banned ставить guardHandle, oauth — errorCallbackURL нижче
   const urlError = $derived(page.url.searchParams.get('error'))
   const urlErrorText = $derived(
     urlError === 'banned'
@@ -60,8 +60,8 @@
     e.preventDefault()
     if (loading || googleLoading) return
 
-    // Позначаємо поля як «торкнуті» саме тут: до першого натиску
-    // помилок немає, підпис під полем з'являється рівно на спробу увійти.
+    // * позначаємо поля як «торкнуті» саме тут: до першого натиску
+    // * помилок немає, підпис під полем з'являється рівно на спробу увійти
     touched = { email: true, password: true }
     if (!formValid) return
     loading = true
@@ -75,8 +75,8 @@
       })
 
       if (err) {
-        // 403 = EMAIL_NOT_VERIFIED. Не залишаємо юзера в глухому куті:
-        // better-auth уже надіслав новий код, ведемо його вводити.
+        // * 403 = EMAIL_NOT_VERIFIED. Не залишаємо юзера в глухому куті:
+        // * better-auth уже надіслав новий код, ведемо його вводити
         if (err.status === 403) {
           await goto(
             `/user/verify-email?email=${encodeURIComponent(normalizedEmail)}`,
@@ -85,14 +85,14 @@
         }
         if (err.status === 429)
           serverError = 'Забагато спроб. Спробуйте через хвилину.'
-        // Однакове формулювання на «немає юзера» і «невірний пароль» —
-        // інакше форма стає оракулом існування акаунтів.
+        // * однакове формулювання на «немає юзера» і «невірний пароль» —
+        // * інакше форма стає оракулом існування акаунтів
         else serverError = 'Невірний email або пароль'
         return
       }
 
-      // Тост ДО навігації: invalidateAll перемонтовує кореневий layout
-      // разом із <Toaster>, і черга тостів обнуляється.
+      // * тост ДО навігації: invalidateAll перемонтовує кореневий layout
+      // * разом із <Toaster>, і черга тостів обнуляється
       const name = data?.user?.name ?? ''
       toast(name ? `Вітаємо, ${name}!` : 'Вітаємо!', { icon: WaveIcon })
 
@@ -111,9 +111,9 @@
     googleLoading = true
     serverError = ''
     try {
-      // redirectTo прогоняємо через safeRedirectTarget: інакше посилання
-      // /user/login?redirectTo=//evil.com відправило б юзера на чужий домен
-      // одразу після успішного входу, вже з живою сесією.
+      // * redirectTo прогоняємо через safeRedirectTarget: інакше посилання
+      // * /user/login?redirectTo=//evil.com відправило б юзера на чужий домен
+      // * одразу після успішного входу, вже з живою сесією
       const callbackURL = safeRedirectTarget(
         page.url.searchParams.get('redirectTo'),
       )
@@ -123,14 +123,14 @@
         callbackURL,
         errorCallbackURL: '/user/login?error=oauth',
       })
-      // Успіх = редірект на Google, код нижче не виконується.
+      // * успіх = редірект на Google, код нижче не виконується
     } catch (err) {
       if (dev) console.error('[login] google failed:', err)
       serverError = 'Не вдалося увійти через Google'
       googleLoading = false
     }
-    // googleLoading НЕ скидаємо у finally: при успіху сторінка вже йде
-    // на Google, і скидання спінера показало б активну кнопку на мить.
+    // * googleLoading НЕ скидаємо у finally: при успіху сторінка вже йде
+    // * на Google, і скидання спінера показало б активну кнопку на мить
   }
 </script>
 

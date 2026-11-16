@@ -6,23 +6,9 @@ import { cancelWaves } from '$lib/server/dispatch'
 import type { RequestHandler } from './$types'
 
 /**
- * POST /api/proposals/[id]/accept — клиент выбирает мастера.
- *
- * Атомарно:
- *   0. Job → IN_PROGRESS і цей proposal → ACCEPTED умовним записом
- *      (лише з OPEN / SENT): із двох одночасних запитів проходить один,
- *      другий — 409 без другого замовлення
- *   1. Создаёт Order (status=CREATED, БЕЗ чата)
- *   2. Остальные proposals → REJECTED
- *   3. Job.selectedOrderId
- *   4. OrderEvent(CREATED)
- *
- * Чат тут НЕ створюється — інакше кожен вибір майстра плодив би порожній чат
- * у обох списках повідомлень. Його заводить перша спроба написати:
- * POST /api/orders/[id]/chat.
- *
- * После (fail-soft):
- *   - Notification мастеру
+ * POST /api/proposals/[id]/accept — клієнт обирає майстра. В одній транзакції:
+ * заявка → IN_PROGRESS і відгук → ACCEPTED умовним записом, замовлення,
+ * решта відгуків → REJECTED. Чат тут не створюється. Сповіщення — після коміту.
  */
 export const POST: RequestHandler = async ({ params, locals }) => {
   const user = requireApiUser(locals)
@@ -53,7 +39,7 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 
   if (!proposal) throw error(404, 'Proposal не знайдено')
 
-  // Только владелец job может принимать
+  // * только владелец job может принимать
   if (proposal.job.clientId !== user.id) {
     throw error(403, 'Тільки замовник може обрати майстра')
   }
@@ -64,22 +50,19 @@ export const POST: RequestHandler = async ({ params, locals }) => {
     throw error(400, 'Цей відгук вже неактивний')
   }
 
-  // Атомарная транзакция
+  // * атомарная транзакция
   const result = await prisma.$transaction(async (tx) => {
-    // 0. Замок. Перевірки вище зроблені ДО транзакції, тож два запити
-    //    одночасно (подвійний клік, дві вкладки, скрипт) обидва бачили
-    //    заявку відкритою — і створювали ДВА замовлення на одну заявку.
-    //    Умовний запис пускає рівно один: другий чекає на перший і бачить
-    //    уже закриту заявку (0 рядків) — усе відкочується.
+    // * замок: перевірки вище зроблені до транзакції, тож із двох одночасних
+    // * запитів умовний запис пускає один — другий бачить 0 рядків
     const claimed = await tx.job.updateMany({
       where: { id: proposal.jobId, status: 'OPEN' },
       data: { status: 'IN_PROGRESS', closedAt: new Date() },
     })
     if (claimed.count !== 1) throw error(409, 'Заявка вже закрита')
 
-    // Відгук — так само: майстер міг щойно відкликати його або змінити
-    // ціну (PATCH /api/proposals/[id]). Замовлення створюється рівно за
-    // тією ціною, яку бачив клієнт, або не створюється зовсім.
+    // * відгук — так само: майстер міг щойно відкликати його або змінити
+    // * ціну (PATCH /api/proposals/[id]). Замовлення створюється рівно за
+    // * тією ціною, яку бачив клієнт, або не створюється зовсім
     const accepted = await tx.proposal.updateMany({
       where: {
         id: proposal.id,
@@ -104,8 +87,8 @@ export const POST: RequestHandler = async ({ params, locals }) => {
         priceCents: proposal.priceCents,
         currency: 'UAH',
         status: 'CREATED',
-        // Номер заявки — копією: лишається й після того, як заявка
-        // відкриється знову (schema.prisma, Order.jobNumber).
+        // * номер заявки — копією: лишається й після того, як заявка
+        // * відкриється знову (schema.prisma, Order.jobNumber)
         jobNumber: proposal.job.number,
       },
       select: {
@@ -120,7 +103,7 @@ export const POST: RequestHandler = async ({ params, locals }) => {
       },
     })
 
-    // 4. Остальные → REJECTED
+    // * 4. Остальные → REJECTED
     await tx.proposal.updateMany({
       where: {
         jobId: proposal.jobId,
@@ -130,13 +113,13 @@ export const POST: RequestHandler = async ({ params, locals }) => {
       data: { status: 'REJECTED' },
     })
 
-    // 5. Заявка (вже IN_PROGRESS — крок 0) посилається на замовлення
+    // * 5. Заявка (вже IN_PROGRESS — крок 0) посилається на замовлення
     await tx.job.update({
       where: { id: proposal.jobId },
       data: { selectedOrderId: order.id },
     })
 
-    // 6. Audit
+    // * 6. Audit
     await tx.orderEvent.create({
       data: {
         orderId: order.id,
@@ -152,11 +135,11 @@ export const POST: RequestHandler = async ({ params, locals }) => {
     return order
   })
 
-  // Майстра обрано, заявка більше не приймає відгуки — знімаємо заплановані
-  // хвилі, щоб таймер не будив базу заради закритої заявки.
+  // * майстра обрано, заявка більше не приймає відгуки — знімаємо заплановані
+  // * хвилі, щоб таймер не будив базу заради закритої заявки
   cancelWaves(proposal.jobId)
 
-  // Notification мастеру (fail-soft)
+  // * Notification мастеру (fail-soft)
   try {
     await Notify.proposalAccepted(proposal.masterId, proposal.jobId, result.id)
   } catch (err) {

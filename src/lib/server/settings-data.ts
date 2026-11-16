@@ -1,9 +1,5 @@
-// Дані розділів налаштувань — спільні для сторінок сайту
-// (dashboard/settings/*/+page.server.ts) і застосунку (GET-ендпоінти
-// /api/me/profile, /api/me/master-profile, /api/me/security,
-// /api/telegram/link, /api/profile/ai-profile). Розділ на сайті й екран у застосунку
-// показують одне й те саме, тож і читають це з одного місця: інакше
-// одне з двох рано чи пізно почало б показувати застаріле.
+// * дані розділів налаштувань — одне місце для сторінок сайту й екранів
+// * застосунку, щоб вони показували те саме
 
 import { prisma } from './prisma'
 import { activeOrdersCount } from './active-orders'
@@ -48,9 +44,9 @@ export async function loadClientProfileForm(userId: string) {
   return {
     user,
     cities: cities.map((c) => ({ slug: c.slug, name: c.name })),
-    // Райони всіх міст разом: форма сама бере райони обраного міста, і
-    // зміна міста не потребує нового запиту. Координати формі не
-    // потрібні — лише назва й група («Місто» / «Передмістя»).
+    // * райони всіх міст разом: форма сама бере райони обраного міста, і
+    // * зміна міста не потребує нового запиту. Координати формі не
+    // * потрібні — лише назва й група («Місто» / «Передмістя»)
     districts: districts.map((d) => ({
       citySlug: d.citySlug,
       slug: d.slug,
@@ -60,16 +56,7 @@ export async function loadClientProfileForm(userId: string) {
   }
 }
 
-/**
- * Анкета майстра для екрана «Профіль» у застосунку — ті самі поля, що
- * форма на сайті (dashboard/settings/profile, master-onboarding): дані,
- * де працює, що робить, опис, приклади робіт і стан перевірки. Плюс
- * довідники (категорії, міста, райони). Зберігає застосунок тим самим
- * шляхом, що й сайт, — POST /api/profile/master.
- *
- * Анкети ще немає (майстер без MasterProfile) — `master: null`: форма
- * відкривається порожньою.
- */
+/** Анкета майстра для форми профілю, з довідниками. Анкети ще немає — `master: null`. */
 export async function loadMasterProfileForm(userId: string) {
   const [user, categories, cities, districts] = await Promise.all([
     prisma.user.findUnique({
@@ -114,7 +101,7 @@ export async function loadMasterProfileForm(userId: string) {
           travelRadiusKm: mp.travelRadiusKm,
           hasVehicle: mp.hasVehicle,
           crew: mp.crew,
-          // Уміння за категоріями ({ [slug]: … }) — без решти metadata.
+          // * уміння за категоріями ({ [slug]: … }) — без решти metadata
           skills: parseMasterSkills(mp.metadata),
           description: mp.description ?? '',
           portfolioImages: mp.portfolioImages,
@@ -134,12 +121,7 @@ export async function loadMasterProfileForm(userId: string) {
   }
 }
 
-/**
- * Безпека: які способи входу привʼязані й чи можна зараз видалити
- * акаунт. Хеші лишаються на сервері — назовні йдуть лише providerId.
- * Активні замовлення — щоб кнопка «Видалити акаунт» одразу сказала, чому
- * зараз не можна, а не після введення пошти.
- */
+/** Способи входу (лише providerId) і чи можна зараз видалити акаунт. */
 export async function loadSecuritySettings(user: {
   id: string
   email: string
@@ -155,7 +137,7 @@ export async function loadSecuritySettings(user: {
   const providers = accounts.map((a) => a.providerId)
 
   return {
-    // 'credential' — вхід поштою й паролем.
+    // * 'credential' — вхід поштою й паролем
     hasPassword: providers.includes('credential'),
     hasGoogle: providers.includes('google'),
     email: user.email,
@@ -170,7 +152,7 @@ export async function loadSecuritySettings(user: {
 export async function loadNotificationSettings(userId: string) {
   if (!telegramEnabled()) return { telegram: null }
 
-  // Сам id чату назовні не йде — лише «підключено чи ні».
+  // * сам id чату назовні не йде — лише «підключено чи ні»
   const me = await prisma.user.findUnique({
     where: { id: userId },
     select: { telegramChatId: true },
@@ -180,9 +162,9 @@ export async function loadNotificationSettings(userId: string) {
   return {
     telegram: {
       linked,
-      // Посилання з токеном живе 15 хв — тому воно свіже на кожне
-      // читання, а сторінка й застосунок перечитують дані, коли людина
-      // повертається з Telegram.
+      // * посилання з токеном живе 15 хв — тому воно свіже на кожне
+      // * читання, а сторінка й застосунок перечитують дані, коли людина
+      // * повертається з Telegram
       linkUrl: linked ? null : await telegramLinkUrl(userId),
     },
   }

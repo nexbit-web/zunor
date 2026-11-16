@@ -92,7 +92,7 @@
     onpointercancel: () => setGrow(1),
   }
 
-  // ─── Вибір файлу ───
+  // * вибір файлу
 
   function pickFile(): void {
     if (!busy) fileInput?.click()
@@ -121,9 +121,9 @@
     cropFile = file
   }
 
-  // Меню дашборда бере фото з сесії, а вона кешується в cookie на 5 хв.
-  // Без примусового оновлення кешу нове фото зʼявилось би там лише через
-  // кілька хвилин.
+  // * меню дашборда бере фото з сесії, а вона кешується в cookie на 5 хв.
+  // * Без примусового оновлення кешу нове фото зʼявилось би там лише через
+  // * кілька хвилин
   async function syncSession(): Promise<void> {
     await fetch('/api/auth/get-session?disableCookieCache=true', {
       cache: 'no-store',
@@ -138,17 +138,17 @@
     return img.decode().catch(() => {})
   }
 
-  // ─── Завантаження обрізаного ───
+  // * завантаження обрізаного
 
   async function upload(blob: Blob): Promise<void> {
-    // Обрізане видно одразу, поки воно летить у хмару.
+    // * обрізане видно одразу, поки воно летить у хмару
     const local = URL.createObjectURL(blob)
     previewUrl = local
     uploading = true
     error = ''
 
     try {
-      // 1. Підпис (сервер поверне фіксований publicId для overwrite)
+      // * 1. Підпис (сервер поверне фіксований publicId для overwrite)
       const sigRes = await fetch('/api/upload/signature', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -160,14 +160,14 @@
       }
       const sig = await sigRes.json()
 
-      // 2. Upload на Cloudinary з overwrite
+      // * 2. Upload на Cloudinary з overwrite
       const fd = new FormData()
       fd.append('file', blob, 'avatar.jpg')
       fd.append('api_key', sig.apiKey)
       fd.append('timestamp', String(sig.timestamp))
       fd.append('signature', sig.signature)
       fd.append('folder', sig.folder)
-      // Перелік форматів — частина підпису: надсилаємо дослівно.
+      // * перелік форматів — частина підпису: надсилаємо дослівно
       if (sig.allowedFormats) fd.append('allowed_formats', sig.allowedFormats)
       if (sig.publicId) {
         fd.append('public_id', sig.publicId)
@@ -184,7 +184,7 @@
       }
       const uploaded = await upRes.json()
 
-      // 3. Запис у профіль
+      // * 3. Запис у профіль
       const saveRes = await fetch('/api/user/media', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -210,7 +210,7 @@
     }
   }
 
-  // ─── Видалення ───
+  // * видалення
 
   async function remove(): Promise<void> {
     removing = true

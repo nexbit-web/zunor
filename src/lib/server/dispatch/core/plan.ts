@@ -1,4 +1,4 @@
-// Рішення хвилі з готових даних: кого, скільки і в якому радіусі кликати.
+// * рішення хвилі з готових даних: кого, скільки і в якому радіусі кликати
 
 import { DISPATCH_CONFIG } from '../config'
 import { ringRadius, withinRadius } from './rings'

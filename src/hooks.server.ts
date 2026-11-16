@@ -1,13 +1,5 @@
-// Порядок middleware критичний:
-//   1. securityHeaders — HSTS та інші заголовки на ВСІ відповіді (обгортає
-//                        ланцюжок). CSP ставить сам SvelteKit — з nonce на
-//                        кожну сторінку (svelte.config.js, kit.csp)
-//   2. authHandle      — better-auth обробляє /api/auth/*
-//   3. sessionHandle   — резолвить сесію ОДИН раз → locals.session/user;
-//                        для /api/* — ще й бан (сесія забаненого = гість)
-//   4. guardHandle     — banned → emailVerified → onboarded → маршрут
-//
-// Єдине джерело правди про сесію на запит — locals.
+// * порядок ланцюжка критичний: securityHeaders → authHandle → sessionHandle
+// * → adminGate → guardHandle. Сесію на запит резолвить лише sessionHandle
 
 import { auth } from '$lib/server/auth'
 import { svelteKitHandler } from 'better-auth/svelte-kit'
@@ -23,7 +15,6 @@ import { resumeDispatch } from '$lib/server/dispatch'
 import { revokeSessions } from '$lib/server/sessions'
 import { productionDeploy, serverless } from '$lib/server/runtime'
 import { MODE_SNIPPET } from '$lib/theme-script.server'
-// ═══════════════════ Маршрути ═══════════════════
 
 const LOGIN_PATH = '/user/login'
 const VERIFY_PATH = '/user/verify-email'
@@ -31,20 +22,15 @@ const ONBOARDING_PATH = '/dashboard/onboarding'
 const HOME_PATH = '/dashboard'
 const PROTECTED_PREFIX = '/dashboard'
 
-/** Залогіненому тут нема чого робити — на дашборд. */
+// * залогіненого звідси веде на дашборд
 const GUEST_ONLY = new Set([LOGIN_PATH, '/user/register'])
-// /user/forgot і /user/reset-password навмисно НЕ guest-only:
-// юзер може бути залогінений і скидати пароль за листом.
-
-// ═══════════════════ Better-auth handler ═══════════════════
+// * /user/forgot і /user/reset-password сюди не входять: пароль скидає й залогінений
 
 const authHandle: Handle = async ({ event, resolve }) =>
   svelteKitHandler({ event, resolve, auth, building })
 
-// ═══════════════════ Сесія → locals ═══════════════════
-
 const sessionHandle: Handle = async ({ event, resolve }) => {
-  // route.id === null → запит не зматчився з роутом (404, статика в dev).
+  // * запит не зматчився з роутом (404, статика в dev) — сесія не потрібна
   if (event.route.id === null) {
     event.locals.session = null
     event.locals.user = null
@@ -56,11 +42,8 @@ const sessionHandle: Handle = async ({ event, resolve }) => {
     .getSession({ headers: event.request.headers })
     .catch(() => null) // збій auth-шару = аноним, а не 500 на весь сайт
 
-  // API guardHandle не проходить (він лише для сторінок), а сесія з
-  // cookie-кешу живе ще до 5 хв після відкликання. Тож бан і видалення
-  // акаунта перевіряємо тут: для API забанений — гість, і requireApiUser
-  // відповість 401. Стан — із кешу акаунта (account-cache): бан скидає
-  // його явно, тому діє на першому ж запиті, а не за TTL.
+  // * guardHandle — лише для сторінок, а сесія з cookie-кешу живе ще 5 хв після
+  // * відкликання: для API бан перевіряємо тут — забанений стає гостем (401)
   if (session && event.url.pathname.startsWith('/api/')) {
     const account = await getAccountState(session.user.id)
     if (!account || account.banned) session = null
@@ -75,16 +58,8 @@ const sessionHandle: Handle = async ({ event, resolve }) => {
   return resolve(event)
 }
 
-// ═══════════════════ Адмінка ═══════════════════
-//
-// Замок №1 адмінки (№2 — requireStaff у кожному load/action, див.
-// $lib/server/admin/guard.ts). Стоїть ПЕРЕД guardHandle, бо той пропускає
-// /api/* і не знає про /admin.
-//
-//  — гість і не співробітник → 404 на будь-якій адресі під /admin і
-//    /api/admin: ззовні не видно навіть, що адмінка існує;
-//  — співробітник без введеного коду другого фактора → сторінка коду
-//    (/admin/2fa), API → 401. Сама /admin/2fa доступна без коду.
+// * перший замок адмінки (другий — requireStaff у кожному load/action):
+// * не співробітник бачить 404, співробітник без коду 2FA — лише /admin/2fa
 
 const ADMIN_2FA_PATH = '/admin/2fa'
 
@@ -111,18 +86,15 @@ const adminGate: Handle = async ({ event, resolve }) => {
   return resolve(event)
 }
 
-// ═══════════════════ Замки ═══════════════════
-
 const guardHandle: Handle = async ({ event, resolve }) => {
   const { pathname, search } = event.url
   const session = event.locals.session
 
-  // API захищає себе сам: fetch-клієнту потрібен 401, а не 302 на HTML.
+  // * API захищає себе сам: fetch-клієнту потрібен 401, а не редірект на HTML
   if (pathname.startsWith('/api/')) return resolve(event)
 
   const isProtected = pathname.startsWith(PROTECTED_PREFIX)
 
-  // ─── Гість ───
   if (!session) {
     if (isProtected) {
       redirect(
@@ -133,9 +105,7 @@ const guardHandle: Handle = async ({ event, resolve }) => {
     return resolve(event)
   }
 
-  // ─── Залогінений ───
-  // Стан читаємо з БД, а не із сесії: cookieCache живе 5 хв, і за цей час
-  // бан або підтвердження пошти не встигли б подіяти.
+  // * стан — з бази, а не із сесії: cookie-кеш на 5 хв відстає від бану й верифікації
   const needsAccountState =
     isProtected ||
     pathname === VERIFY_PATH ||
@@ -144,61 +114,47 @@ const guardHandle: Handle = async ({ event, resolve }) => {
 
   if (!needsAccountState) return resolve(event)
 
-  // Кешується (TTL — в account-cache.ts): ці поля майже не змінюються, а
-  // запит інакше йде на кожну навігацію дашборда. Зміни через застосунок
-  // скидають кеш явно (invalidateAccount), тож бан і онбординг діють
-  // миттєво незалежно від TTL.
+  // * зміни через застосунок скидають цей кеш явно, тож бан діє одразу
   const account = await getAccountState(session.user.id)
 
-  // Сесія є, юзера в БД нема (видалений) — сесія недійсна.
+  // * сесія є, а користувача в базі немає — сесія недійсна
   if (!account) redirect(303, LOGIN_PATH)
 
-  // ─── Замок 1: бан ───
-  // Убиваємо сесії і в Redis, і в БД, щоб доступ зник і після протухання
-  // cookie-кешу.
+  // * бан: сесії геть і з Redis, і з бази — доступ не повернеться з cookie-кешем
   if (account.banned) {
     await revokeSessions(account.id).catch(() => {})
     await invalidateAccount(account.id)
     redirect(303, `${LOGIN_PATH}?error=banned`)
   }
 
-  // ─── Замок 2: підтвердження пошти ───
-  // Google-юзери сюди не потрапляють: провайдер віддає email_verified,
-  // better-auth проставляє emailVerified при першому вході.
+  // * Google-акаунти сюди не доходять: провайдер підтверджує пошту сам
   if (!account.emailVerified) {
     if (pathname === VERIFY_PATH) return resolve(event)
     redirect(303, VERIFY_PATH)
   }
 
-  // Пошта вже підтверджена — на сторінці верифікації робити нічого.
   if (pathname === VERIFY_PATH) redirect(303, HOME_PATH)
 
-  // ─── Guest-only і лендінг ───
-  // Точна перевірка pathname === '/': /privacy, /terms, /master/about
-  // лишаються доступними залогіненому.
+  // * рівно '/', а не префікс: /privacy, /terms і /master/about відкриті залогіненому
   if (pathname === '/' || GUEST_ONLY.has(pathname)) redirect(303, HOME_PATH)
 
   if (!isProtected) return resolve(event)
 
-  // ─── Замок 3: онбординг ───
-  // Співробітник без анкети — не клієнт і не майстер: його місце в
-  // адмінці, а не на формі онбордингу (туди ж веде вхід за замовчуванням).
+  // * співробітник без анкети — не клієнт і не майстер: його місце в адмінці
   if (!account.onboarded && isStaff(account.role)) redirect(303, '/admin')
 
-  // Не пройшов онбординг → замикаємо в /dashboard/onboarding/**.
+  // * без онбордингу — лише /dashboard/onboarding/**
   if (!account.onboarded && !pathname.startsWith(ONBOARDING_PATH)) {
     redirect(303, ONBOARDING_PATH)
   }
 
-  // Пройшов онбординг → екран вибору ролі закритий назавжди.
-  // Точне порівняння, а не startsWith: дочірній /onboarding/master
-  // лишається доступним онбордженому КЛІЄНТУ — це апгрейд ролі,
-  // і його власний load сам розвертає мастера на /dashboard/profile.
+  // * точне порівняння: /onboarding/master лишається онбордженому клієнту —
+  // * це апгрейд ролі
   if (account.onboarded && pathname === ONBOARDING_PATH) {
     redirect(303, HOME_PATH)
   }
 
-  // Віддаємо стан далі — load-функції не роблять той самий SELECT удруге.
+  // * стан — далі в locals: load-функції не читають його з бази вдруге
   event.locals.account = {
     id: account.id,
     role: account.role,
@@ -209,25 +165,16 @@ const guardHandle: Handle = async ({ event, resolve }) => {
   return resolve(event)
 }
 
-// ═══════════════════ Security headers ═══════════════════
-//
-// CSP тут немає навмисно: її ставить SvelteKit (svelte.config.js, kit.csp)
-// — з одноразовим nonce на кожну сторінку. Заголовок, зібраний руками,
-// nonce не знає, тому мусив дозволяти `script-src 'unsafe-inline'`, а з ним
-// CSP від XSS не захищає взагалі: будь-який вставлений <script> виконався б.
-// Вбудовані скрипти з app.html і скрипт теми mode-watcher тепер несуть
-// nonce сторінки (`%sveltekit.nonce%`).
+// * CSP тут немає: її ставить SvelteKit із nonce на сторінку (svelte.config.js)
 
 const securityHeaders: Handle = async ({ event, resolve }) => {
   const response = await resolve(event, {
-    // Скрипт теми mode-watcher — у тег із nonce в app.html
-    // ($lib/theme-script.server). Функція, а не рядок: у рядку-заміні
-    // `$&` і `$1` — службові.
+    // * функція, а не рядок: у рядку-заміні `$&` і `$1` службові
     transformPageChunk: ({ html }) =>
       html.replace('%modewatcher.snippet%', () => MODE_SNIPPET),
   })
 
-  // Після logout браузер не має права дістати сторінку з дискового кешу.
+  // * після виходу сторінку не можна дістати з дискового кешу браузера
   if (event.url.pathname.startsWith('/dashboard')) {
     response.headers.set('Cache-Control', 'no-store, must-revalidate')
   }
@@ -250,29 +197,19 @@ const securityHeaders: Handle = async ({ event, resolve }) => {
   return response
 }
 
-// ═══════════════════ Старт процесу ═══════════════════
-
-/**
- * Хвилі розсилки, чиї таймери загинули разом із попереднім процесом
- * (деплой, падіння, рестарт dev-сервера), підхоплюються одразу на старті.
- * Не чекаємо: сервер приймає запити, поки відновлення йде фоном.
- */
+// * хвилі, чиї таймери загинули з попереднім процесом, підхоплюємо на старті — фоном
 export const init: ServerInit = () => {
   if (building) return
 
-  // Telegram-бот: команди й вебхук (прод) чи polling (dev). Ліниво — щоб
-  // grammY не тягнувся в кожен імпорт hooks (і в його тести); без
-  // TELEGRAM_BOT_TOKEN нічого не робить. Прев'ю-деплой Vercel вебхук не
-  // ставить: інакше він перехопив би бота в бойового сайту.
+  // * ліниво, щоб grammY не тягнувся в кожен імпорт hooks. Прев'ю-деплой вебхук
+  // * не ставить: перехопив би бота в бойового сайту
   if (productionDeploy) {
     void import('$lib/server/telegram')
       .then(({ startTelegram }) => startTelegram())
       .catch((err) => console.error('[telegram] start failed:', err))
   }
 
-  // Vercel: init — це кожен холодний старт функції, а таймер після
-  // відповіді не живе. Хвилі там веде черга QStash, нагадування й
-  // відновлення — крон (vercel.json). Далі — лише довгоживучий процес.
+  // * Vercel: таймер після відповіді не живе — хвилі веде QStash, решту — крон
   if (serverless) return
 
   void resumeDispatch()
@@ -285,8 +222,7 @@ export const init: ServerInit = () => {
     })
     .catch((err) => console.error('[dispatch] resume failed:', err))
 
-  // Нагадування за день до прибирання: щоденний таймер о 18:00 за Києвом
-  // (крон `reminders` — страховка).
+  // * щоденний таймер о 18:00 за Києвом; крон `reminders` — страховка
   void import('$lib/server/reminders')
     .then(({ startReminders }) => startReminders())
     .catch((err) => console.error('[reminders] start failed:', err))

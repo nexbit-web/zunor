@@ -40,13 +40,12 @@ interface DsResponse {
   usage?: { total_tokens: number }
 }
 
-// ─── Таймаути ───
 // Синхронний виклик: жорсткий дедлайн на ВЕСЬ запит — коректно, бо стріму
 // немає. 60s: thinking-запити думають 15–20s перед відповіддю.
 const SYNC_TIMEOUT_MS = 60_000
-// Стрім: жорсткий таймаут ЛИШЕ на встановлення зʼєднання (до перших байтів).
+// * стрім: жорсткий таймаут ЛИШЕ на встановлення зʼєднання (до перших байтів)
 const CONNECT_TIMEOUT_MS = 30_000
-// Стрім: idle-таймаут МІЖ чанками; перезаводиться на кожному чанку.
+// * стрім: idle-таймаут МІЖ чанками; перезаводиться на кожному чанку
 const IDLE_TIMEOUT_MS = 20_000
 
 const COMMON_BODY = {
@@ -55,21 +54,14 @@ const COMMON_BODY = {
   max_tokens: 4000, // стеля, не витрата; у thinking звідси ж ідуть reasoning-токени
 }
 
-// ─── Режим thinking (док: /guides/thinking_mode) ───
-// Дефолт у v4 — enabled, тому ЗАВЖДИ задаємо явно.
-//   enabled  — точніший розбір складних входів (простині з багатьма фактами,
-//              драфти), але 15–20s до перших слів.
-//   disabled — швидкі короткі ходи (~2s), поведінка старого deepseek-chat.
-// ⚠️ Обмеження thinking-режиму з doc, які МАЄ памʼятати той, хто викликає:
-//   1) temperature ігнорується;
-//   2) якщо thinking-хід зробив tool_call, у наступних запитах того ж ланцюга
-//      треба повертати reasoning_content, інакше API поверне 400 —
-//      тому ретраї resolveDraft ідуть із thinking=false.
+// * thinking завжди задаємо явно (дефолт — enabled): enabled точніший, але
+// * 15–20 с до перших слів; disabled — ~2 с. У thinking-режимі temperature
+// * ігнорується, а після tool_call треба повертати reasoning_content — тому
+// * повтори resolveDraft ідуть із thinking=false
 function thinkingBody(thinking: boolean) {
   return { thinking: { type: thinking ? 'enabled' : 'disabled' } }
 }
 
-// ─── Синхронний виклик (драфтові раунди) ───
 export async function chatCompletion(
   messages: DsMessage[],
   tools: DsTool[],
@@ -119,7 +111,6 @@ export async function chatCompletion(
   return data
 }
 
-// ─── Стрімовий виклик ───
 export interface StreamResult {
   content: string
   toolCall: DsToolCall | null
@@ -211,7 +202,7 @@ export async function* chatCompletionStream(
 
       buffer += decoder.decode(value, { stream: true })
 
-      // SSE: події розділені \n\n, кожен рядок «data: {...}»
+      // * SSE: події розділені \n\n, кожен рядок «data: {...}»
       const events = buffer.split('\n\n')
       buffer = events.pop() ?? '' // хвіст без \n\n лишаємо на наступний тік
 
@@ -237,7 +228,7 @@ export async function* chatCompletionStream(
         const delta = choice.delta
         if (!delta) continue
 
-        // Дельта tool_call → з цієї миті це драфт, текст клієнту більше не шлемо
+        // * дельта tool_call → з цієї миті це драфт, текст клієнту більше не шлемо
         if (delta.tool_calls?.length) {
           if (!toolStarted) {
             toolStarted = true
@@ -250,7 +241,7 @@ export async function* chatCompletionStream(
           continue
         }
 
-        // Звичайний текст. Стрімимо клієнту ЛИШЕ поки не почався tool_call.
+        // * звичайний текст. Стрімимо клієнту ЛИШЕ поки не почався tool_call
         if (delta.content) {
           content += delta.content
           if (!toolStarted) yield { type: 'text', delta: delta.content }
@@ -258,8 +249,8 @@ export async function* chatCompletionStream(
       }
     }
   } catch (err) {
-    // Обрив/таймаут посеред стріму: фіксуємо в лог те, що встигли зібрати,
-    // і кидаємо далі — обробка обриву лишається в agent.ts.
+    // * Обрив/таймаут посеред стріму: фіксуємо в лог те, що встигли зібрати,
+    // * і кидаємо далі — обробка обриву лишається в agent.ts
     turnLog().note(`Стрім обірвався: ${String(err)}`)
     turnLog().response({
       text: content,

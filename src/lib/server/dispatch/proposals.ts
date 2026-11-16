@@ -1,4 +1,4 @@
-// Рекомендації клієнту серед відгуків на заявку: дані з БД → core/recommend.
+// * рекомендації клієнту серед відгуків на заявку: дані з БД → core/recommend
 
 import { cityDistricts, districtDistanceKm } from '$lib/geo/districts'
 import { asEffort } from '$lib/categories/effort'
@@ -61,7 +61,7 @@ export async function recommendForJob(
   return recommend(
     proposals.map(
       ({ id, createdAt, master: { hasVehicle, crew, ...master } }) => {
-        // Майстер з іншого міста — відстань невідома, а не «поруч».
+        // * майстер з іншого міста — відстань невідома, а не «поруч»
         const distanceKm =
           master.city === job.city
             ? districtDistanceKm(districts, master.district, job.district)

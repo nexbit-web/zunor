@@ -5,10 +5,7 @@ import type { PageServerLoad } from './$types'
 export const load: PageServerLoad = async ({ locals, url }) => {
   const userId = requireUser(locals).id
 
-  // Роль уже прочитана з БД у guardHandle і лежить у locals.account —
-  // окремий SELECT тут був другим запитом за ту саму колонку на кожен
-  // вхід на сторінку. Фолбек на CLIENT лишається на випадок, якщо роут
-  // колись винесуть з-під /dashboard, де account не заповнюється.
+  // * роль уже в locals.account; фолбек — якщо роут винесуть з-під /dashboard
   const userRole = locals.account?.role ?? 'CLIENT'
   const roleParam = url.searchParams.get('role')
   const role: 'all' | 'client' | 'master' =
@@ -30,7 +27,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     select: {
       id: true,
       title: true,
-      // Картка бере з неї послугу, день і теги характеристик.
+      // * картка бере з неї послугу, день і теги характеристик
       metadata: true,
       priceCents: true,
       currency: true,
@@ -47,8 +44,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
       master: {
         select: { id: true, name: true, avatar: true },
       },
-      // «today/tomorrow» у metadata відносні до дня створення ЗАЯВКИ, а
-      // не замовлення — без цієї дати день прибирання зсувався б.
+      // * «today/tomorrow» у metadata відносні до дня створення ЗАЯВКИ, а
+      // * не замовлення — без цієї дати день прибирання зсувався б
       fromJob: { select: { createdAt: true } },
     },
     take: 200,

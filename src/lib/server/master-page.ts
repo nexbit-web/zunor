@@ -1,11 +1,5 @@
-// Профіль майстра очима клієнта: сторінка dashboard/master/[id] і
-// GET /api/masters/[id] для застосунку. Публічної сторінки (/@handle)
-// більше немає — профіль бачать лише з акаунтом. Дані — з Redis: профіль
-// відкривають часто (з кожної пропозиції), а будити Neon заради цього
-// не варто.
-//
-// Ключ — за userId: кожне місце, що міняє профіль, знає id і скидає кеш
-// одним викликом.
+// * профіль майстра очима клієнта — для сайту й застосунку, з кешу Redis:
+// * його відкривають із кожної пропозиції. Ключ — за userId
 
 import { prisma } from './prisma'
 import { cached, forget } from './cache'
@@ -44,21 +38,13 @@ export interface MasterPage {
   reviewsCount: number
   completedOrders: number
   reviews: PageReview[]
-  /**
-   * Компанія чи людина й формат роботи. Необовʼязкові: запис у Redis,
-   * зроблений до цих полів, живе ще до PAGE_TTL_SEC — без них сторінка
-   * просто не показує ці рядки.
-   */
+  // * необовʼязкові: запис у Redis, зроблений до цих полів, ще живе
   crew?: CrewType | null
   services?: SkillLabel[]
   premises?: SkillLabel[]
 }
 
-/**
- * Профіль за id (null — такого користувача немає). Хто кличе, сам
- * перевіряє роль: не майстер — 404. Порожнє не кешуємо: інакше випадкові
- * id засмічували б Redis на PAGE_TTL_SEC.
- */
+/** Профіль за id; роль перевіряє той, хто кличе. Порожнє не кешуємо. */
 export function loadMasterPageById(userId: string): Promise<MasterPage | null> {
   return cached(`master:${userId}`, PAGE_TTL_SEC, () => readPage(userId), {
     cacheNull: false,

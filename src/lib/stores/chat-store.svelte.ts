@@ -9,15 +9,9 @@ import type {
 } from '$lib/components/chat/types'
 
 /**
- * Глобальний store для синхронізації стану чатів між сторінками:
- *  • Бейдж "непрочитаних" у панелі дашборда оновлюється у real-time
- *  • Список чатів на /messages синхронізується автоматично коли приходить
- *    повідомлення в інший чат
- *
- * Підписується на private-user-{userId} і слухає chat:update (нове
- * повідомлення) і chat:read (хтось прочитав: ✓✓ співрозмовника, а своє
- * прочитане на іншому пристрої гасить лічильник).
- * Викликати subscribeToUserEvents(userId) один раз у root +layout.svelte.
+ * Стан чатів між сторінками: бейдж непрочитаних і список на /messages.
+ * Слухає private-user-{userId}: chat:update (нове повідомлення) і chat:read.
+ * subscribeToUserEvents(userId) кличеться раз у кореневому лейауті.
  */
 
 type Channel = ReturnType<ReturnType<typeof getPusher>['subscribe']>
@@ -26,13 +20,7 @@ class ChatStore {
   /** Список превью чатів, синхронізується з /messages */
   chats = $state<ChatPreview[]>([])
 
-  /**
-   * Тотальний лічильник непрочитаних — для бейджа у хедері.
-   *
-   * Саме $derived, а не $state, який доводилось перераховувати руками
-   * після кожної мутації списку: похідне значення не може розійтися
-   * з джерелом, тож забути виклик перерахунку в новій гілці неможливо.
-   */
+  /** Усі непрочитані — для бейджа. $derived: похідне не може розійтися з джерелом. */
   totalUnread = $derived(this.chats.reduce((sum, c) => sum + c.unreadCount, 0))
 
   /** Чи store ініціалізований (через subscribe) */
@@ -41,9 +29,9 @@ class ChatStore {
   /** ID юзера якого ми слухаємо (щоб не підписатися двічі) */
   private boundUserId: string | null = null
 
-  // Канал і посилання на обробники тримаємо, щоб було ЩО знімати.
-  // Інлайнові стрілки в bind не дають цієї можливості: unbind без тієї
-  // самої посилки не знімає нічого.
+  // * канал і посилання на обробники тримаємо, щоб було ЩО знімати.
+  // * Інлайнові стрілки в bind не дають цієї можливості: unbind без тієї
+  // * самої посилки не знімає нічого
   private channel: Channel | null = null
   private onChatUpdate: ((data: ChatUpdatePayload) => void) | null = null
   private onMessageNew: ((data: MessageNewPayload) => void) | null = null
@@ -65,7 +53,7 @@ class ChatStore {
   markPeerRead(chatId: string, lastReadAt: string) {
     const chat = this.chats.find((c) => c.id === chatId)
     if (!chat) return
-    // Події можуть прийти не по черзі — межа прочитаного назад не їде.
+    // * події можуть прийти не по черзі — межа прочитаного назад не їде
     if (chat.peerLastReadAt && chat.peerLastReadAt > lastReadAt) return
     chat.peerLastReadAt = lastReadAt
   }
@@ -81,25 +69,25 @@ class ChatStore {
     if (!browser) return
     if (this.boundUserId === userId) return
 
-    // Зміна користувача: старі обробники треба зняти, інакше вони
-    // залишаться висіти на попередньому каналі назавжди.
+    // * зміна користувача: старі обробники треба зняти, інакше вони
+    // * залишаться висіти на попередньому каналі назавжди
     this.unbindChannel()
 
     const pusher = getPusher()
     const channelName = `private-user-${userId}`
     const channel = pusher.subscribe(channelName)
 
-    // Прийшло нове/інше оновлення в чаті — оновлюємо preview і unread
+    // * прийшло нове/інше оновлення в чаті — оновлюємо preview і unread
     this.onChatUpdate = (data: ChatUpdatePayload) => {
       this.handleChatUpdate(data, userId)
     }
-    // Деталь повідомлення (для звуку коли чат закритий)
+    // * деталь повідомлення (для звуку коли чат закритий)
     this.onMessageNew = (data: MessageNewPayload) => {
       this.handleIncomingMessage(data, userId)
     }
 
-    // Прочитали чат (подія сервера з api/chats/[id]/read). Чат закритий
-    // — інакше то саме приносить message:read у вікні розмови.
+    // * прочитали чат (подія сервера з api/chats/[id]/read). Чат закритий
+    // * — інакше то саме приносить message:read у вікні розмови
     this.onChatRead = (data: ChatReadPayload) => {
       if (data.readerId === userId) this.markReadElsewhere(data)
       else this.markPeerRead(data.chatId, data.lastReadAt)
@@ -123,14 +111,7 @@ class ChatStore {
     this.initialized = false
   }
 
-  /**
-   * Знімає ТІЛЬКИ свої обробники — unbind, а не unsubscribe.
-   *
-   * На цьому ж каналі private-user-* висить стор сповіщень. unsubscribe
-   * гасив би канал цілком, тобто разом із дзвіночком. Зараз це проходило
-   * непоміченим лише тому, що unsubscribeAll кличуть при виході з акаунта,
-   * коли сторінка однаково перезавантажується.
-   */
+  /** Знімає лише свої обробники (unbind): на цьому ж каналі висить стор сповіщень. */
   private unbindChannel() {
     if (this.onChatUpdate)
       this.channel?.unbind('chat:update', this.onChatUpdate)
@@ -159,7 +140,7 @@ class ChatStore {
   private handleChatUpdate(data: ChatUpdatePayload, currentUserId: string) {
     const chat = this.chats.find((c) => c.id === data.chatId)
     if (!chat) {
-      // Невідомий чат — можливо щойно створений, перезавантажимо весь список
+      // * невідомий чат — можливо щойно створений, перезавантажимо весь список
       this.refreshChats()
       return
     }
@@ -168,8 +149,8 @@ class ChatStore {
     chat.lastMessageAt = data.lastMessageAt
     chat.lastSenderId = data.lastSenderId
 
-    // Інкрементуємо unread якщо повідомлення не від мене
-    // і чат не відкритий зараз
+    // * інкрементуємо unread якщо повідомлення не від мене
+    // * і чат не відкритий зараз
     const isFromOther = data.lastSenderId && data.lastSenderId !== currentUserId
     const isActiveChat = this.activeChatId === data.chatId
 
@@ -177,7 +158,7 @@ class ChatStore {
       chat.unreadCount += 1
     }
 
-    // Переміщаємо чат на верх списку
+    // * переміщаємо чат на верх списку
     this.chats = [chat, ...this.chats.filter((c) => c.id !== data.chatId)]
   }
 
@@ -186,22 +167,14 @@ class ChatStore {
     currentUserId: string,
   ) {
     if (data.message.senderId === currentUserId) return
-    // Звук — тільки якщо чат не активний (інакше chat-window сам звукує)
+    // * звук — тільки якщо чат не активний (інакше chat-window сам звукує)
     if (this.activeChatId !== data.chatId) {
       playMessageSound()
       this.tryShowBrowserNotification(data)
     }
   }
 
-  /**
-   * Тягне список чатів з сервера. Публічний, бо це ЄДИНЕ місце, де чати
-   * потрапляють у стор поза сторінкою /messages.
-   *
-   * Раніше список приходив із серверного лейауту на КОЖНІЙ навігації
-   * дашборда — два запити до БД за кожен перехід, хоча дані змінюються
-   * рідко й у реальному часі їх однаково оновлює Pusher. Тепер: один
-   * запит за сесію, далі стор живе сам.
-   */
+  /** Тягне список чатів із сервера: один запит за сесію, далі стор живе на подіях. */
   async refreshChats(): Promise<void> {
     try {
       const res = await fetch('/api/chats')
@@ -209,7 +182,7 @@ class ChatStore {
       const json = await res.json()
       this.setChats(json.chats ?? [])
     } catch {
-      // ignore: без списку бейдж просто лишиться порожнім
+      // * ignore: без списку бейдж просто лишиться порожнім
     }
   }
 

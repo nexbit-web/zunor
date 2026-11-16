@@ -1,15 +1,6 @@
-// Dev-логер одного ходу Zunor. Пише у .zunor-logs/<дата>/ по файлу на хід:
-// системний промпт, історія, ПОЛЯ схеми інструмента, кожен виклик моделі
-// з відповіддю, результат валідації і фінальний ZunorResponse.
-//
-// Навіщо: без цього «ІІ поставив не те питання» неможливо відлагодити —
-// не видно ні що модель отримала, ні що повернула.
-//
-// Контракти:
-//   1. НІКОЛИ не роняє запит. Будь-яка помилка запису проковтується.
-//   2. У проді — no-op: файли не пишуться, памʼять не витрачається.
-//   3. Контекст протягується через AsyncLocalStorage, щоб не міняти
-//      сигнатури agent.ts/deepseek.ts заради dev-інструмента.
+// * dev-логер одного ходу асистента: пише в .zunor-logs/ промпт, історію,
+// * виклики моделі й результат. Ніколи не роняє запит; у проді — no-op;
+// * контекст — через AsyncLocalStorage
 
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { mkdir, writeFile } from 'node:fs/promises'
@@ -42,8 +33,6 @@ export interface TurnLogger {
   note(line: string): void
 }
 
-// ─────────────────────── No-op для проду ───────────────────────
-
 const NOOP: TurnLogger = {
   setup: () => {},
   request: () => {},
@@ -52,8 +41,6 @@ const NOOP: TurnLogger = {
   final: () => {},
   note: () => {},
 }
-
-// ─────────────────────── Реалізація ───────────────────────
 
 /** Огортає текст у 4-бектіковий фенс: усередині можуть бути свої бектіки. */
 function fence(body: string): string {
@@ -81,8 +68,8 @@ class FileTurnLogger implements TurnLogger {
     }
     const all = Object.keys(params.properties ?? {})
     const required = params.required ?? []
-    // Найважливіший рядок логу: якщо тут є trash при мийці вікон —
-    // баг знайдено, далі промпт можна не читати.
+    // * найважливіший рядок логу: якщо тут є trash при мийці вікон —
+    // * баг знайдено, далі промпт можна не читати
     this.toolFields =
       `все (${all.length}): ${all.join(', ')}\n` +
       `обовʼязкові: ${required.join(', ') || '—'}`
@@ -191,8 +178,6 @@ class FileTurnLogger implements TurnLogger {
     }
   }
 }
-
-// ─────────────────────── Контекст ───────────────────────
 
 const storage = new AsyncLocalStorage<TurnLogger>()
 

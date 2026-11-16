@@ -1,13 +1,6 @@
-// Незавершений діалог з асистентом переживає перезавантаження сторінки.
-//
-// Чому не в базі: `/api/zunor/chat` stateless — він отримує ВСЮ історію в тілі
-// запиту, тож серверу зберігати нічого. У базу їде лише готова заявка, а
-// чернетки розмов осідали б там назавжди. Втрачений на F5 хід — це повторно
-// витрачені гроші на DeepSeek, тому історія й тримається на клієнті.
-//
-// Ключ включає userId: на спільному комп'ютері наступна людина не має побачити
-// чужу розмову про її квартиру. TTL — доба: тижневий діалог це вже не
-// «продовжити», а сюрприз.
+// * незавершений діалог з асистентом переживає F5 у localStorage:
+// * /api/zunor/chat stateless, а втрачений хід — повторні гроші на модель.
+// * Ключ включає userId, TTL — доба
 
 import { browser } from '$app/environment'
 import type { ZunorDraft } from '$lib/types/zunor'
@@ -66,12 +59,7 @@ const TTL_MS = 24 * 60 * 60_000
 /** Стеля на кількість реплік. Сервер однаково бере лише останні 24. */
 const MAX_MESSAGES = 60
 
-/**
- * Стеля на розмір запису. localStorage дає ~5 МБ на домен НА ВСІ ключі,
- * тож роздувати один — значить зламати решту (гучність звуку, ширина
- * панелей). Переповнення кидає QuotaExceededError, який ми ковтаємо, але
- * тоді збереження просто мовчки не працює — краще не доводити.
- */
+/** Стеля на розмір запису: localStorage — ~5 МБ на всі ключі домену. */
 const MAX_BYTES = 256 * 1024
 
 function keyFor(userId: string): string {
@@ -103,13 +91,13 @@ export function saveDialog(userId: string, dialog: ZunorDialog): void {
     }
 
     const raw = JSON.stringify(envelope)
-    // Один довгий діалог не має права з'їсти квоту домену.
+    // * один довгий діалог не має права з'їсти квоту домену
     if (raw.length > MAX_BYTES) return
 
     localStorage.setItem(keyFor(userId), raw)
   } catch {
-    // Приватний режим, вимкнене сховище, вичерпана квота — не наша проблема:
-    // чат продовжує працювати, просто без відновлення після F5.
+    // * приватний режим, вимкнене сховище, вичерпана квота — не наша проблема:
+    // * чат продовжує працювати, просто без відновлення після F5
   }
 }
 
@@ -145,15 +133,15 @@ export function loadDialog(userId: string): ZunorDialog | null {
       pendingPhotos: Array.isArray(data.pendingPhotos)
         ? data.pendingPhotos
         : [],
-      // Фолбек рахує id від збережених реплік: без нього нові повідомлення
-      // отримали б ті самі id, і Svelte переплутав би їх у keyed-блоці.
+      // * фолбек рахує id від збережених реплік: без нього нові повідомлення
+      // * отримали б ті самі id, і Svelte переплутав би їх у keyed-блоці
       nextMsgId:
         typeof data.nextMsgId === 'number'
           ? data.nextMsgId
           : Math.max(0, ...data.messages.map((m) => m.id)) + 1,
     }
   } catch {
-    // Пошкоджений JSON — прибираємо, щоб не спотикатись об нього щоразу.
+    // * пошкоджений JSON — прибираємо, щоб не спотикатись об нього щоразу
     clearDialog(userId)
     return null
   }
@@ -165,6 +153,6 @@ export function clearDialog(userId: string): void {
   try {
     localStorage.removeItem(keyFor(userId))
   } catch {
-    // див. saveDialog
+    // * див. saveDialog
   }
 }

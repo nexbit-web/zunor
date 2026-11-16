@@ -44,9 +44,9 @@
   const isLoggedIn = $derived(!!page.data.session?.user)
   const orderHref = $derived(isLoggedIn ? ORDER_HREF_SIGNED_IN : ORDER_HREF)
 
-  // Сторінки, чий перший екран заходить під шапку: там вона прозора, доки
-  // сторінку не прокрутили. На сервері scrollY = 0 — тобто прозора, як і
-  // буде на першому кадрі.
+  // * сторінки, чий перший екран заходить під шапку: там вона прозора, доки
+  // * сторінку не прокрутили. На сервері scrollY = 0 — тобто прозора, як і
+  // * буде на першому кадрі
   const OVERLAY_PATHS = new Set(['/'])
   let scrollY = $state(0)
   const solid = $derived(

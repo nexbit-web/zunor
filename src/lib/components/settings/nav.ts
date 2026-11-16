@@ -16,9 +16,9 @@ export interface SettingsSection {
   roles?: readonly ('CLIENT' | 'MASTER')[]
 }
 
-// Порядок груп у меню. Іконки одноколірні, без кольорових плиток: плитки
-// перетягували увагу з назв, а колір у застосунку тепер означає одне —
-// обраний акцент.
+// * порядок груп у меню. Іконки одноколірні, без кольорових плиток: плитки
+// * перетягували увагу з назв, а колір у застосунку тепер означає одне —
+// * обраний акцент
 export const SETTINGS_GROUPS: readonly {
   id: SettingsGroupId
   label: string
@@ -27,8 +27,8 @@ export const SETTINGS_GROUPS: readonly {
   { id: 'app', label: 'Застосунок' },
 ]
 
-// «Вийти» тут немає: це дія, а не розділ, і вона стоїть унизу меню
-// налаштувань окремо від решти пунктів.
+// * «Вийти» тут немає: це дія, а не розділ, і вона стоїть унизу меню
+// * налаштувань окремо від решти пунктів
 export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   { slug: 'profile', label: 'Профіль', icon: UserRound, group: 'account' },
   { slug: 'security', label: 'Безпека', icon: Shield, group: 'account' },
@@ -44,7 +44,7 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     label: 'AI асистент',
     icon: Sparkles,
     group: 'app',
-    // Анкета впливає на діалог створення заявки — майстер їх не створює.
+    // * анкета впливає на діалог створення заявки — майстер їх не створює
     roles: ['CLIENT'],
   },
 ]

@@ -10,11 +10,11 @@
   import EyeOff from '$lib/components/icons/set/eye-off.svelte'
   import ArrowLeft from '$lib/components/icons/set/arrow-left.svelte'
 
-  // ─── Token з URL ───
+  // * Token з URL
   const token = $derived(page.url.searchParams.get('token') ?? '')
   const tokenValid = $derived(token.length > 0 && token.length < 500)
 
-  // ─── State ───
+  // * State
   let password = $state('')
   let confirm = $state('')
   let showPassword = $state(false)
@@ -23,7 +23,7 @@
   let success = $state(false)
   let touched = $state({ password: false, confirm: false })
 
-  // ─── Derived validation ───
+  // * Derived validation
   const passwordError = $derived(
     touched.password && password.length < 8 ? 'Мінімум 8 символів' : '',
   )
@@ -34,13 +34,13 @@
     password.length >= 8 && password === confirm && tokenValid,
   )
 
-  // ─── Submit ───
+  // * Submit
   async function handleSubmit(e: SubmitEvent) {
     e.preventDefault()
     if (loading) return
 
-    // Перевірка на натиск, а не на blur: кнопка лишається активною, і
-    // причину видно під конкретним полем.
+    // * перевірка на натиск, а не на blur: кнопка лишається активною, і
+    // * причину видно під конкретним полем
     touched = { password: true, confirm: true }
     if (!formValid) return
 
@@ -63,7 +63,7 @@
       }
 
       success = true
-      // Через 2.5 секунди редіректимо на логін
+      // * через 2.5 секунди редіректимо на логін
       setTimeout(() => goto('/user/login'), 2500)
     } catch (err) {
       console.error('[reset-password] failed:', err)

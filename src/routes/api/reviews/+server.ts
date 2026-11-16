@@ -35,19 +35,19 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     throw error(400, 'Відгук можна залишити лише після завершення замовлення')
   }
 
-  // Напрямок + отримувач відгуку
+  // * напрямок + отримувач відгуку
   const direction = isClient ? 'CLIENT_TO_MASTER' : 'MASTER_TO_CLIENT'
   const targetId = isClient ? order.masterId : order.clientId
 
-  // Чи вже є відгук цієї сторони
+  // * чи вже є відгук цієї сторони
   const existing = await prisma.review.findUnique({
     where: { orderId_direction: { orderId, direction } },
     select: { id: true },
   })
   if (existing) throw error(409, 'Ви вже залишили відгук')
 
-  // Транзакція: створюємо відгук + перераховуємо рейтинг отримувача
-  // у правильному полі за напрямком (master/client)
+  // * транзакція: створюємо відгук + перераховуємо рейтинг отримувача
+  // * у правильному полі за напрямком (master/client)
   await prisma.$transaction(
     async (tx) => {
       await tx.review.create({
@@ -60,7 +60,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
         },
       })
 
-      // Усі відгуки про отримувача (за напрямком, де він є ціллю)
+      // * усі відгуки про отримувача (за напрямком, де він є ціллю)
       const agg = await tx.review.aggregate({
         where: {
           direction,
@@ -91,7 +91,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     { maxWait: 10000, timeout: 20000 },
   )
 
-  // Рейтинг і відгуки майстра — у його профілі (кеш master-page).
+  // * рейтинг і відгуки майстра — у його профілі (кеш master-page)
   if (isClient) await forgetMasterPage(targetId)
 
   return json({ ok: true })

@@ -1,10 +1,8 @@
 import { dev } from '$app/environment'
 import { sendEmail } from '../email'
 
-// Повний union із сигнатури emailOTP.sendVerificationOTP (better-auth 1.6).
-// 'change-email' зараз недосяжний — changeEmail у плагіні вимкнено, —
-// але тримаємо копію готовою: інакше вмикання опції дасть лист
-// із неправильним текстом замість помилки компіляції.
+// * повний union із сигнатури emailOTP: 'change-email' зараз недосяжний, але
+// * вмикання опції має дати помилку компіляції, а не лист із чужим текстом
 type OtpType =
   | 'sign-in'
   | 'email-verification'
@@ -82,8 +80,8 @@ export async function sendOtpEmail(params: {
 }): Promise<void> {
   const { email, otp, type } = params
 
-  // Локально SMTP часто не налаштований — код у консоль, щоб флоу
-  // проходився цілком, включно з requireEmailVerification.
+  // * локально SMTP часто не налаштований — код у консоль, щоб флоу
+  // * проходився цілком, включно з requireEmailVerification
   if (dev) console.log(`[otp] ${type} → ${email}: ${otp}`)
 
   await sendEmail({

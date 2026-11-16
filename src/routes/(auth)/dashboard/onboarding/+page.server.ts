@@ -1,13 +1,10 @@
 import { redirect } from '@sveltejs/kit'
 import type { PageServerLoad } from './$types'
 
-// Тільки вибір ролі. Дані форм вантажать дочірні роути.
+// * тільки вибір ролі. Дані форм вантажать дочірні роути
 export const load: PageServerLoad = ({ locals }) => {
-  // Роль уже обрана й профіль заповнено — повертатись до вибору нікому
-  // не можна: клієнт став би мастером в обхід апгрейду, мастер узагалі
-  // не має шляху назад. Апгрейд CLIENT → MASTER живе на /dashboard/profile.
-  //
-  // account заповнює guardHandle у hooks — другий SELECT не потрібен.
+  // * профіль заповнено — до вибору ролі не повертаються; апгрейд CLIENT →
+  // * MASTER живе на /dashboard/profile
   if (locals.account?.onboarded) redirect(303, '/dashboard/profile')
 
   return {}

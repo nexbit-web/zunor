@@ -2,19 +2,12 @@ import { json, error } from '@sveltejs/kit'
 import { requireApiUser } from '$lib/server/guards'
 import { loadMasterPageById } from '$lib/server/master-page'
 import { getCategories, getCities } from '$lib/server/reference'
+import { nameBySlug } from '$lib/utils/slug-name'
 import type { RequestHandler } from './$types'
 
 /**
- * GET /api/masters/[id] — профіль майстра для застосунку: клієнт відкриває
- * його з пропозиції чи замовлення (фото, перевірка, рейтинг, виконані,
- * послуги, «про себе», приклади робіт, відгуки).
- *
- * Дані — ті самі, що на сторінці сайту dashboard/master/[id]
- * ($lib/server/master-page, з Redis): ні телефону, ні пошти. Лише з
- * акаунтом. Не майстер (чи немає такого) — 404.
- *
- * Каталогу за цим немає (MANIFESTO): шляху «усі майстри» не існує — сюди
- * приходять лише з конкретної пропозиції чи замовлення.
+ * GET /api/masters/[id] — профіль майстра для застосунку: ті самі дані, що
+ * на сторінці сайту, без телефону й пошти. Шляху «усі майстри» немає.
  */
 export const GET: RequestHandler = async ({ params, locals }) => {
   requireApiUser(locals)
@@ -30,16 +23,16 @@ export const GET: RequestHandler = async ({ params, locals }) => {
       name: page.name,
       avatar: page.avatar,
       bio: page.bio,
-      city: cities.find((c) => c.slug === page.city)?.name ?? page.city,
+      city: nameBySlug(cities, page.city) ?? page.city,
       createdAt: page.createdAt,
       isVerified: page.verificationStatus === 'VERIFIED',
       crew: page.crew ?? null,
-      // Порядок — як у профілі майстра.
+      // * порядок — як у профілі майстра
       categories: page.categories.map(
-        (slug) => categories.find((c) => c.slug === slug)?.name ?? slug,
+        (slug) => nameBySlug(categories, slug) ?? slug,
       ),
-      // Ті самі slug'и — за ними застосунок бере банер шапки, як сайт
-      // ($lib/categories/registry: getBannerForCategories).
+      // * ті самі slug'и — за ними застосунок бере банер шапки, як сайт
+      // * ($lib/categories/registry: getBannerForCategories)
       categorySlugs: page.categories,
       services: page.services ?? [],
       premises: page.premises ?? [],

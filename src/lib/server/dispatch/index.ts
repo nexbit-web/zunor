@@ -1,5 +1,5 @@
-// Мозок підбору майстрів — єдиний вхід для роутів. Як він влаштований і
-// які обіцянки тримає — README.md поруч.
+// * мозок підбору майстрів — єдиний вхід для роутів. Як він влаштований і
+// * які обіцянки тримає — README.md поруч
 
 export { startWaves, cancelWaves, scheduledCount } from './scheduler'
 export { resumeDispatch } from './recovery'

@@ -1,26 +1,7 @@
-// Telegram-бот Zunor (grammY): сповіщення, коли сайт закрито.
-//
-// Навіщо. Сповіщення в застосунку живуть лише у відкритій вкладці
-// (Pusher). Майстер закрив браузер — про заявку поруч дізнався б
-// наступного разу, коли зайде, а швидкість відгуку — головна метрика
-// (MANIFESTO, правило №2). Telegram в Україні є майже в кожного, і пуш
-// звідти приходить на телефон завжди.
-//
-// Що робить:
-//   • дублює кожне сповіщення (усе, що йде через pushNotification) у чат
-//     із ботом — заголовок, подробиці й кнопка дії, як у картці на сайті;
-//   • /start <токен> — привʼязує чат до акаунта (токен — з налаштувань
-//     сповіщень, див. link-token.ts); /stop — відвʼязує.
-//
-// Як отримує оновлення:
-//   • прод — вебхук POST /api/telegram/webhook із секретним заголовком;
-//     адресу бот ставить собі сам на старті процесу (startTelegram);
-//   • dev — long polling. Але ЛИШЕ якщо в бота немає вебхука: polling
-//     знімає вебхук, і запуск dev із токеном продового бота мовчки
-//     вимкнув би бота на проді. Для розробки — окремий бот.
-//
-// Без TELEGRAM_BOT_TOKEN усе вимкнене: getBot() → null, налаштування
-// блоку Telegram не показують, сповіщення йдуть лише на сайт.
+// * Telegram-бот: дублює сповіщення, коли сайт закрито. /start <токен>
+// * привʼязує чат, /stop відвʼязує. Прод — вебхук, dev — long polling, і лише
+// * якщо в бота немає вебхука: polling зняв би його в бойового бота.
+// * Без TELEGRAM_BOT_TOKEN усе вимкнене
 
 import { Bot, GrammyError, InlineKeyboard, webhookCallback } from 'grammy'
 import { createHash } from 'node:crypto'
@@ -86,8 +67,6 @@ function escapeHtml(text: string): string {
     .replaceAll('>', '&gt;')
 }
 
-// ─── Бот ───
-
 let bot: Bot | null = null
 
 export function getBot(): Bot | null {
@@ -141,7 +120,7 @@ function registerHandlers(b: Bot): void {
     )
   })
 
-  // Бот не співрозмовник: на будь-що інше — коротко, що він уміє.
+  // * бот не співрозмовник: на будь-що інше — коротко, що він уміє
   b.on('message', async (ctx) => {
     if (ctx.chat.type !== 'private') return
     await ctx.reply(
@@ -154,8 +133,6 @@ function registerHandlers(b: Bot): void {
     console.error('[telegram] update failed:', err.error)
   })
 }
-
-// ─── Привʼязка ───
 
 /**
  * Записує чат за акаунтом. Той самий чат в іншому акаунті відвʼязується:
@@ -236,8 +213,8 @@ export async function telegramLinkUrl(userId: string): Promise<string | null> {
   const b = getBot()
   if (!b) return null
   try {
-    // getMe лише при першому виклику; далі grammY тримає відповідь у памʼяті.
-    // Тайм-аут — щоб сторінка налаштувань не висіла, якщо Telegram лежить.
+    // * getMe лише при першому виклику; далі grammY тримає відповідь у памʼяті.
+    // * Тайм-аут — щоб сторінка налаштувань не висіла, якщо Telegram лежить
     await Promise.race([
       b.init(),
       new Promise((_, reject) =>
@@ -252,15 +229,7 @@ export async function telegramLinkUrl(userId: string): Promise<string | null> {
   return `https://t.me/${b.botInfo.username}?start=${startToken}`
 }
 
-// ─── Надсилання ───
-
-/**
- * Дублює сповіщення в Telegram, якщо людина його підключила. Нічого не
- * кидає: сповіщення вже в базі й на сайті, Telegram — лише ще один шлях.
- *
- * 403 від Telegram — людина заблокувала бота чи видалила чат: тоді
- * відвʼязуємо, інакше кожне наступне сповіщення марно стукало б туди ж.
- */
+/** Копія сповіщення в Telegram. Нічого не кидає; 403 (бота заблоковано) — відвʼязуємо. */
 export async function sendToTelegram(n: Notification): Promise<void> {
   const b = getBot()
   if (!b) return
@@ -315,8 +284,6 @@ export async function sendTelegramText(userId: string, text: string): Promise<vo
   }
 }
 
-// ─── Вебхук і запуск ───
-
 let webhookHandler: ((event: { request: Request }) => Promise<Response>) | null =
   null
 
@@ -326,9 +293,9 @@ export function telegramWebhook():
   | null {
   const b = getBot()
   if (!b) return null
-  // Адаптер sveltekit віддає Response, але в типах grammY це unknown.
+  // * адаптер sveltekit віддає Response, але в типах grammY це unknown
   webhookHandler ??= webhookCallback(b, 'sveltekit', {
-    // Без правильного секрету — 401: оновлення може надіслати лише Telegram.
+    // * без правильного секрету — 401: оновлення може надіслати лише Telegram
     secretToken: webhookSecret(),
   }) as (event: { request: Request }) => Promise<Response>
   return webhookHandler
@@ -366,8 +333,8 @@ export async function startTelegram(): Promise<void> {
         )
         return
       }
-      // catch обовʼязковий: polling падає, якщо той самий бот уже
-      // запущений деінде (409), а необроблений reject поклав би сервер.
+      // * catch обовʼязковий: polling падає, якщо той самий бот уже
+      // * запущений деінде (409), а необроблений reject поклав би сервер
       b.start({
         drop_pending_updates: true,
         allowed_updates: ['message'],

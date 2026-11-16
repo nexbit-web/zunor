@@ -7,32 +7,28 @@ import { groupReactions, isReaction } from '$lib/components/chat/reactions'
 import type { RequestHandler } from './$types'
 
 /**
- * PUT /api/chats/[id]/messages/[messageId]/reaction
- * Body: { emoji: string | null }
- *
- * Ставить МОЮ реакцію рівно в те, що прийшло: емодзі — поставити чи
- * замінити, null — зняти. «Та сама ще раз — зняти» вирішує браузер
- * (nextReaction): так повтор запиту після обриву мережі не перемикає
- * реакцію туди-сюди.
+ * PUT — моя реакція рівно така, як прийшла: емодзі або null (зняти).
+ * «Та сама ще раз — зняти» вирішує браузер, тож повтор запиту після обриву
+ * мережі не перемикає реакцію. Body: { emoji: string | null }
  */
 export const PUT: RequestHandler = async ({ params, request, locals }) => {
   const user = requireApiUser(locals)
 
-  // Подвійний клік ставить і знімає — ліміт щедрий, але скрипт, що
-  // смикає реакцію в циклі, у розсилку Pusher не пройде.
+  // * подвійний клік ставить і знімає — ліміт щедрий, але скрипт, що
+  // * смикає реакцію в циклі, у розсилку Pusher не пройде
   const rl = await limit(`react:${user.id}`, { points: 120, duration: 60_000 })
   if (!rl.success) throw error(429, 'Забагато реакцій, зачекайте хвилинку')
 
   const body = await request.json().catch(() => null)
   if (!body || typeof body !== 'object') throw error(400, 'Invalid JSON')
   const raw = (body as { emoji?: unknown }).emoji ?? null
-  // Лише з закритого набору: інакше в базу й у чужу вкладку через Pusher
-  // їхав би будь-який рядок.
+  // * лише з закритого набору: інакше в базу й у чужу вкладку через Pusher
+  // * їхав би будь-який рядок
   if (raw !== null && !isReaction(raw)) throw error(400, 'Невідома реакція')
   const emoji = raw
 
-  // Повідомлення — саме цього чату, а чат — мій. Усе чуже — 404: не
-  // підтверджуємо, що таке повідомлення взагалі існує.
+  // * повідомлення — саме цього чату, а чат — мій. Усе чуже — 404: не
+  // * підтверджуємо, що таке повідомлення взагалі існує
   const message = await prisma.message.findFirst({
     where: {
       id: params.messageId,
@@ -50,7 +46,7 @@ export const PUT: RequestHandler = async ({ params, request, locals }) => {
         messageId_userId: { messageId: message.id, userId: user.id },
       },
       create: { messageId: message.id, userId: user.id, emoji },
-      // Нова реакція — у кінець ряду, як щойно поставлена.
+      // * нова реакція — у кінець ряду, як щойно поставлена
       update: { emoji, createdAt: new Date() },
     })
   } else {
@@ -59,8 +55,8 @@ export const PUT: RequestHandler = async ({ params, request, locals }) => {
     })
   }
 
-  // Віддаємо й розсилаємо ПОВНИЙ стан, а не різницю: вкладка, що
-  // пропустила попередню подію, все одно покаже правду.
+  // * віддаємо й розсилаємо ПОВНИЙ стан, а не різницю: вкладка, що
+  // * пропустила попередню подію, все одно покаже правду
   const reactions = groupReactions(
     await prisma.messageReaction.findMany({
       where: { messageId: message.id },

@@ -71,23 +71,23 @@
 
   const sidebar = useSidebar()
 
-  // Згорнута панель — це рейка з іконками (collapsible="icon"), а не
-  // порожнеча: навігація лишається під рукою, ховаються лише підписи.
-  // На телефоні рейки немає взагалі — там панель шторка.
+  // * згорнута панель — це рейка з іконками (collapsible="icon"), а не
+  // * порожнеча: навігація лишається під рукою, ховаються лише підписи.
+  // * На телефоні рейки немає взагалі — там панель шторка
   const collapsed = $derived(sidebar.state === 'collapsed' && !sidebar.isMobile)
 
   const toggleLabel = $derived(
     sidebar.isMobile ? 'Закрити меню' : 'Згорнути меню',
   )
 
-  // ─── Сесія та роль ───
+  // * сесія та роль
 
   type NavRole = 'CLIENT' | 'MASTER'
 
   const session = $derived(page.data.session)
 
-  // Роль із layout-load (читана з БД), а НЕ з session.user.role: сесія
-  // кешується в cookie на 5 хв, і свіжий майстер бачив би CLIENT.
+  // * роль із layout-load (читана з БД), а НЕ з session.user.role: сесія
+  // * кешується в cookie на 5 хв, і свіжий майстер бачив би CLIENT
   const role = $derived<NavRole>(
     page.data.role === 'MASTER' ? 'MASTER' : 'CLIENT',
   )
@@ -100,9 +100,9 @@
   onMount(() => {
     if (!session?.user?.id || chatStore.initialized) return
 
-    // Чати приходять із SSR лише на /messages, де вони — зміст сторінки.
-    // На решті дашборда тягнемо їх один раз за сесію: далі список живе
-    // на подіях Pusher, і жодна навігація більше не коштує запиту до БД.
+    // * чати приходять із SSR лише на /messages, де вони — зміст сторінки.
+    // * На решті дашборда тягнемо їх один раз за сесію: далі список живе
+    // * на подіях Pusher, і жодна навігація більше не коштує запиту до БД
     const ssrChats = page.data.chats
     if (ssrChats) chatStore.setChats(ssrChats)
     else chatStore.refreshChats()
@@ -110,7 +110,7 @@
     chatStore.subscribeToUserEvents(session.user.id).catch(() => {})
   })
 
-  // ─── Навігація ───
+  // * навігація
 
   type NavItem = {
     href: string
@@ -167,18 +167,18 @@
   const pathname = $derived(page.url.pathname)
   const settingsActive = $derived(pathname.startsWith('/dashboard/settings'))
   const helpActive = $derived(pathname.startsWith('/dashboard/help'))
-  // Вхід в адмінку — лише співробітникам (роль із бази, як і `role` вище).
+  // * вхід в адмінку — лише співробітникам (роль із бази, як і `role` вище)
   const staff = $derived(isStaff(page.data.role))
 
-  // Перехід за пунктом меню на телефоні закриває шторку: інакше вона
-  // лишалась би поверх сторінки, на яку користувач щойно пішов.
+  // * перехід за пунктом меню на телефоні закриває шторку: інакше вона
+  // * лишалась би поверх сторінки, на яку користувач щойно пішов
   function closeOnMobile(): void {
     if (sidebar.isMobile) sidebar.setOpenMobile(false)
   }
 
-  // Активний пункт рахуємо один раз: інакше /dashboard/jobs/new
-  // підсвічував би одночасно і «Нове замовлення», і «Мої заявки».
-  // Серед префіксних збігів виграє найдовший.
+  // * активний пункт рахуємо один раз: інакше /dashboard/jobs/new
+  // * підсвічував би одночасно і «Нове замовлення», і «Мої заявки».
+  // * Серед префіксних збігів виграє найдовший
   const activeHref = $derived.by(() => {
     const exact = NAV_ITEMS.find((i) => i.exact && pathname === i.href)
     if (exact) return exact.href
@@ -198,9 +198,9 @@
     return 0
   }
 
-  // Клік по ПОРОЖНЬОМУ місцю рейки розгортає панель: ціль уся рейка, а
-  // не лише 40px кнопки. Клік по пункту чи кнопці робить своє і панель
-  // не чіпає. Клавіатурний шлях — кнопка на місці знака.
+  // * клік по ПОРОЖНЬОМУ місцю рейки розгортає панель: ціль уся рейка, а
+  // * не лише 40px кнопки. Клік по пункту чи кнопці робить своє і панель
+  // * не чіпає. Клавіатурний шлях — кнопка на місці знака
   function expandFromRail(event: MouseEvent): void {
     if (!collapsed || away) return
     if ((event.target as Element).closest('a, button')) return

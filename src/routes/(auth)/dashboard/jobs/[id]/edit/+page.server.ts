@@ -3,13 +3,13 @@ import { prisma } from '$lib/server/prisma'
 import { requireUser } from '$lib/server/guards'
 import type { PageServerLoad } from './$types'
 
-// Редагування заявки — лише власник і лише відкрита (правила запису — у
-// $lib/server/job-edit). Чужа — 404: сторінка не підтверджує, що заявка є.
-// Закрита — назад на заявку: там видно, чому змінити вже не можна.
+// * редагування заявки — лише власник і лише відкрита (правила запису — у
+// * $lib/server/job-edit). Чужа — 404: сторінка не підтверджує, що заявка є.
+// * Закрита — назад на заявку: там видно, чому змінити вже не можна
 export const load: PageServerLoad = async ({ params, locals }) => {
   const userId = requireUser(locals).id
 
-  // Лічильник віддається назовні лише після перевірки власника нижче.
+  // * лічильник віддається назовні лише після перевірки власника нижче
   const [job, proposals] = await Promise.all([
     prisma.job.findUnique({
       where: { id: params.id },

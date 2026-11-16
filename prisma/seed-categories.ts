@@ -1,10 +1,4 @@
-// prisma/seed-categories.ts
-//
-// Запуск:
-//   npx tsx prisma/seed-categories.ts
-//
-// На MVP — одна категорія «Прибирання» для Одеси.
-// Інші категорії додамо пізніше, по мірі росту.
+// * запуск: npx tsx prisma/seed-categories.ts
 
 import { PrismaClient } from '../src/generated/prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
@@ -18,7 +12,6 @@ if (!connectionString) {
 const adapter = new PrismaPg({ connectionString })
 const prisma = new PrismaClient({ adapter })
 
-// ─── Конфігурація MVP ───
 // Одна категорія. Структура підкатегорій (типи прибирання) живе на UI-рівні
 // як пресети форми, не в БД. Це дозволяє додавати/змінювати їх без міграцій.
 

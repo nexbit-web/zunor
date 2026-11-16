@@ -1,11 +1,7 @@
 import type { ChatPreview } from '$lib/components/chat/types'
 import { prisma } from './prisma'
 
-/**
- * Стеля списку чатів. Список відсортований за свіжістю, тож зріз ріже лише
- * «хвіст», який у сайдбарі ніхто не гортає. Без ліміту запит ріс би разом з
- * історією юзера.
- */
+// * стеля: список за свіжістю, зріз ріже лише хвіст, який ніхто не гортає
 const MAX_CHATS = 100
 
 export async function loadChatsForUser(userId: string): Promise<ChatPreview[]> {
@@ -24,7 +20,7 @@ export async function loadChatsForUser(userId: string): Promise<ChatPreview[]> {
           members: {
             where: { userId: { not: userId } },
             select: {
-              // ✓✓ у списку біля мого останнього повідомлення.
+              // * для ✓✓ біля мого останнього повідомлення
               lastReadAt: true,
               user: {
                 select: {
@@ -50,9 +46,7 @@ export async function loadChatsForUser(userId: string): Promise<ChatPreview[]> {
   const chatIds = memberships.map((m) => m.chat.id)
   const unreadByChatId = new Map<string, number>()
 
-  // Один groupBy вместо N запросов.
-  // type != SYSTEM — страховка для legacy-строк: системные события заказов
-  // больше не сообщения и не должны накручивать счётчик непрочитанных.
+  // * один groupBy замість запиту на чат; SYSTEM — старі рядки подій замовлення
   const unread = await prisma.message.groupBy({
     by: ['chatId'],
     where: {

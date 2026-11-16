@@ -102,14 +102,14 @@
 
   let { edit }: { edit?: JobEditData } = $props()
 
-  // Початковий знімок заявки — далі форма живе сама (AGENTS, розділ 8).
+  // * початковий знімок заявки — далі форма живе сама (AGENTS, розділ 8)
   const start = untrack(() => edit)
   const m = (start?.metadata ?? {}) as Record<string, unknown>
   const str = (v: unknown): string =>
     typeof v === 'string' ? v : typeof v === 'number' ? String(v) : ''
 
-  // «Сьогодні/завтра» в заявці — від дня її створення; у формі показуємо
-  // датою. Дата, що вже минула, — не вибір: людина обере нову.
+  // * «Сьогодні/завтра» в заявці — від дня її створення; у формі показуємо
+  // * датою. Дата, що вже минула, — не вибір: людина обере нову
   const todayDate = today(getLocalTimeZone())
   const startWhen = (() => {
     if (!start) return ''
@@ -117,7 +117,7 @@
     return iso && iso >= todayDate.toString() ? iso : ''
   })()
 
-  // ─── State ───
+  // * State
   let step = $state(start ? (startWhen ? 5 : 4) : 1)
   let premise = $state(str(m.premise))
   let service = $state(str(m.service))
@@ -152,14 +152,14 @@
   let success = $state(false)
   let serverError = $state('')
 
-  // Схожа відкрита заявка (409 від POST /api/jobs) — разом із послугою, на
-  // яку її знайшли: обрала людина іншу — попередження вже не про цю.
+  // * схожа відкрита заявка (409 від POST /api/jobs) — разом із послугою, на
+  // * яку її знайшли: обрала людина іншу — попередження вже не про цю
   let duplicate = $state<{ job: DuplicateJob; service: string } | null>(null)
   const shownDuplicate = $derived(
     duplicate && duplicate.service === service ? duplicate.job : null,
   )
 
-  // Крок 3 адаптивний: набір обовʼязкових полів залежить від послуги.
+  // * крок 3 адаптивний: набір обовʼязкових полів залежить від послуги
   const step3Valid = $derived.by(() => {
     if (needsItems(service)) return items.length > 0
     if (needsWindows(service))
@@ -187,8 +187,8 @@
     windowSide: windowSide || undefined,
     balcony: balcony || undefined,
     items: items.length ? items : undefined,
-    // Площа від асистента: форма її не питає, сервер зберігає сам. Лише
-    // поки послуга та сама — для іншої вона може не мати сенсу.
+    // * площа від асистента: форма її не питає, сервер зберігає сам. Лише
+    // * поки послуга та сама — для іншої вона може не мати сенсу
     areaM2:
       service === m.service && typeof m.areaM2 === 'number'
         ? m.areaM2
@@ -198,7 +198,7 @@
     premise && service ? generateTitle(previewMeta) : '',
   )
 
-  // ─── Хімчистка: лічильник предметів ───
+  // * хімчистка: лічильник предметів
   function itemQty(type: string, variant?: string): number {
     return (
       items.find(
@@ -241,7 +241,7 @@
     step = edit && ready ? 5 : 2
   }
   function selectService(key: string) {
-    // Та сама послуга в редагуванні — деталі лишаються як були.
+    // * та сама послуга в редагуванні — деталі лишаються як були
     if (edit && key === service) {
       step = ready ? 5 : 3
       return
@@ -262,8 +262,8 @@
     if (step3Valid) step = edit && when ? 5 : 4
   }
   function selectQuickWhen(key: string) {
-    // У редагуванні — датою: «завтра» в заявці рахувалось би від дня її
-    // створення (сервер так само переведе, тут — щоб показати дату).
+    // * У редагуванні — датою: «завтра» в заявці рахувалось би від дня її
+    // * створення (сервер так само переведе, тут — щоб показати дату)
     if (edit) {
       when = resolveWhen(key, new Date()) ?? key
       calendarValue = parseDate(when)
@@ -287,7 +287,7 @@
     if (step > 1) step--
   }
 
-  // ─── Зведення для редагування ───
+  // * зведення для редагування
   const premiseLabel = $derived(
     PREMISES.find((p) => p.key === premise)?.label ?? '',
   )
@@ -310,7 +310,7 @@
   )
 
 
-  // confetti вантажимо лениво — не тягнемо в початковий бандл.
+  // * confetti вантажимо лениво — не тягнемо в початковий бандл
   async function celebrate() {
     try {
       const { default: confetti } = await import('canvas-confetti')
@@ -348,7 +348,7 @@
         })
       }, 150)
     } catch {
-      // confetti не критичний — мовчки ігноруємо
+      // * confetti не критичний — мовчки ігноруємо
     }
   }
 
@@ -357,7 +357,7 @@
     submitting = true
     serverError = ''
 
-    // Збираємо лише релевантні для послуги поля (сервер валідує повторно).
+    // * збираємо лише релевантні для послуги поля (сервер валідує повторно)
     const metadata: Record<string, unknown> = { premise, service, when }
     if (needsRooms(service)) {
       metadata.rooms = rooms
@@ -394,7 +394,7 @@
                 note: note.trim() || undefined,
                 attachments: imageUrls,
                 attachmentsPublicIds: imagePublicIds,
-                // Попередження вже бачили — це «Все одно створити».
+                // * попередження вже бачили — це «Все одно створити»
                 allowDuplicate: shownDuplicate ? true : undefined,
               },
         ),
@@ -418,7 +418,7 @@
         return
       }
 
-      // Редагування: сторінка змінюється на заявку — тост каже, що сталось.
+      // * редагування: сторінка змінюється на заявку — тост каже, що сталось
       if (edit) {
         if (json?.changed !== false) toast.success('Заявку оновлено')
         await goto(`/dashboard/jobs/${edit.id}`, { invalidateAll: true })
@@ -438,7 +438,7 @@
     }
   }
 
-  // ─── Повторювані класи на токенах ───
+  // * повторювані класи на токенах
   const tileCls =
     'group flex min-h-[124px] cursor-pointer flex-col items-start gap-3.5 rounded-[22px] border border-border bg-card p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-ring hover:shadow-md active:scale-[0.985] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none motion-reduce:hover:translate-y-0'
   const tileIcCls =

@@ -45,8 +45,8 @@
         throw new Error(err.message ?? 'Помилка')
       }
       await invalidateAll()
-      // Після invalidateAll форма зникає — сама по собі це двозначна
-      // подія: так виглядав би і збій, який стер написане.
+      // * після invalidateAll форма зникає — сама по собі це двозначна
+      // * подія: так виглядав би і збій, який стер написане
       toast.success('Дякуємо за відгук!')
     } catch (err) {
       error = err instanceof Error ? err.message : 'Помилка'

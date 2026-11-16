@@ -14,15 +14,9 @@ import type { RequestHandler } from './$types'
 import { background } from '$lib/server/background'
 
 /**
- * POST /api/orders/[id]/[action]
- *
- * action ∈ ['start', 'complete', 'cancel']
- *
- * Чат — тільки для спілкування: зміна статусу НЕ створює повідомлення
- * у стрічці. Замість цього:
- *   - broadcast 'order:status' → плашка в шапці чату оновлюється live;
- *   - OrderEvent → аудит;
- *   - Notify.* → сповіщення у дзвіночку.
+ * POST /api/orders/[id]/[action] — start | complete | cancel.
+ * Зміна статусу не пише повідомлення в чат: подія `order:status`, OrderEvent
+ * для аудиту й сповіщення.
  */
 
 const ACTION_TO_TRANSITION: Record<string, OrderTransition> = {
@@ -70,7 +64,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
   const newStatus = nextStatus(transition)
   const body = await request.json().catch(() => ({}) as Record<string, unknown>)
 
-  // Транзакция перехода
+  // * транзакция перехода
   const updated = await prisma.$transaction(
     async (tx) => {
       const now = new Date()
@@ -79,12 +73,8 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
         updatedAt: now,
       }
 
-      // Замок. canTransition вище читав статус ДО транзакції: два запити
-      // одночасно обидва бачили, наприклад, IN_PROGRESS і обидва
-      // «завершували» замовлення — лічильник completedOrders майстра ріс
-      // двічі (так накручувалась статистика), а «скасувати» й «завершити»
-      // могли пройти разом. Умовний запис пускає перехід рівно з того
-      // статусу, який ми перевірили: другий запит отримує 0 рядків.
+      // * замок: canTransition читав статус до транзакції. Умовний запис пускає
+      // * перехід рівно з перевіреного статусу — другий запит отримує 0 рядків
       const moved = await tx.order.updateMany({
         where: { id: order.id, status: order.status },
         data: { status: newStatus, updatedAt: now },
@@ -96,7 +86,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
       switch (transition) {
         case 'START': {
           data.startedAt = now
-          // Инкремент totalOrders мастера
+          // * инкремент totalOrders мастера
           await tx.masterProfile.update({
             where: { userId: order.masterId },
             data: { totalOrders: { increment: 1 } },
@@ -118,11 +108,11 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
           if (reason.length > 500) throw error(400, 'Причина занадто довга')
           data.cancelReason = reason || null
 
-          // Майстер відмовився → повертаємо заявку в пошук (manifest: клієнт не винен)
+          // * майстер відмовився → повертаємо заявку в пошук (manifest: клієнт не винен)
           if (actor === 'MASTER' && order.fromJob) {
             const jobId = order.fromJob.id
 
-            // 1. Заявка знову відкрита + лічильник відгуків обнуляємо
+            // * 1. Заявка знову відкрита + лічильник відгуків обнуляємо
             await tx.job.update({
               where: { id: jobId },
               data: {
@@ -133,7 +123,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
               },
             })
 
-            // 2. Видаляємо всі відгуки — заявка чиста, майстри відгукуються заново
+            // * 2. Видаляємо всі відгуки — заявка чиста, майстри відгукуються заново
             await tx.proposal.deleteMany({ where: { jobId } })
 
             // 3. Чорна мітка втікачу — мозок пам'ятає, що він відмовився.
@@ -143,7 +133,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
               data: { declined: true, respondedAt: null, openedAt: null },
             })
 
-            // 4. Решту записів диспатчу видаляємо → redispatch покличе їх заново
+            // * 4. Решту записів диспатчу видаляємо → redispatch покличе їх заново
             await tx.dispatchEvent.deleteMany({
               where: {
                 jobId,
@@ -205,7 +195,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
     })
   }
 
-  // Майстер відмовився → перезапускаємо диспатч (мозок шукає заміну)
+  // * майстер відмовився → перезапускаємо диспатч (мозок шукає заміну)
   if (transition === 'CANCEL' && actor === 'MASTER' && order.fromJob) {
     background(startWaves(order.fromJob), 'dispatch reopen')
   }
@@ -220,10 +210,10 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
         break
       case 'CANCEL': {
         if (actor === 'MASTER' && order.fromJob) {
-          // Майстер відмовився → клієнту тепле повідомлення від Zuno
+          // * майстер відмовився → клієнту тепле повідомлення від Zuno
           await Notify.jobReopened(updated.clientId, order.fromJob.id)
         } else {
-          // Клієнт скасував → майстру звичайне сповіщення
+          // * клієнт скасував → майстру звичайне сповіщення
           await Notify.orderCancelled(
             updated.masterId,
             updated.id,

@@ -1,21 +1,17 @@
-// Детект активної послуги (Intent Detection). Скан історії від ПОЧАТКУ,
-// тільки user-повідомлення: обрана послуга тримається, доки клієнт явно
-// не передумає. Це UX-оптимізація промпту, НЕ рівень безпеки: авторитетне
-// поле service все одно валідує validateCleaningMetadata.
+// * активна послуга розмови — з user-повідомлень від початку історії. Це
+// * оптимізація промпту, а не безпека: service валідує validateCleaningMetadata
 import { SERVICES } from '$lib/categories/cleaning/presets'
 import type { ZunorClientMessage } from '$lib/types/zunor'
 import { SERVICE_SYNONYMS, type ServiceKey } from './service-rules'
 
-// Нормалізація: нижній регістр + усі види апострофів → прямий,
-// щоб 'вікна' ловилось незалежно від ʼ/'/`.
+// * нормалізація: нижній регістр + усі види апострофів → прямий,
+// * щоб 'вікна' ловилось незалежно від ʼ/'/`
 function norm(s: string): string {
   return s.toLowerCase().replace(/[’'`ʼ]/g, "'")
 }
 
-// Збіг лише на ПОЧАТКУ слова: needle не може стояти всередині іншого
-// слова ('вітрин' не спрацює у вигаданому '...повітрин...').
-// Випадок, коли needle — початок ДОВШОГО слова ('стіл' у 'стільки'),
-// цим не ловиться — такі синоніми прибрані з SERVICE_SYNONYMS.
+// * збіг лише на початку слова; needle як початок довшого слова («стіл» у
+// * «стільки») цим не ловиться — таких синонімів у списку немає
 function findNeedle(text: string, needle: string): number {
   let from = 0
   while (from <= text.length - needle.length) {
@@ -34,7 +30,7 @@ const TRIGGERS: ReadonlyArray<{ key: ServiceKey; needles: readonly string[] }> =
     needles: [norm(s.label), ...(SERVICE_SYNONYMS[s.key] ?? []).map(norm)],
   }))
 
-// Межі слова — Unicode-класами: `\b` у JS не бачить кирилиці (AGENTS.md).
+// * межі слова — Unicode-класами: `\b` у JS не бачить кирилиці (AGENTS.md)
 const word = (alternatives: string) =>
   new RegExp(`(?<![\\p{L}\\p{N}_])(${alternatives})(?![\\p{L}\\p{N}_])`, 'iu')
 
@@ -87,12 +83,8 @@ function isChoice(content: string, mention: Mention): boolean {
 }
 
 /**
- * Активна послуга розмови. Обрану послугу тримаємо: згадка іншої в
- * ВІДПОВІДІ — це деталь, а не новий вибір. «Генеральне… вікна теж
- * хотілося б» перемикало фокус на «Миття вікон», і агент вимагав
- * кількість вікон як обовʼязкове поле, доки клієнт не здавався.
- *
- * Перемикаємо лише на явну зміну наміру або на коротку репліку-вибір.
+ * Обрану послугу тримаємо: згадка іншої у відповіді — деталь, а не новий
+ * вибір. Перемикаємо лише на явну зміну наміру або коротку репліку-вибір.
  */
 export function detectActiveService(
   history: ReadonlyArray<ZunorClientMessage>,

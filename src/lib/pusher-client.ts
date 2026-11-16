@@ -2,17 +2,7 @@ import Pusher from 'pusher-js'
 import { env } from '$env/dynamic/public'
 import { browser } from '$app/environment'
 
-/**
- * Клієнтський Pusher — singleton, ініціалізується один раз при першому
- * виклику getPusher(). Auto-reconnect у Pusher вбудований.
- *
- * Налаштування у .env:
- *   PUBLIC_PUSHER_KEY=xxx
- *   PUBLIC_PUSHER_CLUSTER=eu
- *
- * Авторизація private/presence каналів робиться через
- *   /api/pusher/auth — там перевіряємо session і права.
- */
+/** Клієнтський Pusher — синглтон. Private- і presence-канали підписує /api/pusher/auth. */
 
 let instance: Pusher | null = null
 
@@ -29,7 +19,7 @@ export function getPusher(): Pusher {
     authTransport: 'ajax',
   })
 
-  // Логування для дебагу — приберіть у проді
+  // * логування для дебагу — приберіть у проді
   if (import.meta.env.DEV) {
     instance.connection.bind('state_change', (s: { current: string }) => {
       console.log('[Pusher]', s.current)

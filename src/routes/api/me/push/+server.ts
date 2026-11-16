@@ -15,15 +15,9 @@ async function readToken(request: Request) {
 }
 
 /**
- * POST /api/me/push — цей пристрій отримує push-сповіщення
- * ($lib/server/push). Тіло: { token: 'ExponentPushToken[…]', platform:
- * 'ios' | 'android' }.
- *
- * Застосунок кличе його при кожному запуску з увімкненим push — токен
- * може змінитись, а запис лише оновлюється. Той самий токен в іншого
- * акаунта (на телефоні увійшли іншим) переходить до цього: один пристрій
- * — один акаунт, як і чат Telegram. Пристроїв понад MAX_DEVICES —
- * найдавніші геть.
+ * POST /api/me/push — пристрій отримує push. Тіло: { token, platform }.
+ * Той самий токен в іншого акаунта переходить до цього: один пристрій — один
+ * акаунт. Пристроїв понад MAX_DEVICES — найдавніші геть.
  */
 export const POST: RequestHandler = async ({ request, locals }) => {
   const user = requireApiUser(locals)
@@ -40,7 +34,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
   await prisma.pushToken.upsert({
     where: { token },
     create: { userId: user.id, token, platform },
-    // updatedAt оновлюється й без змін — так видно, що пристрій живий.
+    // * updatedAt оновлюється й без змін — так видно, що пристрій живий
     update: { userId: user.id, platform },
   })
 

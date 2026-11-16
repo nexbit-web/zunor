@@ -29,7 +29,7 @@
     if (value === null) {
       return `Усе місто й передмістя — ${all} ${pluralUk(all, 'район', 'райони', 'районів')}.`
     }
-    // Свій район не перелічуємо: він очевидний і так.
+    // * свій район не перелічуємо: він очевидний і так
     const near = districtsWithin(districts, district, value).filter(
       (d) => d.slug !== district,
     )

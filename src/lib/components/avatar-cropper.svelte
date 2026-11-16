@@ -86,7 +86,7 @@
 
   const box = $derived(frame ?? { x: PAD, y: PAD, size: crop })
 
-  // ─── Перетворення: сцена ↔ власні осі фото ───
+  // * перетворення: сцена ↔ власні осі фото
 
   /** Вектор сцени → осі фото: M·R(−θ)·d. */
   function toImage(dx: number, dy: number): { x: number; y: number } {
@@ -140,7 +140,7 @@
     settleTimer = setTimeout(() => (settling = false), 340)
   }
 
-  // ─── Завантаження файлу ───
+  // * завантаження файлу
 
   $effect(() => {
     if (!file) return
@@ -155,7 +155,7 @@
       natural = { w: probe.naturalWidth, h: probe.naturalHeight }
       src = url
     }
-    // HEIC з iPhone поза Safari, битий файл — браузер не розбере.
+    // * HEIC з iPhone поза Safari, битий файл — браузер не розбере
     probe.onerror = () => {
       if (alive) failed = true
     }
@@ -170,8 +170,8 @@
     }
   })
 
-  // Нове фото чи інший розмір сцени — все з початку: рівно в колі, по
-  // центру, без нахилу.
+  // * нове фото чи інший розмір сцени — все з початку: рівно в колі, по
+  // * центру, без нахилу
   $effect(() => {
     if (!natural.w || crop <= 0) return
     untrack(() => {
@@ -186,7 +186,7 @@
     })
   })
 
-  // ─── Масштаб ───
+  // * масштаб
 
   /**
    * Поставити точку фото qn (у пікселях оригіналу, від центру фото) у
@@ -212,7 +212,7 @@
     chosenScale = scale
   }
 
-  // ─── Поворот і віддзеркалення ───
+  // * поворот і віддзеркалення
 
   /** Кут змінився: фото крутиться навколо центру кола й, якщо треба,
    *  більшає, щоб накрити коло. Повернули назад — вертається обраний масштаб. */
@@ -233,8 +233,8 @@
     })
   }
 
-  // Дзеркало по горизонталі ЕКРАНА: у моделі це зміна знаку кута плюс
-  // віддзеркалення в осях фото. Точка в центрі кола лишається тією ж.
+  // * дзеркало по горизонталі ЕКРАНА: у моделі це зміна знаку кута плюс
+  // * віддзеркалення в осях фото. Точка в центрі кола лишається тією ж
   function flip(): void {
     if (!src) return
     settle(() => {
@@ -246,7 +246,7 @@
   }
 
   function setTilt(next: number): void {
-    // «Прилипає» до рівного: точно в нуль пальцем не влучити.
+    // * «Прилипає» до рівного: точно в нуль пальцем не влучити
     const t = clamp(next, -TILT_MAX, TILT_MAX)
     tilt = Math.abs(t) < 0.8 ? 0 : Math.round(t * 10) / 10
     afterRotate()
@@ -308,13 +308,13 @@
     if (pts.length > 1 && gesture.dist > 0) {
       const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y)
       const s = clamp((gesture.scale * dist) / gesture.dist, minScale, maxScale)
-      // Точка фото, що була під серединою пальців, лишається під нею.
+      // * точка фото, що була під серединою пальців, лишається під нею
       place(gesture.q.x, gesture.q.y, s, cx, cy)
       chosenScale = scale
       return
     }
 
-    // Фото їде за пальцем — точка в центрі кола зсувається навпаки.
+    // * фото їде за пальцем — точка в центрі кола зсувається навпаки
     const d = toImage(cx - gesture.cx, cy - gesture.cy)
     const { lu, lv } = limits(scale)
     u = rubber(gesture.u - d.x, -lu, lu)
@@ -331,9 +331,9 @@
     startGesture()
   }
 
-  // Коліщатко — через addEventListener: лише з { passive: false } можна
-  // скасувати прокрутку сторінки під діалогом. Щипок на тачпаді браузер
-  // присилає як wheel з ctrlKey — він чутливіший, тож крок більший.
+  // * коліщатко — через addEventListener: лише з { passive: false } можна
+  // * скасувати прокрутку сторінки під діалогом. Щипок на тачпаді браузер
+  // * присилає як wheel з ctrlKey — він чутливіший, тож крок більший
   function wheelZoom(node: HTMLElement) {
     const onWheel = (e: WheelEvent) => {
       if (!natural.w) return
@@ -346,7 +346,7 @@
     return { destroy: () => node.removeEventListener('wheel', onWheel) }
   }
 
-  // ─── Кути рамки ───
+  // * кути рамки
 
   type Corner = 'nw' | 'ne' | 'sw' | 'se'
   const CORNERS: Corner[] = ['nw', 'ne', 'sw', 'se']
@@ -358,7 +358,7 @@
     e.stopPropagation()
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
     settling = false
-    // Протилежний кут стоїть, рамка росте від нього в бік пальця.
+    // * протилежний кут стоїть, рамка росте від нього в бік пальця
     const sx = corner.endsWith('e') ? 1 : -1
     const sy = corner.startsWith('s') ? 1 : -1
     resize = {
@@ -376,7 +376,7 @@
     if (!(stage instanceof HTMLElement)) return
     const p = stagePoint(e, stage)
     const { sx, sy, ax, ay } = resize
-    // Не дрібніше, ніж дозволяє найбільше наближення.
+    // * не дрібніше, ніж дозволяє найбільше наближення
     const smallest = Math.max(MIN_FRAME, (crop * scale) / maxScale)
     const size = clamp(
       Math.max((p.x - ax) * sx, (p.y - ay) * sy),
@@ -390,7 +390,7 @@
     }
   }
 
-  // Відпустили кут — виділене розтягується на всю рамку.
+  // * відпустили кут — виділене розтягується на всю рамку
   function onCornerUp(): void {
     if (!resize || !frame) return
     resize = null
@@ -406,7 +406,7 @@
     })
   }
 
-  // ─── Лінійка нахилу ───
+  // * лінійка нахилу
 
   let tiltDrag: { x: number; tilt: number } | null = null
 
@@ -419,7 +419,7 @@
 
   function onRulerMove(e: PointerEvent): void {
     if (!tiltDrag) return
-    // Тягнеш шкалу вліво — під покажчик приїжджають більші градуси.
+    // * тягнеш шкалу вліво — під покажчик приїжджають більші градуси
     setTilt(tiltDrag.tilt - (e.clientX - tiltDrag.x) / PX_PER_DEG)
   }
 
@@ -433,7 +433,7 @@
     e.preventDefault()
   }
 
-  // ─── Клавіатура на фото ───
+  // * клавіатура на фото
 
   function onStageKey(e: KeyboardEvent): void {
     if (!natural.w) return
@@ -472,14 +472,14 @@
     e.preventDefault()
   }
 
-  // ─── Результат ───
+  // * результат
 
   let exporting = $state(false)
 
   async function confirm(): Promise<void> {
     if (!image || !natural.w || exporting) return
     exporting = true
-    // Якщо натиснули посеред пружини — беремо вже повернуте в межі.
+    // * якщо натиснули посеред пружини — беремо вже повернуте в межі
     clampOffset()
 
     const out = Math.max(1, Math.min(OUTPUT_MAX, Math.round(crop / scale)))
@@ -490,11 +490,11 @@
 
     let blob: Blob | null = null
     if (ctx) {
-      // Прозорий PNG у JPEG став би чорним — підкладаємо біле.
+      // * прозорий PNG у JPEG став би чорним — підкладаємо біле
       ctx.fillStyle = '#fff'
       ctx.fillRect(0, 0, out, out)
       ctx.imageSmoothingQuality = 'high'
-      // Той самий перетвір, що й на сцені, лише від центру кола.
+      // * той самий перетвір, що й на сцені, лише від центру кола
       const off = toStage(u, v)
       const w = natural.w * scale
       const h = natural.h * scale

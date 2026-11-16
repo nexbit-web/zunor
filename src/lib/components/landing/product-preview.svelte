@@ -78,13 +78,13 @@
   let frameWidth = $state(WIDTH)
   const zoom = $derived(Math.min(1, frameWidth / WIDTH))
 
-  // ─── Зміст сценарію ───
+  // * зміст сценарію
 
   const TASK = 'Треба прибрати квартиру після ремонту, завтра зранку'
   const ASK = 'Зрозуміло! А яка приблизно площа квартири?'
   const AREA_CHIPS = ['до 50 м²', '50–80 м²', 'понад 80 м²']
 
-  // Ті самі підказки, що на першому екрані /dashboard/jobs/new.
+  // * ті самі підказки, що на першому екрані /dashboard/jobs/new
   const HERO_CHIPS = [
     { label: 'Прибрати квартиру', icon: Home },
     { label: 'Хімчистка', icon: Sofa },
@@ -105,15 +105,15 @@
       when: 'tomorrow',
     },
   }
-  // Рядки картки — тим самим describeJob, що й справжня картка драфту.
-  // Чотири з шести: повна картка у вікні 600px виштовхувала назву за
-  // верхній край.
+  // * рядки картки — тим самим describeJob, що й справжня картка драфту.
+  // * Чотири з шести: повна картка у вікні 600px виштовхувала назву за
+  // * верхній край
   const createdAt = new Date().toISOString()
   const SHOWN_ROWS = ['Послуга', 'Площа', 'Сміття', 'Коли']
   const draftRows = describeJob(DRAFT.metadata, createdAt).filter((r) =>
     SHOWN_ROWS.includes(r.label),
   )
-  // День — як у JobSummary: resolveWhen + formatDay.
+  // * день — як у JobSummary: resolveWhen + formatDay
   const day = formatDay(resolveWhen(DRAFT.metadata.when, createdAt) ?? createdAt)
   const ROW_ICONS: Record<string, typeof ClipboardCheck> = {
     Home,
@@ -165,7 +165,7 @@
   const chip =
     'inline-flex h-5 items-center gap-1 rounded-full px-2 text-[11.5px] font-medium whitespace-nowrap'
 
-  // ─── Стан сценарію ───
+  // * стан сценарію
 
   type Scene = 'hero' | 'chat' | 'done' | 'job'
   type Msg =
@@ -232,8 +232,8 @@
     let visible = false
     let wake: (() => void) | null = null
 
-    // Пауза, яка стоїть, доки вікно поза екраном: сценарій не біжить
-    // даремно й не починається з середини, коли до нього докрутили.
+    // * пауза, яка стоїть, доки вікно поза екраном: сценарій не біжить
+    // * даремно й не починається з середини, коли до нього докрутили
     async function sleep(ms: number) {
       let left = ms
       while (left > 0) {
@@ -264,7 +264,7 @@
       reset()
       await sleep(1000)
 
-      // 1. Людина пише задачу й надсилає
+      // * 1. Людина пише задачу й надсилає
       for (const ch of TASK) {
         typed += ch
         await sleep(36)
@@ -274,7 +274,7 @@
       await sleep(200)
       pressed = null
 
-      // 2. Zunor думає й уточнює площу
+      // * 2. Zunor думає й уточнює площу
       scene = 'chat'
       messages = [{ id: 1, role: 'user', text: typed }]
       typed = ''
@@ -292,7 +292,7 @@
       chips = []
       messages.push({ id: 3, role: 'user', text: AREA_CHIPS[1] })
 
-      // 3. Заявка зібрана — підтвердити
+      // * 3. Заявка зібрана — підтвердити
       await sleep(350)
       thinking = true
       await sleep(2000)
@@ -303,16 +303,16 @@
       await sleep(450)
       pressed = null
 
-      // 4. Готово — шукаємо клінера
+      // * 4. Готово — шукаємо клінера
       scene = 'done'
       await sleep(2400)
 
-      // 5. Перший відгук
+      // * 5. Перший відгук
       island = 'on'
       notif = 1
       await sleep(2800)
 
-      // 6. Сторінка заявки з пропозиціями
+      // * 6. Сторінка заявки з пропозиціями
       scene = 'job'
       for (let i = 1; i <= PROPOSALS.length; i++) {
         await sleep(600)

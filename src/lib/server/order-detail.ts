@@ -1,12 +1,5 @@
-// Замовлення цілком — для сторінки сайту (dashboard/orders/[id]) і для
-// застосунку (GET /api/orders/[id]). Один завантажувач і одна перевірка
-// доступу на обох (AGENTS.md, «Перевірка доступу живе в одному місці»):
-// коли кожен шлях мав свій запит, API віддавав інше, ніж сторінка (без
-// телефону, з чужим 403 замість 404).
-//
-// Телефон тут — легально: замовлення існує, глядач перевірений як його
-// сторона (MANIFESTO, «захист контактів до угоди»). Ніде до угоди його
-// немає.
+// * замовлення цілком — один завантажувач і одна перевірка доступу для сайту
+// * й застосунку. Телефон тут законний: угода є, глядач — її сторона
 
 import { prisma } from './prisma'
 import { SERVICE_EVENTS } from './order-events'
@@ -43,11 +36,10 @@ function query(orderId: string) {
           },
         },
       },
-      // «today/tomorrow» у metadata відносні до дня створення ЗАЯВКИ.
+      // * «today/tomorrow» у metadata відносні до дня створення заявки
       fromJob: { select: { id: true, number: true, createdAt: true } },
       events: {
-        // Службова відмітка нагадування (server/reminders) — аудит, не
-        // подія для людей: в «Історії подій» їй не місце.
+        // * службова відмітка нагадування — аудит, не подія для людей
         where: { type: { notIn: [...SERVICE_EVENTS] } },
         orderBy: { createdAt: 'asc' },
         select: {
@@ -74,11 +66,7 @@ function query(orderId: string) {
 
 export type OrderDetailRow = NonNullable<Awaited<ReturnType<typeof query>>>
 
-/**
- * Замовлення для глядача-сторони. Немає такого АБО глядач не клієнт і не
- * майстер — null: назовні це 404, не 403 (чужий обʼєкт не підтверджує
- * навіть свого існування, AGENTS.md 2.2).
- */
+/** Замовлення для його сторони; немає або глядач не сторона — null (назовні 404). */
 export async function loadOrderDetail(
   orderId: string,
   viewerId: string,
@@ -89,12 +77,8 @@ export async function loadOrderDetail(
   return order
 }
 
-/**
- * Відповідь API для застосунку — явний перелік полів (службові поля
- * модерації `removed*` назовні не йдуть), рейтинги плоскі
- * (`avgRating`, `reviewsCount`), як у решті API. Контракт: поля лише
- * додаються.
- */
+// * відповідь API — явний перелік полів: службові `removed*` назовні не йдуть.
+// * Контракт: поля лише додаються
 export function orderDetailDto(order: OrderDetailRow) {
   const { client, master, fromJob } = order
   return {
@@ -117,8 +101,7 @@ export function orderDetailDto(order: OrderDetailRow) {
     chatId: order.chatId,
     jobId: fromJob?.id ?? null,
     jobCreatedAt: fromJob?.createdAt ?? null,
-    // Номер заявки для людей (Job.number) — з копії в замовленні: зв'язок
-    // fromJob рветься, коли заявку відкривають знову.
+    // * номер — з копії в замовленні: звʼязок fromJob рветься, коли заявку відкривають знову
     jobNumber: order.jobNumber ?? fromJob?.number ?? null,
     client: {
       id: client.id,

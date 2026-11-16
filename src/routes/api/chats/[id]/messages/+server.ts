@@ -36,8 +36,8 @@ export const GET: RequestHandler = async ({ params, url, locals }) => {
   if (!membership) throw error(403, 'Not a member')
 
   const messages = await prisma.message.findMany({
-    // type != SYSTEM — legacy-рядки не показуємо навіть якщо міграцію
-    // ще не накотили.
+    // * type != SYSTEM — legacy-рядки не показуємо навіть якщо міграцію
+    // * ще не накотили
     where: { chatId, type: { not: 'SYSTEM' } },
     orderBy: { createdAt: 'desc' },
     take: MESSAGE_PAGE_SIZE + 1,
@@ -64,7 +64,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
   const body = await request.json().catch(() => null)
   if (!body || typeof body !== 'object') throw error(400, 'Invalid JSON')
 
-  // ─── Валідація типу ───
+  // * валідація типу
   const rawType = (body as { type?: unknown }).type ?? 'TEXT'
   if (!ALLOWED_TYPES.includes(rawType as AllowedType)) {
     throw error(400, 'Невідомий тип повідомлення')
@@ -79,7 +79,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
   if (type === 'TEXT' && !text) throw error(400, 'Text required')
   if (text.length > MAX_TEXT_LENGTH) throw error(400, 'Text too long')
 
-  // ─── Валідація вкладення ───
+  // * валідація вкладення
   const rawAttachment = (body as { attachment?: unknown }).attachment
   const attachment =
     rawAttachment && typeof rawAttachment === 'object'
@@ -103,12 +103,8 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
   let attachmentName: string | null = null
 
   if (attachment?.url) {
-    // Приймаємо тільки те, що реально завантажено через нашу підписану
-    // форму: файл із теки чату ЦІЄЇ людини в НАШІЙ хмарі
-    // ($lib/server/own-media). Самого префікса res.cloudinary.com мало: він
-    // пускав чужий акаунт Cloudinary й тип `fetch`, тобто вкладенням ставав
-    // файл, який відправник міг підмінити вже після надсилання. Фото —
-    // лише картинка; файл — будь-який тип завантаження.
+    // * вкладення — лише файл із теки чату цієї людини в нашій хмарі (own-media);
+    // * фото — лише картинка
     if (
       !isOwnUpload(attachment.url, attachment.publicId, chatFolder(user.id), {
         image: type === 'PHOTO',
@@ -152,9 +148,9 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
   })
   if (!membership) throw error(403, 'Not a member')
 
-  // Відповідати можна лише на повідомлення цього ж чату.
-  // Без цієї перевірки reply на чужий messageId повертав би у відповіді
-  // текст повідомлення з чату, до якого юзер не має доступу.
+  // * відповідати можна лише на повідомлення цього ж чату.
+  // * Без цієї перевірки reply на чужий messageId повертав би у відповіді
+  // * текст повідомлення з чату, до якого юзер не має доступу
   if (replyToId) {
     const parent = await prisma.message.findFirst({
       where: { id: replyToId, chatId },
@@ -170,8 +166,8 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
         ? '📷 Фото'
         : '📎 Файл'
 
-  // Картка посилання — лише в тексті (підпис до фото її не має, як у
-  // Telegram). Відома з кешу пишеться одразу, невідома — після відповіді.
+  // * картка посилання — лише в тексті (підпис до фото її не має, як у
+  // * Telegram). Відома з кешу пишеться одразу, невідома — після відповіді
   const linkPreview =
     type === 'TEXT' ? planLinkPreview(text) : { value: null, fetchLater: false }
 
@@ -207,11 +203,8 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 
   const payload = toChatMessage(message)
 
-  // ─── Безпечний broadcast: помилки логуються, не падають ───
-  // Усі події — одночасно, а не по черзі: інакше chat:update (рядок у
-  // списку й число на вкладці) чекав відповіді Pusher на message:new і
-  // приходив на ~200 мс пізніше за саме повідомлення, а відповідь
-  // відправникові (годинник → галочка) — ще на стільки ж пізніше.
+  // * усі події одночасно: інакше chat:update чекав би відповіді Pusher на
+  // * message:new і приходив пізніше за саме повідомлення
   await Promise.all([
     safeTrigger(channels.chat(chatId), events.messageNew, {
       message: payload,
@@ -235,15 +228,15 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
     ),
   ])
 
-  // Push на телефони співрозмовників ($lib/server/push) — після відповіді:
-  // запит до Expo не має тримати галочку «надіслано».
+  // * Push на телефони співрозмовників ($lib/server/push) — після відповіді:
+  // * запит до Expo не має тримати галочку «надіслано»
   background(
     sendMessagePush({
       recipients: membership.chat.members.map((m) => m.userId),
       chatId,
       messageId: payload.id,
       senderName: message.sender.name,
-      // Фото з підписом — значок і підпис, без підпису — «📷 Фото».
+      // * фото з підписом — значок і підпис, без підпису — «📷 Фото»
       text:
         type === 'TEXT'
           ? text.slice(0, 180)
@@ -254,7 +247,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
     'chat push',
   )
 
-  // Без await: сторонній сайт не має тримати відправку.
+  // * без await: сторонній сайт не має тримати відправку
   if (linkPreview.fetchLater)
     background(attachLinkPreview(chatId, message.id, text), 'link preview')
 

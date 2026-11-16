@@ -1,10 +1,5 @@
-// Inline-иконки брендов из Simple Icons (simpleicons.org, лицензия CC0).
-// viewBox 0 0 24 24, одиночный <path>, fill=currentColor.
-//
-// Почему инлайн, а не @iconify: ради нескольких иконок не тащим зависимость,
-// рантайм-компонент и сетевой запрос к чужому CDN (+ дырку в строгой CSP).
-// Добавить бренд — добавить запись. Path берётся из simpleicons.org или
-// raw.githubusercontent.com/simple-icons/simple-icons/develop/icons/<slug>.svg
+// * іконки брендів із Simple Icons (CC0): viewBox 24, один <path>. Вбудовані —
+// * без залежності й запиту до чужого CDN. Новий бренд — новий запис
 
 export type BrandName = 'instagram' | 'telegram' | 'x' | 'threads' | 'youtube'
 

@@ -1,7 +1,7 @@
 <script lang="ts">
-  // Рядок «підпис + пояснення ліворуч, контрол праворуч».
-  // Для полів форми (інпут праворуч) є SettingsField — там інша поведінка
-  // на вузьких екранах.
+  // * рядок «підпис + пояснення ліворуч, контрол праворуч».
+  // * Для полів форми (інпут праворуч) є SettingsField — там інша поведінка
+  // * на вузьких екранах
   import type { Snippet } from 'svelte'
   import { getSettingsLayout } from './layout'
 
@@ -63,7 +63,7 @@
     : split
       ? 'mt-0.5 text-[13px] leading-relaxed'
       : 'mt-0.5 text-[12px] leading-relaxed'
-  // Широкий контрол у вузькій картці — на всю ширину під текстом.
+  // * широкий контрол у вузькій картці — на всю ширину під текстом
   const controlClass = $derived(stacked && wide ? 'w-full @3xl:w-auto' : '')
 </script>
 

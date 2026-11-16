@@ -3,15 +3,9 @@ import { runQueuedWave, verifyWaveRequest } from '$lib/server/dispatch'
 import type { RequestHandler } from './$types'
 
 /**
- * POST /api/dispatch/wave — чергова хвиля розсилки від черги QStash
- * (лише Vercel; $lib/server/dispatch/queue.ts). Тіло — { jobId }.
- *
- * Пускає лише підписаний нашими ключами QStash виклик саме на цю адресу:
- * інакше будь-хто міг би смикати розсилку. Чужий — 401 без жодної роботи.
- *
- * Помилку хвилі НЕ ковтаємо: 500 — і QStash повторить сам. Хвиля
- * ідемпотентна (номер відпрацьованої лежить у заявці), тож повтор чи
- * зайвий виклик нічого не дублюють.
+ * POST /api/dispatch/wave — хвиля розсилки від черги QStash (лише Vercel).
+ * Пускає тільки підписаний виклик. Помилку хвилі не ковтаємо: 500 — і QStash
+ * повторить сам; хвиля ідемпотентна.
  */
 export const POST: RequestHandler = async ({ request }) => {
   const body = await request.text()
@@ -26,7 +20,7 @@ export const POST: RequestHandler = async ({ request }) => {
   } catch {
     throw error(400, 'Invalid JSON')
   }
-  // id заявки — cuid; стеля на довжину, щоб сміття не йшло в запит.
+  // * id заявки — cuid; стеля на довжину, щоб сміття не йшло в запит
   if (typeof jobId !== 'string' || jobId.length === 0 || jobId.length > 64) {
     throw error(400, 'jobId required')
   }

@@ -9,21 +9,9 @@ import { limit } from '$lib/server/rate-limit'
 import type { RequestHandler } from './$types'
 
 /**
- * GET /api/jobs/[id] — деталі заявки (екран заявки в застосунку).
- *
- * Дані й доступ — $lib/server/job-detail, ті самі, що в сторінки сайту:
- * власник, релевантний майстер або майстер із власною пропозицією. Решта
- * отримує 404 (а не 403: інакше відповідь підтверджує існування чужої
- * заявки).
- *
- * `?open=1` — людина відкрила заявку: унікальний перегляд і «майстер
- * відкрив» для диспетчера, як на сторінці сайту. Обидва ідемпотентні
- * (один перегляд на глядача), тож оновлення екрана нічого не накручує.
- *
- * Контракт: поля, що були раніше, — ті самі (category / city — slug),
- * решта лише додана: number, metadata, effort, editedAt, place, categoryName,
- * cityName, client.createdAt; proposals, isMaster, canPropose,
- * cantProposeReason.
+ * GET /api/jobs/[id] — заявка для застосунку: дані й доступ ті самі, що в
+ * сторінки сайту (job-detail); решті — 404. `?open=1` — людина відкрила
+ * заявку (перегляд і «майстер відкрив»). Контракт: поля лише додаються.
  */
 export const GET: RequestHandler = async ({ params, locals, url }) => {
   const user = requireApiUser(locals)
@@ -56,16 +44,13 @@ export const GET: RequestHandler = async ({ params, locals, url }) => {
 }
 
 /**
- * PATCH /api/jobs/[id] — змінити заявку. Лише власник і лише відкрита;
- * правила й побічні дії — у $lib/server/job-edit.
- *
- * Тіло — як у POST /api/jobs: { metadata, description, attachments,
- * attachmentsPublicIds }.
+ * PATCH /api/jobs/[id] — змінити заявку: лише власник і лише відкрита
+ * (job-edit). Тіло — як у POST /api/jobs.
  */
 export const PATCH: RequestHandler = async ({ params, locals, request }) => {
   const user = requireApiUser(locals)
 
-  // Кожне збереження може сповістити майстрів — не частіше розумного.
+  // * кожне збереження може сповістити майстрів — не частіше розумного
   const rl = await limit(`job:edit:${user.id}`, {
     points: 30,
     duration: 60 * 60_000,
@@ -107,15 +92,15 @@ export const DELETE: RequestHandler = async ({ params, locals }) => {
       where: { id: job.id },
       data: { status: 'CANCELLED', closedAt: new Date() },
     }),
-    // Все pending proposals → REJECTED
+    // * все pending proposals → REJECTED
     prisma.proposal.updateMany({
       where: { jobId: job.id, status: 'SENT' },
       data: { status: 'REJECTED' },
     }),
   ])
 
-  // Заявки більше немає — знімаємо заплановані хвилі, щоб таймер не будив
-  // базу заради розсилки, яку диспетчер однаково відхилить.
+  // * заявки більше немає — знімаємо заплановані хвилі, щоб таймер не будив
+  // * базу заради розсилки, яку диспетчер однаково відхилить
   cancelWaves(job.id)
 
   return json({ ok: true })

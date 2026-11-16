@@ -6,7 +6,7 @@ import type { PageServerLoad } from './$types'
 
 export const load: PageServerLoad = async ({ locals, url }) => {
   const staff = await requireStaff(locals)
-  // Модераторові метрики ні до чого — його робота в анкетах і скаргах.
+  // * модераторові метрики ні до чого — його робота в анкетах і скаргах
   if (!atLeast(staff.role, 'MANAGER')) redirect(303, '/admin/moderation')
 
   const raw = url.searchParams.get('period')

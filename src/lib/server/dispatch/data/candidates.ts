@@ -1,4 +1,4 @@
-// Читання для рішення хвилі: сама заявка й майстри, яких можна покликати.
+// * читання для рішення хвилі: сама заявка й майстри, яких можна покликати
 
 import { districtDistanceKm, type District } from '$lib/geo/districts'
 import { matchingFor, meetsConditions } from '$lib/categories/matching'
@@ -49,8 +49,8 @@ export async function loadJob(
   return {
     ...job,
     district: job.district ?? null,
-    // Заявка старша за Job.effort — обсяг із metadata тією ж формулою
-    // (без поправки асистента: її тоді ще не було).
+    // * заявка старша за Job.effort — обсяг із metadata тією ж формулою
+    // * (без поправки асистента: її тоді ще не було)
     effort:
       asEffort(job.effort) ?? matchingFor(job.category).effort(job.metadata),
     notified: new Set(events.map((e) => e.masterId)),
@@ -58,13 +58,9 @@ export async function loadJob(
 }
 
 /**
- * Майстри, яких можна покликати: місто й категорія заявки, активний
- * профіль, ще не покликані й не сам клієнт.
- *
- * Чого майстер не робить (вид прибирання, тип обʼєкта — categories/
- * matching) — відсікаємо зовсім: він сам так сказав. Межу виїзду й
- * нестачу (немає авто, а сміття треба вивезти) не відсікаємо, а
- * позначаємо (withinReach): їх переступає лише остання хвиля.
+ * Майстри, яких можна покликати. Чого майстер не робить — відсікаємо зовсім;
+ * межу виїзду й нестачу авто лише позначаємо (withinReach): їх переступає
+ * остання хвиля.
  */
 export async function loadCandidates(
   db: Db,
@@ -77,8 +73,8 @@ export async function loadCandidates(
       role: 'MASTER',
       city: job.city,
       id: { not: job.clientId },
-      // Забанений не отримує заявок: увійти він не може, а покликаним
-      // рахувався б — і остання хвиля думала б, що заявку вже побачили.
+      // * забанений не отримує заявок: увійти він не може, а покликаним
+      // * рахувався б — і остання хвиля думала б, що заявку вже побачили
       banned: false,
       masterProfile: {
         isActive: true,
@@ -127,7 +123,7 @@ export async function loadCandidates(
   const [busy, history, seen] = await Promise.all([
     countBusyOrders(db, ids),
     loadHistory(db, ids, since),
-    // Точний «онлайн» — з Redis; у базі він грубий (presence.ts).
+    // * точний «онлайн» — з Redis; у базі він грубий (presence.ts)
     lastSeenMany(ids),
   ])
 
@@ -149,8 +145,8 @@ export async function loadCandidates(
     crewFit: crewFit(m.profile.crew, job.effort),
     withinReach:
       acceptsDistance(m.distanceKm, m.profile.travelRadiusKm ?? null) &&
-      // «Немає авто» — лише явна відповідь: хто не відповідав, той не
-      // втрачає заявок, яких отримував до появи питання.
+      // * «Немає авто» — лише явна відповідь: хто не відповідав, той не
+      // * втрачає заявок, яких отримував до появи питання
       !(needsVehicle && m.profile.hasVehicle === false),
   }))
 }

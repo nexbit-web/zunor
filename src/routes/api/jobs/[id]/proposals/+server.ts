@@ -8,12 +8,7 @@ import { masterRatingSelect, flattenMasterRating } from '$lib/server/user-dto'
 import { proposalPhone } from '$lib/server/job-detail'
 import type { RequestHandler } from './$types'
 
-/**
- * POST /api/jobs/[id]/proposals — майстер надсилає відгук.
- *
- * Body: { message: string, priceUah: number, estimatedDays: number }
- * Безкоштовно (lead fee прибрано).
- */
+/** POST — майстер надсилає відгук. Body: { message, priceUah, estimatedDays } */
 export const POST: RequestHandler = async ({ params, request, locals }) => {
   const user = requireApiUser(locals)
 
@@ -82,8 +77,8 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
     throw error(400, 'Заявка більше не приймає відгуки')
   if (job.expiresAt < new Date()) throw error(400, 'Термін подачі минув')
 
-  // Право на відгук перевіряємо на сервері (та сама умова, що в стрічці й гейті
-  // перегляду) — не покладаємось на те, що UI ховає кнопку.
+  // * право на відгук перевіряємо на сервері (та сама умова, що в стрічці й гейті
+  // * перегляду) — не покладаємось на те, що UI ховає кнопку
   if (me.city !== job.city) {
     throw error(403, 'Заявка не у вашому місті')
   }
@@ -91,7 +86,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
     throw error(403, 'Ця категорія не у вашому профілі')
   }
 
-  // Повторний відгук неможливий (унікальний ключ jobId+masterId).
+  // * повторний відгук неможливий (унікальний ключ jobId+masterId)
   const existing = await prisma.proposal.findUnique({
     where: { jobId_masterId: { jobId: job.id, masterId: user.id } },
     select: { id: true },
@@ -100,7 +95,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
     throw error(400, 'Ви вже відправили відгук на цю заявку')
   }
 
-  // Створення відгуку + інкремент лічильника — атомарно.
+  // * створення відгуку + інкремент лічильника — атомарно
   const proposal = await prisma.$transaction(async (tx) => {
     const created = await tx.proposal.create({
       data: {
@@ -129,15 +124,15 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
     return created
   })
 
-  // Сповіщення клієнту — fail-soft: збій нотифікації не валить створення відгуку.
+  // * сповіщення клієнту — fail-soft: збій нотифікації не валить створення відгуку
   try {
     await Notify.newProposal(job.clientId, job.id, proposal.id)
   } catch (err) {
     console.error('[proposal:new] notify failed', err)
   }
 
-  // Память диспетчера: майстер відповів на розіслану заявку — ключова метрика
-  // якості розсилки (хто з уведомлених реально відгукнувся).
+  // * память диспетчера: майстер відповів на розіслану заявку — ключова метрика
+  // * якості розсилки (хто з уведомлених реально відгукнувся)
   markResponded(job.id, user.id).catch(() => {})
 
   return json({ proposal }, { status: 201 })

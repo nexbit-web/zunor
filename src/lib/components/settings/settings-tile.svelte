@@ -27,7 +27,7 @@
 
   let { kind, size = 32 }: Props = $props()
 
-  // Ті самі кольори, що TINT у застосунку.
+  // * ті самі кольори, що TINT у застосунку
   const TINT: Record<'mail' | 'key' | 'sound', string> = {
     mail: '#007aff',
     key: '#8e8e93',

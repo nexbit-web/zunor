@@ -1,9 +1,5 @@
-// Профіль клієнта для AI-асистента.
-//
-// Структуровані дані замість вільного тексту — це не про зручність,
-// а про безпеку: чіпи обмежені ключами з пресетів, тому підставити
-// в промпт довільний текст через них неможливо. Санітизації потребує
-// лише поле `about`.
+// * профіль клієнта для асистента. Структуровані поля — ключі з пресетів:
+// * підставити через них текст у промпт неможливо. Санітизується лише `about`
 
 import { PREMISES, SERVICES } from '$lib/categories/cleaning/presets'
 
@@ -14,9 +10,9 @@ export const MAX_OBJECTS = 4
 const PREMISE_KEYS: Set<string> = new Set(PREMISES.map((p) => p.key))
 const SERVICE_KEYS: Set<string> = new Set(SERVICES.map((s) => s.key))
 
-// type, а не interface: Prisma вимагає в Json-значеннях індексну
-// сигнатуру, і в type-аліасів вона виводиться неявно, а в інтерфейсів —
-// ні. З interface довелося б кастити при кожному записі в БД.
+// * type, а не interface: Prisma вимагає в Json-значеннях індексну
+// * сигнатуру, і в type-аліасів вона виводиться неявно, а в інтерфейсів —
+// * ні. З interface довелося б кастити при кожному записі в БД
 
 export type AiObject = {
   premise: string
@@ -62,7 +58,7 @@ export function parseAiProfile(raw: unknown): AiProfile {
           if (!o || typeof o !== 'object') return null
           const rec = o as Record<string, unknown>
           const premise = typeof rec.premise === 'string' ? rec.premise : ''
-          // Невідомий ключ = підробка або застарілий пресет → викидаємо.
+          // * невідомий ключ = підробка або застарілий пресет → викидаємо
           if (!PREMISE_KEYS.has(premise)) return null
           return { premise, note: sanitizeText(rec.note, OBJECT_NOTE_MAX) }
         })
@@ -92,21 +88,14 @@ export function isProfileEmpty(p: AiProfile): boolean {
   )
 }
 
-/**
- * Профіль → блок промпту.
- *
- * Це ДАНІ, а не інструкції. Захист трирівневий:
- *   1. Структуровані поля беруться з пресетів — підставити текст не можна.
- *   2. Вільні поля санітизовані й обрізані ще при збереженні.
- *   3. Явна рамка з попередженням для моделі.
- */
+/** Профіль → блок промпту. Це дані, а не інструкції: пресети, санітизація й рамка для моделі. */
 export function buildProfileBlock(p: AiProfile): string | null {
   if (isProfileEmpty(p)) return null
 
   const facts: string[] = []
-  // Окремий список того, що вже ВІДОМО і чого не можна перепитувати.
-  // Без нього модель читає анкету як загальну довідку й усе одно
-  // йде по своєму сценарію питань.
+  // * окремий список того, що вже ВІДОМО і чого не можна перепитувати.
+  // * Без нього модель читає анкету як загальну довідку й усе одно
+  // * йде по своєму сценарію питань
   const known: string[] = []
 
   if (p.callName) facts.push(`Звертайся до клієнта: ${p.callName}.`)
@@ -129,7 +118,7 @@ export function buildProfileBlock(p: AiProfile): string | null {
       })
       .join('; ')
     facts.push(`Об'єкти клієнта: ${list}.`)
-    // Кілька об'єктів — уточнити, ПРО ЯКИЙ мова, все ж треба.
+    // * кілька об'єктів — уточнити, ПРО ЯКИЙ мова, все ж треба
     facts.push(
       "Якщо незрозуміло, про який об'єкт мова — запитай, але не про тип приміщення взагалі.",
     )

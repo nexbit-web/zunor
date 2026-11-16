@@ -1,9 +1,4 @@
-// Єдине джерело правди про запис профілю та ролі.
-//
-// Історія: раніше клієнт зберігався через /api/user/update, майстер —
-// через /api/user/onboarding, і кожен шлях сам вирішував, чи виставляти
-// onboarded. Майстер його не виставляв — звідси вічна петля на онбордингу.
-// Тепер обидва шляхи заходять сюди.
+// * єдине місце, що пише профіль і роль: і онбординг, і редагування
 
 import { error } from '@sveltejs/kit'
 import { prisma } from './prisma'
@@ -26,8 +21,6 @@ import { invalidateAccount } from './account-cache'
 import { forgetMasterPage } from './master-page'
 import { refreshSessionUser } from './sessions'
 
-// ═══════════════════ Обмеження ═══════════════════
-
 const PHONE_RE = /^\+380\d{9}$/
 const NAME_MIN = 2
 const NAME_MAX = 80
@@ -37,19 +30,11 @@ const DESC_MAX = 2000
 const CATEGORIES_MAX = 5
 const PORTFOLIO_MAX = 6
 
-// Фото профілю й портфоліо приймаємо лише через $lib/server/own-media:
-// пара «посилання + publicId» з теки цієї людини в НАШІЙ хмарі (або фото
-// з Google-акаунта). Доки вистачало префікса res.cloudinary.com, а publicId
-// писався з тіла як є, чужий id можна було покласти собі в профіль — і
-// наступне збереження стирало чужий файл із хмари.
+// * фото профілю й портфоліо — лише через own-media: своя тека в нашій хмарі
 
 const asString = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
 
-/**
- * Район — обовʼязковий там, де для міста є райони в БД (зараз це Одеса):
- * з нього рахуються кільця розсилки, і без нього заявка йде всім підряд.
- * Для міста без районів — null, питати нема про що.
- */
+// * район обовʼязковий там, де в міста є райони: з нього рахуються кільця розсилки
 function parseDistrict(
   districts: readonly District[],
   raw: unknown,
@@ -60,19 +45,8 @@ function parseDistrict(
   return district.slug
 }
 
-// ═══════════════════ Правило переходу ролей ═══════════════════
-
-/**
- * CLIENT → MASTER дозволено. MASTER → CLIENT — ні.
- *
- * Причина не в UI, а в даних: у майстра є рейтинг, відгуки, портфоліо
- * й історія замовлень. Зниження до клієнта осиротило б ці записи
- * і дало б спосіб «скинути» погану репутацію, ставши клієнтом
- * і повернувшись назад майстром із чистим профілем.
- *
- * Службові ролі (ADMIN/MANAGER/MODERATOR) через цю функцію не змінюються
- * взагалі — тільки вручну в БД.
- */
+// * CLIENT → MASTER можна, назад — ні: зниження осиротило б рейтинг і відгуки
+// * й дало б спосіб скинути погану репутацію. Службові ролі тут не міняються
 function assertRoleTransition(
   current: Role,
   target: 'CLIENT' | 'MASTER',
@@ -84,14 +58,11 @@ function assertRoleTransition(
     throw error(403, 'Змінити роль неможливо')
   }
 
-  // target === 'CLIENT'
   if (current === 'MASTER') {
     throw error(403, 'Виконавець не може повернутися до ролі замовника')
   }
   throw error(403, 'Змінити роль неможливо')
 }
-
-// ═══════════════════ Дані для форм ═══════════════════
 
 /** Все, що потрібно обом формам: і на онбордингу, і на редагуванні. */
 export async function loadProfileData(userId: string) {
@@ -126,10 +97,7 @@ export async function loadProfileData(userId: string) {
         },
       },
     }),
-    // Довідники з кешу в пам'яті процесу, а не з БД: вони однакові для всіх
-    // і майже не змінюються, а ця функція обслуговує і онбординг, і кожне
-    // відкриття /settings/profile — тобто будила базу двома зайвими
-    // запитами щоразу. Див. $lib/server/reference.
+    // * довідники — з кешу, не з бази
     getCategories(),
     getCities(),
     getDistricts(),
@@ -139,8 +107,7 @@ export async function loadProfileData(userId: string) {
 
   return {
     user,
-    // Урізаємо до полів, які читають форми: усе зайве поїхало б у payload
-    // сторінки на кожне її відкриття.
+    // * лише поля, які читають форми: решта поїхала б у payload сторінки
     categories: categories.map((c) => ({
       slug: c.slug,
       name: c.name,
@@ -152,8 +119,7 @@ export async function loadProfileData(userId: string) {
       region: c.region,
       isCapital: c.isCapital,
     })),
-    // Райони всіх міст разом: форма сама бере райони обраного міста, і
-    // зміна міста не потребує нового запиту.
+    // * райони всіх міст: зміна міста у формі не потребує нового запиту
     districts,
     prefill: {
       name: user.name ?? '',
@@ -164,8 +130,6 @@ export async function loadProfileData(userId: string) {
     },
   }
 }
-
-// ═══════════════════ Клієнт ═══════════════════
 
 export async function saveClientProfile(
   userId: string,
@@ -215,8 +179,7 @@ export async function saveClientProfile(
     { avatar: me.avatar, avatarPublicId: me.avatarPublicId },
   )
 
-  // Старе фото в Cloudinary — прибираємо, не чекаючи результату. Лише зі
-  // своєї теки: id у базі міг лишитись від часів, коли його не перевіряли.
+  // * старе фото з хмари — не чекаючи; лише зі своєї теки: id у старому рядку міг бути чужим
   if (
     me.avatarPublicId &&
     me.avatarPublicId !== avatarPublicId &&
@@ -238,15 +201,13 @@ export async function saveClientProfile(
       avatar,
       avatarPublicId,
       role: 'CLIENT',
-      // Виставляється ТІЛЬКИ тут, після повної валідації.
+      // * ставиться лише тут, після повної валідації
       onboarded: true,
     },
   })
 
   await afterProfileSaved(userId)
 }
-
-// ═══════════════════ Майстер ═══════════════════
 
 export async function saveMasterProfile(
   userId: string,
@@ -267,21 +228,17 @@ export async function saveMasterProfile(
   })
   if (!me) throw error(401, 'Unauthorized')
 
-  // CLIENT → MASTER пройде, MASTER → MASTER (редагування) теж.
+  // * пройде і CLIENT → MASTER, і MASTER → MASTER (редагування)
   assertRoleTransition(me.role, 'MASTER')
 
-  // У компанії в name — її назва: вона й показується всюди замість імені
-  // (окремої колонки немає, див. schema.prisma, MasterProfile.crew).
+  // * у компанії в name — її назва: окремої колонки немає
   const name = asString(input.name)
   if (name.length < NAME_MIN || name.length > NAME_MAX) {
     const label = input.crew === 'COMPANY' ? 'Назва' : 'Імʼя'
     throw error(400, `${label}: ${NAME_MIN}–${NAME_MAX} символів`)
   }
 
-  // Username (нікнейм) більше не питаємо й не пишемо: публічної сторінки
-  // /@handle немає, а клієнти бачать імʼя. Колонка в базі лишилась —
-  // старі значення лежать, як були; `username` у тілі від старих
-  // збірок застосунку просто ігнорується.
+  // * username не питаємо й не пишемо; у тілі від старих збірок застосунку ігнорується
 
   const phone = asString(input.phone)
   if (!PHONE_RE.test(phone)) {
@@ -296,7 +253,7 @@ export async function saveMasterProfile(
     input.district,
   )
 
-  // Не передали зовсім — «будь-де»: так поводився профіль до появи радіуса.
+  // * не передали — «будь-де»
   const travelRadiusKm = input.travelRadiusKm ?? null
   if (!isTravelRadius(travelRadiusKm)) {
     throw error(400, 'Оберіть, як далеко готові їздити')
@@ -318,9 +275,7 @@ export async function saveMasterProfile(
     throw error(400, `Опис: ${DESC_MIN}–${DESC_MAX} символів`)
   }
 
-  // Відповіді для підбору. Обовʼязкові: від них залежить, які заявки до
-  // майстра дійдуть, і «не відповів» тут означало б «отримуй усе підряд» —
-  // той самий спам, від якого ці питання рятують.
+  // * відповіді для підбору обовʼязкові: «не відповів» означало б «отримуй усе підряд»
   if (typeof input.vehicle !== 'boolean') {
     throw error(400, 'Вкажіть, як добираєтесь на замовлення')
   }
@@ -340,9 +295,7 @@ export async function saveMasterProfile(
     if (!check.ok) throw error(400, check.error)
     skills[category] = check.value
   }
-  // У metadata — лише вміння в межах категорії; авто й формат роботи —
-  // колонки. Уміння — вихід валідаторів категорій, тобто звичайні обʼєкти
-  // з рядків; unknown у типі лише тому, що форма умінь — справа категорії.
+  // * у metadata — лише вміння категорії; авто й формат роботи — колонки
   const metadata = { skills } as unknown as Prisma.InputJsonObject
 
   const { avatar, avatarPublicId } = acceptedAvatar(
@@ -352,8 +305,7 @@ export async function saveMasterProfile(
     { avatar: me.avatar, avatarPublicId: me.avatarPublicId },
   )
 
-  // Приклади робіт — парами «посилання + publicId»: те, що вже лежить в
-  // анкеті, лишається; нове — лише своє завантаження з нашої хмари.
+  // * приклади робіт: що вже в анкеті — лишається, нове — лише своє завантаження
   const oldPortfolio = {
     urls: me.masterProfile?.portfolioImages ?? [],
     publicIds: me.masterProfile?.portfolioImagesPublicIds ?? [],
@@ -368,7 +320,6 @@ export async function saveMasterProfile(
   const portfolioImages = portfolio.urls
   const portfolioImagesPublicIds = portfolio.publicIds
 
-  // ─── Перевірка існування довідників ───
   const [cityExists, categoriesValid] = await Promise.all([
     prisma.city.findUnique({ where: { slug: citySlug }, select: { id: true } }),
     prisma.category.count({
@@ -380,9 +331,7 @@ export async function saveMasterProfile(
     throw error(400, 'Деякі категорії не існують')
   }
 
-  // ─── Прибирання Cloudinary (fire-and-forget) ───
-  // Стираємо лише файли з теки цієї людини (own-media): чужий id у старому
-  // рядку бази не має ставати способом стерти чужий файл.
+  // * стираємо з хмари лише файли з теки цієї людини, не чекаючи
   if (
     me.avatarPublicId &&
     avatarPublicId &&
@@ -404,7 +353,7 @@ export async function saveMasterProfile(
       .catch((err) => console.error('[profile] cleanup portfolio', err))
   }
 
-  // ─── Роль + профіль атомарно ───
+  // * роль і профіль — атомарно
   await prisma.$transaction([
     prisma.user.update({
       where: { id: userId },
@@ -451,7 +400,7 @@ export async function saveMasterProfile(
     }),
   ])
 
-  // Кожна подача = запит на (повторну) модерацію.
+  // * кожна подача — запит на (повторну) модерацію
   await safeTrigger(channels.admin, events.moderationNew, {
     name,
     resubmission: Boolean(me.masterProfile),
@@ -460,13 +409,8 @@ export async function saveMasterProfile(
   await afterProfileSaved(userId)
 }
 
-/**
- * Профіль записано повз better-auth — скидаємо все, що його кешує:
- *   • стан акаунта для guard (onboarded і роль) — інакше людина
- *     поверталась би на форму або бачила вкладки старої ролі;
- *   • копію користувача в сесіях — імʼя й аватар у меню;
- *   • профіль майстра (кеш master-page).
- */
+// * профіль записано повз better-auth — скидаємо все, що його кешує: стан
+// * акаунта, копію користувача в сесіях, сторінку майстра
 async function afterProfileSaved(userId: string): Promise<void> {
   await Promise.all([
     invalidateAccount(userId),

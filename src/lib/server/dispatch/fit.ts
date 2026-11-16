@@ -1,8 +1,5 @@
-// «Топ для тебе» для сторінки стрічки: обсяг і потребу в авто питаємо в
-// категорії (matchingFor), рішення — чиста функція в core/fit.ts.
-//
-// Один шлях для SSR (dashboard/jobs) і догрузки (api/jobs/feed), як і
-// masterFeedScope: інакше перша сторінка й наступні позначали б по-різному.
+// * «Топ для тебе»: один шлях для SSR і догрузки — інакше перша сторінка й
+// * наступні позначали б по-різному
 
 import { asEffort } from '$lib/categories/effort'
 import { matchingFor } from '$lib/categories/matching'
@@ -37,7 +34,7 @@ export function bestMatches(
           distanceKm: j.distanceKm,
           hasVehicle: master.hasVehicle,
           crew: master.crew,
-          // Як у розсилці: обсяг із заявки, а старша за поле — з metadata.
+          // * як у розсилці: обсяг із заявки, а старша за поле — з metadata
           effort: asEffort(j.effort) ?? matching.effort(j.metadata),
           needsVehicle: matching.needsVehicle(j.metadata),
         }),

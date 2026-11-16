@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Hugeicons PaintBoard. Згенеровано scripts/icons/build-icons.mjs — не правити.
+  // * Hugeicons PaintBoard. Згенеровано scripts/icons/build-icons.mjs — не правити
   import StrokeIcon, { type IconProps } from '../stroke-icon.svelte'
 
   let { size = 24, ...rest }: IconProps = $props()

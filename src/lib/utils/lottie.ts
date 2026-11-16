@@ -2,19 +2,9 @@ import type { AnimationItem, AnimationSegment } from 'lottie-web'
 import type { Attachment } from 'svelte/attachments'
 
 /**
- * Lottie-анімація в елементі:
- *
- * ```svelte
- * <div {@attach lottie({ src: '/animations/photo-upload.json' })}></div>
- * ```
- *
- * Бібліотека вантажиться ЛІНИВО — окремим чанком і лише там, де анімація
- * справді є; JSON береться зі `static/` за URL, тож бандл не роздуває.
- *
- * Збірка `lottie_light`: тільки SVG-рендерер, без expressions і ефектів.
- * Нашим анімаціям більшого не треба, а це на ~40 КБ (gzip) менше за повну.
- * Нова анімація з expressions у цій збірці мовчки стоятиме — перевір
- * експорт перед тим, як класти файл у `static/animations`.
+ * Lottie-анімація в елементі: `<div {@attach lottie({ src })}></div>`.
+ * Бібліотека вантажиться ліниво, окремим чанком; збірка `lottie_light` —
+ * лише SVG-рендерер, анімація з expressions у ній стоятиме.
  */
 
 export interface LottieOptions {
@@ -52,8 +42,8 @@ export function lottie({
     let anim: AnimationItem | undefined
     let destroyed = false
 
-    // Бібліотеку й JSON тягнемо паралельно: з `path` lottie почав би
-    // вантажити файл лише після себе.
+    // * бібліотеку й JSON тягнемо паралельно: з `path` lottie почав би
+    // * вантажити файл лише після себе
     Promise.all([
       import('lottie-web/build/player/lottie_light'),
       fetch(src).then((r) => r.json() as Promise<{ markers?: LottieMarker[] }>),
@@ -77,7 +67,7 @@ export function lottie({
         })
         anim = item
       })
-      // Анімація — прикраса: не завантажилась, то й не показуємо.
+      // * анімація — прикраса: не завантажилась, то й не показуємо
       .catch(() => {})
 
     return () => {

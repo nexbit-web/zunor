@@ -25,8 +25,8 @@ export const load: PageServerLoad = async (event) => {
   })
   if (!report) error(404, 'Скаргу не знайдено')
 
-  // Скільки ще скарг на ту саму людину — одна скарга й десята читаються
-  // по-різному.
+  // * скільки ще скарг на ту саму людину — одна скарга й десята читаються
+  // * по-різному
   const [targetReports, order, job, messages] = await Promise.all([
     prisma.report.count({ where: { targetId: report.targetId } }),
     report.orderId
@@ -48,9 +48,9 @@ export const load: PageServerLoad = async (event) => {
           select: { title: true, description: true, status: true, createdAt: true },
         })
       : null,
-    // Листування — лише в межах скарги на чат і лише останні 30
-    // повідомлень: модераторові треба побачити, що сталось, а не читати
-    // чужі розмови. Кожен такий перегляд записується в журнал нижче.
+    // * листування — лише в межах скарги на чат і лише останні 30
+    // * повідомлень: модераторові треба побачити, що сталось, а не читати
+    // * чужі розмови. Кожен такий перегляд записується в журнал нижче
     report.chatId
       ? prisma.message.findMany({
           where: { chatId: report.chatId, deletedAt: null },

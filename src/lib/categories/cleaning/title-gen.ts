@@ -1,5 +1,5 @@
-// Генерація заголовка заявки з metadata.
-// Поля адаптивні — залежать від типу послуги.
+// * генерація заголовка заявки з metadata.
+// * Поля адаптивні — залежать від типу послуги
 
 import {
   premiseLabel,
@@ -29,46 +29,40 @@ export interface CleaningMetadata {
    * («вітрини в ТЦ», «дуже брудно»). Нуль не зберігаємо.
    */
   effortAdjust?: -1 | 1
-  // житлові послуги
+  // * житлові послуги
   rooms?: string
   floor?: number
   hasElevator?: string
-  // після ремонту
+  // * після ремонту
   trash?: string
-  // регулярне
+  // * регулярне
   frequency?: string
-  // вікна
+  // * вікна
   windowsCount?: number
   windowSide?: string
   balcony?: string
-  // хімчистка
+  // * хімчистка
   items?: CleaningItem[]
 }
 
-/**
- * Будує людський заголовок заявки.
- * Приклади:
- *   "Генеральне прибирання, квартира, 2 кімнати"
- *   "Миття вікон, квартира, 5 вікон"
- *   "Хімчистка: диван, килим"
- */
+/** Заголовок заявки: «Генеральне прибирання, квартира, 2 кімнати», «Хімчистка: диван, килим». */
 export function generateTitle(meta: CleaningMetadata): string {
   const service = serviceLabel(meta.service)
   const premise = premiseLabel(meta.premise).toLowerCase()
 
-  // Хімчистка — перелік предметів
+  // * хімчистка — перелік предметів
   if (meta.service === 'sofa' && meta.items && meta.items.length > 0) {
     const names = meta.items.map((i) => itemLabel(i.type).toLowerCase())
     const unique = [...new Set(names)]
     return `Хімчистка: ${unique.join(', ')}`
   }
 
-  // Вікна — кількість
+  // * вікна — кількість
   if (meta.service === 'windows' && meta.windowsCount) {
     return `${service}, ${premise}, ${meta.windowsCount} вікон`
   }
 
-  // Житлові — кімнати
+  // * житлові — кімнати
   if (meta.rooms) {
     return `${service}, ${premise}, ${roomLabel(meta.rooms).toLowerCase()}`
   }

@@ -1,26 +1,13 @@
 import { prisma } from '$lib/server/prisma'
 import { markOpened, recommendForJob } from '$lib/server/dispatch'
 import { checkJobAccess, jobViewerSelect } from '$lib/server/job-access'
-import { getDistricts } from '$lib/server/reference'
+import { getCategories, getCities, getDistricts } from '$lib/server/reference'
 import { cityDistricts, jobPlace } from '$lib/geo/districts'
 
-/**
- * Заявка з усім, що бачить її сторінка: сама заявка, пропозиції (власник —
- * усі з позначками «Рекомендуємо» / «Новачок», майстер — лише свою), чи
- * може майстер відгукнутись. Одне джерело для сторінки сайту
- * (dashboard/jobs/[id]) і GET /api/jobs/[id] (застосунок) — щоб екран
- * заявки в застосунку показував те саме, що й сайт.
- *
- * Доступ — правило $lib/server/job-access. null — заявки немає або
- * глядачеві її бачити не можна (обидва — 404: інакше відповідь
- * підтверджувала б існування чужої заявки).
- */
+// * заявка з усім, що бачить її сторінка, — одне джерело для сайту й
+// * застосунку. null — заявки немає або глядачеві її не можна (обидва — 404)
 
-/**
- * Один унікальний перегляд на пару (заявка, глядач).
- * Повторне відкриття не доходить до UPDATE — конфлікт по unique гаситься
- * на рівні INSERT, і «гаряча» заявка не переписується щоразу.
- */
+// * один перегляд на пару (заявка, глядач): повторне відкриття гаситься на INSERT
 async function countUniqueView(jobId: string, viewerId: string) {
   const inserted = await prisma.jobView.createMany({
     data: [{ jobId, viewerId }],
@@ -49,21 +36,12 @@ export interface JobDetailProposal {
     avatar: string | null
     avgRating: number
     reviewsCount: number
-    /**
-     * Телефон майстра — лише власникові заявки й лише в живій або
-     * прийнятій пропозиції (proposalPhone). Клієнт дзвонить, щоб
-     * домовитись про ціну ще до вибору (власник), а відкликана чи
-     * відхилена пропозиція номера вже не показує.
-     */
+    /** Телефон майстра — лише власникові й лише в живій або прийнятій пропозиції. */
     phone?: string | null
   }
 }
 
-/**
- * Номер майстра в пропозиції: видно, поки пропозиція жива (SENT) або
- * прийнята. Відкликаний чи відхилений відгук — це вже не пропозиція, і
- * номер у ньому ні до чого.
- */
+/** Номер у пропозиції видно, поки вона SENT або ACCEPTED. */
 export function proposalPhone(
   status: string,
   phone: string | null | undefined,
@@ -75,11 +53,7 @@ export async function loadJobDetail(
   jobId: string,
   userId: string,
   opts: {
-    /**
-     * Людина ВІДКРИЛА заявку (сторінка, екран застосунку): рахуємо
-     * унікальний перегляд і памʼять диспетчера «майстер відкрив». Обидва —
-     * ідемпотентні, повторне відкриття нічого не накручує.
-     */
+    /** Людина відкрила заявку: унікальний перегляд і «майстер відкрив» — обидва ідемпотентні. */
     track?: boolean
   } = {},
 ) {
@@ -87,7 +61,7 @@ export async function loadJobDetail(
     where: { id: userId },
     select: {
       ...jobViewerSelect,
-      // Район глядача — лише для підпису «≈4 км» біля району заявки.
+      // * для підпису «≈4 км» біля району заявки
       district: true,
       masterProfile: {
         select: {
@@ -104,7 +78,6 @@ export async function loadJobDetail(
     where: { id: jobId },
     select: {
       id: true,
-      // Номер для людей (schema.prisma, Job.number).
       number: true,
       title: true,
       description: true,
@@ -140,34 +113,29 @@ export async function loadJobDetail(
   })
   if (!job) return null
 
-  // ─── Контроль доступу ───
   const { canView, isOwner, isMaster } = await checkJobAccess(job, {
     id: userId,
     ...user,
   })
   if (!canView) return null
 
-  // Людиночитні назви для категорії та міста (slug → name)
-  const [categoryRow, cityRow, allDistricts] = await Promise.all([
-    prisma.category.findUnique({
-      where: { slug: job.category },
-      select: { name: true },
-    }),
-    prisma.city.findUnique({
-      where: { slug: job.city },
-      select: { name: true, region: true },
-    }),
+  // * назви категорії й міста — з кешу довідників, без запитів у базу
+  const [categories, cities, allDistricts] = await Promise.all([
+    getCategories(),
+    getCities(),
     getDistricts(),
   ])
+  const categoryRow = categories.find((c) => c.slug === job.category)
+  const cityRow = cities.find((c) => c.slug === job.city)
 
   if (opts.track) {
-    // Лічильник переглядів — лише для не-власника, не блокуючи відповідь.
+    // * перегляди — лише не власника, не блокуючи відповідь
     if (!isOwner) countUniqueView(job.id, userId).catch(() => {})
-    // Памʼять диспетчера: майстер відкрив розіслану йому заявку.
+    // * памʼять диспетчера: майстер відкрив розіслану йому заявку
     if (isMaster && !isOwner) markOpened(job.id, userId).catch(() => {})
   }
 
-  // Пропозиції: власник бачить усі, майстер — лише свою.
+  // * власник бачить усі пропозиції, майстер — лише свою
   let proposals: JobDetailProposal[] = []
 
   if (isOwner) {
@@ -213,7 +181,7 @@ export async function loadJobDetail(
       },
     })
 
-    // Топ-3 + слот новачку — тими самими вагами, що й розсилка.
+    // * топ-3 і слот новачку — тими самими вагами, що й розсилка
     const now = new Date()
     const { recommended: recommendedIds, newbies: newbieIds } =
       await recommendForJob(
@@ -299,7 +267,6 @@ export async function loadJobDetail(
     }
   }
 
-  // Чи може майстер подати пропозицію?
   let canPropose = false
   let cantProposeReason: string | null = null
 
@@ -321,7 +288,7 @@ export async function loadJobDetail(
     job,
     categoryName: categoryRow?.name ?? job.category,
     cityName: cityRow?.name ?? job.city,
-    // Район, а не адреса: точну адресу клієнт дає в чаті після угоди.
+    // * район, а не адреса: точну адресу клієнт дає в чаті після угоди
     place: jobPlace(
       cityDistricts(allDistricts, job.city),
       job.district,

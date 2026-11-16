@@ -4,6 +4,8 @@ import { redirect } from '@sveltejs/kit'
 import { parseMasterSkills } from '$lib/masters/meta'
 import { CATEGORY_SLUG } from '$lib/categories/cleaning/presets'
 import { describeCleaningSkills } from '$lib/categories/cleaning/skills'
+import { getCategories, getCities } from '$lib/server/reference'
+import { nameBySlug } from '$lib/utils/slug-name'
 import type { PageServerLoad } from './$types'
 import type {
   FreelancerProfileData,
@@ -56,12 +58,12 @@ async function loadReviews(
 export const load: PageServerLoad = async ({
   locals,
 }): Promise<DashboardData> => {
-  // Сесія вже в locals після hooks.server.ts — повторний getSession зайвий.
+  // * сесія вже в locals після hooks.server.ts — повторний getSession зайвий
   const sessionUser = requireUser(locals)
 
-  // Явний select замість include: рядок User містить і aiProfile (JSON, росте
-  // разом з анкетою асистента), і банові поля — на сторінці профілю вони не
-  // потрібні, а тягнулись при кожному відкритті дашборда.
+  // * явний select замість include: рядок User містить і aiProfile (JSON, росте
+  // * разом з анкетою асистента), і банові поля — на сторінці профілю вони не
+  // * потрібні, а тягнулись при кожному відкритті дашборда
   const user = await prisma.user.findUnique({
     where: { id: sessionUser.id },
     select: {
@@ -94,21 +96,15 @@ export const load: PageServerLoad = async ({
   if (!user) redirect(302, '/user/login')
 
   if (user.role === 'CLIENT') {
-    // Паралельно: відгуки + лічильники + назва міста
-    const [reviews, totalOrders, completedOrders, cityRow] = await Promise.all([
+    const [reviews, totalOrders, completedOrders, cities] = await Promise.all([
       loadReviews('clientId', user.id, 'MASTER_TO_CLIENT'),
       prisma.order.count({ where: { clientId: user.id } }),
       prisma.order.count({
         where: { clientId: user.id, status: 'COMPLETED' },
       }),
-      user.city
-        ? prisma.city.findUnique({
-            where: { slug: user.city },
-            select: { name: true },
-          })
-        : Promise.resolve(null),
+      getCities(),
     ])
-    const cityName = cityRow?.name ?? user.city ?? undefined
+    const cityName = nameBySlug(cities, user.city)
 
     return {
       profileType: 'client',
@@ -133,25 +129,14 @@ export const load: PageServerLoad = async ({
 
   const mp = user.masterProfile
 
-  // Паралельно: відгуки + назва міста + назви категорій
-  const [reviews, cityRow, categoryRows] = await Promise.all([
+  const [reviews, cities, categories] = await Promise.all([
     loadReviews('masterId', user.id, 'CLIENT_TO_MASTER'),
-    user.city
-      ? prisma.city.findUnique({
-          where: { slug: user.city },
-          select: { name: true },
-        })
-      : Promise.resolve(null),
-    mp?.categories && mp.categories.length > 0
-      ? prisma.category.findMany({
-          where: { slug: { in: mp.categories } },
-          select: { slug: true, name: true },
-        })
-      : Promise.resolve([]),
+    getCities(),
+    getCategories(),
   ])
-  const cityName = cityRow?.name ?? user.city ?? undefined
+  const cityName = nameBySlug(cities, user.city)
   const categoryNames = (mp?.categories ?? []).map(
-    (slug) => categoryRows.find((c) => c.slug === slug)?.name ?? slug,
+    (slug) => nameBySlug(categories, slug) ?? slug,
   )
   const skills = describeCleaningSkills(
     parseMasterSkills(mp?.metadata)[CATEGORY_SLUG],

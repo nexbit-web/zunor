@@ -28,9 +28,9 @@
     filters?: any
   } = $props()
 
-  // Перша сторінка — з load, і саме $derived, а не знімок: коли load
-  // перезапускається (нова заявка, повторний перехід), стрічка бере свіжі
-  // дані. Догрузка через /api/jobs/feed дописує в той самий масив.
+  // * перша сторінка — з load, і саме $derived, а не знімок: коли load
+  // * перезапускається (нова заявка, повторний перехід), стрічка бере свіжі
+  // * дані. Догрузка через /api/jobs/feed дописує в той самий масив
   let jobs = $derived([...initialJobs])
   let nextCursor = $derived<string | null>(initialNextCursor)
   let loadingMore = $state(false)
@@ -67,8 +67,8 @@
     }
   }
 
-  // Дзвіночок каже «є нова заявка» — стрічка оновлюється сама, а не
-  // показує «поки немає» до F5.
+  // * дзвіночок каже «є нова заявка» — стрічка оновлюється сама, а не
+  // * показує «поки немає» до F5
   onMount(() =>
     notifications.onNotification((n) => {
       if (n.type === 'NEW_JOB') void invalidate('app:jobs-feed')
@@ -87,7 +87,7 @@
     return () => obs.disconnect()
   })
 
-  // Клієнтська фільтрація по типу послуги (metadata.service)
+  // * клієнтська фільтрація по типу послуги (metadata.service)
   const visibleJobs = $derived(
     activeService !== ALL
       ? jobs.filter((j) => {

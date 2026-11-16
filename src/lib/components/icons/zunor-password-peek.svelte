@@ -36,7 +36,7 @@
     frames[!filled ? 'idle' : visible ? 'visible' : 'hidden'] ?? 0,
   )
 
-  // Кадр на екрані. Не $state: його крутить rAF, а не розмітка.
+  // * кадр на екрані. Не $state: його крутить rAF, а не розмітка
   let shown = 0
 
   function ready(item: AnimationItem, markers: LottieMarker[]): void {
@@ -69,7 +69,7 @@
     }
     raf = requestAnimationFrame(step)
 
-    // Нова ціль скасовує цей прохід; наступний продовжить із shown.
+    // * нова ціль скасовує цей прохід; наступний продовжить із shown
     return () => cancelAnimationFrame(raf)
   })
 </script>

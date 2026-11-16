@@ -1,13 +1,9 @@
-// Профіль клієнта — інструмент майстра: перш ніж відгукнутись чи вже в
-// замовленні, подивитись, хто замовник і що про нього кажуть інші майстри.
-// Один код для сторінки сайту (dashboard/client/[id]) і застосунку
-// (GET /api/clients/[id]), щоб правила доступу не розійшлись.
-//
-// Публічної сторінки в клієнта немає навмисно (не «вітрина», MANIFESTO).
-// Телефону тут немає навіть для майстра: він — лише в замовленні, після
-// угоди (AGENTS.md, «Телефон — після угоди»).
+// * профіль клієнта — інструмент майстра; один код для сайту й застосунку.
+// * Телефону тут немає: він — лише в замовленні, після угоди
 
 import { prisma } from './prisma'
+import { getCities } from './reference'
+import { nameBySlug } from '$lib/utils/slug-name'
 import type {
   ClientProfileData,
   ProfileReview,
@@ -35,15 +31,8 @@ async function loadClientReviews(clientId: string): Promise<ProfileReview[]> {
   })
 }
 
-/**
- * Профіль клієнта `clientId` очима `viewerId`. null — не показувати: глядач
- * не майстер (клієнтові чужий профіль клієнта не потрібен), або такого
- * клієнта немає, або це не клієнт. Хто кличе — відповідає 404, а не 403:
- * відповідь не має підтверджувати, що профіль існує.
- *
- * Роль глядача — з бази, не з сесії: сесія з cookie-кешу може памʼятати
- * стару роль.
- */
+// * null — не показувати: глядач не майстер або це не клієнт (назовні 404).
+// * Роль глядача — з бази: сесія з cookie-кешу може памʼятати стару
 export async function loadClientProfile(
   viewerId: string,
   clientId: string,
@@ -54,37 +43,31 @@ export async function loadClientProfile(
   })
   if (viewer?.role !== 'MASTER') return null
 
-  const [client, reviews, totalOrders, completedOrders] = await Promise.all([
-    prisma.user.findUnique({
-      where: { id: clientId },
-      select: {
-        id: true,
-        role: true,
-        name: true,
-        avatar: true,
-        bio: true,
-        city: true,
-        createdAt: true,
-        avgRatingAsClient: true,
-        reviewsCountAsClient: true,
-      },
-    }),
-    loadClientReviews(clientId),
-    prisma.order.count({ where: { clientId } }),
-    prisma.order.count({
-      where: { clientId, status: 'COMPLETED' },
-    }),
-  ])
+  const [client, reviews, totalOrders, completedOrders, cities] =
+    await Promise.all([
+      prisma.user.findUnique({
+        where: { id: clientId },
+        select: {
+          id: true,
+          role: true,
+          name: true,
+          avatar: true,
+          bio: true,
+          city: true,
+          createdAt: true,
+          avgRatingAsClient: true,
+          reviewsCountAsClient: true,
+        },
+      }),
+      loadClientReviews(clientId),
+      prisma.order.count({ where: { clientId } }),
+      prisma.order.count({
+        where: { clientId, status: 'COMPLETED' },
+      }),
+      getCities(),
+    ])
 
   if (!client || client.role !== 'CLIENT') return null
-
-  // Назва міста українською (slug → name)
-  const cityRow = client.city
-    ? await prisma.city.findUnique({
-        where: { slug: client.city },
-        select: { name: true },
-      })
-    : null
 
   return {
     id: client.id,
@@ -92,7 +75,7 @@ export async function loadClientProfile(
     avatar: client.avatar ?? undefined,
     bio: client.bio ?? undefined,
     phone: null,
-    city: cityRow?.name ?? client.city ?? undefined,
+    city: nameBySlug(cities, client.city),
     createdAt: client.createdAt.toISOString(),
     totalOrders,
     completedOrders,

@@ -1,4 +1,4 @@
-﻿// src/lib/components/profile/types.ts
+﻿// * src/lib/components/profile/types.ts
 
 import type { Crew } from '$lib/masters/meta'
 import type { SkillLabel } from '$lib/categories/cleaning/skills'

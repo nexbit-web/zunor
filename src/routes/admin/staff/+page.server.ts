@@ -5,10 +5,8 @@ import { asForm, field } from '$lib/server/admin/form'
 import { STAFF_ROLES, isStaff, type StaffRole } from '$lib/admin/roles'
 import type { Actions, PageServerLoad } from './$types'
 
-// Співробітники — лише для ADMIN. Ролі видаються існуючим акаунтам за
-// поштою (людина спершу реєструється в Zunor звичайним шляхом), а не
-// створюються тут із паролем: так у співробітника той самий захищений
-// вхід, що й у всіх, і жодного пароля не проходить через чужі руки.
+// * лише для ADMIN. Ролі видаються існуючим акаунтам за поштою: жоден пароль
+// * не проходить через чужі руки
 export const load: PageServerLoad = async ({ locals }) => {
   const me = await requireStaff(locals, 'ADMIN')
 

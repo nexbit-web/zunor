@@ -1,9 +1,5 @@
-// «Онлайн» майстра: коли його востаннє бачили (lastSeen). Єдиний споживач —
-// бал підбору (dispatch/core/score.ts), де пороги свіжості 5 / 30 / 60 хв.
-//
-// Точний час живе в Redis і пишеться часто; у базу — рідко: лише щоб пул
-// кандидатів (orderBy lastSeen) брав живих і щоб без Redis усе працювало.
-// Без Redis база пишеться так само часто, як раніше.
+// * «онлайн» майстра (lastSeen) для балу підбору. Точний час — у Redis і
+// * пишеться часто; у базу — рідко, як запасний
 
 import { prisma } from './prisma'
 import { attempt, redisEnabled, redisKey } from './redis'
@@ -43,7 +39,7 @@ export function touchPresence(userId: string): void {
 
   if (now - last.db >= DB_EVERY_MS) {
     last.db = now
-    // Fail-soft: presence не має ламати запит.
+    // * presence не має ламати запит
     background(
       prisma.user
         .update({ where: { id: userId }, data: { lastSeen: new Date(now) } })
@@ -56,10 +52,7 @@ export function touchPresence(userId: string): void {
   if (written.size > MAX_TRACKED) prune(now)
 }
 
-/**
- * Точний lastSeen для списку користувачів — однією командою. Кого в Redis
- * немає (або Redis вимкнений), у мапі немає: тоді береться час із бази.
- */
+/** Точний lastSeen для списку — однією командою. Кого в Redis немає, того немає й у мапі. */
 export async function lastSeenMany(
   userIds: readonly string[],
 ): Promise<Map<string, Date>> {
@@ -86,6 +79,6 @@ function prune(now: number): void {
   for (const [id, w] of written) {
     if (now - Math.max(w.redis, w.db) > DB_EVERY_MS * 2) written.delete(id)
   }
-  // Усі свіжі — стеля важливіша: гірше лише кілька зайвих записів.
+  // * усі свіжі — стеля важливіша за кілька зайвих записів
   if (written.size > MAX_TRACKED) written.clear()
 }

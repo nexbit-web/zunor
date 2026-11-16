@@ -8,19 +8,10 @@ import type { RequestHandler } from './$types'
 
 /**
  * GET /api/cron?task=auto-expire|dispatch-waves|reminders|all
- * Авторизація: CRON_SECRET в Authorization: Bearer ...
+ * Авторизація — CRON_SECRET в Authorization: Bearer.
  *
- * dispatch-waves — СТРАХОВКА, а не основний механізм: хвилі ведуть таймери
- * мозку підбору, а загублене ними підхоплює відновлення на старті процесу.
- * Крон кличе те саме відновлення — на випадок, якщо процес жив, а хвиля
- * вичерпала повтори.
- *
- * reminders — теж страховка: нагадування за день до прибирання шле
- * таймер процесу о 18:00 за Києвом. Повтор того ж дня нічого не шле.
- *
- * Розклад: dispatch-waves — раз на 30 хвилин, auto-expire — раз на добу,
- * reminders — раз на добу, о 18:05 за Києвом. Частіше ставити не можна,
- * причина — у scheduler.ts.
+ * dispatch-waves і reminders — страховка: основну роботу роблять таймери
+ * процесу. Розклад рідкісний навмисно — причина в scheduler.ts.
  */
 
 interface CronResult {
@@ -30,19 +21,13 @@ interface CronResult {
   error?: string
 }
 
-/**
- * Порівняння секрету за постійний час.
- *
- * Звичайний `!==` виходить на першому відмінному байті, тож час відповіді
- * підказує, скільки символів уже вгадано. Через мережу шум великий і атака
- * малореальна, але ціна захисту тут — три рядки.
- */
+/** Порівняння секрету за постійний час: `!==` видає, скільки символів уже вгадано. */
 function secretMatches(header: string | null, secret: string): boolean {
   if (!header) return false
   const expected = `Bearer ${secret}`
   const a = Buffer.from(header)
   const b = Buffer.from(expected)
-  // timingSafeEqual вимагає однакової довжини, а сама довжина не таємниця.
+  // * timingSafeEqual вимагає однакової довжини, а сама довжина не таємниця
   if (a.length !== b.length) return false
   return timingSafeEqual(a, b)
 }

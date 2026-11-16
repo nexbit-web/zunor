@@ -1,5 +1,5 @@
-// Які відгуки клієнт бачить першими: топ за тим самим балом, що й у
-// розсилці, і одне місце в топі гарантовано новачку.
+// * які відгуки клієнт бачить першими: топ за тим самим балом, що й у
+// * розсилці, і одне місце в топі гарантовано новачку
 
 import { isNewMaster, masterScore } from './score'
 import type { RankableProposal, Recommendation } from '../types'
@@ -17,7 +17,7 @@ export function recommend(
       respondedAt: p.createdAt.getTime(),
       isNew: isNewMaster(p.master, now),
     }))
-    // За рівного балу вище той, хто відгукнувся раніше.
+    // * за рівного балу вище той, хто відгукнувся раніше
     .sort((a, b) => b.score - a.score || a.respondedAt - b.respondedAt)
 
   const top = ranked.slice(0, TOP_N)

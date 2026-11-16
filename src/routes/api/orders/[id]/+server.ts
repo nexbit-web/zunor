@@ -3,12 +3,7 @@ import { requireApiUser } from '$lib/server/guards'
 import { loadOrderDetail, orderDetailDto } from '$lib/server/order-detail'
 import type { RequestHandler } from './$types'
 
-/**
- * GET /api/orders/[id] — замовлення цілком (екран замовлення в
- * застосунку): деталі прибирання, друга сторона з телефоном і рейтингом,
- * відгуки, історія подій. Ті самі дані й та сама перевірка доступу, що в
- * сторінки сайту ($lib/server/order-detail). Не сторона угоди — 404.
- */
+/** GET /api/orders/[id] — замовлення цілком; дані й доступ як у сторінки сайту. Не сторона — 404. */
 export const GET: RequestHandler = async ({ params, locals }) => {
   const user = requireApiUser(locals)
 

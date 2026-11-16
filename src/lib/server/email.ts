@@ -1,9 +1,7 @@
 import { transporter, SMTP_FROM } from './mailer'
 import { dev } from '$app/environment'
 
-// ═══════════════════════════════════════════════════════════
-// Константи
-// ═══════════════════════════════════════════════════════════
+// * константи
 
 const EMAIL_RE = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
 const EMAIL_MAX_LENGTH = 254 // RFC 5321
@@ -11,9 +9,7 @@ const SUBJECT_MAX_LENGTH = 200
 const SEND_TIMEOUT_MS = 15_000 // 15 сек таймаут на SMTP
 const SEND_RETRIES = 2 // повторні спроби при тимчасових помилках
 
-// ═══════════════════════════════════════════════════════════
-// Helpers
-// ═══════════════════════════════════════════════════════════
+// * Helpers
 
 /**
  * Екранує користувацькі дані у HTML — захист від XSS у листах.
@@ -82,13 +78,7 @@ function maskEmail(email: string): string {
   return `${masked}@${domain}`
 }
 
-/**
- * Перевіряє чи помилка тимчасова (можна retry):
- * - Network errors (ECONNRESET, ETIMEDOUT)
- * - SMTP 4xx (Try again later)
- *
- * 5xx (permanent) і помилки авторизації — НЕ retry.
- */
+/** Тимчасова помилка (мережа, SMTP 4xx) — можна повторити; 5xx і авторизація — ні. */
 function isRetryableError(err: unknown): boolean {
   if (!(err instanceof Error)) return false
   const code = (err as NodeJS.ErrnoException).code
@@ -99,7 +89,7 @@ function isRetryableError(err: unknown): boolean {
   ) {
     return true
   }
-  // SMTP transient errors (4xx)
+  // * SMTP transient errors (4xx)
   const responseCode = (err as { responseCode?: number }).responseCode
   if (responseCode && responseCode >= 400 && responseCode < 500) {
     return true
@@ -114,9 +104,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-// ═══════════════════════════════════════════════════════════
-// Базова функція відправки
-// ═══════════════════════════════════════════════════════════
+// * базова функція відправки
 
 interface SendEmailParams {
   to: string
@@ -128,14 +116,8 @@ interface SendEmailParams {
 }
 
 /**
- * Базова функція відправки email через nodemailer.
- *
- * Особливості:
- *  - Валідація email і теми перед відправкою.
- *  - Таймаут 15 секунд — щоб не зависнути на повільному SMTP.
- *  - Retry до 2 разів при тимчасових помилках (з exponential backoff).
- *  - Plain text fallback автоматично з HTML.
- *  - PII (email) маскується у логах.
+ * Відправка листа: валідація, таймаут 15 с, до 2 повторів на тимчасових
+ * помилках, plain text із HTML, пошта в логах замаскована.
  */
 async function sendEmail({
   to,
@@ -144,7 +126,7 @@ async function sendEmail({
   text,
   noRetry = false,
 }: SendEmailParams): Promise<void> {
-  // ─── Валідація ───
+  // * валідація
   if (!isValidEmail(to)) {
     throw new Error(`[email] Invalid recipient address`)
   }
@@ -170,7 +152,7 @@ async function sendEmail({
           subject,
           html,
           text: finalText,
-          // Захист від email-bouncing зловживань
+          // * захист від email-bouncing зловживань
           headers: {
             'X-Auto-Response-Suppress': 'All',
             'Auto-Submitted': 'auto-generated',
@@ -181,7 +163,7 @@ async function sendEmail({
         ),
       ])
 
-      // Успіх — лог тільки в dev (на проді PII лог = погано)
+      // * успіх — лог тільки в dev (на проді PII лог = погано)
       if (dev) {
         console.log(`[email] ✅ sent to ${maskEmail(to)} (attempt ${attempt})`)
       }
@@ -201,13 +183,13 @@ async function sendEmail({
 
       if (!shouldRetry) break
 
-      // Exponential backoff: 500ms, 1500ms, 4500ms…
+      // * Exponential backoff: 500ms, 1500ms, 4500ms…
       const delay = 500 * Math.pow(3, attempt - 1)
       await sleep(delay)
     }
   }
 
-  // Усі спроби вичерпано
+  // * усі спроби вичерпано
   const errorMessage =
     lastError instanceof Error ? lastError.message : 'Unknown error'
   throw new Error(
@@ -215,9 +197,7 @@ async function sendEmail({
   )
 }
 
-// ═══════════════════════════════════════════════════════════
-// PUBLIC: Відновлення паролю
-// ═══════════════════════════════════════════════════════════
+// * PUBLIC: Відновлення паролю
 
 interface SendResetPasswordParams {
   to: string
@@ -225,14 +205,7 @@ interface SendResetPasswordParams {
   resetUrl: string
 }
 
-/**
- * Відправляє лист з посиланням на скидання паролю.
- *
- * Безпека:
- *  - Валідація URL (тільки http/https).
- *  - Екранування name (захист від XSS у HTML-листі).
- *  - Plain text fallback.
- */
+/** Лист зі скиданням пароля: посилання лише http(s), імʼя екранується. */
 export async function sendResetPasswordEmail({
   to,
   name,
@@ -250,7 +223,7 @@ export async function sendResetPasswordEmail({
 
   const html = buildResetPasswordHtml({ safeName, safeUrl })
 
-  // Plain text fallback (для клієнтів без HTML, accessibility)
+  // * Plain text fallback (для клієнтів без HTML, accessibility)
   const text = `Привіт, ${displayName}!
 
 Ви запросили відновлення паролю для свого акаунту Zunor.
@@ -266,9 +239,7 @@ Zunor`
   await sendEmail({ to, subject, html, text })
 }
 
-// ═══════════════════════════════════════════════════════════
-// HTML templates (винесені окремо для зручності та A/B тестів)
-// ═══════════════════════════════════════════════════════════
+// * HTML templates (винесені окремо для зручності та A/B тестів)
 
 interface ResetPasswordTemplateParams {
   safeName: string // вже екранований

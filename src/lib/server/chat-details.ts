@@ -1,11 +1,5 @@
-// Чат очима учасника: хто співрозмовник, коли його бачили, до якого
-// моменту прочитано з обох боків.
-//
-// Один завантажувач на два шляхи — сторінку чату
-// (dashboard/messages/[chatId]) і GET /api/chats/[id] (застосунок). Доки
-// він жив лише в лоадері сторінки, третій шлях до тих самих даних
-// довелося б писати копією — а копія перевірки членства рано чи пізно
-// відстала б (AGENTS.md, «Перевірка доступу живе в одному місці»).
+// * чат очима учасника: співрозмовник, коли його бачили, до якого моменту
+// * прочитано. Один завантажувач для сторінки чату й GET /api/chats/[id]
 
 import type { ChatDetails } from '$lib/components/chat/types'
 import { freshest, lastSeenMany } from './presence'
@@ -29,7 +23,7 @@ export async function loadChatDetails(
           id: true,
           members: {
             select: {
-              // lastReadAt співрозмовника — з нього галочки ✓✓.
+              // * lastReadAt співрозмовника — з нього галочки ✓✓
               lastReadAt: true,
               user: {
                 select: {
@@ -55,9 +49,9 @@ export async function loadChatDetails(
   const peer = peerMember?.user
   if (!peerMember || !peer) return null
 
-  // Точний час — з Redis, якщо він є; база пишеться рідше (presence.ts).
-  // Запит лише ПІСЛЯ перевірки членства: «коли був у мережі» — теж дані
-  // людини, і чужому їх не видно.
+  // * точний час — з Redis, якщо він є; база пишеться рідше (presence.ts).
+  // * Запит лише ПІСЛЯ перевірки членства: «коли був у мережі» — теж дані
+  // * людини, і чужому їх не видно
   const seen = await lastSeenMany([peer.id])
   const peerLastSeen = peer.lastSeen
     ? freshest(peer.lastSeen, seen.get(peer.id))

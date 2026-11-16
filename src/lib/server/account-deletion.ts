@@ -1,26 +1,7 @@
-// Видалення акаунта на прохання самої людини («право бути забутим»,
-// обіцяне в /privacy).
-//
-// Видалення — це ЗНЕОСОБЛЕННЯ, а не DELETE рядка User. На користувача
-// посилаються замовлення, повідомлення й відгуки ДРУГОЇ сторони (зовнішні
-// ключі без каскаду), і стерти їх означало б забрати в майстра історію
-// роботи й рейтинг, а в клієнта — листування про його ж замовлення. Тому
-// як у Telegram: рядок лишається під іменем «Видалений акаунт», а все, що
-// робить його людиною, стирається.
-//
-// Що зникає: імʼя, пошта (замінюється на службову — справжня звільняється
-// для нової реєстрації), username (лишився в базі від старих анкет), телефон, фото,
-// «про себе», анкета асистента, район, чат Telegram, способи входу (пароль, Google),
-// сесії, сповіщення, коди підтвердження, анкета й портфоліо майстра, фото
-// помешкань у заявках. Файли — і з Cloudinary (уся тека zunor/users/<id>/).
-//
-// Що лишається: завершені й скасовані замовлення, повідомлення в чатах,
-// відгуки (рейтинг тих, кого людина оцінювала, не має мінятись), журнал
-// розсилки. Фото, надіслані в чат, — теж: вони вже в листуванні з іншою
-// людиною, як і в Telegram.
-//
-// Поки є активне замовлення (CREATED / IN_PROGRESS), видалити не можна:
-// друга сторона лишилась би з домовленістю, по яку нікому прийти.
+// * видалення акаунта — знеособлення, а не DELETE рядка: на користувача
+// * посилаються замовлення, повідомлення й відгуки другої сторони. Рядок
+// * лишається як «Видалений акаунт», усе особисте стирається разом із файлами.
+// * З активним замовленням видалити не можна
 
 import { prisma } from './prisma'
 import { Prisma } from '../../generated/prisma/client'
@@ -34,10 +15,7 @@ import { forgetChatId } from './telegram/chat-cache'
 /** Імʼя, яке бачить друга сторона в чатах, замовленнях і відгуках. */
 export const DELETED_NAME = 'Видалений акаунт'
 
-/**
- * Службова пошта замість справжньої: колонка унікальна й обовʼязкова.
- * Домен `.invalid` зарезервований (RFC 2606) — лист туди не піде ніколи.
- */
+/** Службова пошта: колонка унікальна й обовʼязкова; `.invalid` зарезервований — лист не піде. */
 export function deletedEmail(userId: string): string {
   return `deleted-${userId}@deleted.invalid`
 }
@@ -67,15 +45,9 @@ export async function openWorkOf(userId: string): Promise<OpenWork> {
   return { openJobIds: jobs.map((j) => j.id), pending }
 }
 
-/**
- * Закриває відкриту роботу людини, якої на платформі більше не буде
- * (видалення акаунта, бан). Усередині транзакції:
- *   — відкриті заявки скасовуються, як кнопкою «Скасувати заявку»
- *     (DELETE /api/jobs/[id]): відгуки на них відхилені;
- *   — пропозиції, що чекають, відкликаються, як «Відкликати»
- *     (DELETE /api/proposals/[id]): лічильник заявки мінус один.
- * Хвилі розсилки знімає afterOpenWorkClosed — уже після коміту.
- */
+// * закриває відкриту роботу людини, якої більше не буде (видалення, бан):
+// * заявки скасовуються, пропозиції відкликаються. Хвилі знімає
+// * afterOpenWorkClosed — уже після коміту
 export async function closeOpenWork(
   tx: Prisma.TransactionClient,
   work: OpenWork,
@@ -126,16 +98,13 @@ export async function deleteAccount(userId: string): Promise<DeleteResult> {
   await prisma.$transaction(async (tx) => {
     await closeOpenWork(tx, work, now)
 
-    // Фото помешкань — це дані клієнта. Файли видаляються з хмари нижче,
-    // а посилання — тут, інакше на сторінці старого замовлення в майстра
-    // висіли б биті картинки.
+    // * фото помешкань — дані клієнта: посилання геть, файли стираються нижче
     await tx.job.updateMany({
       where: { clientId: userId },
       data: { attachments: [], attachmentsPublicIds: [] },
     })
 
-    // Анкета майстра: isActive: false прибирає його з розсилки, стрічки й
-    // рекомендацій (усі три фільтрують за ним).
+    // * isActive: false прибирає з розсилки, стрічки й рекомендацій
     await tx.masterProfile.updateMany({
       where: { userId },
       data: {
@@ -164,23 +133,18 @@ export async function deleteAccount(userId: string): Promise<DeleteResult> {
         telegramChatId: null,
         telegramLinkedAt: null,
         isOnline: false,
-        // Бан — друга лінія захисту: якщо десь лишилась жива сесія (кеш
-        // cookie живе 5 хв), guardHandle викине її на першому ж запиті.
+        // * бан — друга лінія: живу сесію з cookie-кешу викине guardHandle
         banned: true,
         banReason: 'account-deleted',
       },
     })
 
-    // Способи входу: без них увійти в цей акаунт неможливо, а справжня
-    // пошта вже вільна для нової реєстрації.
+    // * без способів входу в акаунт не зайти, а справжня пошта вже вільна
     await tx.account.deleteMany({ where: { userId } })
     await tx.notification.deleteMany({ where: { userId } })
-    // Пристрої з застосунком: push цього акаунта більше нікуди не йде.
     await tx.pushToken.deleteMany({ where: { userId } })
-    // Коди підтвердження й посилання на скидання пароля, видані на пошту.
-    // Коди better-auth лежать як «<тип>-otp-<пошта>»: endsWith із дефісом,
-    // а не contains — інакше a@b.co зачепило б і коди xa@b.co. Посилання
-    // на скидання пароля — «reset-password:<токен>» зі значенням userId.
+    // * коди better-auth лежать як «<тип>-otp-<пошта>»: endsWith із дефісом, а не
+    // * contains — інакше a@b.co зачепило б і xa@b.co
     await tx.otpCode.deleteMany({ where: { email: user.email } })
     await tx.verification.deleteMany({
       where: {
@@ -189,21 +153,16 @@ export async function deleteAccount(userId: string): Promise<DeleteResult> {
     })
   })
 
-  // ─── Після коміту ───
-
   afterOpenWorkClosed(work)
 
-  // Сесії — і з бази, і з Redis (через better-auth), потім кеш стану
-  // акаунта: бан має подіяти на першому ж запиті, а не за TTL.
+  // * сесії й кеш стану акаунта: бан діє на першому ж запиті
   await revokeSessions(userId).catch((err) =>
     console.error('[account-deletion] revoke sessions failed:', err),
   )
   await invalidateAccount(userId)
   forgetChatId(userId)
 
-  // Файли — остання й необовʼязкова частина: акаунт уже знеособлено, а
-  // збій хмари не має повертати людині «не вдалося видалити». Залишки
-  // без жодного посилання в базі ніде не показуються.
+  // * файли — остання й необовʼязкова частина: збій хмари не скасовує видалення
   await cloudinary.api
     .delete_resources_by_prefix(`zunor/users/${userId}/`)
     .catch((err: unknown) =>

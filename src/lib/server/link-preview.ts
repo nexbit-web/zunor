@@ -1,22 +1,7 @@
-// Превʼю посилання в чаті — картка «сайт · заголовок · опис», як у Telegram.
-//
-// Сервер сам іде за адресою, яку написав у чаті користувач, — а це
-// класична діра SSRF: «http://127.0.0.1:5432», «http://169.254.169.254/»
-// (метадані хмари) чи імʼя, що резолвиться у внутрішню мережу. Тому:
-//   • лише http(s), лише стандартні порти, без логіна в адресі;
-//   • адреса перевіряється ПІСЛЯ DNS і саме та, до якої підключаємось
-//     (`lookup` усередині запиту). Перевірка імені окремо від підключення
-//     обходиться DNS-rebinding'ом: перший резолв публічний, другий — ні;
-//   • редіректи — вручну, кожен крок перевіряється заново;
-//   • тайм-аут на все разом і стеля на розмір: читаємо лише <head>.
-//
-// Картинки в превʼю немає навмисно: її вантажив би браузер співрозмовника
-// напряму з чужого сервера — піксель-трекер, що віддає IP і час
-// прочитання тому, хто скинув посилання (Telegram для цього проксує
-// картинки через себе).
-//
-// Модуль не знає про чат і базу — лише «адреса → картка». Запис у
-// повідомлення й розсилка — у $lib/server/chat-link-preview.
+// * превʼю посилання в чаті. Сервер іде за адресою від користувача — це SSRF,
+// * тому: лише http(s) і стандартні порти; адреса перевіряється після DNS, у
+// * `lookup` самого підключення; редіректи вручну; тайм-аут і стеля на розмір.
+// * Картинки немає навмисно: це був би піксель-трекер для співрозмовника
 
 import { lookup as dnsLookup } from 'node:dns'
 import http from 'node:http'
@@ -35,14 +20,12 @@ const TITLE_MAX = 200
 const DESCRIPTION_MAX = 300
 const SITE_MAX = 80
 
-// Кеш у памʼяті процесу — зі стелею, як усе в ньому (AGENTS.md, 2.1).
+// * кеш у памʼяті процесу — зі стелею, як усе в ньому (AGENTS.md, 2.1)
 const CACHE_MAX = 500
 const TTL_FOUND = 6 * 60 * 60_000
 const TTL_MISSING = 30 * 60_000
 /** Скільки сайтів можемо чекати одночасно; понад це — без картки. */
 const MAX_INFLIGHT = 20
-
-// ═══════════════════════ Які адреси публічні ═══════════════════════
 
 const PRIVATE = new BlockList()
 for (const [net, prefix] of [
@@ -64,9 +47,9 @@ for (const [net, prefix] of [
 ] as const) {
   PRIVATE.addSubnet(net, prefix, 'ipv4')
 }
-// IPv6 — навпаки, від дозволеного: лише глобальний unicast 2000::/3, і з
-// нього геть документацію, Teredo й 6to4 (останні два вкладають IPv4
-// всередину, зокрема й 127.0.0.1).
+// * IPv6 — навпаки, від дозволеного: лише глобальний unicast 2000::/3, і з
+// * нього геть документацію, Teredo й 6to4 (останні два вкладають IPv4
+// * всередину, зокрема й 127.0.0.1)
 const GLOBAL_V6 = new BlockList()
 GLOBAL_V6.addSubnet('2000::', 3, 'ipv6')
 for (const [net, prefix] of [
@@ -91,11 +74,11 @@ export function isPublicAddress(ip: string): boolean {
 function isAllowedUrl(url: URL): boolean {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return false
   if (url.username || url.password) return false
-  // URL сам прибирає явний стандартний порт (:80 / :443) — будь-який
-  // інший тут означає чужий сервіс на тому ж хості.
+  // * URL сам прибирає явний стандартний порт (:80 / :443) — будь-який
+  // * інший тут означає чужий сервіс на тому ж хості
   if (url.port) return false
   const host = url.hostname.replace(/^\[|\]$/g, '')
-  // IP у адресі підключається без DNS — `lookup` його не побачить.
+  // * IP у адресі підключається без DNS — `lookup` його не побачить
   if (isIP(host)) return isPublicAddress(host)
   return host.includes('.') && !host.endsWith('.localhost')
 }
@@ -125,8 +108,6 @@ export const publicLookup: LookupFunction = (hostname, options, callback) => {
     },
   )
 }
-
-// ═══════════════════════ Завантаження ═══════════════════════
 
 const HEADERS = {
   'user-agent': 'Mozilla/5.0 (compatible; ZunorLinkPreview/1.0)',
@@ -181,8 +162,8 @@ function hop(url: URL, signal: AbortSignal): Promise<Hop> {
       res?.destroy()
       resolve(result)
     }
-    // Обрив за тайм-аутом мусить завершити крок будь-де: на розпакуванні
-    // потік інакше просто завис би, а з ним і запис у кеші «в дорозі».
+    // * обрив за тайм-аутом мусить завершити крок будь-де: на розпакуванні
+    // * потік інакше просто завис би, а з ним і запис у кеші «в дорозі»
     if (signal.aborted) return settle({ kind: 'none' })
     signal.addEventListener('abort', () => settle({ kind: 'none' }), {
       once: true,
@@ -195,8 +176,8 @@ function hop(url: URL, signal: AbortSignal): Promise<Hop> {
         method: 'GET',
         headers: HEADERS,
         lookup: publicLookup,
-        // Без пулу: чуже зʼєднання з тим самим імʼям не мало нашої
-        // перевірки адреси.
+        // * без пулу: чуже зʼєднання з тим самим імʼям не мало нашої
+        // * перевірки адреси
         agent: false,
         signal,
       },
@@ -226,7 +207,7 @@ function hop(url: URL, signal: AbortSignal): Promise<Hop> {
         body.on('data', (chunk: Buffer) => {
           chunks.push(chunk)
           size += chunk.length
-          // Лічимо РОЗПАКОВАНЕ — gzip-бомба упирається в ту саму стелю.
+          // * лічимо РОЗПАКОВАНЕ — gzip-бомба упирається в ту саму стелю
           if (size >= MAX_BYTES || chunk.includes('</head>')) finish()
         })
         body.on('end', finish)
@@ -260,8 +241,6 @@ async function download(
     controller.abort()
   }
 }
-
-// ═══════════════════════ Розбір <head> ═══════════════════════
 
 const NAMED_ENTITIES: Record<string, string> = {
   amp: '&',
@@ -329,13 +308,8 @@ function siteOf(url: string): string {
 }
 
 /**
- * Картка з HTML сторінки: Open Graph → Twitter → звичайні <title> і
- * description. Без заголовка й опису картки немає — сама назва сайту
- * нічого не додає до посилання.
- *
- * @param link    посилання з повідомлення (його й відкриває картка)
- * @param finalUrl куди привели редіректи — з нього назва сайту, якщо
- *                 og:site_name немає (pb.ua/short → next.privat24.ua)
+ * Картка з HTML: Open Graph → Twitter → <title> і description. Без заголовка
+ * й опису картки немає. `finalUrl` — куди привели редіректи: з нього назва сайту.
  */
 export function parseLinkPreview(
   html: string,
@@ -377,8 +351,6 @@ export function parseLinkPreview(
   return { url: link, siteName, title, description }
 }
 
-// ═══════════════════════ Кеш і вхід ═══════════════════════
-
 const cache = new Map<string, { preview: LinkPreview | null; until: number }>()
 const inflight = new Map<string, Promise<LinkPreview | null>>()
 
@@ -388,7 +360,7 @@ function remember(link: string, preview: LinkPreview | null) {
     preview,
     until: Date.now() + (preview ? TTL_FOUND : TTL_MISSING),
   })
-  // Map памʼятає порядок вставки — перший ключ найстаріший.
+  // * Map памʼятає порядок вставки — перший ключ найстаріший
   while (cache.size > CACHE_MAX) {
     cache.delete(cache.keys().next().value!)
   }
@@ -420,7 +392,7 @@ export function fetchLinkPreview(link: string): Promise<LinkPreview | null> {
 
   const pending = inflight.get(link)
   if (pending) return pending
-  // Перевантаження — без картки й без запису в кеш: це не відповідь сайту.
+  // * перевантаження — без картки й без запису в кеш: це не відповідь сайту
   if (inflight.size >= MAX_INFLIGHT) return Promise.resolve(null)
 
   const job = download(link)

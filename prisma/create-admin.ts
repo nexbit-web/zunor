@@ -1,26 +1,8 @@
-// prisma/create-admin.ts
-//
-// Акаунт адміністратора з поштою й паролем — вхід у Zunor звичайною
-// формою «Пошта + пароль», далі /admin і код другого фактора.
-//
-// Запуск (ЗАПУСКАЄ ЛЮДИНА у своєму терміналі — пароль бачить лише вона):
-//   npx tsx prisma/create-admin.ts                     # admin@zunor.org
-//   npx tsx prisma/create-admin.ts boss@example.com
-//
-// Пароль генерується тут же (24 випадкові символи, ~143 біти) і
-// друкується ОДИН раз. У базі — лише хеш better-auth (scrypt).
-//
-// Повторний запуск із тією ж поштою — НОВИЙ пароль: старий перестає
-// діяти, усі сесії цього акаунта закриваються. Так само, якщо пароль
-// загубився.
-//
-// Інших співробітників створює вже ADMIN в адмінці («Співробітники»), з
-// журналом. Цей скрипт — для першого входу й аварійної заміни пароля.
-//
-// Пошта: відновлення пароля шле лист на неї, тож скринька мусить бути
-// ВАША або не існувати на вашому ж домені. Чужий домен (чи такий, що
-// можна зареєструвати) — це скидання пароля адміна для того, хто ним
-// заволодіє.
+// * акаунт адміністратора з поштою й паролем — для першого входу й аварійної
+// * заміни пароля. Запускає людина у своєму терміналі:
+// *   npx tsx prisma/create-admin.ts [пошта]      (типово admin@zunor.org)
+// * Пароль генерується тут і друкується один раз; повторний запуск — новий
+// * пароль і закриті сесії. Скринька мусить бути вашою: на неї йде відновлення
 
 import 'dotenv/config'
 import { randomInt } from 'node:crypto'
@@ -54,8 +36,8 @@ function generatePassword(): string {
   return [group(), group(), group(), group()].join('-')
 }
 
-// Redis і Pusher — необовʼязкові, як і в застосунку: без них просто
-// нічого скидати.
+// * Redis і Pusher — необовʼязкові, як і в застосунку: без них просто
+// * нічого скидати
 const { UPSTASH_REDIS_REST_URL: redisUrl, UPSTASH_REDIS_REST_TOKEN: redisToken } = process.env
 const redis = redisUrl && redisToken ? new Redis({ url: redisUrl, token: redisToken }) : null
 
@@ -69,8 +51,8 @@ async function dropCaches(userId: string, sessionTokens: string[]) {
     ]
     await redis.del(...keys).catch((e) => console.warn(`! Redis: ${e}`))
   }
-  // Памʼять запущеного сервера скидає та сама подія, якою це робила CRM
-  // (account-cache.ts, subscribeToInvalidations).
+  // * памʼять запущеного сервера скидає та сама подія, якою це робила CRM
+  // * (account-cache.ts, subscribeToInvalidations)
   const { PUSHER_APP_ID: appId, PUSHER_KEY: key, PUSHER_SECRET: secret } = process.env
   if (appId && key && secret) {
     await new Pusher({ appId, key, secret, cluster: process.env.PUSHER_CLUSTER ?? 'eu' })
@@ -99,15 +81,15 @@ async function main() {
         },
         select: { id: true },
       })
-      // accountId = id користувача — так пише сам better-auth при реєстрації.
+      // * accountId = id користувача — так пише сам better-auth при реєстрації
       await tx.account.create({
         data: { userId: user.id, providerId: 'credential', accountId: user.id, password: hash },
       })
     })
     console.log(`✓ Створено адміністратора ${email}`)
   } else {
-    // Чужий звичайний акаунт сюди не перетворюємо: це був би спосіб
-    // забрати його собі. Лише заміна пароля вже наявному співробітнику.
+    // * чужий звичайний акаунт сюди не перетворюємо: це був би спосіб
+    // * забрати його собі. Лише заміна пароля вже наявному співробітнику
     if (!STAFF.has(existing.role)) {
       fail(`Пошта ${email} уже зайнята звичайним акаунтом (${existing.role}) — візьміть іншу`)
     }

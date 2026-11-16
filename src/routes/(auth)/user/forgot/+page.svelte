@@ -6,18 +6,14 @@
   import FieldError from '$lib/components/forms/field-error.svelte'
   import { onDestroy } from 'svelte'
 
-  // ═══════════════════════════════════════════════════════════
   // Константи
-  // ═══════════════════════════════════════════════════════════
 
   const EMAIL_RE = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
   const EMAIL_MAX_LENGTH = 254
   const REQUEST_TIMEOUT_MS = 15_000 // 15 сек на запит
   const RESEND_COOLDOWN_SEC = 60 // не дозволяємо retry раніше ніж через 1 хв
 
-  // ═══════════════════════════════════════════════════════════
   // State
-  // ═══════════════════════════════════════════════════════════
 
   let email = $state('')
   let loading = $state(false)
@@ -28,9 +24,7 @@
   let cooldownInterval: ReturnType<typeof setInterval> | null = null
   let abortController: AbortController | null = null
 
-  // ═══════════════════════════════════════════════════════════
   // Validation
-  // ═══════════════════════════════════════════════════════════
 
   function isValidEmail(e: string): boolean {
     const trimmed = e.trim()
@@ -47,9 +41,7 @@
 
   const formValid = $derived(isValidEmail(email))
 
-  // ═══════════════════════════════════════════════════════════
   // Cooldown timer для повторного запиту
-  // ═══════════════════════════════════════════════════════════
 
   function startCooldown() {
     cooldown = RESEND_COOLDOWN_SEC
@@ -70,27 +62,25 @@
     touched = false
   }
 
-  // ═══════════════════════════════════════════════════════════
   // Submit
-  // ═══════════════════════════════════════════════════════════
 
   async function handleSubmit(e: SubmitEvent) {
     e.preventDefault()
     if (loading) return
 
-    // Перевірка на натиск, а не на blur: кнопка лишається активною, і
-    // причину видно під полем, а не в сірій незатискуваній кнопці.
+    // * перевірка на натиск, а не на blur: кнопка лишається активною, і
+    // * причину видно під полем, а не в сірій незатискуваній кнопці
     touched = true
     if (!formValid) return
 
     loading = true
     serverError = ''
 
-    // Скасовуємо попередній запит, якщо ще не завершився
+    // * скасовуємо попередній запит, якщо ще не завершився
     if (abortController) abortController.abort()
     abortController = new AbortController()
 
-    // Таймаут на весь запит
+    // * таймаут на весь запит
     const timeoutId = setTimeout(() => {
       abortController?.abort()
     }, REQUEST_TIMEOUT_MS)
@@ -108,16 +98,16 @@
 
       clearTimeout(timeoutId)
 
-      // Rate limit — показуємо реальну помилку
+      // * Rate limit — показуємо реальну помилку
       if (res.status === 429) {
         serverError = 'Забагато спроб. Спробуйте пізніше.'
         return
       }
 
-      // Інші помилки — silent (захист від email enumeration).
-      // Юзер завжди бачить "лист відправлено", навіть якщо email не існує.
+      // * інші помилки — silent (захист від email enumeration).
+      // * Юзер завжди бачить "лист відправлено", навіть якщо email не існує
       if (!res.ok) {
-        // Логуємо для нашої діагностики, але не показуємо юзеру
+        // * логуємо для нашої діагностики, але не показуємо юзеру
         console.warn('[forgot] non-OK response:', res.status)
       }
 
@@ -126,7 +116,7 @@
     } catch (err) {
       clearTimeout(timeoutId)
 
-      // AbortError — скасовано таймаутом або повторним submit
+      // * AbortError — скасовано таймаутом або повторним submit
       if ((err as Error).name === 'AbortError') {
         serverError = 'Запит зайняв забагато часу. Спробуйте ще раз.'
         return
@@ -139,9 +129,7 @@
     }
   }
 
-  // ═══════════════════════════════════════════════════════════
   // Cleanup
-  // ═══════════════════════════════════════════════════════════
 
   onDestroy(() => {
     if (cooldownInterval) clearInterval(cooldownInterval)

@@ -6,13 +6,8 @@ import type { PageServerLoad } from './$types'
 export const load: PageServerLoad = async ({ locals }) => {
   const user = requireUser(locals, '/dashboard/onboarding/master')
 
-  // Майстер, який уже онбордився, редагує профіль на /dashboard/profile —
-  // тут йому робити нічого.
-  //
-  // А от онбордженого КЛІЄНТА пускаємо: для нього ця сторінка —
-  // апгрейд ролі CLIENT → MASTER, єдиний шлях стати виконавцем.
-  // Саме на цій умові й ламався перехід: перевірка лише на onboarded
-  // розвертала клієнта назад на /dashboard/profile.
+  // * онбордженому майстрові тут нічого робити, а онбордженого клієнта
+  // * пускаємо: для нього це апгрейд ролі
   if (locals.account?.onboarded && locals.account.role === 'MASTER') {
     redirect(303, '/dashboard/profile')
   }

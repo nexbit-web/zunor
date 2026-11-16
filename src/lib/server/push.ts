@@ -1,23 +1,7 @@
-// Push-сповіщення в застосунок (../mobile) через Expo Push Service.
-//
-// Навіщо. Pusher живе лише поки застосунок відкритий, Telegram підключив
-// не кожен. Push приходить на телефон завжди — а швидкість відгуку
-// майстра — головна метрика (MANIFESTO, правило №2).
-//
-// Як:
-//   • застосунок сам реєструє пристрій — POST /api/me/push з Expo-токеном
-//     (таблиця PushToken), вимкнув push чи вийшов — DELETE;
-//   • кожне сповіщення, що йде через pushNotification (notify() і хвилі
-//     розсилки), летить на всі пристрої людини одним запитом до Expo;
-//   • нове повідомлення в чаті — співрозмовникам (sendMessagePush, з
-//     api/chats/[id]/messages), без запису в стрічку сповіщень;
-//   • Expo відповів «пристрою вже немає» (DeviceNotRegistered —
-//     застосунок видалили) — рядок геть, щоб не стукати марно.
-//
-// EXPO_ACCESS_TOKEN — необовʼязковий: потрібен, лише якщо в проєкті на
-// expo.dev увімкнено «Enhanced Security for Push Notifications».
-//
-// Нічого не кидає: збій push не має валити дію, що породила сповіщення.
+// * push у застосунок через Expo Push Service: Pusher живе лише у відкритому
+// * застосунку, а push приходить завжди. Пристрій реєструє сам застосунок
+// * (POST /api/me/push); «пристрою вже немає» від Expo — рядок геть.
+// * Нічого не кидає: збій push не валить дію, що породила сповіщення
 
 import { env } from '$env/dynamic/private'
 import { prisma } from './prisma'
@@ -42,12 +26,7 @@ export function isPushPlatform(value: unknown): value is PushPlatform {
   return PUSH_PLATFORMS.includes(value as PushPlatform)
 }
 
-/**
- * Що застосунок отримує в `data`: куди вести по дотику (те саме правило,
- * що й у стрічці сповіщень застосунку — `notificationTarget`) і що
- * позначити прочитаним. Поля лише додаємо — старі версії застосунку
- * живуть місяцями.
- */
+/** `data` для застосунку: куди вести по дотику й що позначити прочитаним. Поля лише додаємо. */
 function payload(n: Notification) {
   return {
     notificationId: n.id,
@@ -82,13 +61,7 @@ export async function sendPush(notification: Notification): Promise<void> {
 /** Тип push про нове повідомлення — застосунок за ним гасить системний банер. */
 export const MESSAGE_PUSH_TYPE = 'NEW_MESSAGE'
 
-/**
- * Нове повідомлення в чаті — співрозмовникам на телефон, як у Telegram:
- * заголовок — хто написав, текст — що (фото й файл — підписом «📷 Фото»).
- * У стрічку сповіщень і в Telegram повідомлення не йдуть — лише push.
- * Відкритий застосунок системного банера не показує: там свій, зверху
- * (mobile, components/message-banner).
- */
+/** Нове повідомлення в чаті — співрозмовникам на телефон. У стрічку сповіщень і Telegram не йде. */
 export async function sendMessagePush(params: {
   recipients: string[]
   chatId: string
@@ -112,10 +85,10 @@ async function deliver(userIds: string[], content: PushContent): Promise<void> {
   if (!userIds.length) return
   try {
     const rows = await prisma.pushToken.findMany({
-      // Забанений (і видалений — це теж бан) нічого не отримує.
+      // * забанений (і видалений — це теж бан) нічого не отримує
       where: { userId: { in: userIds }, user: { banned: false } },
       select: { token: true },
-      // Expo приймає до 100 повідомлень за запит.
+      // * Expo приймає до 100 повідомлень за запит
       take: Math.min(userIds.length * MAX_DEVICES, 100),
     })
     if (!rows?.length) return
@@ -125,7 +98,7 @@ async function deliver(userIds: string[], content: PushContent): Promise<void> {
       title: content.title,
       ...(content.body ? { body: content.body } : null),
       sound: 'default',
-      // Android: канал, який створює застосунок (lib/push.ts там).
+      // * Android: канал, який створює застосунок (lib/push.ts там)
       channelId: 'default',
       priority: 'high',
       data: content.data,
@@ -147,7 +120,7 @@ async function deliver(userIds: string[], content: PushContent): Promise<void> {
       return
     }
 
-    // Квитки — у тому ж порядку, що й повідомлення.
+    // * квитки — у тому ж порядку, що й повідомлення
     const { data } = (await res.json()) as { data?: Ticket[] }
     const gone = (data ?? [])
       .map((t, i) =>

@@ -1,8 +1,5 @@
-// Санітизація «копірайту» заявки (title/description) з недовірених джерел:
-// вивід LLM або клієнтський POST. Svelte екранує рядки при рендері, тож
-// задача тут не анти-XSS, а гігієна: без керуючих символів, однорядкова
-// назва, ліміти довжини. Не пройшло — null, викликаючий код підставляє
-// шаблонний фолбек (generateTitle).
+// * гігієна title/description з недовірених джерел (вивід LLM, клієнтський
+// * POST): без керуючих символів, однорядкова назва, ліміти. Не пройшло — null
 
 const TITLE_MIN = 8
 const TITLE_MAX = 80
@@ -25,7 +22,7 @@ export function sanitizeJobTitle(raw: unknown): string | null {
   const oneLine = stripControl(raw.replace(/\s+/g, ' '), false)
   if (oneLine.length < TITLE_MIN) return null
   if (oneLine.length <= TITLE_MAX) return oneLine
-  // Обрізаємо по межі слова, щоб не лишати «Генеральне прибир»
+  // * обрізаємо по межі слова, щоб не лишати «Генеральне прибир»
   const cut = oneLine.slice(0, TITLE_MAX)
   const lastSpace = cut.lastIndexOf(' ')
   return lastSpace > TITLE_MIN ? cut.slice(0, lastSpace) : cut

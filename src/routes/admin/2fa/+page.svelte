@@ -32,8 +32,8 @@
   let showKey = $state(false)
   let formEl = $state<HTMLFormElement>()
 
-  // `?/verify` замінює весь query, тож redirectTo переносимо руками —
-  // інакше після коду людина опинялась би на огляді, а не там, куди йшла.
+  // * `?/verify` замінює весь query, тож redirectTo переносимо руками —
+  // * інакше після коду людина опинялась би на огляді, а не там, куди йшла
   const action = $derived.by(() => {
     const to = page.url.searchParams.get('redirectTo')
     return to ? `?/verify&redirectTo=${encodeURIComponent(to)}` : '?/verify'
@@ -43,8 +43,8 @@
     if (!sending && code.length === CODE_LENGTH) formEl?.requestSubmit()
   }
 
-  // Вийти з акаунта — щоб зайти іншим (звичайним). «На сайт» є лише в
-  // того, хто має анкету: без неї /dashboard веде назад сюди (hooks).
+  // * вийти з акаунта — щоб зайти іншим (звичайним). «На сайт» є лише в
+  // * того, хто має анкету: без неї /dashboard веде назад сюди (hooks)
   let leaving = $state(false)
   async function leaveTo(path: string): Promise<void> {
     if (leaving) return
@@ -57,11 +57,11 @@
     }
   }
   const leave = () => leaveTo('/')
-  // Налаштування другого фактора — лише одразу після входу (сервер,
-  // SETUP_FRESH_MS): виходимо й ведемо на вхід із поверненням в адмінку.
+  // * налаштування другого фактора — лише одразу після входу (сервер,
+  // * SETUP_FRESH_MS): виходимо й ведемо на вхід із поверненням в адмінку
   const relogin = () => leaveTo('/user/login?redirectTo=%2Fadmin')
 
-  // Посилання — як «Увійти» / «Забули пароль?» на сторінках входу.
+  // * посилання — як «Увійти» / «Забули пароль?» на сторінках входу
   const LINK =
     'rounded-sm text-primary underline-offset-4 transition-colors hover:text-primary-hover hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50'
 </script>

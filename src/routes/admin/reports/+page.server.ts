@@ -5,7 +5,7 @@ import type { PageServerLoad } from './$types'
 const STATUSES = ['OPEN', 'RESOLVED', 'DISMISSED'] as const
 type Status = (typeof STATUSES)[number]
 
-// Черга скарг: відкриті — від найстарішої.
+// * черга скарг: відкриті — від найстарішої
 export const load: PageServerLoad = async ({ locals, url }) => {
   await requireStaff(locals)
 

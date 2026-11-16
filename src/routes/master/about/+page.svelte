@@ -67,8 +67,8 @@
   import { Button } from '$lib/components/ui/button/index.js'
   import { reveal } from '$lib/utils/reveal'
 
-  // Тип спільний для всіх карткових списків сторінки: іконка + заголовок
-  // + текст. Секції відрізняються лише сіткою, не формою даних.
+  // * тип спільний для всіх карткових списків сторінки: іконка + заголовок
+  // * + текст. Секції відрізняються лише сіткою, не формою даних
   interface Item {
     icon: typeof Check
     title: string
@@ -131,7 +131,7 @@
     },
   ]
 
-  // ─── Що це за робота ───
+  // * що це за робота
   const WORK_TYPES: readonly Item[] = [
     {
       icon: House,
@@ -183,7 +183,7 @@
     },
   ]
 
-  // ─── Як почати ───
+  // * як почати
   const STEPS: readonly Item[] = [
     {
       icon: UserPlus,
@@ -207,7 +207,7 @@
     },
   ]
 
-  // ─── Що всередині (з ілюстраціями) ───
+  // * що всередині (з ілюстраціями)
   const FEED_POINTS = [
     'Стрічка доступних заявок у реальному часі',
     'Тип прибирання, район і час — одразу в картці',
@@ -220,7 +220,7 @@
     'Статус замовлення й історія — в одному місці',
   ] as const
 
-  // ─── Кого шукаємо ───
+  // * кого шукаємо
   const WHO: readonly Item[] = [
     {
       icon: ShieldCheck,
@@ -497,8 +497,11 @@
       use:reveal
     >
       <img
-        src="/master-hero.png"
+        src="/master-hero.webp"
         alt="Клінер Zunor за роботою"
+        width="1254"
+        height="1254"
+        decoding="async"
         class="size-full object-cover"
       />
     </div>
@@ -761,8 +764,12 @@
           use:reveal={90}
         >
           <img
-            src="/feat-feed.png"
+            src="/feat-feed.webp"
             alt="Стрічка заявок у застосунку Zunor"
+            width="1254"
+            height="1254"
+            loading="lazy"
+            decoding="async"
             class="size-full object-cover"
           />
         </div>
@@ -776,8 +783,12 @@
           use:reveal
         >
           <img
-            src="/feat-order.png"
+            src="/feat-order.webp"
             alt="Картка замовлення у застосунку Zunor"
+            width="1254"
+            height="1254"
+            loading="lazy"
+            decoding="async"
             class="size-full object-cover"
           />
         </div>

@@ -1,14 +1,6 @@
-// Повноекранний перегляд фото (PhotoSwipe) — один на весь застосунок:
-// чат, портфоліо в налаштуваннях, галерея профілю й заявки. Вигляд — як
-// у Telegram Desktop (photo-lightbox.css): темне тло, ряд іконок угорі
-// праворуч, гортання стрілками, свайпом і клавішами.
-//
-// Посилання-мініатюри позначаються `data-pswp` (href — повне фото).
-// Розміри знімка беремо з уже завантаженої мініатюри: PhotoSwipe малює
-// фото рівно в тих розмірах, які йому дали, і з вигаданими 1600×1600
-// кожен знімок розтягувався в квадрат.
-//
-// Без JS посилання лишається посиланням — фото відкривається вкладкою.
+// * повноекранний перегляд фото (PhotoSwipe) — один на застосунок. Мініатюри
+// * позначаються `data-pswp`; розміри знімка беремо з завантаженої мініатюри.
+// * Без JS посилання лишається посиланням
 
 import PhotoSwipeLightbox from 'photoswipe/lightbox'
 import 'photoswipe/style.css'
@@ -24,12 +16,12 @@ function icon(body: string, cls = ''): string {
 }
 
 const CLOSE = icon('<path d="M19 5 5 19M5 5l14 14"/>')
-// Вертикальна риска плюса має клас PhotoSwipe — наближене фото ховає її,
-// і «+» стає «−».
+// * вертикальна риска плюса має клас PhotoSwipe — наближене фото ховає її,
+// * і «+» стає «−»
 const ZOOM = icon(
   '<circle cx="11" cy="11" r="8"/><path d="M17 17l4 4M8 11h6"/><path class="pswp__zoom-icn-bar-v" d="M11 8v6"/>',
 )
-// Стрілку «далі» PhotoSwipe сам віддзеркалює з «назад».
+// * стрілку «далі» PhotoSwipe сам віддзеркалює з «назад»
 const ARROW = icon(
   '<path d="M15 6C15 6 9 10.4189 9 12C9 13.5812 15 18 15 18"/>',
 )
@@ -86,8 +78,8 @@ export function photoLightbox(
     pswpModule: () => import('photoswipe'),
     mainClass: 'app-pswp',
     bgOpacity: 0.88,
-    // Із видаленням поверх відкривається діалог підтвердження, а пастка
-    // фокуса PhotoSwipe відбирала б у нього фокус.
+    // * із видаленням поверх відкривається діалог підтвердження, а пастка
+    // * фокуса PhotoSwipe відбирала б у нього фокус
     trapFocus: !onDelete,
     closeSVG: CLOSE,
     zoomSVG: ZOOM,
@@ -109,8 +101,8 @@ export function photoLightbox(
     }
     data.src = link.href
     data.msrc = img?.currentSrc
-    // Мініатюра обрізана object-cover (квадрат у сітці) — PhotoSwipe
-    // тоді відкриває фото з обрізаного прямокутника, а не стискає його.
+    // * мініатюра обрізана object-cover (квадрат у сітці) — PhotoSwipe
+    // * тоді відкриває фото з обрізаного прямокутника, а не стискає його
     if (link.dataset.cropped !== undefined) data.thumbCropped = true
     return data
   })
@@ -120,8 +112,8 @@ export function photoLightbox(
     if (held) e.preventDefault()
   })
 
-  // Кнопки шапки в порядку Telegram: видалити, завантажити, далі
-  // штатні «наблизити» (order 10) і «закрити» (20).
+  // * кнопки шапки в порядку Telegram: видалити, завантажити, далі
+  // * штатні «наблизити» (order 10) і «закрити» (20)
   lightbox.on('uiRegister', () => {
     const ui = lightbox.pswp?.ui
     if (!ui) return

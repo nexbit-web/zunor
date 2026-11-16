@@ -31,12 +31,12 @@
     }),
   )
 
-  // untrack: початковий активний розділ. Далі його веде scrollspy нижче.
+  // * untrack: початковий активний розділ. Далі його веде scrollspy нижче
   let activeId = $state(untrack(() => sections[0]?.id ?? ''))
   let showTop = $state(false)
 
-  // Scrollspy — легітимний випадок роботи з DOM API поза реактивністю Svelte.
-  // Observer і scroll-listener завжди прибираються при демонтажі/зміні sections.
+  // * Scrollspy — легітимний випадок роботи з DOM API поза реактивністю Svelte.
+  // * Observer і scroll-listener завжди прибираються при демонтажі/зміні sections
   $effect(() => {
     const headings = sections
       .map((s) => document.getElementById(s.id))

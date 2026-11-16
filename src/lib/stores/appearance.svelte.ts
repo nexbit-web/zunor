@@ -1,11 +1,6 @@
-// Акцентний колір і висока контрастність — персональний вигляд, як і
-// тема в mode-watcher. Живуть у localStorage ЦЬОГО браузера: на сервері
-// їх немає, тож розділ «Вигляд» рендериться без SSR (див. його +page.ts).
-//
-// Застосування — атрибутом на <html> (data-accent, data-contrast), а самі
-// кольори — у layout.css. До гідратації атрибути ставить скрипт у
-// app.html: без нього сторінка спершу малювалась би синьою й перефарбовувалась
-// уже після завантаження JS.
+// * акцентний колір і контрастність — у localStorage цього браузера, тож
+// * розділ «Вигляд» рендериться без SSR. Атрибути на <html> до гідратації
+// * ставить скрипт в app.html
 
 /**
  * Порядок — як у палітрі на екрані. Кольорів тут навмисно немає: вони
@@ -30,7 +25,7 @@ export type AccentId = (typeof ACCENTS)[number]['id']
 /** Signal Blue з DESIGN.md — той, що в :root без жодного атрибута. */
 export const DEFAULT_ACCENT: AccentId = 'blue'
 
-// Ті самі ключі читає скрипт в app.html — міняти тільки разом.
+// * ті самі ключі читає скрипт в app.html — міняти тільки разом
 export const ACCENT_KEY = 'zunor-accent'
 export const CONTRAST_KEY = 'zunor-contrast'
 
@@ -44,7 +39,7 @@ function persist(key: string, value: string | null): void {
     if (value === null) localStorage.removeItem(key)
     else localStorage.setItem(key, value)
   } catch {
-    // Вибір діє до перезавантаження — це краще, ніж помилка в консолі.
+    // * вибір діє до перезавантаження — це краще, ніж помилка в консолі
   }
 }
 
@@ -55,9 +50,9 @@ class Appearance {
   constructor() {
     if (typeof document === 'undefined') return
 
-    // Стартове значення — з атрибута, який уже поставив app.html, а не
-    // повторним читанням сховища: так стор і сторінка гарантовано
-    // бачать одне й те саме.
+    // * стартове значення — з атрибута, який уже поставив app.html, а не
+    // * повторним читанням сховища: так стор і сторінка гарантовано
+    // * бачать одне й те саме
     const root = document.documentElement
     const saved = root.dataset.accent
     if (isAccent(saved)) this.accent = saved
@@ -67,8 +62,8 @@ class Appearance {
   setAccent(id: AccentId): void {
     this.accent = id
 
-    // Типовий колір не пишемо: без атрибута діє :root, і зміна
-    // типового в layout.css дійде до всіх, хто його не міняв.
+    // * типовий колір не пишемо: без атрибута діє :root, і зміна
+    // * типового в layout.css дійде до всіх, хто його не міняв
     const custom = id === DEFAULT_ACCENT ? null : id
     persist(ACCENT_KEY, custom)
 

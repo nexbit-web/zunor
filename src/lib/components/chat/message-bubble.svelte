@@ -123,8 +123,8 @@
       : (message.linkPreview ?? null),
   )
 
-  // Варіанти кольору тримаємо тут, а не в розмітці:
-  // інакше кожен вкладений елемент обростає своїм тернарником
+  // * варіанти кольору тримаємо тут, а не в розмітці:
+  // * інакше кожен вкладений елемент обростає своїм тернарником
   const bubbleTone = $derived(
     isMine
       ? 'bg-primary text-primary-foreground'
@@ -151,12 +151,10 @@
     if (!message.replyTo) return ''
     if (message.replyTo.type === 'PHOTO') return 'Фото'
     if (message.replyTo.type === 'FILE') return 'Файл'
-    // Текст порожній лише в одному випадку — оригінал видалили (сервер
-    // не віддає видаленого навіть у цитаті).
+    // * текст порожній лише в одному випадку — оригінал видалили (сервер
+    // * не віддає видаленого навіть у цитаті)
     return message.replyTo.text || 'Повідомлення видалено'
   }
-
-  // ═══════════════════════ Меню ═══════════════════════
 
   let menuOpen = $state(false)
   let bubbleEl = $state<HTMLElement | null>(null)
@@ -187,12 +185,10 @@
   function onDblClick(e: MouseEvent) {
     if (!showMenu || !onReact) return
     if ((e.target as HTMLElement).closest('a, button')) return
-    // Подвійний клік виділяє слово — тут він означає реакцію.
+    // * подвійний клік виділяє слово — тут він означає реакцію
     window.getSelection()?.removeAllRanges()
     onReact(message, QUICK_REACTION)
   }
-
-  // ═══════════════════════ Свайп — відповісти ═══════════════════════
 
   const SWIPE_MAX = 72
   const SWIPE_TRIGGER = 56
@@ -211,7 +207,7 @@
     const dx = e.clientX - swipeStart.x
     const dy = e.clientY - swipeStart.y
     if (!swiping) {
-      // Пішов по вертикалі — це прокрутка стрічки, не свайп.
+      // * пішов по вертикалі — це прокрутка стрічки, не свайп
       if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) {
         swipeStart = null
         return

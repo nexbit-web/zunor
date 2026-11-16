@@ -264,7 +264,7 @@
         subtitle:
           'Далі цієї відстані заявки не надсилатимемо. Чим ширше коло — тим більше заявок.',
       },
-      // Лише людині: компанія — завжди команда (див. STEPS).
+      // * лише людині: компанія — завжди команда (див. STEPS)
       {
         id: 'crew',
         phase: 'work',
@@ -312,8 +312,8 @@
     ]
   }
 
-  // untrack: початкові значення беремо один раз, інакше оновлення data
-  // затирало б те, що людина щойно набрала.
+  // * untrack: початкові значення беремо один раз, інакше оновлення data
+  // * затирало б те, що людина щойно набрала
   const initial = untrack(() => data.user)
   const mp = initial.masterProfile
 
@@ -332,14 +332,14 @@
 
   const PHASES = $derived(phasesFor(isCompany))
 
-  // ─── Поля ───
+  // * поля
   let avatarUrl = $state(initial.avatar ?? '')
   let avatarPublicId = $state(initial.avatarPublicId ?? '')
   let avatarUploading = $state(false)
 
-  // Імʼя людини й назва компанії — обидва User.name, але чернетки окремі:
-  // інакше імʼя з Google-акаунта ставало б «назвою компанії», а
-  // перемикання туди й назад стирало б набране.
+  // * імʼя людини й назва компанії — обидва User.name, але чернетки окремі:
+  // * інакше імʼя з Google-акаунта ставало б «назвою компанії», а
+  // * перемикання туди й назад стирало б набране
   let personName = $state(savedWho === 'company' ? '' : (initial.name ?? ''))
   let companyTitle = $state(savedWho === 'company' ? (initial.name ?? '') : '')
   const name = $derived(isCompany ? companyTitle : personName)
@@ -352,15 +352,15 @@
   let cityOpen = $state(false)
   let cityTriggerRef = $state<HTMLButtonElement>(null!)
   let district = $state(initial.district ?? '')
-  // Новий профіль — «будь-де»: звузити коло людина може сама, а з вузьким
-  // за замовчуванням вона б і не дізналась, скільки заявок минає її.
+  // * новий профіль — «будь-де»: звузити коло людина може сама, а з вузьким
+  // * за замовчуванням вона б і не дізналась, скільки заявок минає її
   let travelRadius = $state<TravelRadius>(
     mp && isTravelRadius(mp.travelRadiusKm) ? mp.travelRadiusKm : null,
   )
 
-  // Категорія поки одна — «Прибирання», і чіп з одним варіантом був би
-  // питанням без вибору. Її обираємо самі, а питаємо те, що в ній
-  // справді різниться: які саме прибирання.
+  // * категорія поки одна — «Прибирання», і чіп з одним варіантом був би
+  // * питанням без вибору. Її обираємо самі, а питаємо те, що в ній
+  // * справді різниться: які саме прибирання
   const onlyCategory = untrack(() =>
     data.categories.length === 1 ? data.categories[0].slug : null,
   )
@@ -369,7 +369,7 @@
   )
   let description = $state(mp?.description ?? '')
 
-  // ─── Відповіді для підбору ───
+  // * відповіді для підбору
   const savedSkills = parseCleaningSkills(
     parseMasterSkills(mp?.metadata)[CATEGORY_SLUG],
   )
@@ -406,8 +406,8 @@
   let submitting = $state(false)
   let step = $state(0)
 
-  // Помилку показуємо лише після виходу з поля (або спроби піти далі):
-  // червоне під порожнім полем, якого ще не торкались, — це грубо.
+  // * помилку показуємо лише після виходу з поля (або спроби піти далі):
+  // * червоне під порожнім полем, якого ще не торкались, — це грубо
   let touched = $state({
     who: false,
     name: false,
@@ -422,7 +422,7 @@
     crew: false,
   })
 
-  // ─── Телефон ───
+  // * телефон
   function normalizePhone(input: string): string {
     let d = input.replace(/\D/g, '')
     if (d.startsWith('380')) d = d.slice(3)
@@ -445,17 +445,17 @@
   function onPhoneInput(e: Event): void {
     const el = e.currentTarget as HTMLInputElement
     phoneDigits = normalizePhone(el.value)
-    // Примусова синхронізація DOM: без неї курсор стрибає в кінець
-    // при редагуванні середини номера.
+    // * примусова синхронізація DOM: без неї курсор стрибає в кінець
+    // * при редагуванні середини номера
     el.value = formatLocal(phoneDigits)
   }
 
-  // Перша цифра укр. мобільного коду: 3, 5, 6, 7, 9.
+  // * перша цифра укр. мобільного коду: 3, 5, 6, 7, 9
   const phoneValid = $derived(
     phoneDigits.length === 9 && /^[35679]/.test(phoneDigits),
   )
 
-  // ─── Похідні ───
+  // * похідні
   const nameTrim = $derived(name.trim())
   const nameValid = $derived(
     nameTrim.length >= NAME_MIN && nameTrim.length <= NAME_MAX,
@@ -495,8 +495,8 @@
   )
   const cityError = $derived(touched.city && !city ? 'Оберіть місто' : '')
 
-  // Район і радіус — лише там, де для міста є райони в БД (зараз —
-  // Одеса). Без них кроку «як далеко» нема про що питати.
+  // * район і радіус — лише там, де для міста є райони в БД (зараз —
+  // * Одеса). Без них кроку «як далеко» нема про що питати
   const districts = $derived(cityDistricts(data.districts, city))
   const needsDistrict = $derived(districts.length > 0)
   const districtValid = $derived(
@@ -552,8 +552,8 @@
       categories.length > 0 &&
       (!cleans || (services.length > 0 && premises.length > 0)) &&
       vehicle !== null &&
-      // null, доки немає відповіді «хто ви», а в людини — ще й «сам чи з
-      // напарником».
+      // * null, доки немає відповіді «хто ви», а в людини — ще й «сам чи з
+      // * напарником»
       crew !== null &&
       descValid,
   )
@@ -564,7 +564,7 @@
   )
   const wasRejected = $derived(mp?.verificationStatus === 'REJECTED')
 
-  // ─── Кроки ───
+  // * кроки
   const STEPS = $derived(
     stepsFor(isCompany).filter(
       (s) =>
@@ -649,10 +649,10 @@
     return stepOk(id)
   }
 
-  // ─── Дії ───
+  // * дії
   function closeAndFocusTrigger(): void {
     cityOpen = false
-    // tick: поповер ще в DOM на момент виклику, фокус без нього не сяде.
+    // * tick: поповер ще в DOM на момент виклику, фокус без нього не сяде
     tick().then(() => cityTriggerRef?.focus())
   }
 
@@ -767,9 +767,9 @@
     }
   }
 
-  // Збереження саме веде на іншу сторінку (submitting ще true) — його не
-  // зупиняємо. Закриття вкладки чи чужий сайт: свого вікна там не
-  // показати, cancel() просить браузер спитати своїм.
+  // * збереження саме веде на іншу сторінку (submitting ще true) — його не
+  // * зупиняємо. Закриття вкладки чи чужий сайт: свого вікна там не
+  // * показати, cancel() просить браузер спитати своїм
   beforeNavigate(({ cancel, to, willUnload }) => {
     if (discarding || submitting || unsavedPhotos.length === 0) return
     cancel()
@@ -783,9 +783,9 @@
     void save(next)
   }
 
-  // Вийти без збереження: файли, що так і не потрапили в профіль, із
-  // хмари прибираємо — інакше там лишались би фото, яких ніде немає.
-  // keepalive — запит доживе, навіть коли сторінка вже пішла.
+  // * вийти без збереження: файли, що так і не потрапили в профіль, із
+  // * хмари прибираємо — інакше там лишались би фото, яких ніде немає.
+  // * keepalive — запит доживе, навіть коли сторінка вже пішла
   function discardAndLeave(): void {
     const next = leaveTo ?? '/dashboard'
     leaveTo = null

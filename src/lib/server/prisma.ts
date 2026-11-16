@@ -3,12 +3,8 @@ import { PrismaPg } from '@prisma/adapter-pg'
 import { DATABASE_URL } from '$env/static/private'
 import { dev } from '$app/environment'
 
-// ─── Singleton ───
-// В dev Vite перевыконує цей файл при кожному hot-reload — без singleton
-// це означало б десятки нових PrismaClient інстансів і вичерпання
-// connection pool у Postgres ("too many connections").
-//
-// На проді — звичайний експорт, бо файл виконується один раз при старті.
+// * у dev Vite перевиконує файл на кожен hot-reload: без синглтона зʼєднання
+// * з базою вичерпались би
 
 const adapter = new PrismaPg({ connectionString: DATABASE_URL })
 

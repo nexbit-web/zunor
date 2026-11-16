@@ -96,7 +96,7 @@
     fd.append('timestamp', String(sig.timestamp))
     fd.append('signature', sig.signature)
     fd.append('folder', sig.folder)
-    // Перелік форматів — частина підпису: надсилаємо дослівно.
+    // * перелік форматів — частина підпису: надсилаємо дослівно
     if (sig.allowedFormats) fd.append('allowed_formats', sig.allowedFormats)
 
     const upRes = await fetch(

@@ -1,12 +1,5 @@
-// Чат Telegram людини — з кешем у памʼяті процесу.
-//
-// Сповіщення ходять пачками: одна хвиля розсилки — це десятки NEW_JOB
-// одночасно, і кожне без кешу питало б базу «а чи є в майстра Telegram».
-// Відповідь міняється лише при підключенні й відключенні — обидва шляхи
-// скидають кеш тут же, тож TTL лише страховка від змін повз застосунок.
-//
-// Окремий легкий модуль (лише prisma): його кличе й видалення акаунта, а
-// тягнути туди grammY немає сенсу. Стеля обовʼязкова (AGENTS, 2.1).
+// * чат Telegram людини — з кешем у памʼяті: хвиля розсилки шле десятки
+// * сповіщень одночасно. Підключення й відключення скидають кеш; стеля є
 
 import { prisma } from '../prisma'
 import { serverless } from '../runtime'
@@ -29,11 +22,11 @@ export async function chatIdOf(userId: string): Promise<string | null> {
     where: { id: userId },
     select: { telegramChatId: true, banned: true },
   })
-  // Забанений і видалений (він теж banned) у Telegram нічого не отримують.
+  // * забанений і видалений (він теж banned) у Telegram нічого не отримують
   const chatId = user && !user.banned ? user.telegramChatId : null
 
   if (cache.size >= MAX_ENTRIES) {
-    // Найстаріший запис — перший у Map (порядок вставки).
+    // * найстаріший запис — перший у Map (порядок вставки)
     const oldest = cache.keys().next().value
     if (oldest !== undefined) cache.delete(oldest)
   }

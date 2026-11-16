@@ -23,7 +23,7 @@
   import { serviceLabel, resolveWhen } from '$lib/categories/cleaning/presets'
   import { jobTags } from '$lib/components/jobs/display'
   import { ORDER_STATUS_LABEL, formatMoney } from '$lib/orders/labels'
-  // Дата відповідає на питання «коли це востаннє рухалось».
+  // * дата відповідає на питання «коли це востаннє рухалось»
   import { formatRelative, formatFull, formatDay } from '$lib/utils/time'
   import type { OrderStatus } from '../../../generated/prisma/client'
 
@@ -73,9 +73,9 @@
     typeof service === 'string' ? serviceLabel(service) : 'Прибирання',
   )
 
-  // «today/tomorrow» у metadata — відносно дня СТВОРЕННЯ заявки, а
-  // замовлення зʼявляється пізніше, коли клієнт обрав майстра. Від дати
-  // замовлення «завтра» зсувалось би на день-два вперед.
+  // * «today/tomorrow» у metadata — відносно дня СТВОРЕННЯ заявки, а
+  // * замовлення зʼявляється пізніше, коли клієнт обрав майстра. Від дати
+  // * замовлення «завтра» зсувалось би на день-два вперед
   const base = $derived(order.jobCreatedAt ?? order.createdAt)
   const day = $derived.by(() => {
     const iso = resolveWhen(meta.when, base)

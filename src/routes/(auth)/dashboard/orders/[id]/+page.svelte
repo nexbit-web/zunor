@@ -34,7 +34,7 @@
 
   const details = $derived(describeJob((data.order as any).metadata))
 
-  // ─── Derived ───
+  // * Derived
   const order = $derived(data.order)
   const isClient = $derived(data.viewerId === order.clientId)
   const isMaster = $derived(data.viewerId === order.masterId)
@@ -75,9 +75,9 @@
     isMaster && order.status === 'COMPLETED' && !reviewFromMaster,
   )
 
-  // Номер для людей — номер заявки (Job.number; копія в замовленні, бо
-  // зв'язок fromJob рветься, коли заявку відкривають знову). Старі без
-  // нього — хвіст id, як було.
+  // * номер для людей — номер заявки (Job.number; копія в замовленні, бо
+  // * зв'язок fromJob рветься, коли заявку відкривають знову). Старі без
+  // * нього — хвіст id, як було
   const orderNumber = $derived(order.jobNumber ?? order.fromJob?.number ?? null)
   const orderShortId = $derived(
     orderNumber ? `№${orderNumber}` : `#${order.id.slice(-8).toUpperCase()}`,
@@ -113,7 +113,7 @@
     return 'bg-amber-500 ring-4 ring-amber-500/20'
   }
 
-  // ─── Actions ───
+  // * Actions
   let copyConfirm = $state(false)
   let copyTimeout: ReturnType<typeof setTimeout> | null = null
 

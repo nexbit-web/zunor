@@ -1,4 +1,4 @@
-// Спільний тип даних онбордингу (load віддає його обом компонентам).
+// * спільний тип даних онбордингу (load віддає його обом компонентам)
 import type { District } from '$lib/geo/districts'
 import type { Crew } from '$lib/masters/meta'
 

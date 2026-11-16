@@ -54,7 +54,7 @@
     value = slug
     onpick?.()
     open = false
-    // tick: поповер ще в DOM на момент виклику, фокус без нього не сяде.
+    // * tick: поповер ще в DOM на момент виклику, фокус без нього не сяде
     tick().then(() => triggerRef?.focus())
   }
 </script>

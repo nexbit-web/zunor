@@ -1,18 +1,18 @@
 <script lang="ts">
   import { safeJsonLd } from '$lib/utils/json-ld'
 
-  // Контракт пропсів (Data Interface Contract)
+  // * контракт пропсів (Data Interface Contract)
   interface Props {
     title: string
     description: string
     canonical: string
   }
 
-  // Svelte 5: Деструктуризація реактивних пропсів
+  // * Svelte 5: Деструктуризація реактивних пропсів
   let { title, description, canonical }: Props = $props()
 
-  // Оптимізація під архітектуру Svelte 5: Використовуємо руну $derived()
-  // Це створює замикання (closure), фіксує реактивні залежності та усуває помилку state_referenced_locally
+  // * оптимізація під архітектуру Svelte 5: Використовуємо руну $derived()
+  // * Це створює замикання (closure), фіксує реактивні залежності та усуває помилку state_referenced_locally
   const schemaData = $derived({
     '@context': 'https://schema.org',
     '@type': 'LocalBusiness',

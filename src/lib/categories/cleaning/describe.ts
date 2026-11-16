@@ -1,5 +1,5 @@
-// Перетворює Job.metadata у список характеристик для показу клієнту/майстру.
-// Адаптивно — поля залежать від послуги.
+// * перетворює Job.metadata у список характеристик для показу клієнту/майстру.
+// * Адаптивно — поля залежать від послуги
 
 import { pluralUk } from '$lib/utils/plural'
 import {
@@ -32,12 +32,8 @@ export interface JobDetail {
 }
 
 /**
- * Будує список характеристик заявки з metadata.
- * Повертає [] якщо metadata порожня або не з прибирання.
- *
- * createdAt — для «today»/«tomorrow»: вони відносні до дня створення
- * заявки (resolveWhen). Драфт у чаті ще не створений, тож його звідти
- * кличуть без дати й показують «Завтра» як є.
+ * Характеристики заявки з metadata; [] — порожньо або не прибирання.
+ * createdAt — для «today»/«tomorrow»: вони відносні до дня створення заявки.
  */
 export function describeJob(
   metadata: unknown,
@@ -48,7 +44,7 @@ export function describeJob(
   const m = metadata as Record<string, unknown>
   const details: JobDetail[] = []
 
-  // Помешкання
+  // * помешкання
   if (m.premise) {
     details.push({
       label: 'Помешкання',
@@ -57,7 +53,7 @@ export function describeJob(
     })
   }
 
-  // Послуга
+  // * послуга
   if (m.service) {
     details.push({
       label: 'Послуга',
@@ -66,7 +62,7 @@ export function describeJob(
     })
   }
 
-  // Кімнати
+  // * кімнати
   if (m.rooms) {
     details.push({
       label: 'Кімнат',
@@ -75,7 +71,7 @@ export function describeJob(
     })
   }
 
-  // Площа — зі слів клієнта, тому «≈»
+  // * площа — зі слів клієнта, тому «≈»
   if (typeof m.areaM2 === 'number' && m.areaM2 > 0) {
     details.push({
       label: 'Площа',
@@ -84,7 +80,7 @@ export function describeJob(
     })
   }
 
-  // Частота (регулярне)
+  // * частота (регулярне)
   if (m.frequency) {
     details.push({
       label: 'Періодичність',
@@ -93,7 +89,7 @@ export function describeJob(
     })
   }
 
-  // Сміття (після ремонту)
+  // * сміття (після ремонту)
   if (m.trash) {
     details.push({
       label: 'Сміття',
@@ -102,7 +98,7 @@ export function describeJob(
     })
   }
 
-  // Вікна
+  // * вікна
   if (m.windowsCount) {
     const count = Number(m.windowsCount)
     details.push({
@@ -126,7 +122,7 @@ export function describeJob(
     })
   }
 
-  // Поверх + ліфт
+  // * поверх + ліфт
   if (m.floor != null) {
     details.push({
       label: 'Поверх',
@@ -141,7 +137,7 @@ export function describeJob(
       icon: 'ArrowUpDown',
     })
   }
-  // Хімчистка: предмети — структурований список (назва + кількість)
+  // * хімчистка: предмети — структурований список (назва + кількість)
   if (Array.isArray(m.items) && m.items.length > 0) {
     const list = m.items.map((it: unknown) => {
       const item = it as Record<string, unknown>
@@ -157,7 +153,7 @@ export function describeJob(
     details.push({ label: 'Предмети', value: '', items: list })
   }
 
-  // Коли
+  // * коли
   if (m.when) {
     const day = createdAt ? resolveWhen(m.when, createdAt) : null
     details.push({

@@ -1,12 +1,5 @@
-// Дії адмінки. Кожна:
-//   — перевіряє права виконавця ще раз (гард сторінки — не єдиний замок);
-//   — міняє дані ЧЕРЕЗ правила застосунку, а не мимо них: бан відкликає
-//     сесії й у Redis, і в базі, скидає кеш стану, знімає хвилі розсилки;
-//     рішення модерації приходить майстрові сповіщенням (і в Telegram);
-//   — пише запис у журнал (AdminAction).
-//
-// Саме цього бракувало окремій CRM: вона писала в базу напряму, і бан
-// діяв із запізненням, а майстер не дізнавався про рішення модерації.
+// * дії адмінки. Кожна ще раз перевіряє права, міняє дані через правила
+// * застосунку (бан відкликає сесії, скидає кеш, знімає хвилі) і пише в журнал
 
 import { error, type RequestEvent } from '@sveltejs/kit'
 import { prisma } from '../prisma'
@@ -26,8 +19,6 @@ import type { Staff } from './guard'
 type Ev = Pick<RequestEvent, 'getClientAddress'>
 
 const DELETED_BAN_REASON = 'account-deleted'
-
-// ─── Модерація анкет ───
 
 export async function decideVerification(
   event: Ev,
@@ -71,13 +62,11 @@ export async function decideVerification(
     decision === 'reject' ? { reason: reason!.trim() } : undefined,
   )
 
-  // Після запису: сповіщення про рішення, якого в базі немає, гірше за
-  // запізніле.
+  // * після запису: сповіщення про рішення, якого в базі немає, гірше за
+  // * запізніле
   if (decision === 'approve') await Notify.verificationApproved(masterId)
   else await Notify.verificationRejected(masterId, reason!.trim())
 }
-
-// ─── Бан ───
 
 /** Хто кого може банити. Співробітника — лише ADMIN; останнього ADMIN — ніхто. */
 async function assertCanModerateUser(
@@ -119,8 +108,8 @@ export async function banUser(
   const target = await assertCanModerateUser(staff, targetId)
   if (target.banned) error(400, 'Уже заблоковано')
 
-  // Відкрита робота забаненого не має висіти: його заявки більше нікому
-  // не потрібні, а його пропозиції клієнт не повинен обирати.
+  // * відкрита робота забаненого не має висіти: його заявки більше нікому
+  // * не потрібні, а його пропозиції клієнт не повинен обирати
   const work = await openWorkOf(targetId)
   const now = new Date()
   await prisma.$transaction(async (tx) => {
@@ -129,14 +118,14 @@ export async function banUser(
       where: { id: targetId },
       data: { banned: true, banReason: text, isOnline: false },
     })
-    // Push на телефони — геть разом із сесіями: після розбану пристрій
-    // без сесії не мав би отримувати сповіщення цього акаунта.
+    // * Push на телефони — геть разом із сесіями: після розбану пристрій
+    // * без сесії не мав би отримувати сповіщення цього акаунта
     await tx.pushToken.deleteMany({ where: { userId: targetId } })
   })
   afterOpenWorkClosed(work)
 
-  // Бан має подіяти на першому ж запиті: сесії — і з Redis, і з бази
-  // (через better-auth цього процесу), стан акаунта — без кешу.
+  // * бан має подіяти на першому ж запиті: сесії — і з Redis, і з бази
+  // * (через better-auth цього процесу), стан акаунта — без кешу
   await revokeSessions(targetId).catch((err) =>
     console.error('[admin] revoke sessions failed:', err),
   )
@@ -157,7 +146,7 @@ export async function unbanUser(
 ): Promise<void> {
   const target = await assertCanModerateUser(staff, targetId)
   if (!target.banned) error(400, 'Не заблоковано')
-  // Видалений акаунт теж banned — але його вже знеособлено, повертати нічого.
+  // * видалений акаунт теж banned — але його вже знеособлено, повертати нічого
   if (target.banReason === DELETED_BAN_REASON) {
     error(400, 'Акаунт видалено власником — розблокувати не можна')
   }
@@ -169,8 +158,6 @@ export async function unbanUser(
   await invalidateAccount(targetId)
   await logAdmin(event, staff.id, 'user.unban', { type: 'user', id: targetId })
 }
-
-// ─── Скарги ───
 
 export async function resolveReport(
   event: Ev,
@@ -204,12 +191,10 @@ export async function resolveReport(
     { targetId: report.targetId, resolution: resolution.trim() || null },
   )
 
-  // Людині, що поскаржилась, — що її почули. Відхилену не сповіщаємо:
-  // «ми нічого не зробили» без пояснення лише дратує.
+  // * людині, що поскаржилась, — що її почули. Відхилену не сповіщаємо:
+  // * «ми нічого не зробили» без пояснення лише дратує
   if (status === 'RESOLVED') await Notify.reportResolved(report.reporterId)
 }
-
-// ─── Співробітники (лише ADMIN) ───
 
 /**
  * Призначає роль співробітника людині з акаунтом у Zunor (за поштою) або
@@ -233,7 +218,7 @@ export async function setStaffRole(
   if (target.banned) error(400, 'Акаунт заблоковано')
   if (role === null && !isStaff(target.role)) error(400, 'Це не співробітник')
   if (role !== null && target.role === 'MASTER') {
-    // Майстер-співробітник модерував би сам себе й конкурентів.
+    // * майстер-співробітник модерував би сам себе й конкурентів
     error(400, 'Майстер не може бути співробітником — потрібен окремий акаунт')
   }
   if (
@@ -246,7 +231,7 @@ export async function setStaffRole(
 
   const next = role ?? 'CLIENT'
   await prisma.user.update({ where: { id: target.id }, data: { role: next } })
-  // Знята роль діє на першому ж запиті: гард читає роль із кешу стану.
+  // * знята роль діє на першому ж запиті: гард читає роль із кешу стану
   await invalidateAccount(target.id)
 
   await logAdmin(event, staff.id, 'staff.role', { type: 'user', id: target.id }, {
@@ -265,8 +250,8 @@ export async function resetStaffTwoFactor(
   if (targetId === staff.id) error(400, 'Свій другий фактор скидає інший адміністратор')
 
   await prisma.staffTwoFactor.deleteMany({ where: { userId: targetId } })
-  // Живі сесії з уже введеним кодом теж закриваємо — інакше скидання
-  // нічого б не змінило до кінця робочого дня.
+  // * живі сесії з уже введеним кодом теж закриваємо — інакше скидання
+  // * нічого б не змінило до кінця робочого дня
   await revokeSessions(targetId).catch(() => {})
   await logAdmin(event, staff.id, 'staff.reset_2fa', { type: 'user', id: targetId })
 }

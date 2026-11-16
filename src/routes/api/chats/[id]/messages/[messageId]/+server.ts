@@ -14,12 +14,7 @@ import { background } from '$lib/server/background'
 const MAX_TEXT_LENGTH = 4000
 const EDIT_WINDOW_MS = 24 * 60 * 60 * 1000 // 24 години на редагування
 
-/**
- * PATCH /api/chats/[id]/messages/[messageId]
- * Body: { text: string }
- *
- * Редагування власного TEXT повідомлення в межах 24 годин.
- */
+/** PATCH — редагування власного текстового повідомлення в межах 24 годин. Body: { text } */
 export const PATCH: RequestHandler = async ({ params, request, locals }) => {
   const user = requireApiUser(locals)
 
@@ -47,14 +42,14 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
   if (message.deletedAt) throw error(400, 'Message deleted')
   if (message.type !== 'TEXT') throw error(400, 'Only text can be edited')
 
-  // Посилання те саме — картка лишається; інше чи зникло — стара йде
-  // геть разом із ним, а по нову сходимо після відповіді.
+  // * посилання те саме — картка лишається; інше чи зникло — стара йде
+  // * геть разом із ним, а по нову сходимо після відповіді
   const linkPreview = planLinkPreview(
     newText,
     toLinkPreview(message.linkPreview),
   )
 
-  // Вікно редагування
+  // * вікно редагування
   const age = Date.now() - message.createdAt.getTime()
   if (age > EDIT_WINDOW_MS) {
     throw error(400, 'Edit window expired')
@@ -70,7 +65,7 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
     },
   })
 
-  // Якщо це останнє повідомлення в чаті — оновити кеш
+  // * якщо це останнє повідомлення в чаті — оновити кеш
   await prisma.chat.updateMany({
     where: {
       id: params.id,
@@ -102,12 +97,7 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
   })
 }
 
-/**
- * DELETE /api/chats/[id]/messages/[messageId]
- *
- * Soft delete власного повідомлення. У UI замість тексту покажеться
- * "Повідомлення видалено".
- */
+/** DELETE — мʼяке видалення власного повідомлення. */
 export const DELETE: RequestHandler = async ({ params, locals }) => {
   const user = requireApiUser(locals)
 

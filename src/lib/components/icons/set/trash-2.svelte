@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Hugeicons Delete02. Згенеровано scripts/icons/build-icons.mjs — не правити.
+  // * Hugeicons Delete02. Згенеровано scripts/icons/build-icons.mjs — не правити
   import StrokeIcon, { type IconProps } from '../stroke-icon.svelte'
 
   let { size = 24, ...rest }: IconProps = $props()

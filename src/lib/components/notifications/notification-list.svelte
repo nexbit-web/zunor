@@ -27,7 +27,7 @@
     initialUnreadCount: number
   } = $props()
 
-  // Порожня стрічка каже, чого тут чекати, — у майстра й клієнта своє.
+  // * порожня стрічка каже, чого тут чекати, — у майстра й клієнта своє
   const master = $derived(page.data.role === 'MASTER')
 
   type Filter = 'all' | 'unread'
@@ -37,8 +37,8 @@
     unread: 'Непрочитані',
   }
 
-  // untrack: SSR дає лише ПОЧАТКОВИЙ знімок стрічки. Далі список живе сам —
-  // догрузка по курсору й позначки «прочитано» правлять його локально.
+  // * untrack: SSR дає лише ПОЧАТКОВИЙ знімок стрічки. Далі список живе сам —
+  // * догрузка по курсору й позначки «прочитано» правлять його локально
   let items = $state<Notification[]>(untrack(() => [...initialItems]))
   let nextCursor = $state<string | null>(untrack(() => initialNextCursor))
   let filter = $state<Filter>('all')
@@ -61,7 +61,7 @@
     browser ? notifications.unreadCount : initialUnreadCount,
   )
 
-  // ─── Завантаження ───
+  // * завантаження
 
   function query(cursor: string | null): string {
     const p = new URLSearchParams({ limit: '20' })
@@ -81,7 +81,7 @@
       const j = await res.json()
       items = j.items
       nextCursor = j.nextCursor
-      // Сервер щойно перерахував непрочитані — зводимо бейдж із істиною.
+      // * сервер щойно перерахував непрочитані — зводимо бейдж із істиною
       notifications.setUnreadCount(j.unreadCount)
     } catch {
       toast.error('Помилка зʼєднання')
@@ -97,7 +97,7 @@
       const res = await fetch(`/api/notifications?${query(nextCursor)}`)
       if (!res.ok) return
       const j = await res.json()
-      // Дублі можливі, якщо поки гортали, прилетіло нове зверху.
+      // * дублі можливі, якщо поки гортали, прилетіло нове зверху
       const seen = new Set(items.map((x) => x.id))
       items = [
         ...items,
@@ -105,7 +105,7 @@
       ]
       nextCursor = j.nextCursor
     } catch {
-      // Мовчки: сентинел лишиться на місці, наступний скрол спробує знову.
+      // * мовчки: сентинел лишиться на місці, наступний скрол спробує знову
     } finally {
       loadingMore = false
     }
@@ -164,18 +164,18 @@
     const prev = items
     items = items.filter((x) => x.id !== n.id)
 
-    // Успіх не тостимо: рядок зник на очах, це і є відповідь.
+    // * успіх не тостимо: рядок зник на очах, це і є відповідь
     if (!(await notifications.remove([n.id], n.isRead ? 0 : 1))) {
       items = prev
       toast.error('Не вдалося видалити сповіщення')
     }
   }
 
-  // ─── Видалення: підтвердження ───
+  // * видалення: підтвердження
 
   let deleteOpen = $state(false)
-  // Не скидаємо в null при закритті — інакше текст діалогу зникне
-  // прямо посеред анімації виходу.
+  // * не скидаємо в null при закритті — інакше текст діалогу зникне
+  // * прямо посеред анімації виходу
   let pendingDelete = $state<Notification | null>(null)
 
   function askRemove(n: Notification): void {
@@ -183,10 +183,10 @@
     deleteOpen = true
   }
 
-  // ─── Realtime ───
+  // * Realtime
 
   onMount(() => {
-    // Підписка спільна зі стором — своєї сторінка не тримає.
+    // * підписка спільна зі стором — своєї сторінка не тримає
     const offNotification = notifications.onNotification((n) => {
       items = [n, ...items.filter((x) => x.id !== n.id)]
     })

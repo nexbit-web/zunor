@@ -4,8 +4,8 @@ import type { PageServerLoad } from './$types'
 
 const PAGE = 100
 
-// Журнал дій — лише для ADMIN. Лише читання: змінити чи стерти запис з
-// адмінки неможливо. Сторінки — курсором за датою (?before=ISO).
+// * журнал дій — лише для ADMIN. Лише читання: змінити чи стерти запис з
+// * адмінки неможливо. Сторінки — курсором за датою (?before=ISO)
 export const load: PageServerLoad = async ({ locals, url }) => {
   await requireStaff(locals, 'ADMIN')
 

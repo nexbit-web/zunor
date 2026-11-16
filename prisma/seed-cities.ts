@@ -1,9 +1,4 @@
-// prisma/seed-cities.ts
-//
-// Запуск:
-//   npx tsx prisma/seed-cities.ts
-//
-// Idempotent: можна запускати кілька разів — використовує upsert.
+// * запуск: npx tsx prisma/seed-cities.ts — ідемпотентно (upsert)
 
 import { PrismaClient } from '../src/generated/prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
@@ -25,8 +20,8 @@ interface SeedCity {
   sortOrder: number
 }
 
-// Спочатку — спецзначення "all", далі столиця, далі міста-мільйонники,
-// потім інші обласні центри в алфавітному порядку, потім великі міста.
+// * спочатку — спецзначення "all", далі столиця, далі міста-мільйонники,
+// * потім інші обласні центри в алфавітному порядку, потім великі міста
 const CITIES: SeedCity[] = [
   { slug: 'odesa', name: 'Одеса', region: 'Одеська', sortOrder: 1 },
 ]

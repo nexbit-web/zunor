@@ -21,7 +21,7 @@
   let { class: className, ...restProps }: HTMLFormAttributes = $props()
   const id = $props.id()
 
-  // ─── State ───
+  // * State
   let name = $state('')
   let email = $state('')
   let password = $state('')
@@ -34,7 +34,7 @@
     password: false,
   })
 
-  // ─── Валідація (UX; авторитет — сервер) ───
+  // * валідація (UX; авторитет — сервер)
   const EMAIL_RE = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
   const isValidName = (n: string) =>
     n.trim().length >= 2 && n.trim().length <= 50
@@ -61,9 +61,9 @@
     e.preventDefault()
     if (loading || googleLoading) return
 
-    // Перевірка спрацьовує на натиск, а не на blur: кнопка лишається
-    // активною, і людина дізнається про проблему з конкретного поля,
-    // а не з сірого прямокутника, який мовчки не натискається.
+    // * перевірка спрацьовує на натиск, а не на blur: кнопка лишається
+    // * активною, і людина дізнається про проблему з конкретного поля,
+    // * а не з сірого прямокутника, який мовчки не натискається
     touched = { name: true, email: true, password: true }
     if (!formValid) return
 
@@ -73,9 +73,9 @@
     const normalizedEmail = email.trim().toLowerCase()
 
     try {
-      // Користувача ще НЕМАЄ: сервер лише шле код
-      // ($lib/server/registration). Акаунт зʼявиться з вірним кодом.
-      // Відповідь однакова, є акаунт із цією поштою чи ні.
+      // * користувача ще НЕМАЄ: сервер лише шле код
+      // * ($lib/server/registration). Акаунт зʼявиться з вірним кодом.
+      // * Відповідь однакова, є акаунт із цією поштою чи ні
       const { error: err } = await registration.start({
         name: name.trim(),
         email: normalizedEmail,
@@ -107,7 +107,7 @@
       await signIn.social({
         provider: 'google',
         callbackURL: '/dashboard',
-        // Куди Google поверне при відмові юзера або помилці провайдера.
+        // * куди Google поверне при відмові юзера або помилці провайдера
         errorCallbackURL: '/user/login?error=oauth',
       })
     } catch (err) {
@@ -115,7 +115,7 @@
       serverError = 'Не вдалося увійти через Google'
       googleLoading = false
     }
-    // Не скидаємо googleLoading у finally — при успіху йде редірект на Google.
+    // * не скидаємо googleLoading у finally — при успіху йде редірект на Google
   }
 </script>
 

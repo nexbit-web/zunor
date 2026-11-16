@@ -1,8 +1,5 @@
-// Кеш «спершу Redis, потім база» для даних, що міняються рідко й явно.
-//
-// Значення проходить через JSON, тож тип перевіряється (JsonSafe): Date із
-// Redis повернувся б рядком, і помилка вилізла б далеко від кешу. Дати —
-// рядком ISO.
+// * кеш «Redis → база» для даних, що міняються рідко й явно. Значення йде
+// * через JSON, тому тип обмежений JsonSafe: Date повернувся б рядком
 
 import { attempt, redisKey } from './redis'
 import { background } from './background'
@@ -18,19 +15,12 @@ export type JsonSafe<T> = T extends Primitive
       ? readonly JsonSafe<U>[]
       : { [K in keyof T]: JsonSafe<T[K]> }
 
-/**
- * Покоління ключів у памʼяті процесу. Читач, що полетів у базу ДО
- * forget(), не має права записати в кеш застарілу відповідь ПІСЛЯ нього.
- */
+// * покоління ключа: читач, що пішов у базу до forget(), не запише застаріле після нього
 const generations = new Map<string, number>()
 const MAX_GENERATIONS = 10_000
 
 export interface CacheOptions {
-  /**
-   * Кешувати «немає» (null). Так — для видаленого акаунта: інакше кожен
-   * запит з ним бив би в базу. Ні — там, де «немає» може стати «є» будь-
-   * якої миті (профіль за id, якого ще немає в базі).
-   */
+  /** Кешувати й «немає» (null). Вимкнути там, де «немає» будь-якої миті стає «є». */
   cacheNull?: boolean
 }
 
@@ -46,7 +36,7 @@ export async function cached<T>(
     try {
       return JSON.parse(hit) as T
     } catch {
-      // Битий запис — як промах: перечитаємо й перезапишемо.
+      // * битий запис — як промах
     }
   }
 
@@ -62,7 +52,7 @@ export async function cached<T>(
   return value
 }
 
-/** Забути ключі. Чекати обовʼязково: наступне читання має піти в базу. */
+// * чекати обовʼязково: наступне читання має піти в базу
 export async function forget(...keys: string[]): Promise<void> {
   if (keys.length === 0) return
   const full = keys.map((k) => redisKey(k))

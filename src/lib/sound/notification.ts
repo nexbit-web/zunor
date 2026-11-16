@@ -1,16 +1,6 @@
 import { browser } from '$app/environment'
 
-/**
- * Звукові сповіщення для чату через Web Audio API.
- *
- * НЕ використовуємо <audio> теги бо:
- *  • потрібно завантажувати mp3-файл (зайва мережа)
- *  • iOS Safari блокує autoplay
- *  • складно контролювати гучність і частоту
- *
- * Web Audio API синтезує звук на льоту, працює всюди, не потребує файлів.
- * Стиль звуку — короткий високий «дзень» як у Telegram/iOS.
- */
+/** Звук чату через Web Audio API: синтез на льоту, без файлів і блокування autoplay. */
 
 let audioContext: AudioContext | null = null
 let muted = false
@@ -52,7 +42,7 @@ export function playMessageSound() {
   const ctx = getCtx()
   if (!ctx) return
 
-  // Якщо контекст ще suspended — спроба разблокувати
+  // * якщо контекст ще suspended — спроба разблокувати
   if (ctx.state === 'suspended') {
     ctx.resume().catch(() => {})
     return
@@ -60,9 +50,9 @@ export function playMessageSound() {
 
   const now = ctx.currentTime
 
-  // Перший «дзень» (вищий)
+  // * перший «дзень» (вищий)
   playBeep(ctx, 880, now, 0.08, 0.18)
-  // Другий «дзень» (вищий, коротший — як ехо)
+  // * другий «дзень» (вищий, коротший — як ехо)
   playBeep(ctx, 1320, now + 0.09, 0.06, 0.14)
 }
 
@@ -79,7 +69,7 @@ export function playSuccessSound() {
   }
 
   const now = ctx.currentTime
-  // Дві ноти мажорної терції — приємне, гармонійне поєднання
+  // * дві ноти мажорної терції — приємне, гармонійне поєднання
   playTone(ctx, 1046.5, now, 0.18, 0.1) // C6
   playTone(ctx, 1318.5, now + 0.11, 0.34, 0.11) // E6 — вищий, з довшим хвостом
 }
@@ -95,19 +85,19 @@ function playTone(
   duration: number,
   peakGain: number,
 ) {
-  // Фільтр — зрізає різкі верхи, робить звук теплим
+  // * фільтр — зрізає різкі верхи, робить звук теплим
   const filter = ctx.createBiquadFilter()
   filter.type = 'lowpass'
   filter.frequency.value = 3500
   filter.connect(ctx.destination)
 
-  // Основний тон
+  // * основний тон
   const osc1 = ctx.createOscillator()
   const gain1 = ctx.createGain()
   osc1.type = 'sine'
   osc1.frequency.value = frequency
 
-  // Октава вище — делікатний блиск (тихо)
+  // * октава вище — делікатний блиск (тихо)
   const osc2 = ctx.createOscillator()
   const gain2 = ctx.createGain()
   osc2.type = 'sine'
@@ -160,7 +150,7 @@ function playBeep(
   osc.type = 'sine'
   osc.frequency.value = frequency
 
-  // ADSR-обвідна — швидкий attack, плавний release щоб не клацало
+  // * ADSR-обвідна — швидкий attack, плавний release щоб не клацало
   gain.gain.setValueAtTime(0, startTime)
   gain.gain.linearRampToValueAtTime(peakGain, startTime + 0.01)
   gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration)
@@ -171,8 +161,6 @@ function playBeep(
   osc.start(startTime)
   osc.stop(startTime + duration + 0.05)
 }
-
-// ─── Mute toggle (зберігається у localStorage) ───
 
 export function loadMutePreference() {
   if (!browser) return

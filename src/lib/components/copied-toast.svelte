@@ -12,8 +12,8 @@
 <script lang="ts" module>
   import type { Toast } from 'svelte-hot-french-toast'
 
-  // Псевдонім типу, а не interface: toast.custom вимагає пропсів виду
-  // Record<string, unknown>, а інтерфейс без індексу ним не вважається.
+  // * псевдонім типу, а не interface: toast.custom вимагає пропсів виду
+  // * Record<string, unknown>, а інтерфейс без індексу ним не вважається
   export type CopiedToastProps = {
     toast: Toast
     text: string

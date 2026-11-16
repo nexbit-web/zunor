@@ -1,10 +1,5 @@
-// Посилання в тексті повідомлення — клікабельні, як у будь-якому
-// месенджері: адресу, яку скинув майстер, не треба виділяти й копіювати.
-//
-// Розбиваємо текст на шматки, а розмітку малює компонент: {@html} у
-// проєкті заборонений (AGENTS.md, «Безпека»), і так текст лишається
-// текстом. Посиланням стає лише http(s) або www. — ніяких javascript: чи
-// data:, навіть якщо їх написали в повідомленні.
+// * посилання в тексті повідомлення: текст ріжемо на шматки, розмітку малює
+// * компонент — {@html} заборонений. Посиланням стає лише http(s) або www.
 
 export type TextPart =
   | { kind: 'text'; value: string }
@@ -23,7 +18,7 @@ export function linkify(text: string): TextPart[] {
     const start = match.index ?? 0
     let raw = match[0]
     const tail = raw.match(TRAILING)?.[0] ?? ''
-    // Дужку лишаємо, якщо в адресі є відкрита: …/wiki/Kyiv_(city)
+    // * дужку лишаємо, якщо в адресі є відкрита: …/wiki/Kyiv_(city)
     const keepParen =
       tail.startsWith(')') && raw.slice(0, -tail.length).includes('(')
     if (tail && !keepParen) raw = raw.slice(0, -tail.length)

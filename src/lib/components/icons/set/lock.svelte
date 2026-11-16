@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Hugeicons SquareLock02. Згенеровано scripts/icons/build-icons.mjs — не правити.
+  // * Hugeicons SquareLock02. Згенеровано scripts/icons/build-icons.mjs — не правити
   import StrokeIcon, { type IconProps } from '../stroke-icon.svelte'
 
   let { size = 24, ...rest }: IconProps = $props()

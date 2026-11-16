@@ -42,13 +42,13 @@
       title: 'Компанія',
       links: [
         { label: 'Про нас', href: '/about' },
-        // TODO: підставити справжню скриньку підтримки перед запуском
+        // * TODO: підставити справжню скриньку підтримки перед запуском
         { label: 'Написати нам', href: 'mailto:hello@zunor.com', external: true },
       ],
     },
   ]
 
-  // TODO: підставити справжні адреси перед запуском
+  // * TODO: підставити справжні адреси перед запуском
   const socials: { label: string; href: string; icon: BrandName }[] = [
     { label: 'Instagram', href: 'https://www.instagram.com/zunor_official/', icon: 'instagram' },
     { label: 'Telegram', href: 'https://t.me/zunor_official', icon: 'telegram' },

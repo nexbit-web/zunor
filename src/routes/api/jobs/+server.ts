@@ -15,25 +15,17 @@ import { findDuplicateJob } from '$lib/server/job-duplicates'
 import { acceptedJobPhotos, NO_JOB_PHOTOS } from '$lib/server/job-attachments'
 import type { RequestHandler } from './$types'
 
-// GET тут навмисно немає: пагіновану видачу заявок (і «мої», і стрічку
-// майстра) віддає /api/jobs/feed — саме в нього ходять master-feed.svelte
-// і client-jobs.svelte. Тутешній GET?role=client|master дублював ту саму
-// логіку без пагінації, з фронту не викликався і тихо розходився з feed.
+// * GET тут немає: пагіновану видачу заявок віддає /api/jobs/feed
 
 /**
- * POST /api/jobs — створити заявку на прибирання і запустити dispatch.
- *
- * Категорія фіксована (прибирання). metadata валідується конфігом категорії,
- * title генерується сервером із metadata (клієнтському title не довіряємо),
- * місто й район беруться з профілю клієнта. Бюджет не питаємо.
- *
- * Схожа відкрита заявка вже є — 409 `{ message, duplicate }` без створення;
- * повтор із `allowDuplicate: true` створює (`$lib/server/job-duplicates`).
+ * POST /api/jobs — створити заявку й запустити розсилку. metadata валідує
+ * категорія, title генерує сервер, місто й район — з профілю клієнта.
+ * Схожа відкрита заявка — 409 `{ message, duplicate }`; `allowDuplicate` створює.
  */
 export const POST: RequestHandler = async ({ request, locals }) => {
   const user = requireApiUser(locals)
 
-  // 10 заявок на годину на користувача — захист від спаму стрічки майстрів.
+  // * 10 заявок на годину на користувача — захист від спаму стрічки майстрів
   const rl = await limit(`job:create:${user.id}`, {
     points: 10,
     duration: 60 * 60_000,
@@ -43,26 +35,22 @@ export const POST: RequestHandler = async ({ request, locals }) => {
   const body = await request.json().catch(() => null)
   if (!body) throw error(400, 'Invalid JSON')
 
-  // Уся структура заявки валідується на сервері — клієнтській формі не довіряємо.
+  // * уся структура заявки валідується на сервері — клієнтській формі не довіряємо
   const validation = validateCleaningMetadata(body.metadata)
   if (!validation.ok || !validation.clean) {
     throw error(400, validation.error ?? 'Некоректні дані заявки')
   }
   const metadata = validation.clean
 
-  // AI-потік (Zunor) передає title/description; ручна форма — ні.
-  // Обидва санітизуються як недовірений ввід; фолбек — шаблонна генерація.
+  // * AI-потік (Zunor) передає title/description; ручна форма — ні.
+  // * Обидва санітизуються як недовірений ввід; фолбек — шаблонна генерація
   const title = sanitizeJobTitle(body.title) ?? generateTitle(metadata)
   const aiDescription = sanitizeJobDescription(body.description)
 
   const note =
     typeof body.note === 'string' ? body.note.trim().slice(0, 1000) : ''
 
-  // Приймаємо лише пари «посилання + publicId» з теки заявок цієї людини
-  // в НАШІЙ хмарі — те саме правило, що й при редагуванні
-  // ($lib/server/job-attachments). Сам префікс res.cloudinary.com пускав
-  // чужий акаунт Cloudinary: фото помешкання можна було підмінити вже в
-  // стрічці майстрів, а чужий publicId — підкласти під пізніше стирання.
+  // * фото — лише пари з теки заявок цієї людини в нашій хмарі (job-attachments)
   const { attachments, attachmentsPublicIds } = acceptedJobPhotos(
     body.attachments,
     body.attachmentsPublicIds,
@@ -70,8 +58,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     NO_JOB_PHOTOS,
   )
 
-  // Місто — з профілю клієнта. Без міста заявку не створюємо: інакше вона
-  // потрапила б не до тих майстрів. Гард у hooks.server.ts це теж не пускає.
+  // * місто — з профілю клієнта. Без міста заявку не створюємо: інакше вона
+  // * потрапила б не до тих майстрів. Гард у hooks.server.ts це теж не пускає
   const me = await prisma.user.findUnique({
     where: { id: user.id },
     select: { city: true, district: true },
@@ -79,8 +67,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
   const city = me?.city
   if (!city) throw error(400, 'Спочатку вкажіть місто у профілі')
 
-  // Дубль питаємо, доки людина не сказала «Все одно створити»
-  // ($lib/server/job-duplicates). Явний `true`, не будь-яке truthy.
+  // * дубль питаємо, доки людина не сказала «Все одно створити»
+  // * ($lib/server/job-duplicates). Явний `true`, не будь-яке truthy
   const allowDuplicate = body.allowDuplicate === true
 
   const [categoryExists, cityExists, allDistricts, duplicate] =
@@ -96,16 +84,16 @@ export const POST: RequestHandler = async ({ request, locals }) => {
         : findDuplicateJob(user.id, CATEGORY_SLUG, metadata),
     ])
 
-  // Район — теж із профілю, а не з тіла запиту: з нього рахуються кільця
-  // розсилки, і підставити чужий район означало б покликати не тих майстрів.
-  // Немає району (старий профіль) — заявка піде всім, як і раніше.
+  // * район — теж із профілю, а не з тіла запиту: з нього рахуються кільця
+  // * розсилки, і підставити чужий район означало б покликати не тих майстрів.
+  // * Немає району (старий профіль) — заявка піде всім, як і раніше
   const district =
     findDistrict(cityDistricts(allDistricts, city), me?.district)?.slug ?? null
   if (!categoryExists) throw error(500, 'Категорію прибирання не налаштовано')
   if (!cityExists) throw error(400, 'Місто не знайдено')
 
-  // Після решти перевірок: «Все одно створити» не має впертись у помилку,
-  // яку можна було показати одразу. Заявку не створено — розсилки немає.
+  // * після решти перевірок: «Все одно створити» не має впертись у помилку,
+  // * яку можна було показати одразу. Заявку не створено — розсилки немає
   if (duplicate) {
     return json(
       { message: 'Схожа заявка вже шукає майстра', duplicate },
@@ -124,8 +112,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
       title,
       description: aiDescription ?? (note || null),
       metadata: metadata as unknown as object,
-      // Обсяг рахує сервер із перевіреної metadata — від нього залежить,
-      // кого розсилка кличе першим (dispatch/core/score.ts, crewFit).
+      // * обсяг рахує сервер із перевіреної metadata — від нього залежить,
+      // * кого розсилка кличе першим (dispatch/core/score.ts, crewFit)
       effort: matchingFor(CATEGORY_SLUG).effort(metadata),
       currency: 'UAH',
       attachments,
@@ -142,8 +130,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     },
   })
 
-  // Перша хвиля — одразу, решта — таймерами від createdAt. Не кидає: збій
-  // хвилі повторюється, а заявка вже створена — відповідь клієнту не валимо.
+  // * перша хвиля — одразу, решта — таймерами від createdAt. Не кидає: збій
+  // * хвилі повторюється, а заявка вже створена — відповідь клієнту не валимо
   await startWaves(job)
 
   return json({ job }, { status: 201 })

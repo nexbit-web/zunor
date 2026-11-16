@@ -1,4 +1,4 @@
-// Валідація metadata на сервері. Поля перевіряються залежно від послуги.
+// * валідація metadata на сервері. Поля перевіряються залежно від послуги
 
 import {
   PREMISES,
@@ -84,11 +84,11 @@ export function validateCleaningMetadata(raw: unknown): ValidationResult {
     }
   }
 
-  // ─── Поправка асистента до обсягу — лише ±1 (див. categories/effort) ───
+  // * поправка асистента до обсягу — лише ±1 (див. categories/effort)
   const adjust = parseEffortAdjust(m.effortAdjust)
   if (adjust !== 0) clean.effortAdjust = adjust
 
-  // ─── Житлові послуги: кімнати + поверх + ліфт ───
+  // * житлові послуги: кімнати + поверх + ліфт
   if (needsRooms(service)) {
     const rooms = String(m.rooms ?? '')
     if (!ROOM_OPTIONS.some((o) => o.key === rooms)) {
@@ -96,14 +96,14 @@ export function validateCleaningMetadata(raw: unknown): ValidationResult {
     }
     clean.rooms = rooms
 
-    // Поверх — опціонально, але якщо є — число
+    // * поверх — опціонально, але якщо є — число
     if (m.floor != null && m.floor !== '') {
       const floor = Number(m.floor)
       if (Number.isInteger(floor) && floor >= 0 && floor <= 200) {
         clean.floor = floor
       }
     }
-    // Ліфт — опціонально
+    // * ліфт — опціонально
     const elev = String(m.hasElevator ?? '')
     if (ELEVATOR_OPTIONS.some((o) => o.key === elev)) {
       clean.hasElevator = elev
@@ -119,7 +119,7 @@ export function validateCleaningMetadata(raw: unknown): ValidationResult {
     }
   }
 
-  // ─── Після ремонту: сміття ───
+  // * після ремонту: сміття
   if (needsTrash(service)) {
     const trash = String(m.trash ?? '')
     if (!TRASH_OPTIONS.some((o) => o.key === trash)) {
@@ -128,7 +128,7 @@ export function validateCleaningMetadata(raw: unknown): ValidationResult {
     clean.trash = trash
   }
 
-  // ─── Регулярне: частота ───
+  // * регулярне: частота
   if (needsFrequency(service)) {
     const freq = String(m.frequency ?? '')
     if (!FREQUENCY_OPTIONS.some((o) => o.key === freq)) {
@@ -137,7 +137,7 @@ export function validateCleaningMetadata(raw: unknown): ValidationResult {
     clean.frequency = freq
   }
 
-  // ─── Вікна: кількість + поверх + балкон ───
+  // * вікна: кількість + поверх + балкон
   if (needsWindows(service)) {
     const count = Number(m.windowsCount)
     if (!Number.isInteger(count) || count < 1 || count > 200) {
@@ -145,9 +145,9 @@ export function validateCleaningMetadata(raw: unknown): ValidationResult {
     }
     clean.windowsCount = count
 
-    // Сторона миття — обовʼязкова: без неї майстер не може порахувати ціну.
-    // До цієї правки відповідь клієнта («ззовні») втрачалась у вільному
-    // тексті description і спотворювалась («доступ ззовні»).
+    // * сторона миття — обовʼязкова: без неї майстер не може порахувати ціну.
+    // * До цієї правки відповідь клієнта («ззовні») втрачалась у вільному
+    // * тексті description і спотворювалась («доступ ззовні»)
     const side = String(m.windowSide ?? '')
     if (!WINDOW_SIDE_OPTIONS.some((o) => o.key === side)) {
       return { ok: false, error: 'Уточніть, з якого боку мити вікна' }
@@ -160,10 +160,10 @@ export function validateCleaningMetadata(raw: unknown): ValidationResult {
         clean.floor = floor
       }
     }
-    // Балкон у вікон прибрано як хлам: тип скління вже задає сама послуга.
+    // * балкон у вікон прибрано як хлам: тип скління вже задає сама послуга
   }
 
-  // ─── Хімчистка: предмети ───
+  // * хімчистка: предмети
   if (needsItems(service)) {
     const rawItems = Array.isArray(m.items) ? m.items : []
     const items: CleaningItem[] = []
@@ -180,7 +180,7 @@ export function validateCleaningMetadata(raw: unknown): ValidationResult {
 
       const item: CleaningItem = { type, qty }
 
-      // варіант — якщо предмет його має
+      // * варіант — якщо предмет його має
       if (def.variants) {
         const variant = String(it.variant ?? '')
         if (def.variants.some((v) => v.key === variant)) {

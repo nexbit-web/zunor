@@ -1,10 +1,6 @@
-// Таймери хвиль у памʼяті процесу — швидкий шлях: база прокидається лише
-// тоді, коли є робота (крон щохвилини не давав би Neon заснути). Надійність
-// дає не таймер: номер відпрацьованої хвилі пишеться в заявку, і все, що
-// таймер не встиг, підбирає відновлення (recovery.ts).
-//
-// На Vercel (runtime.ts) таймер не доживає до хвилі — там хвилі й повтори
-// ставить черга QStash (queue.ts), а таймерів процесу немає взагалі.
+// * таймери хвиль у памʼяті процесу: база прокидається лише тоді, коли є
+// * робота. Надійність дає не таймер: номер хвилі пишеться в заявку, решту
+// * підбирає відновлення. На Vercel таймерів немає — там черга (queue.ts)
 
 import { DISPATCH_CONFIG } from './config'
 import { FINAL_WAVE, waveStartsAt } from './core/waves'
@@ -75,7 +71,7 @@ export async function runWave(jobId: string, attempt = 0): Promise<void> {
     }
     console.warn(`[dispatch] job=${jobId} wave failed, retry in ${delaySec}s`)
     if (serverless) {
-      // Повтор через чергу: QStash ще й сам повторить, якщо й він впаде.
+      // * повтор через чергу: QStash ще й сам повторить, якщо й він впаде
       const queued = await enqueueWave(jobId, delaySec).catch(() => false)
       if (!queued)
         console.error(`[dispatch] job=${jobId} retry not queued, left to recovery`)
@@ -101,7 +97,7 @@ function after(jobId: string, ms: number, run: () => Promise<void>): void {
     release(jobId)
     void run()
   }, ms)
-  // Незавершений таймер не тримає процес живим при зупинці сервера.
+  // * незавершений таймер не тримає процес живим при зупинці сервера
   timer.unref?.()
   watch.timers.add(timer)
 }

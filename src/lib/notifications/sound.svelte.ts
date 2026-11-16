@@ -1,9 +1,4 @@
-// Звук сповіщень на Web Audio API.
-//
-// Генеруємо тон кодом, а не тягнемо mp3: нема мережевого запиту,
-// нема 404 при відсутньому файлі, нема затримки на першому відтворенні.
-//
-// Client-only: усі звернення до AudioContext і localStorage під `browser`.
+// * звук сповіщень на Web Audio API: тон генерується кодом, без mp3 і запиту
 
 import { browser } from '$app/environment'
 
@@ -18,7 +13,7 @@ type AudioCtor = typeof AudioContext
 function getContext(): AudioContext | null {
   if (!browser) return null
 
-  // webkitAudioContext — Safari до 14.1.
+  // * webkitAudioContext — Safari до 14.1
   const Ctor =
     window.AudioContext ??
     (window as unknown as { webkitAudioContext?: AudioCtor }).webkitAudioContext
@@ -39,7 +34,7 @@ function playTone(ctx: AudioContext): void {
   const now = ctx.currentTime
 
   const master = ctx.createGain()
-  // Плавний старт: миттєвий стрибок гучності дає цифровий клац.
+  // * плавний старт: миттєвий стрибок гучності дає цифровий клац
   master.gain.setValueAtTime(0, now)
   master.gain.linearRampToValueAtTime(0.9, now + 0.02)
   master.gain.exponentialRampToValueAtTime(0.0001, now + 0.7)
@@ -51,7 +46,7 @@ function playTone(ctx: AudioContext): void {
   master.connect(filter)
   filter.connect(ctx.destination)
 
-  // [частота, зсув старту, пікова гучність, момент згасання]
+  // * [частота, зсув старту, пікова гучність, момент згасання]
   const voices: readonly [number, number, number, number][] = [
     [330, 0, 0.8, 0.5],
     [440, 0.08, 0.7, 0.55],
@@ -68,21 +63,21 @@ function playTone(ctx: AudioContext): void {
     const gain = ctx.createGain()
     gain.gain.setValueAtTime(0, start)
     gain.gain.linearRampToValueAtTime(peak, start + 0.02)
-    // exponentialRamp не приймає 0 — тому 0.001 замість нуля.
+    // * exponentialRamp не приймає 0 — тому 0.001 замість нуля
     gain.gain.exponentialRampToValueAtTime(0.001, now + fadeEnd)
 
     osc.connect(gain)
     gain.connect(master)
 
     osc.start(start)
-    // Із запасом після згасання: обрив на піку чути як клац.
+    // * із запасом після згасання: обрив на піку чути як клац
     osc.stop(now + 0.7)
   }
 }
 
 class NotificationSound {
-  // За замовчуванням увімкнено: людина очікує почути сповіщення,
-  // а вимкнути може одним кліком.
+  // * за замовчуванням увімкнено: людина очікує почути сповіщення,
+  // * а вимкнути може одним кліком
   enabled = $state(
     browser ? localStorage.getItem(STORAGE_KEY) !== 'false' : true,
   )
@@ -97,8 +92,8 @@ class NotificationSound {
 
     localStorage.setItem(STORAGE_KEY, String(value))
 
-    // Програємо одразу при вмиканні: людина чує, що саме обрала,
-    // і заразом клік розблоковує AudioContext на всю сесію.
+    // * програємо одразу при вмиканні: людина чує, що саме обрала,
+    // * і заразом клік розблоковує AudioContext на всю сесію
     if (value) this.play()
   }
 
@@ -108,8 +103,8 @@ class NotificationSound {
     const audio = getContext()
     if (!audio) return
 
-    // Контекст засинає, поки не було взаємодії зі сторінкою.
-    // resume() спрацює лише після кліку — це штатна поведінка браузера.
+    // * контекст засинає, поки не було взаємодії зі сторінкою.
+    // * resume() спрацює лише після кліку — це штатна поведінка браузера
     if (audio.state === 'suspended') void audio.resume().catch(() => {})
 
     try {

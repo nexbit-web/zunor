@@ -14,13 +14,13 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 
   const detail = await loadJobDetail(params.id, userId, { track: true })
   if (!detail) {
-    // Сесія є, а користувача вже немає (видалений) — на вхід, як і раніше.
+    // * сесія є, а користувача вже немає (видалений) — на вхід, як і раніше
     const exists = await prisma.user.count({ where: { id: userId } })
     if (!exists) throw redirect(302, '/user/login')
     throw error(404, 'Заявку не знайдено')
   }
 
-  // closedAt сторінці не потрібен — віддаємо те саме, що й раніше.
+  // * closedAt сторінці не потрібен — віддаємо те саме, що й раніше
   const { closedAt: _closedAt, ...job } = detail.job
 
   return {

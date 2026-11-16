@@ -8,14 +8,9 @@ const ALLOWED_KINDS = ['avatar', 'job', 'chat'] as const
 type Kind = (typeof ALLOWED_KINDS)[number]
 type ResourceType = 'image' | 'raw' | 'auto'
 
-// Підпис — це право покласти файл у НАШУ хмару. Доки він обмежував лише
-// теку, за ним приймалось будь-що: exe, html, архів на сотні мегабайт — у
-// наше сховище, за наш рахунок і під нашим іменем на res.cloudinary.com.
-// Тепер у підпис входить перелік дозволених форматів (`allowed_formats`):
-// Cloudinary сам відхиляє решту, а прибрати параметр клієнт не може —
-// підпис перестає сходитись.
-//
-// SVG немає навмисно: це документ зі скриптами, а не картинка.
+// * підпис — право покласти файл у нашу хмару, тому в нього входить перелік
+// * форматів (`allowed_formats`): решту відхиляє сам Cloudinary. SVG немає
+// * навмисно: це документ зі скриптами
 
 /** Фото: аватар, заявка, портфоліо, фото в чаті. */
 const IMAGE_FORMATS = [
@@ -56,13 +51,7 @@ function folderForKind(kind: Kind, userId: string): string {
   }
 }
 
-/**
- * Старі збірки застосунку поля `allowed_formats` не шлють — з обмеженим
- * підписом Cloudinary відповів би їм «Invalid Signature». Якщо такі збірки
- * ще в людей на телефонах, UPLOAD_SIGNATURE_LEGACY=1 повертає підпис без
- * обмеження форматів (як було), доки вони не оновляться. За замовчуванням
- * — обмежений.
- */
+/** Старі збірки застосунку `allowed_formats` не шлють: UPLOAD_SIGNATURE_LEGACY=1 дає підпис без обмеження. */
 const legacySignature = () => env.UPLOAD_SIGNATURE_LEGACY === '1'
 
 function tooMany(resetAt: number): Response {
@@ -76,9 +65,9 @@ function tooMany(resetAt: number): Response {
 }
 
 export const POST: RequestHandler = async ({ request, locals }) => {
-  // Не через requireApiUser: цей ендпоінт віддає 401 у власному форматі
-  // { error }, а гард кидає { message }. Джерело сесії єдине (locals),
-  // а тіло відповіді лишаємо як є, щоб не міняти контракт для клієнта.
+  // * не через requireApiUser: цей ендпоінт віддає 401 у власному форматі
+  // * { error }, а гард кидає { message }. Джерело сесії єдине (locals),
+  // * а тіло відповіді лишаємо як є, щоб не міняти контракт для клієнта
   const user = locals.user
   if (!user) return json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -87,8 +76,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     duration: 60_000,
   })
   if (!rl.success) return tooMany(rl.resetAt)
-  // Підпис діє годину й не одноразовий, тож хвилинного ліміту мало: друга
-  // стеля — на годину.
+  // * підпис діє годину й не одноразовий, тож хвилинного ліміту мало: друга
+  // * стеля — на годину
   const hourly = await limit(`upload-sign:h:${user.id}`, {
     points: 300,
     duration: 60 * 60_000,
@@ -116,8 +105,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
       ? body.resourceType
       : 'auto'
 
-  // Аватар і фото заявки — завжди картинка, хоч би що просив клієнт. Чат —
-  // фото або файл: формати — за тим, що саме вантажать.
+  // * аватар і фото заявки — завжди картинка, хоч би що просив клієнт. Чат —
+  // * фото або файл: формати — за тим, що саме вантажать
   const resourceType: ResourceType = kind === 'chat' ? requested : 'image'
   const allowedFormats = legacySignature()
     ? undefined
@@ -125,7 +114,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
       ? IMAGE_FORMATS
       : FILE_FORMATS
 
-  // Для аватара — фіксований public_id щоб нове фото перезаписувало старе
+  // * для аватара — фіксований public_id щоб нове фото перезаписувало старе
   const publicId =
     kind === 'avatar' ? `zunor/users/${user.id}/avatar/profile` : undefined
 

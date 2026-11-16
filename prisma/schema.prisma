@@ -59,7 +59,6 @@ model User {
   adminActions         AdminAction[]     @relation("AdminActions")
   pushTokens           PushToken[]
 
-  @@index([username])
   @@index([role, city])
 }
 
@@ -168,7 +167,6 @@ model JobView {
   job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
 
   @@unique([jobId, viewerId])
-  @@index([jobId])
 }
 
 model Proposal {
@@ -437,6 +435,9 @@ model Session {
   updatedAt      DateTime @updatedAt
   impersonatedBy String?
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // * відкликання й список сесій людини шукають за userId
+  @@index([userId])
 }
 
 model Account {
@@ -456,6 +457,8 @@ model Account {
   user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([providerId, accountId])
+  // * вхід паролем шукає способи входу людини за userId
+  @@index([userId])
 }
 
 model OtpCode {
@@ -565,8 +568,8 @@ model DispatchEvent {
   declined    Boolean   @default(false)
 
   @@unique([jobId, masterId])
-  @@index([jobId])
-  @@index([masterId])
+  // * стрічка майстра: його покликання за життя заявки, новіші першими
+  @@index([masterId, notifiedAt])
 }
 
 enum Role {

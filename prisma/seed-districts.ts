@@ -1,11 +1,6 @@
-// prisma/seed-districts.ts
-//
-// Запуск (після prisma/seed-cities.ts — район привʼязаний до міста):
-//   npx tsx prisma/seed-districts.ts
-//
-// Idempotent: можна запускати кілька разів — використовує upsert. Район,
-// прибраний із prisma/data/districts.ts, НЕ видаляється: на нього можуть
-// посилатися профілі й заявки. Вимкнути його — isActive = false у БД.
+// * запуск після seed-cities: npx tsx prisma/seed-districts.ts — ідемпотентно.
+// * Район, прибраний із data/districts.ts, не видаляється: на нього посилаються
+// * профілі й заявки. Вимкнути — isActive = false у базі
 
 import { PrismaClient } from '../src/generated/prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
@@ -23,8 +18,8 @@ const prisma = new PrismaClient({ adapter })
 async function seed() {
   console.log('🌱 Seeding districts…')
 
-  // Без міста зовнішній ключ не пустить район — кажемо про це по-людськи,
-  // а не стеком Postgres.
+  // * без міста зовнішній ключ не пустить район — кажемо про це по-людськи,
+  // * а не стеком Postgres
   const citySlugs = [...new Set(DISTRICTS.map((d) => d.citySlug))]
   const cities = await prisma.city.findMany({
     where: { slug: { in: citySlugs } },

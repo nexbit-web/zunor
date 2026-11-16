@@ -1,23 +1,7 @@
-// ЄДИНЕ правило «цей файл у Cloudinary — саме цієї людини».
-//
-// Клієнт вантажить файл у хмару сам (підпис — POST /api/upload/signature),
-// а серверу присилає лише посилання й publicId. Обидва — недовірений ввід:
-//
-//   • publicId потім іде в `cloudinary.uploader.destroy`. Доки його брали з
-//     тіла запиту без перевірки, чужий id (а id аватара вгадується:
-//     `zunor/users/<id>/avatar/profile`) можна було записати собі й наступним
-//     збереженням профілю стерти чужий файл;
-//   • посилання показується іншим людям. Чужа хмара Cloudinary, тип `fetch`
-//     чи трансформація з накладанням — це вміст, який ми не контролюємо:
-//     його можна підмінити після модерації й рахувати, хто дивився.
-//
-// Тому приймається лише пара «посилання + publicId», де publicId лежить у
-// теці цієї людини, а посилання — рівно те, що віддає завантаження
-// (`secure_url`): наша хмара, `/<тип>/upload/`, необовʼязкова версія,
-// publicId, розширення. Усе інше — не наше.
-//
-// Новий шлях, що пише посилання на файл у базу чи стирає файл із хмари, —
-// лише через ці функції (AGENTS, 2.2).
+// * єдине правило «цей файл у Cloudinary — саме цієї людини». Клієнт вантажить
+// * файл сам і присилає посилання й publicId — обидва недовірений ввід:
+// * publicId іде в destroy, посилання бачать інші. Приймаємо лише свою теку й
+// * рівно адресу завантаження з нашої хмари
 
 import { env } from '$env/dynamic/private'
 
@@ -32,10 +16,7 @@ const PUBLIC_ID_MAX = 300
 /** Те, з чого складаються наші publicId: тека, згенероване імʼя, розширення. */
 const PUBLIC_ID_RE = /^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*$/
 
-/**
- * publicId лежить у цій теці. `..` відкидається окремо: `startsWith` його
- * пропускає, а шлях `свій/../чужий/avatar/profile` веде вже не у свою теку.
- */
+// * `..` відкидаємо окремо: startsWith його пропускає, а шлях веде вже в чужу теку
 export function isPublicIdIn(publicId: unknown, folder: string): publicId is string {
   return (
     typeof publicId === 'string' &&
@@ -59,11 +40,7 @@ export interface OwnUploadOptions {
   image?: boolean
 }
 
-/**
- * Пара «посилання + publicId» — свіже завантаження в цю теку нашої хмари.
- * Посилання мусить бути рівно `secure_url` завантаження:
- *   https://res.cloudinary.com/<наша хмара>/<тип>/upload/[v123/]<publicId>[.ext]
- */
+/** Свіже завантаження в цю теку: res.cloudinary.com/<наша хмара>/<тип>/upload/[v123/]<publicId>[.ext] */
 export function isOwnUpload(
   url: unknown,
   publicId: unknown,
@@ -83,20 +60,17 @@ export function isOwnUpload(
   if (parsed.username || parsed.password || parsed.port) return false
   if (parsed.search || parsed.hash) return false
 
-  // res.cloudinary.com обслуговує всі акаунти світу: перший сегмент шляху —
-  // імʼя хмари, і воно мусить бути НАШИМ.
+  // * res.cloudinary.com обслуговує всі акаунти світу — імʼя хмари мусить бути нашим
   const cloud = env.CLOUDINARY_CLOUD_NAME
   const [, cloudName, resourceType, delivery, ...rest] = parsed.pathname.split('/')
   if (!cloud || cloudName !== cloud) return false
-  // `upload`, а не `fetch` чи `private`: fetch віддає чужу адресу крізь нашу
-  // хмару, тобто вміст знову не наш.
+  // * fetch віддає чужу адресу крізь нашу хмару
   if (delivery !== 'upload') return false
   if (options.image ? resourceType !== 'image' : !RESOURCE_TYPES.includes(resourceType)) {
     return false
   }
 
-  // Після `upload/` — лише версія й сам файл. Трансформацій тут немає:
-  // накладання (`l_fetch:…`) підтягує чужу картинку поверх нашої.
+  // * без трансформацій: накладання (`l_fetch:…`) тягне чужу картинку поверх нашої
   if (rest[0] && /^v\d+$/.test(rest[0])) rest.shift()
   const tail = rest.join('/')
   if (tail === publicId) return true
@@ -122,16 +96,8 @@ export interface StoredAvatar {
   avatarPublicId?: string | null
 }
 
-/**
- * Що записати в профіль як фото. Приймається:
- *   • порожнє — фото прибрали;
- *   • та сама пара, що вже лежить у профілі (вона пройшла перевірку, коли
- *     її додавали; старі профілі не ламаємо);
- *   • фото з Google-акаунта — без publicId;
- *   • свіже завантаження у свою теку аватара.
- * Усе інше лишає профіль як був: мовчки стерти людині фото через кривий
- * запит гірше, ніж проігнорувати зміну.
- */
+// * приймається: порожнє (фото прибрали), пара, що вже лежить у профілі, фото
+// * з Google-акаунта, свіже завантаження у свою теку. Решта лишає профіль як був
 export function acceptedAvatar(
   rawUrl: unknown,
   rawId: unknown,
@@ -161,11 +127,7 @@ export interface Photos {
   publicIds: string[]
 }
 
-/**
- * Фото з тіла запиту, що пройшли перевірку, у порядку з форми: пара, яка
- * вже була збережена, лишається як є; нова — лише своє завантаження в
- * `folder`. Решта мовчки відкидається. `max` — стеля на довжину масивів.
- */
+// * збережена пара лишається як є, нова — лише своє завантаження в `folder`
 export function acceptedPhotos(
   rawUrls: unknown,
   rawIds: unknown,

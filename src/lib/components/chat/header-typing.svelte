@@ -5,7 +5,7 @@
   поряд з ім'ям співрозмовника, як у Telegram Web.
 -->
 <script lang="ts">
-  // Без props — просто візуальний компонент
+  // * без props — просто візуальний компонент
 </script>
 
 <span class="header-typing">

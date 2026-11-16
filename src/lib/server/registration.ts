@@ -1,26 +1,9 @@
-// Реєстрація поштою — користувач зʼявляється в базі ЛИШЕ після коду з
-// листа. Стандартний /sign-up/email better-auth створює його одразу
-// (emailVerified: false), і в базі лишались люди з чужими чи вигаданими
-// адресами, а чужу пошту можна було «зайняти» своїм паролем. Тому той шлях
-// вимкнено (disabledPaths у auth.ts), а замість нього — цей плагін:
-//
-//   POST /registration/start  { name, email, password } — заявка: імʼя,
-//        хеш пароля (той самий password.hash, що в better-auth) і хеш коду
-//        лежать у таблиці verification; лист із кодом. Користувача немає.
-//   POST /registration/resend { email } — новий код для тієї ж заявки.
-//   POST /registration/verify { email, otp } — вірний код: користувач
-//        (emailVerified: true), вхід паролем і сесія — тими ж функціями,
-//        що в better-auth (internalAdapter, setSessionCookie).
-//
-// Відповіді start і resend однакові, є акаунт чи ні: інакше форма
-// реєстрації стала б оракулом «чия пошта зареєстрована».
-//
-// Лічильник спроб тут — на ОДИН код, і «Надіслати ще раз» починає його
-// заново. Скільки кодів і перевірок узагалі дістається одній пошті за
-// годину й добу, обмежує окремий замок — ./auth-guard.ts (він же рахує
-// спроби атомарно, тож паралельні запити не перевищують бюджет). Коди помилок
-// verify — ті самі, що в emailOTP (INVALID_OTP, OTP_EXPIRED,
-// TOO_MANY_ATTEMPTS): клієнти показують їх уже знайомими текстами.
+// * реєстрація поштою: користувач зʼявляється в базі лише після коду з листа.
+// * До того — заявка в таблиці verification (імʼя, хеш пароля, хеш коду):
+// *   POST /registration/start  { name, email, password }
+// *   POST /registration/resend { email }
+// *   POST /registration/verify { email, otp }
+// * Відповіді start і resend однакові, є акаунт чи ні — форма не оракул
 
 import { createHash, timingSafeEqual } from 'node:crypto'
 import type { BetterAuthPlugin } from 'better-auth'
@@ -34,10 +17,8 @@ const NAME_MAX = 50
 const OTP_LENGTH = 6
 /** Промахів на один код — як allowedAttempts в emailOTP. */
 const MAX_ATTEMPTS = 5
-/**
- * Заявка живе добу: код спливає за `otpExpiresIn`, а «Надіслати ще раз»
- * має працювати й після того — пароль людина вдруге не вводить.
- */
+// * заявка живе добу: код спливає раніше, але «Надіслати ще раз» має працювати
+// * й після того — пароль удруге не вводять
 const PENDING_TTL_MS = 24 * 60 * 60 * 1000
 
 interface Pending {
@@ -87,7 +68,7 @@ const invalidOtp = () =>
   new APIError('BAD_REQUEST', { code: 'INVALID_OTP', message: 'Invalid OTP' })
 
 export interface RegistrationOptions {
-  /** Лист із кодом. Не чекаємо: час відповіді не має видавати, чи є акаунт. */
+  /** Лист із кодом. Не чекаємо: час відповіді не видає, чи є акаунт. */
   sendCode: (data: { email: string; otp: string }) => void
   /** Скільки живе код, с. */
   otpExpiresIn: number
@@ -128,13 +109,11 @@ export const registration = (opts: RegistrationOptions) =>
             })
           }
 
-          // Хеш — завжди, і для зайнятої пошти: інакше за часом відповіді
-          // видно, що акаунт уже є.
+          // * хеш — завжди, і для зайнятої пошти: час відповіді не видає, що акаунт є
           const passwordHash = await ctx.context.password.hash(password)
 
-          // Підтверджений акаунт уже є — та сама відповідь, без листа.
-          // Непідтверджений (зі старого шляху) — заявка, як для нової: код
-          // доведе, що пошта людини, і verify передасть акаунт їй.
+          // * підтверджений акаунт — та сама відповідь, без листа; непідтверджений
+          // * (зі старого шляху) — заявка, як для нової пошти
           const existing =
             await ctx.context.internalAdapter.findUserByEmail(email)
           if (existing?.user.emailVerified) return ctx.json({ success: true })
@@ -172,7 +151,7 @@ export const registration = (opts: RegistrationOptions) =>
             await ctx.context.internalAdapter.findVerificationValue(identifier)
           const pending =
             row && row.expiresAt > new Date() ? parsePending(row.value) : null
-          // Заявки немає — та сама відповідь: нічого не розповідаємо.
+          // * заявки немає — та сама відповідь
           if (!pending) return ctx.json({ success: true })
 
           const otp = generateRandomString(OTP_LENGTH, '0-9')
@@ -228,8 +207,7 @@ export const registration = (opts: RegistrationOptions) =>
             throw invalidOtp()
           }
 
-          // Код вірний — заявку геть ДО створення: два однакові запити
-          // поспіль не створять двох користувачів.
+          // * заявку геть до створення: два однакові запити не створять двох користувачів
           await adapter.deleteVerificationByIdentifier(identifier)
 
           const existing = await adapter.findUserByEmail(email, {
@@ -237,16 +215,14 @@ export const registration = (opts: RegistrationOptions) =>
           })
           let user
           if (existing?.user.emailVerified) {
-            // Поки людина вводила код, акаунт зʼявився іншим шляхом
-            // (Google). Пароль чужого входу не чіпаємо — хай увійде.
+            // * поки вводили код, акаунт зʼявився іншим шляхом (Google) — чужий вхід не чіпаємо
             throw new APIError('UNPROCESSABLE_ENTITY', {
               code: 'USER_ALREADY_EXISTS',
               message: 'User already exists',
             })
           } else if (existing) {
-            // Непідтверджений акаунт зі старого шляху: код довів, що пошта
-            // цієї людини, — акаунт її, з її паролем. Чужі сесії (якщо
-            // були) — геть.
+            // * непідтверджений акаунт зі старого шляху: код довів, що пошта її — акаунт
+            // * її, з її паролем; чужі сесії геть
             const id = existing.user.id
             if (existing.accounts.some((a) => a.providerId === 'credential')) {
               await adapter.updatePassword(id, pending.passwordHash)
@@ -271,7 +247,7 @@ export const registration = (opts: RegistrationOptions) =>
                 emailVerified: true,
               })
             } catch {
-              // Унікальна пошта: хтось устиг тим самим листом раніше.
+              // * унікальна пошта: хтось устиг раніше
               throw new APIError('UNPROCESSABLE_ENTITY', {
                 code: 'USER_ALREADY_EXISTS',
                 message: 'User already exists',
@@ -285,10 +261,9 @@ export const registration = (opts: RegistrationOptions) =>
             })
           }
 
-          // Одразу всередині, як було з autoSignInAfterVerification: пароль
-          // удруге не вводити.
+          // * одразу сесія: пароль удруге не вводити
           const session = await adapter.createSession(user.id)
-          // Сесії немає — її відхилив замок у auth.ts (акаунт заблоковано).
+          // * сесії немає — її відхилив замок у auth.ts (акаунт заблоковано)
           if (!session) {
             throw new APIError('UNAUTHORIZED', {
               code: 'FAILED_TO_CREATE_SESSION',
@@ -304,7 +279,7 @@ export const registration = (opts: RegistrationOptions) =>
         },
       ),
     },
-    // Як у старого /sign-up/email і emailOTP.
+    // * як у emailOTP
     rateLimit: [
       {
         pathMatcher: (path: string) => path === '/registration/start',

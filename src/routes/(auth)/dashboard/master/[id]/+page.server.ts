@@ -1,21 +1,19 @@
 import { error, redirect } from '@sveltejs/kit'
 import { loadMasterPageById } from '$lib/server/master-page'
 import { getCategories, getCities } from '$lib/server/reference'
+import { nameBySlug } from '$lib/utils/slug-name'
 import type { PageServerLoad } from './$types'
 import type { FreelancerProfileData } from '$lib/components/profile/types'
 
-// Профіль майстра — лише в дашборді: клієнт відкриває його з пропозиції,
-// замовлення чи чату. Публічної сторінки немає — Zunor не каталог і не
-// вітрина для пошуковиків, майстра підбирає платформа (MANIFESTO, «Профілі»).
-// Дані — ті самі, що в GET /api/masters/[id] для застосунку
-// ($lib/server/master-page, з Redis): без телефону й пошти.
+// * профіль майстра — лише в дашборді, публічної сторінки немає. Дані ті
+// * самі, що в GET /api/masters/[id]: без телефону й пошти
 export const load: PageServerLoad = async ({ params, locals, setHeaders }) => {
-  // Як у профілі клієнта: гість не має дізнатись навіть те, що профіль
-  // існує, тому 404, а не редірект на логін.
+  // * як у профілі клієнта: гість не має дізнатись навіть те, що профіль
+  // * існує, тому 404, а не редірект на логін
   const viewer = locals.user
   if (!viewer) throw error(404, 'Майстра не знайдено')
 
-  // Свій профіль — на дашборді, там він із кнопкою «Редагувати».
+  // * свій профіль — на дашборді, там він із кнопкою «Редагувати»
   if (params.id === viewer.id) throw redirect(302, '/dashboard')
 
   const [page, cities, categories] = await Promise.all([
@@ -35,13 +33,13 @@ export const load: PageServerLoad = async ({ params, locals, setHeaders }) => {
     name: page.name ?? '',
     avatar: page.avatar ?? undefined,
     bio: page.bio ?? undefined,
-    city: cities.find((c) => c.slug === page.city)?.name ?? page.city ?? undefined,
+    city: nameBySlug(cities, page.city),
     createdAt: page.createdAt,
     verificationStatus: page.verificationStatus,
     verificationRejectReason: null,
-    // Порядок — як у профілі майстра.
+    // * порядок — як у профілі майстра
     categories: page.categories.map(
-      (slug) => categories.find((c) => c.slug === slug)?.name ?? slug,
+      (slug) => nameBySlug(categories, slug) ?? slug,
     ),
     categorySlugs: page.categories,
     portfolioImages: page.portfolioImages,

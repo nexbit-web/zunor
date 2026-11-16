@@ -1,15 +1,6 @@
-// Черга хвиль для Vercel (runtime.ts). Таймер setTimeout там не доживає до
-// хвилі 2 (функцію заморожують після відповіді), тож хвилі 2–4 ставить
-// Upstash QStash: відкладений HTTP-виклик POST /api/dispatch/wave у
-// потрібну хвилину. На Hostinger черга не потрібна — хвилі ведуть таймери
-// процесу (scheduler.ts).
-//
-// Надійність та сама, що з таймерами: номер відпрацьованої хвилі пишеться в
-// заявку, хвиля ідемпотентна, а загублене підбирає відновлення (крон). Тож
-// зайвий виклик нічого не ламає, а пропущений — підбереться.
-//
-// Без QSTASH_* на Vercel хвилі 2–4 прийдуть лише з кроном — тобто із
-// запізненням до доби. На Vercel черга обовʼязкова.
+// * черга хвиль для Vercel: setTimeout там не доживає до хвилі 2, тож хвилі
+// * 2–4 ставить QStash відкладеним викликом POST /api/dispatch/wave. Хвиля
+// * ідемпотентна: зайвий виклик нічого не ламає, пропущений підбере крон
 
 import { Client, Receiver } from '@upstash/qstash'
 import { env } from '$env/dynamic/private'
@@ -20,7 +11,7 @@ import type { DispatchResult, JobRef } from './types'
 const client = env.QSTASH_TOKEN
   ? new Client({
       token: env.QSTASH_TOKEN,
-      // Регіональна адреса QStash (EU / US) — з консолі Upstash.
+      // * регіональна адреса QStash (EU / US) — з консолі Upstash
       ...(env.QSTASH_URL ? { baseUrl: env.QSTASH_URL } : {}),
     })
   : null

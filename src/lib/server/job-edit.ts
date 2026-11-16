@@ -1,20 +1,7 @@
-// Редагування заявки клієнтом (PATCH /api/jobs/[id], сторінка
-// /dashboard/jobs/[id]/edit).
-//
-// Правила:
-//   — лише власник і лише відкрита заявка: з обраним майстром умови вже
-//     домовлені, міняти їх — справа чату, а не форми;
-//   — дані перевіряються тим самим валідатором, що й при створенні;
-//   — «сьогодні/завтра» записуються датою: у заявці вони рахуються від дня
-//     її СТВОРЕННЯ, і «завтра», обране сьогодні, означало б інший день;
-//   — назва перегенеровується, лише коли змінилось те, з чого вона
-//     складається (послуга, помешкання, кімнати…): назва від асистента
-//     краща за шаблонну, і зміна дати чи опису її не чіпає;
-//   — майстрам, що вже надіслали пропозицію, — сповіщення: ціна могла бути
-//     на старі умови. Поки попереднє не прочитане, нового не шлемо.
-//
-// Розсилка не перезапускається: покликані лишаються покликаними, а нові
-// умови стрічка майстрів (masterFeedScope) застосовує одразу.
+// * редагування заявки клієнтом: лише власник і лише відкрита. Валідатор той
+// * самий, що при створенні; «сьогодні/завтра» пишуться датою; назва
+// * перегенеровується, лише коли змінились її складові. Майстрам із пропозицією
+// * — сповіщення. Розсилка не перезапускається
 
 import { prisma } from './prisma'
 import { Notify } from './notifications'
@@ -54,7 +41,7 @@ export async function editJob(
       createdAt: true,
     },
   })
-  // Чужа — 404, а не 403: відповідь не підтверджує, що заявка існує.
+  // * чужа — 404, а не 403: відповідь не підтверджує, що заявка існує
   if (!job || job.clientId !== userId) {
     return { ok: false, status: 404, message: 'Заявку не знайдено' }
   }
@@ -66,7 +53,7 @@ export async function editJob(
     }
   }
 
-  // ─── Умови заявки ───
+  // * умови заявки
   const before = (job.metadata ?? {}) as Record<string, unknown>
   const raw =
     body.metadata && typeof body.metadata === 'object'
@@ -89,7 +76,7 @@ export async function editJob(
   const sameWork = generateTitle(before as unknown as CleaningMetadata) === generateTitle(metadata)
   const title = sameWork ? job.title : generateTitle(metadata)
 
-  // ─── Опис і фото ───
+  // * опис і фото
   const description =
     body.description === undefined ? job.description : sanitizeJobNote(body.description)
 
@@ -104,9 +91,9 @@ export async function editJob(
     photosBefore,
   )
 
-  // Відносне «завтра» в старій заявці й та сама дата з форми — не зміна:
-  // форма показує його датою, і «Зберегти» без правок не має нікого
-  // сповіщати.
+  // * відносне «завтра» в старій заявці й та сама дата з форми — не зміна:
+  // * форма показує його датою, і «Зберегти» без правок не має нікого
+  // * сповіщати
   const beforeDated = { ...before, when: resolveWhen(before.when, job.createdAt) ?? before.when }
   const changed =
     title !== job.title ||
@@ -116,8 +103,8 @@ export async function editJob(
       JSON.stringify(job.attachmentsPublicIds)
   if (!changed) return { ok: true, changed: false }
 
-  // Перевірка статусу — в самому записі: між читанням і записом клієнт
-  // міг обрати майстра в іншій вкладці.
+  // * перевірка статусу — в самому записі: між читанням і записом клієнт
+  // * міг обрати майстра в іншій вкладці
   const { count } = await prisma.job.updateMany({
     where: { id: job.id, status: 'OPEN' },
     data: {
@@ -134,8 +121,8 @@ export async function editJob(
     return { ok: false, status: 409, message: 'Заявку вже закрито — змінити її не можна' }
   }
 
-  // Прибрані з заявки фото — з хмари, лише ПІСЛЯ запису: збій тут лишає
-  // зайвий файл, а не заявку з битим фото.
+  // * прибрані з заявки фото — з хмари, лише ПІСЛЯ запису: збій тут лишає
+  // * зайвий файл, а не заявку з битим фото
   const gone = removedJobPhotos(photosBefore, photos, userId)
   if (gone.length) {
     await Promise.allSettled(gone.map((id) => cloudinary.uploader.destroy(id)))

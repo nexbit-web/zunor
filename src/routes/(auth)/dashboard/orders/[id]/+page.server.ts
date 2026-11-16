@@ -7,8 +7,8 @@ export const load: PageServerLoad = async ({ params, locals }) => {
   const sessionUser = requireUser(locals, `/dashboard/orders/${params.id}`)
   const userId = sessionUser.id
 
-  // Той самий завантажувач і та сама перевірка доступу, що в
-  // GET /api/orders/[id] (застосунок). Не сторона угоди — 404, не 403.
+  // * той самий завантажувач і та сама перевірка доступу, що в
+  // * GET /api/orders/[id] (застосунок). Не сторона угоди — 404, не 403
   const order = await loadOrderDetail(params.id, userId)
   if (!order) throw error(404, 'Замовлення не знайдено')
 

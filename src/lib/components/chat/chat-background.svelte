@@ -83,7 +83,7 @@
     const colors = ['--mesh-1', '--mesh-2', '--mesh-3', '--mesh-4'].map(
       (name) => parseHex(readVar(name)),
     )
-    // Тёмная тема переменных не задаёт — канвас там и так скрыт
+    // * Тёмная тема переменных не задаёт — канвас там и так скрыт
     if (colors.some((c) => Number.isNaN(c.r))) return
 
     const image = ctx.createImageData(MESH_SIZE, MESH_SIZE)
@@ -181,12 +181,12 @@
     try {
       img = await loadPattern()
     } catch (err) {
-      // Фон — украшение: не загрузился, остаётся чистый градиент
+      // * фон — украшение: не загрузился, остаётся чистый градиент
       console.error('[chat-background]', err)
       return
     }
 
-    // Пока грузилась картинка, компонент мог размонтироваться
+    // * пока грузилась картинка, компонент мог размонтироваться
     if (!patternCanvas || !root) return
 
     const scale = dpr()
@@ -201,7 +201,7 @@
     const pattern = ctx.createPattern(tile, 'repeat')
     if (!pattern) return
 
-    // Плитка уже в device-пикселях, поэтому заливаем без доп. трансформаций
+    // * плитка уже в device-пикселях, поэтому заливаем без доп. трансформаций
     ctx.clearRect(0, 0, width, height)
     ctx.fillStyle = pattern
     ctx.fillRect(0, 0, width, height)
@@ -213,11 +213,11 @@
     drawMesh()
     drawPattern()
 
-    // Размер меняется — плитку надо разложить заново на новую площадь
+    // * размер меняется — плитку надо разложить заново на новую площадь
     const resizeObserver = new ResizeObserver(() => drawPattern())
     resizeObserver.observe(root)
 
-    // Смена темы правит CSS-переменные, но реактивность Svelte не трогает
+    // * смена темы правит CSS-переменные, но реактивность Svelte не трогает
     const themeObserver = new MutationObserver(() => {
       drawMesh()
       drawPattern()

@@ -29,8 +29,8 @@
   let serverError = $state('')
   let cooldown = $state(RESEND_COOLDOWN_SEC)
 
-  // Таймер «надіслати ще раз». Чистимо при розмонтуванні, інакше
-  // інтервал переживе перехід і смикатиме state мертвого компонента.
+  // * таймер «надіслати ще раз». Чистимо при розмонтуванні, інакше
+  // * інтервал переживе перехід і смикатиме state мертвого компонента
   $effect(() => {
     if (cooldown <= 0) return
     const timer = setInterval(() => {
@@ -39,9 +39,9 @@
     return () => clearInterval(timer)
   })
 
-  // Кнопки «Підтвердити» немає навмисно: код має рівно шість цифр, тож
-  // момент «готово» система знає сама. Кнопка тут була б проханням
-  // підтвердити те, що людина вже й так дописала до кінця.
+  // * кнопки «Підтвердити» немає навмисно: код має рівно шість цифр, тож
+  // * момент «готово» система знає сама. Кнопка тут була б проханням
+  // * підтвердити те, що людина вже й так дописала до кінця
   async function verify() {
     if (verifying || code.length !== CODE_LENGTH) return
 
@@ -54,7 +54,7 @@
           : await emailOtp.verifyEmail({ email, otp: code })
 
       if (err) {
-        // TOO_MANY_ATTEMPTS: код згорів після 5 промахів, потрібен новий.
+        // * TOO_MANY_ATTEMPTS: код згорів після 5 промахів, потрібен новий
         if (err.code === 'TOO_MANY_ATTEMPTS') {
           serverError = 'Забагато спроб. Запросіть новий код.'
           code = ''
@@ -64,7 +64,7 @@
           code = ''
           cooldown = 0
         } else if (err.code === 'USER_ALREADY_EXISTS') {
-          // Поки вводили код, акаунт зʼявився іншим шляхом (Google).
+          // * поки вводили код, акаунт зʼявився іншим шляхом (Google)
           serverError = 'Акаунт із цією поштою вже є. Увійдіть.'
           code = ''
         } else if (err.status === 429) {
@@ -76,8 +76,8 @@
         return
       }
 
-      // autoSignInAfterVerification: сесія вже створена сервером.
-      // invalidateAll — щоб layout підхопив її до навігації.
+      // * autoSignInAfterVerification: сесія вже створена сервером.
+      // * invalidateAll — щоб layout підхопив її до навігації
       await invalidateAll()
       toast.success('Пошту підтверджено!', { duration: 2000 })
       await goto('/dashboard')

@@ -58,8 +58,8 @@
   const NAME_MAX = 80
   const BIO_MAX = 922
 
-  // Обовʼязкове — спершу, необовʼязкове — одним кроком наприкінці, який
-  // можна пропустити: до заявки людину не тримає ніщо зайве.
+  // * обовʼязкове — спершу, необовʼязкове — одним кроком наприкінці, який
+  // * можна пропустити: до заявки людину не тримає ніщо зайве
   const STEPS: readonly WizardStep[] = [
     {
       id: 'name',
@@ -86,11 +86,11 @@
     },
   ]
 
-  // untrack: початкові значення беремо один раз, інакше оновлення data
-  // затирало б те, що людина щойно набрала.
+  // * untrack: початкові значення беремо один раз, інакше оновлення data
+  // * затирало б те, що людина щойно набрала
   const initial = untrack(() => data.user)
 
-  // ─── Поля ───
+  // * поля
   let avatarUrl = $state(initial.avatar ?? '')
   let avatarPublicId = $state(initial.avatarPublicId ?? '')
   let avatarUploading = $state(false)
@@ -106,8 +106,8 @@
   let submitting = $state(false)
   let step = $state(0)
 
-  // Помилку показуємо лише після виходу з поля (або спроби піти далі):
-  // червоне під порожнім полем, якого ще не торкались, — це грубо.
+  // * помилку показуємо лише після виходу з поля (або спроби піти далі):
+  // * червоне під порожнім полем, якого ще не торкались, — це грубо
   let touched = $state({
     name: false,
     phone: false,
@@ -139,17 +139,17 @@
   function onPhoneInput(e: Event): void {
     const el = e.currentTarget as HTMLInputElement
     phoneDigits = normalizePhone(el.value)
-    // Примусова синхронізація DOM: без неї обрізаний зайвий символ
-    // лишається в полі.
+    // * примусова синхронізація DOM: без неї обрізаний зайвий символ
+    // * лишається в полі
     el.value = formatLocal(phoneDigits)
   }
 
-  // Перша цифра укр. мобільного коду: 3, 5, 6, 7, 9.
+  // * перша цифра укр. мобільного коду: 3, 5, 6, 7, 9
   const phoneValid = $derived(
     phoneDigits.length === 9 && /^[35679]/.test(phoneDigits),
   )
 
-  // ─── Похідні ───
+  // * похідні
   const nameTrim = $derived(name.trim())
   const nameValid = $derived(
     nameTrim.length >= NAME_MIN && nameTrim.length <= NAME_MAX,
@@ -175,7 +175,7 @@
   )
   const cityError = $derived(touched.city && !city ? 'Оберіть місто' : '')
 
-  // Район питаємо лише там, де для міста є райони в БД (зараз — Одеса).
+  // * район питаємо лише там, де для міста є райони в БД (зараз — Одеса)
   const districts = $derived(cityDistricts(data.districts, city))
   const needsDistrict = $derived(districts.length > 0)
   const districtValid = $derived(
@@ -211,10 +211,10 @@
     }
   }
 
-  // ─── Дії ───
+  // * дії
   function closeAndFocusTrigger(): void {
     cityOpen = false
-    // tick: поповер ще в DOM на момент виклику, фокус без нього не сяде.
+    // * tick: поповер ще в DOM на момент виклику, фокус без нього не сяде
     tick().then(() => cityTriggerRef?.focus())
   }
 
@@ -229,8 +229,8 @@
 
     submitting = true
     try {
-      // role та onboarded не шлемо: сервер виставляє їх сам після
-      // валідації. Клієнт не має права на ці поля.
+      // * role та onboarded не шлемо: сервер виставляє їх сам після
+      // * валідації. Клієнт не має права на ці поля
       const res = await fetch('/api/profile/client', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

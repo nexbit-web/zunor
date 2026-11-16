@@ -1,12 +1,6 @@
-// Серіалізація JSON-LD для вставки в <script type="application/ld+json">.
-//
-// Голий JSON.stringify не годиться: він не екранує `<`, тож ім'я майстра
-// виду `</script><script>…` розриває тег і виконується — stored XSS у
-// кожного, хто відкрив чужу публічну сторінку.
-//
-// U+2028/U+2029 екрануються з іншої причини: у JSON вони валідні, а в JS до
-// ES2019 були розривами рядка. Будуються через fromCharCode, бо в редакторі
-// невидимі — вставлені «як є», вони стали б пасткою для наступного.
+// * JSON-LD для <script type="application/ld+json">. Голий JSON.stringify не
+// * екранує `<`: імʼя з `</script>` розриває тег — stored XSS. U+2028/U+2029
+// * будуються через fromCharCode, бо в редакторі невидимі
 
 const LINE_SEP = String.fromCharCode(0x2028)
 const PARA_SEP = String.fromCharCode(0x2029)

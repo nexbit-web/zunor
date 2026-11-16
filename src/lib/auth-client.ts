@@ -5,13 +5,7 @@ import type { BetterAuthClientPlugin } from 'better-auth/client'
 /** Тіло помилки better-auth: код (`INVALID_OTP`…) і текст. */
 type AuthErrorBody = { code?: string; message?: string }
 
-/**
- * Реєстрація з кодом ДО створення користувача ($lib/server/registration):
- * start (імʼя, пошта, пароль → лист із кодом, користувача ще немає),
- * resend, verify (вірний код → користувач і сесія). Схем тіла сервер не
- * описує, тож дії — руками (як у застосунку, mobile/src/lib/auth.ts);
- * verify будить сесію, як вхід.
- */
+/** Реєстрація з кодом до створення користувача: start, resend, verify — verify будить сесію, як вхід. */
 const registrationClient = () =>
   ({
     id: 'registration',
@@ -42,13 +36,13 @@ const registrationClient = () =>
     }),
   }) satisfies BetterAuthClientPlugin
 
-// baseURL не задаємо: клієнт і сервер на одному origin, відносний шлях
-// сам потрапить на /api/auth/*. Явний URL тут ламає прев'ю-деплої.
+// * baseURL не задаємо: клієнт і сервер на одному origin, відносний шлях
+// * сам потрапить на /api/auth/*. Явний URL тут ламає прев'ю-деплої
 export const authClient = createAuthClient({
   plugins: [emailOTPClient(), registrationClient()],
 })
 
-// signUp.email більше немає (сервер його закрив) — реєстрація лише через
-// `registration`.
+// * signUp.email більше немає (сервер його закрив) — реєстрація лише через
+// * `registration`
 export const { signIn, signOut, useSession, emailOtp, registration } =
   authClient

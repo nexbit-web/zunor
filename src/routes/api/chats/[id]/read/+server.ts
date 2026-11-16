@@ -4,13 +4,7 @@ import { prisma } from '$lib/server/prisma'
 import { channels, events, safeTrigger } from '$lib/server/pusher'
 import type { RequestHandler } from './$types'
 
-/**
- * POST /api/chats/[id]/read — позначити чат як прочитаний.
- *
- * Принцип fail-tolerant: помилка Pusher НЕ ламає основний flow —
- * lastReadAt оновлюється у БД у будь-якому разі. Без real-time
- * пуша інший юзер побачить «прочитано» при наступному оновленні.
- */
+/** POST — позначити чат прочитаним. Збій Pusher не ламає запит: lastReadAt уже в базі. */
 export const POST: RequestHandler = async ({ params, locals }) => {
   const user = requireApiUser(locals)
 
@@ -44,12 +38,8 @@ export const POST: RequestHandler = async ({ params, locals }) => {
     }),
   ])
 
-  // Safe trigger — не падає при помилці Pusher. Усе одночасно:
-  //   message:read — відкритому чату (✓✓ у бульбашках);
-  //   chat:read    — особистим каналам учасників: списку чатів, де розмова
-  //                  закрита. Співрозмовник бачить ✓✓ біля свого
-  //                  останнього, а сам читач на інших пристроях — згаслий
-  //                  лічильник. Без цього список чекав перезавантаження.
+  // * одночасно: message:read — відкритому чату (✓✓ у бульбашках), chat:read —
+  // * особистим каналам учасників (список чатів і лічильник на інших пристроях)
   const read = { chatId, readerId: userId, lastReadAt: now.toISOString() }
   await Promise.all([
     safeTrigger(channels.chat(chatId), events.messageRead, read),

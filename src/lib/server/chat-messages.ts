@@ -1,9 +1,5 @@
-// Повідомлення чату: що читаємо з бази й як віддаємо в браузер.
-//
-// Одне місце на три шляхи — сторінку чату, догрузку старіших
-// (GET /api/chats/[id]/messages) і щойно надіслане (POST). Коли select і
-// перетворення жили в кожному окремо, нове поле доводилось дописувати
-// тричі, і рано чи пізно одна з копій відставала.
+// * повідомлення чату: select і перетворення — одне місце на три шляхи
+// * (сторінка, догрузка старіших, щойно надіслане)
 
 import type { Prisma } from '../../generated/prisma/client'
 import { groupReactions } from '$lib/components/chat/reactions'
@@ -69,8 +65,8 @@ export function toChatMessage(m: MessageRow): ChatMessage {
   return {
     id: m.id,
     type: m.type as MessageType,
-    // Видалене не віддаємо навіть у JSON: «видалено» має означати
-    // «немає», а не «сховано в інтерфейсі».
+    // * видалене не віддаємо навіть у JSON: «видалено» має означати
+    // * «немає», а не «сховано в інтерфейсі»
     text: deleted ? '' : m.text,
     attachmentUrl: deleted ? null : m.attachmentUrl,
     attachmentMimeType: m.attachmentMimeType,
@@ -85,8 +81,8 @@ export function toChatMessage(m: MessageRow): ChatMessage {
     replyTo: m.replyTo
       ? {
           id: m.replyTo.id,
-          // Те саме для цитати: видалене повідомлення не має жити далі в
-          // тексті відповіді на нього.
+          // * те саме для цитати: видалене повідомлення не має жити далі в
+          // * тексті відповіді на нього
           text: m.replyTo.deletedAt ? '' : m.replyTo.text,
           senderId: m.replyTo.senderId,
           type: m.replyTo.type as MessageType,

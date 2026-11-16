@@ -1,13 +1,5 @@
-// Єдине джерело правди про сповіщення.
-//
-// Раніше стан жив у трьох місцях: список у user-menu, лічильник
-// у сайдбарі, тост у окремому компоненті — кожен зі своєю підпискою
-// на той самий Pusher-канал. Тепер підписка одна, читачів багато.
-//
-// Лічильник тут — той самий, що світиться в сайдбарі, нижньому меню й
-// мобільному меню. Сторінка /dashboard/notifications НЕ тримає власного:
-// доки тримала, прочитане на сторінці не гасило бейдж у сайдбарі, бо це
-// були два різні числа, які ніхто не зводив.
+// * єдине джерело правди про сповіщення: підписка на канал одна, читачів
+// * багато. Лічильник — той самий у сайдбарі, меню й на сторінці сповіщень
 
 import { browser } from '$app/environment'
 import { getPusher } from '$lib/pusher-client'
@@ -25,13 +17,7 @@ class NotificationStore {
   #userId: string | null = null
   #listeners = new Set<Listener>()
 
-  /**
-   * Викликається один раз із <NotificationsListener /> у layout.
-   *
-   * Початковий лічильник тягнемо з сервера самі, а не отримуємо з даних
-   * лейауту: інакше кожна навігація коштувала б запиту до БД заради числа,
-   * яке далі однаково оновлює Pusher.
-   */
+  /** Кличеться раз із лейауту. Початковий лічильник тягне сам — навігація не коштує запиту. */
   connect(userId: string): void {
     if (!browser || this.#userId === userId) return
 
@@ -41,8 +27,8 @@ class NotificationStore {
 
     try {
       const pusher = getPusher()
-      // subscribe на вже відкритий канал безпечний: Pusher повертає
-      // той самий об'єкт, а bind різних подій з різних місць — штатно.
+      // * subscribe на вже відкритий канал безпечний: Pusher повертає
+      // * той самий об'єкт, а bind різних подій з різних місць — штатно
       this.#channel = pusher.subscribe(`private-user-${userId}`)
       this.#channel.bind('notification:new', this.#handleIncoming)
     } catch (err) {
@@ -51,13 +37,13 @@ class NotificationStore {
   }
 
   disconnect(): void {
-    // unbind, а не unsubscribe: на цьому ж каналі висить chatStore —
-    // відписка вбила б і його.
+    // * unbind, а не unsubscribe: на цьому ж каналі висить chatStore —
+    // * відписка вбила б і його
     this.#channel?.unbind('notification:new', this.#handleIncoming)
     this.#channel = null
     this.#userId = null
     this.unreadCount = 0
-    // #listeners не чіпаємо: їх знімають ті, хто ставив, у своєму onMount-cleanup.
+    // * #listeners не чіпаємо: їх знімають ті, хто ставив, у своєму onMount-cleanup
   }
 
   /**
@@ -68,15 +54,7 @@ class NotificationStore {
     this.unreadCount = Math.max(0, count)
   }
 
-  /**
-   * Підписка на нові сповіщення для тих, хто показує їх списком.
-   * Повертає функцію відписки — саме її треба повернути з onMount.
-   *
-   * Потрібна, бо власний `channel.bind` на сторінці означав би другу
-   * підписку на ту саму подію (і саме там був живий баг: сторінка слухала
-   * подію 'notification', а сервер шле 'notification:new', тож стрічка
-   * не оновлювалась наживо взагалі).
-   */
+  /** Підписка на нові сповіщення для списків; повертає відписку. Власний `channel.bind` був би другою підпискою. */
   onNotification(fn: Listener): () => void {
     this.#listeners.add(fn)
     return () => this.#listeners.delete(fn)
@@ -88,37 +66,33 @@ class NotificationStore {
       const res = await fetch('/api/me/badges')
       if (!res.ok) return
       const data = (await res.json()) as { notifications?: number }
-      // Поки запит летів, Pusher міг уже щось додати — беремо більше,
-      // щоб не загубити свіже сповіщення.
+      // * поки запит летів, Pusher міг уже щось додати — беремо більше,
+      // * щоб не загубити свіже сповіщення
       this.unreadCount = Math.max(this.unreadCount, data.notifications ?? 0)
     } catch {
-      // Мовчки: лічильник лишиться на нулі й підніметься з першою подією.
+      // * мовчки: лічильник лишиться на нулі й підніметься з першою подією
     }
   }
 
-  // Стрілка, щоб зберегти this і мати ту саму посилання для unbind.
+  // * стрілка, щоб зберегти this і мати ту саму посилання для unbind
   #handleIncoming = (data: { notification: Notification }): void => {
     const n = data.notification
 
-    // Чати мають власний бейдж — у лічильник сповіщень вони не йдуть.
+    // * чати мають власний бейдж — у лічильник сповіщень вони не йдуть
     if (isChatNotification(n)) return
 
     this.unreadCount++
     for (const fn of this.#listeners) fn(n)
 
     notificationSound.play()
-    // Перейшов за сповіщенням з острова — воно прочитане, як і в стрічці.
-    // Не вдалось — markRead сам поверне лічильник.
+    // * перейшов за сповіщенням з острова — воно прочитане, як і в стрічці.
+    // * Не вдалось — markRead сам поверне лічильник
     showNotificationToast(n, () => void this.markRead([n.id]))
   }
 
   /**
-   * Оптимістична позначка: UI оновлюється миттєво, запит іде фоном. Не пройшов
-   * — вертаємо як було й кажемо про це викликачу через `false`. Інтерфейс не
-   * має показувати те, чого на сервері не сталось.
-   *
-   * Тоста тут немає навмисно: стор не знає про UI-бібліотеку, а сторінка все
-   * одно вирішує це разом із відкотом власного списку.
+   * Оптимістична позначка: UI одразу, запит фоном. Не пройшов — відкат і
+   * `false`. Тоста тут немає: стор не знає про UI.
    */
   async markRead(ids: string[]): Promise<boolean> {
     if (ids.length === 0) return true

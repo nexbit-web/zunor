@@ -128,7 +128,7 @@
 
   const tags = $derived(jobTags(metadata, createdAt))
 
-  // Рядок факту: сіра іконка 18px, текст поруч.
+  // * рядок факту: сіра іконка 18px, текст поруч
   const ROW = 'flex min-w-0 items-start gap-2.5'
   const ICON = 'mt-0.5 size-[18px] shrink-0 text-muted-foreground'
 </script>

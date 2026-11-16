@@ -25,7 +25,7 @@
   let loading = $state<string | null>(null)
   let error = $state('')
 
-  // Dialog state
+  // * Dialog state
   let cancelOpen = $state(false)
   let cancelReason = $state('')
   let startOpen = $state(false)
@@ -62,7 +62,7 @@
       }
       await invalidateAll()
 
-      // Скасування — не привід святкувати, тому нейтральний тост.
+      // * скасування — не привід святкувати, тому нейтральний тост
       if (action === 'cancel') toast(DONE_MESSAGE.cancel)
       else toast.success(DONE_MESSAGE[action])
     } catch (err) {
@@ -123,7 +123,7 @@
     }
   }
 
-  // ─── Логіка кнопок ───
+  // * логіка кнопок
   const canStart = $derived(isMaster && status === 'CREATED')
   const canComplete = $derived(isMaster && status === 'IN_PROGRESS')
   const canCancel = $derived(

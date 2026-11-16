@@ -18,23 +18,17 @@ import { background } from '$lib/server/background'
 import { safeRedirectTarget } from '$lib/utils/redirect'
 import type { Actions, PageServerLoad } from './$types'
 
-// Вхід в адмінку — код другого фактора на кожну сесію (діє 12 годин).
-// Першого разу — налаштування: QR для застосунку-автентифікатора й
-// перший код, що підтверджує, що застосунок налаштовано правильно.
+// * вхід в адмінку — код другого фактора на кожну сесію (діє 12 годин).
+// * Першого разу — налаштування: QR для застосунку-автентифікатора й
+// * перший код, що підтверджує, що застосунок налаштовано правильно
 
 function target(raw: string | null): string {
   const path = safeRedirectTarget(raw)
   return path === '/admin' || path.startsWith('/admin/') ? path : '/admin'
 }
 
-/**
- * Перше налаштування другого фактора — лише одразу після входу. Доки QR
- * показувався будь-якій живій сесії співробітника, чужа сесія (вкрадена
- * cookie, не закритий чужий компʼютер) до того, як людина сама налаштувала
- * застосунок, привʼязувала адмінку до ЧУЖОГО телефона. Свіжий вхід означає,
- * що людина щойно довела пароль або Google-акаунт.
- * Межа — FRESH_SESSION_MS ($lib/server/guards).
- */
+// * перше налаштування другого фактора — лише одразу після входу: чужа жива
+// * сесія привʼязала б адмінку до чужого телефона
 const RELOGIN_TEXT =
   'Другий фактор налаштовується одразу після входу. Вийдіть з акаунта й увійдіть ще раз.'
 
@@ -48,12 +42,12 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   })
   if (row?.enabledAt) return { mode: 'verify' as const }
 
-  // Секрет і QR — лише свіжій сесії.
+  // * секрет і QR — лише свіжій сесії
   if (!isFreshSession(locals)) return { mode: 'relogin' as const }
 
-  // Налаштування ще не завершене — той самий секрет, поки людина не
-  // введе перший код (інакше кожне оновлення сторінки ламало б уже
-  // відсканований QR).
+  // * налаштування ще не завершене — той самий секрет, поки людина не
+  // * введе перший код (інакше кожне оновлення сторінки ламало б уже
+  // * відсканований QR)
   let secret: string
   if (row) {
     secret = decryptSecret(row.secret)
@@ -64,27 +58,27 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     })
   }
 
-  // Матриця, а не готова картинка: сторінка малює її сама (круглі точки,
-  // фірмові «очі», знак Zunor посередині). Під знак іде ~5% площі, тож
-  // корекція Q (25%) — із запасом; H зробила б код помітно густішим.
+  // * матриця, а не готова картинка: сторінка малює її сама (круглі точки,
+  // * фірмові «очі», знак Zunor посередині). Під знак іде ~5% площі, тож
+  // * корекція Q (25%) — із запасом; H зробила б код помітно густішим
   const { modules } = QRCode.create(otpauthUri(secret, locals.user?.email ?? 'staff'), {
     errorCorrectionLevel: 'Q',
   })
   return {
     mode: 'setup' as const,
     qr: { size: modules.size, cells: Array.from(modules.data, (b) => (b ? '1' : '0')).join('') },
-    // Для ручного введення, якщо камера не бере QR. Лише до першого коду.
+    // * для ручного введення, якщо камера не бере QR. Лише до першого коду
     secret: secret.replace(/(.{4})/g, '$1 ').trim(),
   }
 }
 
-// Дії іменовані: SvelteKit не дозволяє `default` поруч з іншими (`lock`).
+// * дії іменовані: SvelteKit не дозволяє `default` поруч з іншими (`lock`)
 export const actions: Actions = {
   verify: async (event) => {
     const { locals, request, url } = event
     const staff = await requireStaffNoStepUp(locals)
 
-    // Шість цифр перебором — мільйон варіантів; 5 спроб за 5 хвилин.
+    // * шість цифр перебором — мільйон варіантів; 5 спроб за 5 хвилин
     const rl = await limit(`admin-2fa:${staff.id}`, { points: 5, duration: 5 * 60_000 })
     if (!rl.success) {
       return fail(429, { error: 'Забагато спроб. Зачекайте кілька хвилин.' })
@@ -95,7 +89,7 @@ export const actions: Actions = {
     if (!row) return fail(400, { error: 'Оновіть сторінку й спробуйте ще раз.' })
 
     const firstTime = !row.enabledAt
-    // Перший код завершує налаштування — теж лише зі свіжою сесією.
+    // * перший код завершує налаштування — теж лише зі свіжою сесією
     if (firstTime && !isFreshSession(locals)) {
       return fail(403, { error: RELOGIN_TEXT })
     }
@@ -103,10 +97,7 @@ export const actions: Actions = {
     const step = verifyCode(decryptSecret(row.secret), code, row.lastStep)
     if (step === null) return fail(400, { error: 'Невірний код' })
 
-    // Умовний запис: код одноразовий. Два запити з тим самим кодом
-    // одночасно обидва проходили перевірку lastStep вище (читання й запис
-    // були окремо) — підглянутий код спрацьовував удруге. Тепер крок
-    // «займає» рівно один запит.
+    // * умовний запис: код одноразовий, крок «займає» рівно один запит
     const claimed = await prisma.staffTwoFactor.updateMany({
       where: {
         userId: staff.id,
@@ -120,9 +111,9 @@ export const actions: Actions = {
 
     await logAdmin(event, staff.id, firstTime ? 'auth.2fa_setup' : 'auth.2fa')
 
-    // Нова привʼязка автентифікатора — подія, про яку мають знати
-    // адміністратори: якщо це зробив не сам співробітник, його другий
-    // фактор скидають у «Співробітники».
+    // * нова привʼязка автентифікатора — подія, про яку мають знати
+    // * адміністратори: якщо це зробив не сам співробітник, його другий
+    // * фактор скидають у «Співробітники»
     if (firstTime) {
       background(
         alertAdminsAboutSetup(staff.id, locals.user?.email ?? ''),
@@ -130,12 +121,12 @@ export const actions: Actions = {
       )
     }
 
-    // Вхід під твоїм акаунтом, який робив не ти, — видно одразу.
+    // * вхід під твоїм акаунтом, який робив не ти, — видно одразу
     let ip = ''
     try {
       ip = event.getClientAddress()
     } catch {
-      // без адреси
+      // * без адреси
     }
     background(
       sendTelegramText(

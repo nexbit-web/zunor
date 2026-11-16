@@ -48,8 +48,8 @@
       y: 219,
       loopMarker: 'loop',
     },
-    // Генерується scripts/animations/zunor-mark-thinking.cjs. Поле зверху —
-    // під стрибок, з боків — під нахил і присідання.
+    // * генерується scripts/animations/zunor-mark-thinking.cjs. Поле зверху —
+    // * під стрибок, з боків — під нахил і присідання
     thinking: {
       src: '/animations/zunor-mark-thinking.json',
       width: 461,

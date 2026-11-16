@@ -26,18 +26,9 @@ import {
   refuseBannedSession,
 } from './auth-guard'
 
-/**
- * Звідки better-auth бере IP для своїх лімітів. За замовчуванням — лише
- * заголовок X-Forwarded-For з ОДНІЄЮ адресою: ланцюжок із кількох він не
- * довіряє, і всі такі запити ділять один лічильник на шлях. Якщо проксі
- * хостингу дописує адресу клієнта до заголовка, що прийшов (так роблять
- * майже всі), задай тут адреси самого проксі — тоді з ланцюжка береться
- * перша недовірена адреса справа, і підставлений клієнтом лівий елемент
- * нічого не дає. Значення — IP або CIDR через кому, напр. `10.0.0.0/8`.
- * AUTH_IP_HEADERS — якщо хостинг кладе адресу клієнта у власний заголовок
- * (`cf-connecting-ip`, `x-real-ip`): лише такий, який клієнт підробити не
- * може.
- */
+// * better-auth довіряє X-Forwarded-For лише з однією адресою. За проксі
+// * хостингу задай AUTH_TRUSTED_PROXIES (IP чи CIDR через кому) або
+// * AUTH_IP_HEADERS — заголовок, який клієнт підробити не може
 const list = (raw: string | undefined) =>
   (raw ?? '')
     .split(',')
@@ -54,55 +45,39 @@ export const auth = betterAuth({
 
   database: prismaAdapter(prisma, { provider: 'postgresql' }),
 
-  // Стандартна реєстрація створює користувача ДО підтвердження пошти —
-  // у базі лишались непідтверджені акаунти з чужими адресами. Реєстрація
-  // тепер — плагін registration (./registration.ts): користувач
-  // зʼявляється лише з кодом із листа. Старий шлях закритий для всіх
-  // (404), щоб його не можна було смикнути в обхід. Разом із ним закриті
-  // ще кілька шляхів better-auth, якими ми не користуємось, — список і
-  // причини в auth-guard.ts (DISABLED_AUTH_PATHS).
+  // * стандартна реєстрація створює користувача до підтвердження пошти — закрита
+  // * разом з іншими зайвими шляхами (auth-guard.ts)
   disabledPaths: [...DISABLED_AUTH_PATHS],
 
-  // Сесії й одноразові коди — у Redis (auth-storage.ts): перевірка сесії
-  // на кожен запит не будить Neon. Без Redis — undefined, усе в базі.
+  // * сесії й одноразові коди — у Redis: перевірка сесії не будить базу
   secondaryStorage: authStorage,
 
-  // ─── Google OAuth ───
   socialProviders: {
     google: {
       clientId: GOOGLE_CLIENT_ID,
       clientSecret: GOOGLE_CLIENT_SECRET,
-      // Явний вибір акаунта: інакше Google мовчки логінить останній
-      // використаний, і юзер не розуміє, під ким він зайшов.
+      // * інакше Google мовчки логінить останній акаунт, і людина не знає, під ким зайшла
       prompt: 'select_account',
     },
   },
 
-  // ─── Звʼязування акаунтів ───
-  // Сценарій: зареєструвався паролем → потім тисне «Продовжити з Google».
-  // Без linking це або дубль-акаунт, або помилка. Google верифікує email,
-  // тож довіряємо йому як джерелу правди про адресу.
-  //
-  // allowDifferentEmails: false — критично. З true чужий OAuth-акаунт
-  // можна причепити до існуючого юзера й зайти під ним.
+  // * зареєструвався паролем, потім «Продовжити з Google» — той самий акаунт.
+  // * allowDifferentEmails: false критично: інакше чужий OAuth чіпляється до акаунта
   account: {
     accountLinking: {
       enabled: true,
       trustedProviders: ['google'],
       allowDifferentEmails: false,
-      // Не перезаписуємо name/avatar, які юзер обрав на онбордингу.
+      // * імʼя й фото з онбордингу не перезаписуємо
       updateUserInfoOnLink: false,
     },
   },
 
-  // ─── Email + password ───
   emailAndPassword: {
     enabled: true,
-    // Завжди, і в dev теж: інакше боєвий флоу не тестується жодного разу
-    // до продакшену. Код у dev дублюється в консоль (див. otp-email.ts).
+    // * і в dev теж: бойовий флоу мусить тестуватись; код дублюється в консоль
     requireEmailVerification: true,
-    // Сесію при реєстрації не створюємо: спершу підтвердження пошти,
-    // сесія зʼявиться після верифікації (autoSignInAfterVerification).
+    // * сесія зʼявиться після підтвердження пошти
     autoSignIn: false,
     minPasswordLength: 8,
     maxPasswordLength: 128,
@@ -115,26 +90,18 @@ export const auth = betterAuth({
           resetUrl: url,
         })
       } catch (err) {
-        // Тихо: інакше відповідь «лист не пішов» видає, що email існує.
+        // * тихо: «лист не пішов» видало б, що пошта зареєстрована
         console.error('[auth] reset password email failed:', err)
       }
     },
     resetPasswordTokenExpiresIn: 3600,
-    // Новий пароль — усі сесії людини геть (Redis і база; better-auth кличе
-    // deleteUserSessions(userId), не deleteSessions — див. sessions.ts).
-    // Пароль скидають і тоді, коли його вкрали: без цього той, хто вже
-    // увійшов, лишався б в акаунті й після зміни. Діє на обидва шляхи —
-    // посилання сайту й код застосунку (emailOTP); застосунок одразу
-    // входить заново новим паролем. Кеш сесії в cookie (cookieCache, 5 хв)
-    // на чужому пристрої може протриматись до кінця свого строку.
+    // * новий пароль — усі сесії людини геть: пароль скидають і тоді, коли його вкрали
     revokeSessionsOnPasswordReset: true,
   },
 
-  // ─── Верифікація email ───
   emailVerification: {
     sendOnSignUp: true,
-    // Після введення коду одразу створюємо сесію — юзер не вводить
-    // пароль вдруге. Далі його підхоплює замок онбордингу.
+    // * після коду одразу сесія — пароль удруге не питаємо
     autoSignInAfterVerification: true,
     expiresIn: OTP_TTL_SECONDS,
   },
@@ -143,13 +110,11 @@ export const auth = betterAuth({
     expiresIn: 60 * 60 * 24 * 30,
     updateAge: 60 * 60 * 24,
     cookieCache: { enabled: true, maxAge: 60 * 5 },
-    // Сесія пишеться і в базу: Redis — копія, а не єдине місце. Сесії,
-    // створені до Redis, і промах у ньому читаються з бази.
+    // * Redis — копія, а не єдине місце: промах у ньому читається з бази
     storeSessionInDatabase: true,
   },
 
-  // Поле користувача змінив сам better-auth (підтвердження пошти тощо) —
-  // guard має перечитати стан акаунта, а не тримати кеш.
+  // * поле змінив сам better-auth (підтвердження пошти) — кеш стану акаунта геть
   databaseHooks: {
     user: {
       update: {
@@ -158,8 +123,7 @@ export const auth = betterAuth({
         },
       },
     },
-    // Заблокований (і видалений — це теж бан) нової сесії не отримує —
-    // auth-guard.ts, refuseBannedSession.
+    // * заблокований (видалений — теж бан) нової сесії не отримує
     session: { create: { before: refuseBannedSession } },
   },
 
@@ -177,15 +141,12 @@ export const auth = betterAuth({
       : {}),
   },
 
-  // ─── Rate limiting ───
-  // Вмикаємо і в dev: ліміти — частина флоу, їх треба бачити при розробці,
-  // інакше 429 вперше прилітає від живого користувача.
+  // * і в dev теж: інакше 429 уперше прилітає живій людині
   rateLimit: {
     enabled: true,
     window: 60,
     max: 60,
-    // Це ліміти за IP. Коди з листа додатково лімітуються за самою поштою
-    // (auth-guard.ts): за IP їх обходить будь-хто з пулом проксі.
+    // * це ліміти за IP; коди з листа лімітуються ще й за поштою (auth-guard.ts)
     customRules: {
       '/sign-in/email': { window: 60, max: 5 },
       '/email-otp/send-verification-otp': { window: 60, max: 2 },
@@ -193,21 +154,16 @@ export const auth = betterAuth({
       '/request-password-reset': { window: 3600, max: 5 },
       '/get-session': false, // дзвониться на кожен перехід, лімітувати нічого
     },
-    // memory тримає ліміти в одному процесі (Hostinger). На Vercel копій
-    // функції кілька — там ліміти в Redis, поруч із сесіями
-    // (secondaryStorage), інакше перебір пароля ділився б між копіями.
+    // * memory — один процес; на Vercel копій кілька, там ліміти в Redis
     storage: serverless && authStorage ? 'secondary-storage' : 'memory',
   },
 
   trustedOrigins: [
     BETTER_AUTH_URL,
-    // Мобільний застосунок (../mobile): плагін expo() бере походження
-    // запиту з його заголовка, і це має бути наша схема.
+    // * схема мобільного застосунку: плагін expo() бере походження з його заголовка
     'zunor://',
     ...(dev ? ['http://localhost:5173', 'http://localhost:4173'] : []),
-    // Застосунок у Expo Go має адресу exp://<IP>:8081. Лише в dev і на
-    // ТЕСТОВОМУ деплої з ZUNOR_EXPO_GO=1 (Vercel, щоб ганяти застосунок
-    // проти нього): на бойовому exp:// пустив би будь-який проєкт з Expo Go.
+    // * Expo Go — лише dev і тестовий деплой: на бойовому exp:// пустив би будь-який проєкт
     ...(dev || env.ZUNOR_EXPO_GO === '1'
       ? ['exp://', 'exp://**', 'exp://192.168.*.*:*/**']
       : []),
@@ -216,10 +172,7 @@ export const auth = betterAuth({
   user: {
     fields: { image: 'avatar' },
     additionalFields: {
-      // input: false — ЖОДНЕ з цих полів не приймається з тіла запиту.
-      // Було input: true на role, а в enum є ADMIN/MANAGER/MODERATOR:
-      // будь-хто міг зареєструватись адміном. Роль виставляє сервер
-      // на онбордингу, banned/onboarded — теж тільки сервер.
+      // * input: false — з тіла запиту не приймається жодне: роль і бан ставить лише сервер
       role: { type: 'string', defaultValue: 'CLIENT', input: false },
       city: { type: 'string', required: false, input: false },
       onboarded: { type: 'boolean', defaultValue: false, input: false },
@@ -229,42 +182,38 @@ export const auth = betterAuth({
 
   plugins: [
     emailOTP({
-      // Верифікація email іде кодом, а не посиланням.
+      // * підтвердження пошти — кодом, а не посиланням
       overrideDefaultEmailVerification: true,
       otpLength: 6,
       expiresIn: OTP_TTL_SECONDS,
-      // Після 5 невдалих спроб код згорає — брутфорс 6 цифр неможливий
-      // навіть якщо хтось обійде rate limit.
+      // * після 5 невдалих спроб код згорає
       allowedAttempts: 5,
-      // У БД лежить хеш: дамп таблиці verification не дає живих кодів.
+      // * у базі хеш: дамп таблиці не дає живих кодів
       storeOTP: 'hashed',
-      // Ми не використовуємо OTP як спосіб входу — тільки як підтвердження.
-      // Без цього /sign-in/email-otp мовчки створює акаунти в обхід реєстрації.
+      // * код — лише підтвердження, не спосіб входу: інакше /sign-in/email-otp створював би акаунти
       disableSignUp: true,
 
       sendVerificationOTP: async ({ email, otp, type }) => {
-        // Не await: час відповіді не повинен залежати від SMTP,
-        // інакше різниця в затримці видає, існує адреса чи ні. Але й не
-        // голий void: на Vercel функцію заморозили б до відправки листа.
+        // * не await: затримка SMTP видавала б, чи існує адреса. І не голий void —
+        // * на Vercel функцію заморозили б до відправки
         background(sendOtpEmail({ email, otp, type }), 'otp email')
       },
     }),
-    // Реєстрація з кодом ДО створення користувача (див. disabledPaths).
+    // * реєстрація з кодом до створення користувача
     registration({
       otpExpiresIn: OTP_TTL_SECONDS,
-      // Той самий лист «Код підтвердження», що й підтвердження пошти.
+      // * той самий лист, що й для підтвердження пошти
       sendCode: ({ email, otp }) =>
         background(
           sendOtpEmail({ email, otp, type: 'email-verification' }),
           'registration otp',
         ),
     }),
-    // Ліміт на пошту для всіх шляхів, що шлють чи перевіряють код.
+    // * ліміт на пошту для шляхів, що шлють чи перевіряють код
     authGuard(),
-    // Вхід із мобільного застосунку: у нативного запиту немає Origin —
-    // плагін бере його з заголовка expo-origin (перевіряється trustedOrigins).
+    // * у нативного запиту немає Origin — плагін бере його з заголовка expo-origin
     expo(),
-    // sveltekitCookies має бути ОСТАННІМ у масиві.
+    // * має бути останнім у масиві
     sveltekitCookies(getRequestEvent),
   ],
 })

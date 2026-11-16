@@ -13,18 +13,10 @@ import type { RequestHandler } from './$types'
 const DAY_MS = 24 * 60 * 60_000
 
 /**
- * POST /api/reports — поскаржитися на людину.
- *
+ * POST /api/reports — скарга на людину.
  * Тіло: { targetId, reason, text?, orderId? | chatId? | jobId? }.
- *
- * Контекст (замовлення, чат, заявка) необовʼязковий, але якщо названий —
- * скаржник і той, на кого скарга, мусять бути в ньому обидва: інакше
- * чужий id перетворював би скаргу на спосіб дізнатись, хто з ким працює
- * (відповідь «404» чи «ок»). Без контексту — скарга з профілю.
- *
- * Повтор тієї самої скарги за добу нового запису не створює, але
- * відповідає так само: людині не треба знати, що вона вже скаржилась.
- * Модератора CRM кличе подія report:new — у ній лише id і причина.
+ * Названий контекст мусить містити обох: інакше скарга показувала б, хто з
+ * ким працює. Повтор за добу запису не створює, але відповідає так само.
  */
 export const POST: RequestHandler = async ({ request, locals }) => {
   const user = requireApiUser(locals)
@@ -68,7 +60,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
   })
   if (!target) error(404, 'Не знайдено')
 
-  // ─── Контекст: обидва мусять бути в ньому ───
+  // * контекст: обидва мусять бути в ньому
   if (orderId) {
     const order = await prisma.order.findFirst({
       where: {
@@ -91,8 +83,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
   }
 
   if (jobId) {
-    // Майстер скаржиться на заявку (її автора) або клієнт — на майстра,
-    // що відгукнувся на його заявку.
+    // * майстер скаржиться на заявку (її автора) або клієнт — на майстра,
+    // * що відгукнувся на його заявку
     const job = await prisma.job.findFirst({
       where: {
         id: jobId,
@@ -106,7 +98,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     if (!job) error(404, 'Не знайдено')
   }
 
-  // ─── Повтор за добу — без нового запису ───
+  // * повтор за добу — без нового запису
   const recent = await prisma.report.findFirst({
     where: {
       reporterId: user.id,
@@ -131,7 +123,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     select: { id: true },
   })
 
-  // Після запису: подія без бази — це скарга, якої модератор не знайде.
+  // * після запису: подія без бази — це скарга, якої модератор не знайде
   await safeTrigger(channels.admin, events.reportNew, {
     reportId: report.id,
     reason,

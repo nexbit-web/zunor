@@ -11,18 +11,13 @@ import type { RequestHandler } from './$types'
 const PAGE_SIZE = 20
 
 /**
- * GET /api/jobs/feed?view=mine|feed&cursor=...&categories=a,b&cities=x,y&minPrice=&maxPrice=
- *
- * Універсальний endpoint для пагінованої видачі заявок.
- * Повертає { jobs, nextCursor }.
- *
- * `limit` (лише для view=mine, 1…PAGE_SIZE) — менша сторінка: бічна
- * панель застосунку показує кілька останніх заявок, а решту тягне вже
- * звичайними сторінками, коли людина натисне «Усі».
+ * GET /api/jobs/feed?view=mine|feed&cursor=&categories=&cities=&minPrice=&maxPrice=
+ * Пагінована видача заявок: { jobs, nextCursor }. `limit` — лише для
+ * view=mine, менша сторінка для бічної панелі застосунку.
  */
 export const GET: RequestHandler = async ({ locals, url }) => {
-  // Нижче в цьому ж хендлері `user` — це рядок із БД (роль, місто,
-  // masterProfile), тому сесійного юзера тримаємо під іншим імʼям.
+  // * нижче в цьому ж хендлері `user` — це рядок із БД (роль, місто,
+  // * masterProfile), тому сесійного юзера тримаємо під іншим імʼям
   const userId = requireApiUser(locals).id
   const view = url.searchParams.get('view') ?? 'mine'
   const cursor = url.searchParams.get('cursor')
@@ -45,7 +40,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean)
-  // Сміття у фільтрі ціни — це «фільтра немає», а не NaN у запиті до бази.
+  // * сміття у фільтрі ціни — це «фільтра немає», а не NaN у запиті до бази
   const minPriceCents = moneyParam(minPriceParam)
   const maxPriceCents = moneyParam(maxPriceParam)
 
@@ -62,7 +57,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
           categories: true,
           travelRadiusKm: true,
           metadata: true,
-          // Для «Топ для тебе» (bestMatches): авто й формат роботи.
+          // * для «Топ для тебе» (bestMatches): авто й формат роботи
           hasVehicle: true,
           crew: true,
         },
@@ -71,7 +66,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
   })
   if (!user) throw error(401, 'Unauthorized')
 
-  // ─── MINE ───
+  // * MINE
   if (view === 'mine') {
     const jobs = await prisma.job.findMany({
       where: { clientId: userId },
@@ -82,8 +77,8 @@ export const GET: RequestHandler = async ({ locals, url }) => {
         id: true,
         title: true,
         description: true,
-        // Картка заявки бере з неї послугу, день і теги — без неї друга
-        // сторінка «Моїх заявок» малювалась би без них.
+        // * картка заявки бере з неї послугу, день і теги — без неї друга
+        // * сторінка «Моїх заявок» малювалась би без них
         metadata: true,
         category: true,
         city: true,
@@ -112,35 +107,32 @@ export const GET: RequestHandler = async ({ locals, url }) => {
     })
   }
 
-  // ─── FEED ───
+  // * FEED
   if (user.role !== 'MASTER') {
     return json({ jobs: [], nextCursor: null })
   }
 
   const mp = user.masterProfile
-  // Маніфест: впускаємо новачків. Verified — це бонус у scoring, не фільтр.
-  // Достатньо активного профілю з містом і категорією.
+  // * маніфест: впускаємо новачків. Verified — це бонус у scoring, не фільтр.
+  // * Достатньо активного профілю з містом і категорією
   if (!mp?.isActive || !user.city || mp.categories.length === 0) {
     return json({ jobs: [], nextCursor: null })
   }
 
-  // Фільтр категорій: тільки з тих, що в профілі мастера
+  // * фільтр категорій: тільки з тих, що в профілі мастера
   const allowedCategories =
     categoriesFilter.length > 0
       ? mp.categories.filter((c) => categoriesFilter.includes(c))
       : mp.categories
 
-  // Місто — лише своє, як у правилі доступу до заявки ($lib/server/job-access)
-  // і в перевірці відгуку. Раніше `?cities=` підставлявся в запит як є, і
-  // майстер гортав заявки будь-якого міста (назва, опис, імʼя замовника),
-  // хоча відкрити чи відгукнутись на них не міг. Фільтр лишився в адресі
-  // для сумісності: без свого міста в ньому стрічка порожня.
+  // * місто — лише своє, як у правилі доступу до заявки; фільтр `?cities=`
+  // * лишився для сумісності: без свого міста в ньому стрічка порожня
   if (citiesFilter.length > 0 && !citiesFilter.includes(user.city)) {
     return json({ jobs: [], nextCursor: null })
   }
   const allowedCities = [user.city]
 
-  // Ціновий фільтр — заявка проходить якщо її діапазон перетинається із заданим
+  // * ціновий фільтр — заявка проходить якщо її діапазон перетинається із заданим
   const priceWhere: Record<string, unknown> = {}
   if (minPriceCents !== null) {
     priceWhere.OR = [
@@ -149,8 +141,8 @@ export const GET: RequestHandler = async ({ locals, url }) => {
     ]
   }
 
-  // Відмови (чорна мітка), хвилі розсилки й межа виїзду — тим самим
-  // правилом, що й перша сторінка з SSR: стрічка не обганяє розсилку.
+  // * відмови (чорна мітка), хвилі розсилки й межа виїзду — тим самим
+  // * правилом, що й перша сторінка з SSR: стрічка не обганяє розсилку
   const allDistricts = await getDistricts()
   const scope = await masterFeedScope({
     masterId: userId,
@@ -225,7 +217,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
   const items = hasMore ? jobs.slice(0, PAGE_SIZE) : jobs
   const nextCursor = hasMore ? items[items.length - 1].id : null
 
-  // Той самий район і відстань, що в першій сторінці з SSR.
+  // * той самий район і відстань, що в першій сторінці з SSR
   const placed = items.map((j) => ({
     job: j,
     place: jobPlace(
@@ -248,7 +240,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
   return json({
     jobs: placed.map(({ job: j, place }) => ({
       ...j,
-      // Автор заявки — це замовник, тому показуємо його клієнтський рейтинг.
+      // * автор заявки — це замовник, тому показуємо його клієнтський рейтинг
       client: flattenClientRating(j.client),
       place,
       match: matches.get(j.id) ?? null,

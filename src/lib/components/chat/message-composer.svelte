@@ -13,8 +13,6 @@
   import EmojiPicker from './emoji-picker.svelte'
   import type { ChatMessage } from './types'
 
-  // ═══════════════════════ Типи ═══════════════════════
-
   interface PendingAttachment {
     file: File
     previewUrl: string | null
@@ -61,15 +59,11 @@
     onEditLast,
   }: Props = $props()
 
-  // ═══════════════════════ Константи ═══════════════════════
-
   const MIN_HEIGHT = 40
   const MAX_HEIGHT = 192
   const MAX_FILE_SIZE = 10 * 1024 * 1024
   const MAX_TEXT_LENGTH = 4000
   const PHOTO_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
-
-  // ═══════════════════════ Стан ═══════════════════════
 
   let text = $state('')
   let pending = $state<PendingAttachment | null>(null)
@@ -82,8 +76,6 @@
 
   let height = $state(MIN_HEIGHT)
 
-  // ═══════════════════════ Похідні ═══════════════════════
-
   /**
    * Текст для дзеркала. Хвостовий \n у pre-wrap не створює нового рядка,
    * тому дописуємо пробіл — інакше висота відстає на один рядок.
@@ -95,8 +87,6 @@
       ? text.trim().length > 0
       : text.trim().length > 0 || pending !== null,
   )
-
-  // ═══════════════════════ Чернетка ═══════════════════════
 
   /**
    * Своя чернетка в кожному чаті. Поле одне на всі чати (вікно не
@@ -123,8 +113,6 @@
   function restoreDraft() {
     text = chatDrafts.get(currentUserId, chatId)
   }
-
-  // ═══════════════════════ Ефекти ═══════════════════════
 
   /**
    * Вимірюємо приховане дзеркало, а не саму textarea.
@@ -166,8 +154,6 @@
       if (pending?.previewUrl) URL.revokeObjectURL(pending.previewUrl)
     }
   })
-
-  // ═══════════════════════ Вкладення ═══════════════════════
 
   function handleFile(file: File) {
     if (editing) return
@@ -229,16 +215,14 @@
     }
   }
 
-  // ═══════════════════════ Завантаження ═══════════════════════
-
   async function uploadToCloudinary(
     file: File,
     type: 'PHOTO' | 'FILE',
   ): Promise<UploadedAttachment> {
     const resourceType = type === 'PHOTO' ? 'image' : 'raw'
 
-    // kind, а не folder: папку endpoint будує сам із userId,
-    // щоб клієнт не міг писати в чужу директорію
+    // * kind, а не folder: папку endpoint будує сам із userId,
+    // * щоб клієнт не міг писати в чужу директорію
     const sigRes = await fetch('/api/upload/signature', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -256,7 +240,7 @@
     form.append('timestamp', String(sig.timestamp))
     form.append('signature', sig.signature)
     form.append('folder', sig.folder)
-    // Перелік форматів — частина підпису: надсилаємо дослівно.
+    // * перелік форматів — частина підпису: надсилаємо дослівно
     if (sig.allowedFormats) form.append('allowed_formats', sig.allowedFormats)
 
     const upRes = await fetch(
@@ -274,8 +258,6 @@
       name: file.name,
     }
   }
-
-  // ═══════════════════════ Надсилання ═══════════════════════
 
   function tmpId(): string {
     return `tmp-${Math.random().toString(36).slice(2, 10)}${Date.now()}`
@@ -355,8 +337,8 @@
 
     onSendOptimistic?.(optimistic)
 
-    // Чистимо поле одразу. previewUrl НЕ відкликаємо — він ще показується
-    // в оптимістичному пузирі до підтвердження з сервера.
+    // * чистимо поле одразу. previewUrl НЕ відкликаємо — він ще показується
+    // * в оптимістичному пузирі до підтвердження з сервера
     text = ''
     chatDrafts.set(currentUserId, chatId, '')
     pending = null
@@ -415,7 +397,7 @@
 
     await tick()
     if (!el) return
-    // На телефоні фокус підняв би клавіатуру поверх панелі емодзі.
+    // * на телефоні фокус підняв би клавіатуру поверх панелі емодзі
     if (!matchMedia('(pointer: coarse)').matches) el.focus()
     el.selectionStart = el.selectionEnd = start + emoji.length
   }

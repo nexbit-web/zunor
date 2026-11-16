@@ -1,22 +1,7 @@
-// Відносний час — один на весь застосунок.
-//
-// До цього однакова функція жила в шести місцях: orders/labels.ts,
-// components/jobs/display.ts, client-jobs.svelte, master-feed.svelte,
-// notification-list.svelte і order-card.svelte. Копії вже встигли
-// розійтись: доба назад в одних місцях була «учора», в інших — «1 дн»,
-// а в третіх «1 днів тому». Людина бачила три різні відповіді на одне
-// питання на сусідніх екранах.
-//
-// Клієнтське: обидві функції читають поточний час і локаль, тож у SSR і
-// в браузері можуть дати різний рядок. Це прийнятно — вони показуються
-// в підписах, а не у формі.
+// * відносний час — один на застосунок. Читає поточний час і локаль, тож у
+// * SSR і в браузері рядок може різнитись: це підписи, а не дані форми
 
-/**
- * «щойно», «5 хв тому», «3 год тому», «учора», «3 дн тому», далі — дата.
- *
- * «учора» окремою гілкою навмисно: «1 дн тому» читається як число, а не
- * як день, і око спотикається.
- */
+/** «щойно», «5 хв тому», «3 год тому», «учора», «3 дн тому», далі — дата. */
 export function formatRelative(value: string | Date): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return ''
@@ -34,14 +19,7 @@ export function formatRelative(value: string | Date): string {
   return date.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' })
 }
 
-/**
- * День у календарі Києва (ISO «YYYY-MM-DD») — «Сьогодні», «Завтра»,
- * «Учора», далі «Пт, 30 жовт.».
- *
- * Не formatRelative: той відповідає «коли це сталося» й рахує години, а
- * тут календарний день, зазвичай у майбутньому. «через 3 дн» читалось би
- * гірше за день тижня, з яким людина звіряє свій тиждень.
- */
+/** Календарний день за Києвом: «Сьогодні», «Завтра», «Учора», далі «Пт, 30 жовт.». */
 export function formatDay(iso: string, now: Date = new Date()): string {
   const day = Date.parse(`${iso}T00:00:00Z`)
   if (Number.isNaN(day)) return ''
@@ -54,7 +32,7 @@ export function formatDay(iso: string, now: Date = new Date()): string {
   if (diff === 1) return 'Завтра'
   if (diff === -1) return 'Учора'
 
-  // timeZone UTC: день уже календарний, зсув пояса переніс би його.
+  // * timeZone UTC: день уже календарний, зсув пояса переніс би його
   const label = new Date(day).toLocaleDateString('uk-UA', {
     timeZone: 'UTC',
     weekday: 'short',

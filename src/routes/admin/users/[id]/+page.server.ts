@@ -6,8 +6,8 @@ import { asForm, field } from '$lib/server/admin/form'
 import { activeOrdersCount } from '$lib/server/active-orders'
 import type { Actions, PageServerLoad } from './$types'
 
-// Сторінка людини. Дивитись може й модератор (на неї ведуть скарги),
-// банити — менеджер і вище (перевіряє banUser).
+// * сторінка людини. Дивитись може й модератор (на неї ведуть скарги),
+// * банити — менеджер і вище (перевіряє banUser)
 export const load: PageServerLoad = async ({ locals, params }) => {
   await requireStaff(locals)
 
@@ -56,7 +56,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
   return {
     user: {
       ...user,
-      // Сам id чату не потрібен — лише чи підключено.
+      // * сам id чату не потрібен — лише чи підключено
       telegramChatId: undefined,
       telegram: !!user.telegramChatId,
       verification: user.masterProfile?.verificationStatus ?? null,

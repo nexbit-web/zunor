@@ -13,7 +13,7 @@ import { limit } from '$lib/server/rate-limit'
 import type { RequestHandler } from './$types'
 
 export const POST: RequestHandler = async ({ request, locals }) => {
-  // 401 у власному форматі { error } — див. коментар в upload/signature.
+  // * 401 у власному форматі { error } — див. коментар в upload/signature
   const user = locals.user
   if (!user) return json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -41,14 +41,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
   const userId = user.id
 
-  // Що таке «своє посилання» — одне правило на весь сервер:
-  // $lib/server/own-media. publicId мусить лежати в теці цієї людини, а
-  // посилання — бути рівно адресою завантаження з НАШОЇ хмари (не чужий
-  // акаунт Cloudinary, не `fetch`, без трансформацій). Інакше аватаром чи
-  // портфоліо ставала б картинка, яку можна підмінити ПІСЛЯ модерації: вона
-  // потім їде в JSON API, у листи й у JSON-LD, де CSP уже не діє.
+  // * «своє посилання» — одне правило на весь сервер (own-media): тека цієї
+  // * людини й рівно адреса завантаження з нашої хмари
 
-  // ── AVATAR ────────────────────────────────────────────────────────────
+  // * AVATAR
   if (body.kind === 'avatar') {
     if (!body.url || !body.publicId)
       return json({ error: 'Missing url or publicId' }, { status: 400 })
@@ -67,9 +63,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     })
     await Promise.all([refreshSessionUser(userId), forgetMasterPage(userId)])
 
-    // Старий файл стираємо, лише якщо він із теки цієї людини. id у базі
-    // колись писався з тіла запиту без перевірки: чужий id, підкладений
-    // собі в профіль, наступною зміною фото стирав чужий файл із хмари.
+    // * старий файл стираємо, лише якщо він із теки цієї людини. id у базі
+    // * колись писався з тіла запиту без перевірки: чужий id, підкладений
+    // * собі в профіль, наступною зміною фото стирав чужий файл із хмари
     if (
       user?.avatarPublicId &&
       user.avatarPublicId !== body.publicId &&
@@ -100,10 +96,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     })
     await Promise.all([refreshSessionUser(userId), forgetMasterPage(userId)])
 
-    // Завантажувач пише аватар у фіксований publicId (upload/signature),
-    // і файл там уже може бути, навіть якщо в базу він не потрапив
-    // (завантажили на онбордингу й не зберегли). Плюс старий id із бази,
-    // якщо він наш. invalidate — щоб CDN перестав віддавати копію.
+    // * аватар лежить у фіксованому publicId і може бути там, навіть якщо в базу
+    // * не потрапив; плюс старий id із бази, якщо він наш
     const ids = new Set([`zunor/users/${userId}/avatar/profile`])
     if (isOwnPublicId(user?.avatarPublicId, userId)) {
       ids.add(user.avatarPublicId)
@@ -119,7 +113,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     return json({ ok: true })
   }
 
-  // ── PORTFOLIO ADD ─────────────────────────────────────────────────────
+  // * PORTFOLIO ADD
   if (body.kind === 'portfolio-add') {
     if (!body.url || !body.publicId)
       return json({ error: 'Missing url or publicId' }, { status: 400 })
@@ -133,11 +127,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     })
 
     if (existing) {
-      // профіль є — додаємо
+      // * профіль є — додаємо
       if (existing.portfolioImages.length >= 6)
         return json({ error: 'Max 6 images' }, { status: 400 })
 
-      // захист від дублікатів
+      // * захист від дублікатів
       if (existing.portfolioImagesPublicIds.includes(body.publicId))
         return json({ ok: true })
 
@@ -152,7 +146,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
         },
       })
     } else {
-      // профіль ще не існує — створюємо з першим фото
+      // * профіль ще не існує — створюємо з першим фото
       await prisma.masterProfile.create({
         data: {
           userId,
@@ -166,7 +160,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     return json({ ok: true })
   }
 
-  // ── PORTFOLIO REMOVE ──────────────────────────────────────────────────
+  // * PORTFOLIO REMOVE
   if (body.kind === 'portfolio-remove') {
     if (!body.publicId)
       return json({ error: 'Missing publicId' }, { status: 400 })
@@ -194,7 +188,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
       await forgetMasterPage(userId)
     }
 
-    // видаляємо з Cloudinary завжди
+    // * видаляємо з Cloudinary завжди
     try {
       await cloudinary.uploader.destroy(body.publicId)
     } catch (err) {

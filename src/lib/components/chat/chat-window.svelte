@@ -91,11 +91,9 @@
   const ONLINE_MS = 5 * 60_000
   const DAY_MS = 24 * 60 * 60_000
 
-  // ═══════════════════════ Стан ═══════════════════════
-
-  // untrack: пропси беремо як ПОЧАТКОВИЙ знімок і далі живемо своїм станом
-  // (нові повідомлення приходять по Pusher). Перечитування при зміні чату
-  // робить окремий $effect нижче — див. «Зміна чату».
+  // * untrack: пропси беремо як ПОЧАТКОВИЙ знімок і далі живемо своїм станом
+  // * (нові повідомлення приходять по Pusher). Перечитування при зміні чату
+  // * робить окремий $effect нижче — див. «Зміна чату»
   let messages = $state<ChatMessage[]>(
     untrack(() => [...initialMessages].reverse()),
   )
@@ -107,9 +105,9 @@
   let typingTimer: ReturnType<typeof setTimeout> | null = null
   let muted = $state(isMuted())
   let scrollContainer = $state<HTMLDivElement | undefined>(undefined)
-  // Висоти шарів над стрічкою: шапка й низ (помилка + поле вводу). Стрічка
-  // на всю висоту вікна, тож відступи в ній — саме ці числа. Стартові —
-  // типові розміри, щоб до першого виміру стрічка не стрибала.
+  // * висоти шарів над стрічкою: шапка й низ (помилка + поле вводу). Стрічка
+  // * на всю висоту вікна, тож відступи в ній — саме ці числа. Стартові —
+  // * типові розміри, щоб до першого виміру стрічка не стрибала
   let topH = $state(60)
   let bottomH = $state(68)
   let replyTo = $state<ChatMessage | null>(null)
@@ -135,7 +133,7 @@
   /** Годинник для «був(ла) 5 хв тому»: оновлюється сам, без запитів. */
   let now = $state(Date.now())
 
-  // ─── Пошук ───
+  // * пошук
   let searchOpen = $state(false)
   let searchQuery = $state('')
   let searchInput = $state<HTMLInputElement | undefined>(undefined)
@@ -148,13 +146,13 @@
 
   const peer = $derived(chat.peer)
 
-  // Скарга зі шапки чату — на майстра чи на клієнта (роль — з бази).
+  // * скарга зі шапки чату — на майстра чи на клієнта (роль — з бази)
   let reportOpen = $state(false)
   const peerRole = $derived<'MASTER' | 'CLIENT'>(
     peer.role === 'MASTER' ? 'MASTER' : 'CLIENT',
   )
-  // Профіль співрозмовника — у дашборді: майстра бачить клієнт, клієнта —
-  // майстер. Співробітник підтримки профілю не має.
+  // * профіль співрозмовника — у дашборді: майстра бачить клієнт, клієнта —
+  // * майстер. Співробітник підтримки профілю не має
   const peerProfile = $derived(
     peer.role === 'MASTER'
       ? `/dashboard/master/${peer.id}`
@@ -180,12 +178,10 @@
     searchResults.findIndex((m) => m.id === activeMatchId),
   )
 
-  // ═══════════════════════ Ефекти ═══════════════════════
-
   onMount(() => {
     const clock = setInterval(() => (now = Date.now()), 30_000)
 
-    // Галерея всіх фото чату: клік по будь-якому — гортаєш усі.
+    // * галерея всіх фото чату: клік по будь-якому — гортаєш усі
     const detachLightbox = scrollContainer
       ? photoLightbox(scrollContainer)
       : undefined
@@ -230,8 +226,8 @@
       activeMatchId = null
     })
 
-    // Є непрочитані — відкриваємо на межі, як Telegram, а не в самому
-    // низу: інакше початок розмови, яку пропустив, лишався вище екрана.
+    // * Є непрочитані — відкриваємо на межі, як Telegram, а не в самому
+    // * низу: інакше початок розмови, яку пропустив, лишався вище екрана
     tick().then(() => {
       const divider = scrollContainer?.querySelector('[data-unread-divider]')
       if (divider) divider.scrollIntoView({ block: 'start' })
@@ -263,7 +259,7 @@
         ...messages,
         { ...data.message, reactions: data.message.reactions ?? [] },
       ]
-      // Пише — отже в мережі просто зараз.
+      // * пише — отже в мережі просто зараз
       peerSeenAt = new Date()
       typingPeer = null
       tick().then(() => {
@@ -303,11 +299,11 @@
       )
     }
 
-    // Картка посилання дописується сервером після відправки — бульбашка
-    // підростає, тож стрічку, що стояла внизу, тримаємо внизу.
+    // * картка посилання дописується сервером після відправки — бульбашка
+    // * підростає, тож стрічку, що стояла внизу, тримаємо внизу
     const onPreview = (data: MessagePreviewPayload) => {
       if (!untrack(() => messages.some((m) => m.id === data.messageId))) {
-        // Своє ще з тимчасовим id: картка обігнала відповідь POST.
+        // * своє ще з тимчасовим id: картка обігнала відповідь POST
         earlyPreviews.set(data.messageId, data.linkPreview)
         if (earlyPreviews.size > 20) {
           earlyPreviews.delete(earlyPreviews.keys().next().value!)
@@ -327,8 +323,8 @@
       }
     }
 
-    // Повний стан реакцій — застосовуємо як є (і на свою зміну теж: це
-    // підтвердження, а заразом лікує пропущені події).
+    // * повний стан реакцій — застосовуємо як є (і на свою зміну теж: це
+    // * підтвердження, а заразом лікує пропущені події)
     const onReaction = (data: MessageReactionPayload) => {
       setReactions(data.messageId, data.reactions)
     }
@@ -371,13 +367,11 @@
     }
   })
 
-  // ═══════════════════════ Надсилання ═══════════════════════
-
   function handleSendOptimistic(msg: ChatMessage) {
     freshIds = new Set([...freshIds, msg.id])
     messages = [...messages, msg]
     pendingIds = new Set([...pendingIds, msg.id])
-    // Своє — завжди донизу, навіть якщо читав історію.
+    // * своє — завжди донизу, навіть якщо читав історію
     unreadFromId = null
     tick().then(() => scrollToBottom())
   }
@@ -470,15 +464,11 @@
     }
   }
 
-  // ═══════════════════════ Реакції ═══════════════════════
-
   function setReactions(messageId: string, reactions: ReactionGroup[]) {
     messages = messages.map((m) =>
       m.id === messageId ? { ...m, reactions } : m,
     )
   }
-
-  // ═══════════════════════ Картки посилань ═══════════════════════
 
   /**
    * Картки, що прийшли раніше за підтвердження свого повідомлення (воно ще
@@ -526,7 +516,7 @@
     try {
       await fetch(`/api/chats/${chatId}/read`, { method: 'POST' })
     } catch {
-      // не критично: позначка оновиться при наступному відкритті
+      // * не критично: позначка оновиться при наступному відкритті
     }
   }
 
@@ -541,11 +531,9 @@
         userName: 'співрозмовник',
       })
     } catch {
-      // Pusher може бути недоступний — індикатор друку не критичний
+      // * Pusher може бути недоступний — індикатор друку не критичний
     }
   }
-
-  // ═══════════════════════ Скрол і пагінація ═══════════════════════
 
   function isNearBottom(): boolean {
     if (!scrollContainer) return true
@@ -591,7 +579,7 @@
       messages = [...(json.messages as ChatMessage[]).reverse(), ...messages]
       nextCursor = json.nextCursor
 
-      // Утримуємо позицію: інакше стрічка стрибне до старих повідомлень
+      // * утримуємо позицію: інакше стрічка стрибне до старих повідомлень
       await tick()
       if (scrollContainer) {
         scrollContainer.scrollTop = scrollContainer.scrollHeight - prevHeight
@@ -635,8 +623,6 @@
     if (flashTimer) clearTimeout(flashTimer)
     flashTimer = setTimeout(() => (flashId = null), 1500)
   }
-
-  // ═══════════════════════ Пошук ═══════════════════════
 
   function openSearch() {
     searchOpen = true
@@ -687,7 +673,7 @@
   function onSearchKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
       e.preventDefault()
-      // Спершу згортаємо список (якщо вже щось обрано), потім — пошук.
+      // * спершу згортаємо список (якщо вже щось обрано), потім — пошук
       if (resultsOpen && activeMatchId) resultsOpen = false
       else closeSearch()
       return
@@ -721,8 +707,6 @@
       resultsOpen = false
     }
   }
-
-  // ═══════════════════════ Групування ═══════════════════════
 
   function toggleMute() {
     muted = !muted

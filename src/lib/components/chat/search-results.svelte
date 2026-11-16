@@ -33,7 +33,7 @@
 
   let list = $state<HTMLElement | null>(null)
 
-  // Стрілками можна піти за край видимого — тягнемо рядок у поле зору.
+  // * стрілками можна піти за край видимого — тягнемо рядок у поле зору
   $effect(() => {
     const row = list?.children[cursor] as HTMLElement | undefined
     row?.scrollIntoView({ block: 'nearest' })

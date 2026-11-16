@@ -22,8 +22,8 @@
 
   export type IslandTone = 'accent' | 'success' | 'danger' | 'warning'
 
-  // Псевдонім типу, а не interface: toast.custom вимагає пропсів виду
-  // Record<string, unknown>, а інтерфейс без індексу ним не вважається.
+  // * псевдонім типу, а не interface: toast.custom вимагає пропсів виду
+  // * Record<string, unknown>, а інтерфейс без індексу ним не вважається
   export type IslandProps = {
     toast: Toast
     /** Одне-два слова над заголовком: «Нова заявка». */

@@ -1,9 +1,8 @@
-// Контент категорії "Прибирання". Чисті дані, без логіки.
-// Поля деталей (крок 3) адаптивні — залежать від типу послуги.
+// * контент категорії "Прибирання". Чисті дані, без логіки.
+// * Поля деталей (крок 3) адаптивні — залежать від типу послуги
 
 export const CATEGORY_SLUG = 'prybyrannya'
 
-// ─── Крок 1: Тип помешкання ───
 export interface PremiseOption {
   key: string
   label: string
@@ -22,7 +21,6 @@ export function premiseLabel(key: string): string {
   return PREMISES.find((p) => p.key === key)?.label ?? key
 }
 
-// ─── Крок 2: Тип прибирання ───
 export interface ServiceOption {
   key: string
   label: string
@@ -42,11 +40,9 @@ export function serviceLabel(key: string): string {
   return SERVICES.find((s) => s.key === key)?.label ?? key
 }
 
-// ─── Крок 3: Деталі (адаптивні) ───
-//
 // Кожна послуга має свій набір полів. Тип поля визначає UI.
 
-// Які послуги питають кімнати/поверх/ліфт (стандартний житловий блок)
+// * які послуги питають кімнати/поверх/ліфт (стандартний житловий блок)
 const ROOM_BASED = ['standard', 'deep', 'post-renovation', 'regular']
 
 export function needsRooms(service: string): boolean {
@@ -65,7 +61,7 @@ export function needsTrash(service: string): boolean {
   return service === 'post-renovation'
 }
 
-// Кількість кімнат
+// * кількість кімнат
 export const ROOM_OPTIONS = [
   { key: '1', label: '1 кімната' },
   { key: '2', label: '2 кімнати' },
@@ -76,7 +72,7 @@ export function roomLabel(key: string): string {
   return ROOM_OPTIONS.find((o) => o.key === key)?.label ?? key
 }
 
-// Ліфт
+// * ліфт
 export const ELEVATOR_OPTIONS = [
   { key: 'yes', label: 'Є ліфт' },
   { key: 'no', label: 'Немає ліфта' },
@@ -85,7 +81,7 @@ export function elevatorLabel(key: string): string {
   return ELEVATOR_OPTIONS.find((o) => o.key === key)?.label ?? key
 }
 
-// Балкон (вікна: тип скління; генеральне прибирання квартири: чи прибирати балкон)
+// * балкон (вікна: тип скління; генеральне прибирання квартири: чи прибирати балкон)
 export const BALCONY_OPTIONS = [
   { key: 'none', label: 'Немає' },
   { key: 'standard', label: 'Звичайний' },
@@ -95,8 +91,8 @@ export function balconyLabel(key: string): string {
   return BALCONY_OPTIONS.find((o) => o.key === key)?.label ?? key
 }
 
-// Сторона миття (для вікон) — найсильніше впливає на ціну:
-// зовні потрібні страховка/висотні роботи, зсередини — ні.
+// * сторона миття (для вікон) — найсильніше впливає на ціну:
+// * зовні потрібні страховка/висотні роботи, зсередини — ні
 export const WINDOW_SIDE_OPTIONS = [
   { key: 'inside', label: 'Зсередини' },
   { key: 'outside', label: 'Ззовні' },
@@ -106,7 +102,7 @@ export function windowSideLabel(key: string): string {
   return WINDOW_SIDE_OPTIONS.find((o) => o.key === key)?.label ?? key
 }
 
-// Сміття (для після ремонту)
+// * сміття (для після ремонту)
 export const TRASH_OPTIONS = [
   { key: 'removed', label: 'Сміття вже винесене' },
   { key: 'needs-removal', label: 'Потрібно винести сміття' },
@@ -115,9 +111,9 @@ export function trashLabel(key: string): string {
   return TRASH_OPTIONS.find((o) => o.key === key)?.label ?? key
 }
 
-// Частота (для регулярного)
-// «Щодня» — для офісів і комерції: без нього щоденне прибирання офісу
-// оформлювалось як «Раз на тиждень», і картка заявки казала неправду.
+// * частота (для регулярного)
+// * «Щодня» — для офісів і комерції: без нього щоденне прибирання офісу
+// * оформлювалось як «Раз на тиждень», і картка заявки казала неправду
 export const FREQUENCY_OPTIONS = [
   { key: 'daily', label: 'Щодня' },
   { key: 'weekly', label: 'Раз на тиждень' },
@@ -128,7 +124,6 @@ export function frequencyLabel(key: string): string {
   return FREQUENCY_OPTIONS.find((o) => o.key === key)?.label ?? key
 }
 
-// ─── Хімчистка: предмети ───
 export interface CleaningItemDef {
   key: string
   label: string
@@ -175,20 +170,13 @@ export function itemVariantLabel(itemKey: string, variantKey: string): string {
   return item?.variants?.find((v) => v.key === variantKey)?.label ?? variantKey
 }
 
-// ─── Крок 4: Коли ───
 export const QUICK_WHEN = [
   { key: 'today', label: 'Сьогодні' },
   { key: 'tomorrow', label: 'Завтра' },
 ]
 const QUICK_WHEN_OFFSET: Record<string, number> = { today: 0, tomorrow: 1 }
 
-/**
- * Дата прибирання як ISO-день у календарі Києва.
- *
- * «today»/«tomorrow» зберігаються як є — відносно дня СТВОРЕННЯ заявки.
- * Без createdAt вони брешуть: заявка «на завтра», створена тиждень тому,
- * показувалась як «Завтра» ще цілий тиждень.
- */
+/** Дата прибирання як ISO-день за Києвом; «today»/«tomorrow» — відносно дня створення заявки. */
 export function resolveWhen(
   when: unknown,
   createdAt: string | Date,
@@ -208,7 +196,7 @@ export function resolveWhen(
 export function whenLabel(key: string): string {
   const q = QUICK_WHEN.find((w) => w.key === key)
   if (q) return q.label
-  // інакше це ISO-дата
+  // * інакше це ISO-дата
   const d = new Date(key)
   if (!isNaN(d.getTime())) {
     return d.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' })

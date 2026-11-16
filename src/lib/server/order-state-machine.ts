@@ -1,15 +1,9 @@
 import type { OrderStatus } from '../../generated/prisma/client'
 
-/**
- * Order state machine — централизованная логика переходов между статусами.
- *
- * Новая Uber-модель:
- *   CREATED ──(START, master)──> IN_PROGRESS ──(COMPLETE, master)──> COMPLETED
- *      │                              │
- *      └──(CANCEL, обе стороны)──> CANCELLED <─(CANCEL, обе стороны)─┘
- *
- * Терминальные состояния (COMPLETED, CANCELLED) не имеют выходов.
- */
+// * переходи статусів замовлення — лише тут:
+// *   CREATED ──(START, майстер)──> IN_PROGRESS ──(COMPLETE, майстер)──> COMPLETED
+// *   CANCEL — обидві сторони, з CREATED і з IN_PROGRESS
+// * COMPLETED і CANCELLED — кінцеві
 
 export type Actor = 'CLIENT' | 'MASTER' | 'SYSTEM'
 
@@ -32,7 +26,7 @@ const TRANSITIONS: Record<OrderTransition, TransitionRule> = {
     to: 'COMPLETED',
     allowedActors: ['MASTER'],
   },
-  // CANCEL — спецкейс, разрешён из CREATED и IN_PROGRESS
+  // * дозволений із CREATED і з IN_PROGRESS — перевіряється окремо
   CANCEL: {
     from: 'CREATED', // проверяется отдельно
     to: 'CANCELLED',
@@ -40,17 +34,12 @@ const TRANSITIONS: Record<OrderTransition, TransitionRule> = {
   },
 }
 
-/**
- * Проверяет, разрешён ли конкретный переход.
- *
- * @returns null если разрешено, или строка с причиной ошибки
- */
+/** null — перехід дозволено; інакше причина відмови. */
 export function canTransition(
   currentStatus: OrderStatus,
   transition: OrderTransition,
   actor: Actor,
 ): string | null {
-  // CANCEL — разрешён из CREATED и IN_PROGRESS
   if (transition === 'CANCEL') {
     const cancellableStates: OrderStatus[] = ['CREATED', 'IN_PROGRESS']
     if (!cancellableStates.includes(currentStatus)) {
@@ -76,16 +65,11 @@ export function canTransition(
   return null
 }
 
-/**
- * Возвращает целевой статус для разрешённого перехода.
- */
 export function nextStatus(transition: OrderTransition): OrderStatus {
   return TRANSITIONS[transition].to
 }
 
-/**
- * Определяет роль юзера в заказе.
- */
+/** Роль користувача в замовленні. */
 export function getActor(
   userId: string,
   order: { clientId: string; masterId: string },
@@ -95,9 +79,6 @@ export function getActor(
   return null
 }
 
-/**
- * Является ли статус терминальным.
- */
 export function isTerminal(status: OrderStatus): boolean {
   return status === 'COMPLETED' || status === 'CANCELLED'
 }

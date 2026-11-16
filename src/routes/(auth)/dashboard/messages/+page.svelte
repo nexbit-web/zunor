@@ -8,7 +8,7 @@
 
   let { data }: { data: PageData } = $props()
 
-  // ─── Resizable sidebar — ширина у localStorage ───
+  // * Resizable sidebar — ширина у localStorage
   let initialSize = $state(28)
   const SIZE_KEY = 'zunor-chat-sidebar-size'
   const LAST_CHAT_KEY = 'zunor-last-chat-id'
@@ -18,7 +18,7 @@
   onMount(() => {
     if (typeof window === 'undefined') return
 
-    // Підвантажуємо ширину сайдбара
+    // * підвантажуємо ширину сайдбара
     const saved = localStorage.getItem(SIZE_KEY)
     if (saved) {
       const n = Number(saved)
@@ -38,7 +38,7 @@
     if (exists) {
       goto(`/dashboard/messages/${lastId}`, { replaceState: true })
     } else {
-      // Чат видалений / закритий — чистимо storage
+      // * чат видалений / закритий — чистимо storage
       localStorage.removeItem(LAST_CHAT_KEY)
     }
   })

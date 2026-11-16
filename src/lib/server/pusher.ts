@@ -1,15 +1,7 @@
 import Pusher from 'pusher'
 import { env } from '$env/dynamic/private'
 
-/**
- * Серверний Pusher для broadcast подій з API endpoints.
- *
- * Налаштування у .env:
- *   PUSHER_APP_ID=xxx
- *   PUSHER_KEY=xxx
- *   PUSHER_SECRET=xxx
- *   PUSHER_CLUSTER=eu
- */
+/** Серверний Pusher для подій з API. */
 export const pusherServer = new Pusher({
   appId: env.PUSHER_APP_ID!,
   key: env.PUSHER_KEY!,
@@ -18,7 +10,6 @@ export const pusherServer = new Pusher({
   useTLS: true,
 })
 
-// ─── Канали ───
 export const channels = {
   chat: (chatId: string) => `private-chat-${chatId}`,
   user: (userId: string) => `private-user-${userId}`,
@@ -26,7 +17,6 @@ export const channels = {
   admin: 'private-admin', // ← канал CRM-адмінів
 }
 
-// ─── Події ───
 export const events = {
   messageNew: 'message:new',
   messageEdit: 'message:edit',
@@ -53,14 +43,7 @@ export const events = {
   reportNew: 'report:new',
 } as const
 
-/**
- * Безпечний broadcast: ловить помилки Pusher і логує їх замість того
- * щоб ронити весь HTTP-запит.
- *
- * Чому це важливо: якщо Pusher тимчасово недоступний (мережева помилка,
- * рейт-ліміт, помилка config), повідомлення все одно зберігається у БД,
- * а інший юзер побачить його при наступному завантаженні чату.
- */
+/** Подія без винятку: збій Pusher логуємо, запит не падає — дані вже в базі. */
 export async function safeTrigger(
   channel: string | string[],
   event: string,
@@ -69,7 +52,7 @@ export async function safeTrigger(
   try {
     await pusherServer.trigger(channel, event, data)
   } catch (err) {
-    // Розшифровуємо помилку щоб у логах було видно конкретну причину
+    // * розшифровуємо помилку щоб у логах було видно конкретну причину
     if (err && typeof err === 'object') {
       const e = err as {
         status?: number
@@ -88,6 +71,6 @@ export async function safeTrigger(
     } else {
       console.error('[Pusher] trigger failed (unknown)', err)
     }
-    // НЕ кидаємо далі — щоб основний flow не падав
+    // * НЕ кидаємо далі — щоб основний flow не падав
   }
 }

@@ -1,7 +1,4 @@
-// Аналітика майстра: тільки числа про його власні результати.
-// Раніше цей роут звався /dashboard/proposals і показував список відгуків —
-// але відгук веде або в заявку, або в замовлення, і обидва шляхи вже є
-// в навігації.
+// * аналітика майстра: лише числа про його власні результати
 
 import { prisma } from '$lib/server/prisma'
 import { requireRole } from '$lib/server/guard'
@@ -25,13 +22,7 @@ const DAY_MS = 86_400_000
  *  довільні роки в запиті означає дозволити скан усієї таблиці. */
 const MAX_RANGE_DAYS = 366
 
-/**
- * 'YYYY-MM-DD' → північ цього дня в UTC.
- *
- * Свідомо UTC, а не локальний час процесу: інакше та сама адреса давала б
- * різні числа залежно від того, у якій зоні підняли сервер, і межа місяця
- * «пливла» б на кілька годин.
- */
+/** 'YYYY-MM-DD' → північ дня в UTC: числа не залежать від зони сервера. */
 function parseDay(value: string | null): Date | null {
   if (!value || !DAY_RE.test(value)) return null
   const ms = Date.parse(`${value}T00:00:00.000Z`)
@@ -54,8 +45,8 @@ function currentMonth(now: Date): { from: Date; toExclusive: Date } {
 }
 
 export const load: PageServerLoad = async ({ locals, url }) => {
-  // Сторінка МАЙСТРА. Клієнта сюди не пускаємо (раніше він проходив
-  // перевірку й бачив порожній список — тепер редірект на дашборд).
+  // * сторінка МАЙСТРА. Клієнта сюди не пускаємо (раніше він проходив
+  // * перевірку й бачив порожній список — тепер редірект на дашборд)
   const user = await requireRole(locals, ['MASTER'], '/dashboard/analytics')
 
   const fallback = currentMonth(new Date())
@@ -64,8 +55,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   const rawTo = parseDay(url.searchParams.get('to'))
 
   let from = fallback.from
-  // Верхня межа ЕКСКЛЮЗИВНА: у БД порівнюємо `lt`, тож останній день
-  // періоду входить у вибірку цілком, разом із вечором.
+  // * верхня межа ЕКСКЛЮЗИВНА: у БД порівнюємо `lt`, тож останній день
+  // * періоду входить у вибірку цілком, разом із вечором
   let toExclusive = fallback.toExclusive
 
   if (rawFrom && rawTo && rawTo.getTime() >= rawFrom.getTime()) {
@@ -79,8 +70,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
   const [proposals, completed, cancelledCount, active, profile] =
     await Promise.all([
-      // Свої ж рядки, по чотири поля: порахувати статуси й час реакції в JS
-      // дешевше, ніж кілька окремих проходів по БД за тим самим набором.
+      // * свої ж рядки, по чотири поля: порахувати статуси й час реакції в JS
+      // * дешевше, ніж кілька окремих проходів по БД за тим самим набором
       prisma.proposal.findMany({
         where: { masterId: user.id, createdAt: period },
         select: {
@@ -91,10 +82,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
         },
       }),
 
-      // Завершені й зароблене — за датою ЗАВЕРШЕННЯ, не створення.
-      // Замовлення, взяте в квітні й здане в травні, — це травневий
-      // заробіток; інакше «скільки я заробив цього місяця» відповідало б
-      // на зовсім інше питання.
+      // * завершені й зароблене — за датою завершення: взяте у квітні й здане в
+      // * травні — травневий заробіток
       prisma.order.aggregate({
         where: { masterId: user.id, status: 'COMPLETED', completedAt: period },
         _count: { _all: true },
@@ -105,8 +94,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
         where: { masterId: user.id, status: 'CANCELLED', cancelledAt: period },
       }),
 
-      // «Зараз у роботі» — це поточний стан, а не подія періоду, тож
-      // фільтра по датах тут немає. На сторінці це підписано.
+      // * «Зараз у роботі» — це поточний стан, а не подія періоду, тож
+      // * фільтра по датах тут немає. На сторінці це підписано
       prisma.order.aggregate({
         where: {
           masterId: user.id,
@@ -116,15 +105,15 @@ export const load: PageServerLoad = async ({ locals, url }) => {
         _sum: { priceCents: true },
       }),
 
-      // Рейтинг уже денормалізований у User — агрегувати Review зайве.
-      // Він завжди за весь час: репутація не ділиться на місяці.
+      // * рейтинг уже денормалізований у User — агрегувати Review зайве.
+      // * Він завжди за весь час: репутація не ділиться на місяці
       prisma.user.findUnique({
         where: { id: user.id },
         select: { avgRatingAsMaster: true, reviewsCountAsMaster: true },
       }),
     ])
 
-  // ─── Відгуки ───
+  // * відгуки
   const byStatus = { SENT: 0, ACCEPTED: 0, REJECTED: 0, WITHDRAWN: 0 }
   let priceSum = 0
   const responseMinutes: number[] = []
@@ -134,16 +123,16 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     priceSum += p.priceCents
 
     const minutes = (p.createdAt.getTime() - p.job.createdAt.getTime()) / 60_000
-    // Відʼємне значення можливе лише при рознесених годинниках — відкидаємо,
-    // щоб один такий рядок не зіпсував медіану.
+    // * відʼємне значення можливе лише при рознесених годинниках — відкидаємо,
+    // * щоб один такий рядок не зіпсував медіану
     if (minutes >= 0) responseMinutes.push(minutes)
   }
 
   const proposalsTotal = proposals.length
 
-  // Конверсія рахується від ВИРІШЕНИХ відгуків. Якби в знаменник ішли ще й
-  // ті, що чекають, число падало б щоразу, коли майстер просто відгукнувся, —
-  // і виглядало б як погіршення роботи.
+  // * конверсія рахується від ВИРІШЕНИХ відгуків. Якби в знаменник ішли ще й
+  // * ті, що чекають, число падало б щоразу, коли майстер просто відгукнувся, —
+  // * і виглядало б як погіршення роботи
   const decided = byStatus.ACCEPTED + byStatus.REJECTED
 
   const completedCount = completed._count._all
@@ -153,14 +142,14 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   return {
     period: {
       from: toDayString(from),
-      // Назад віддаємо ВКЛЮЧНУ дату — саме її бачить людина в календарі.
+      // * назад віддаємо ВКЛЮЧНУ дату — саме її бачить людина в календарі
       to: toDayString(new Date(toExclusive.getTime() - DAY_MS)),
       isCurrentMonth:
         from.getTime() === fallback.from.getTime() &&
         toExclusive.getTime() === fallback.toExclusive.getTime(),
     },
 
-    // Порожній стан — коли за період не сталося геть нічого.
+    // * порожній стан — коли за період не сталося геть нічого
     hasData: proposalsTotal > 0 || closed > 0 || active._count._all > 0,
 
     proposals: {

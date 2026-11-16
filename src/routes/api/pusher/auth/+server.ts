@@ -5,22 +5,16 @@ import { pusherServer } from '$lib/server/pusher'
 import type { RequestHandler } from './$types'
 
 /**
- * Pusher викликає цей endpoint щоразу, коли клієнт subscribe'ається на
- * private- або presence-канал. Ми повинні перевірити що юзер має право
- * на цей канал і повернути signed token.
- *
- * Канали:
- *   private-user-{userId}     → тільки цей юзер
- *   private-chat-{chatId}     → тільки члени чату
- *   presence-chat-{chatId}    → тільки члени чату (з info про юзера)
+ * Підпис на private- і presence-канали Pusher:
+ *   private-user-{userId}   — лише ця людина
+ *   private-chat-{chatId}   — лише учасники чату
+ *   presence-chat-{chatId}  — лише учасники чату
  */
 export const POST: RequestHandler = async ({ request, locals }) => {
   const user = requireApiUser(locals)
 
-  // pusher-js у браузері шле форму; застосунок (mobile/src/lib/realtime.ts)
-  // — JSON: у нативного запиту немає Origin, і форму без нього відхиляє
-  // CSRF-перевірка SvelteKit. JSON цієї перевірки не потребує — з чужого
-  // сайту його без CORS не надіслати.
+  // * браузер шле форму, застосунок — JSON: у нативного запиту немає Origin, і
+  // * форму відхилила б CSRF-перевірка SvelteKit
   let socketId: string | undefined
   let channel: string | undefined
   if (request.headers.get('content-type')?.includes('application/json')) {
@@ -43,7 +37,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
   const userId = user.id
 
-  // ─── private-user-{userId} ───
+  // * private-user-{userId}
   if (channel.startsWith('private-user-')) {
     const targetUserId = channel.slice('private-user-'.length)
     if (targetUserId !== userId) throw error(403, 'Forbidden')
@@ -54,7 +48,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     })
   }
 
-  // ─── private-chat-{chatId} та presence-chat-{chatId} ───
+  // * private-chat-{chatId} та presence-chat-{chatId}
   let chatId: string | null = null
   let isPresence = false
 
@@ -67,13 +61,13 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     throw error(400, 'Unknown channel type')
   }
 
-  // Перевіряємо, що юзер — член цього чату (з кешу, chat-members.ts).
+  // * перевіряємо, що юзер — член цього чату (з кешу, chat-members.ts)
   if (!(await isChatMember(chatId, userId))) {
     throw error(403, 'Not a member of this chat')
   }
 
   if (isPresence) {
-    // Імʼя й аватар — із сесії: окремий запит до бази заради них зайвий.
+    // * імʼя й аватар — із сесії: окремий запит до бази заради них зайвий
     const presenceData = {
       user_id: userId,
       user_info: {

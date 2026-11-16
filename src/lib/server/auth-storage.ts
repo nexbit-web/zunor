@@ -1,9 +1,5 @@
-// Сховище better-auth у Redis: сесії й одноразові коди. Для сесій база
-// лишається джерелом правди (storeSessionInDatabase в auth.ts), Redis —
-// швидка копія: промах у ньому означає лише запит до бази.
-//
-// Видалення збою не ковтає: інакше вихід з акаунта чи бан лишали б сесію
-// живою в Redis до кінця її строку.
+// * сховище better-auth у Redis: база лишається джерелом правди, Redis — копія.
+// * Видалення збою не ковтає: інакше вихід чи бан лишали б сесію живою
 
 import type { BetterAuthOptions } from 'better-auth'
 import { attempt, redisEnabled, redisKey, strict } from './redis'

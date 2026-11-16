@@ -7,7 +7,7 @@
 
   let { data }: { data: PageData } = $props()
 
-  // ─── Resizable sidebar — ширина у localStorage ───
+  // * Resizable sidebar — ширина у localStorage
   let initialSize = $state(28)
   const SIZE_KEY = 'zunor-chat-sidebar-size'
   const LAST_CHAT_KEY = 'zunor-last-chat-id'
@@ -28,7 +28,7 @@
     localStorage.setItem(SIZE_KEY, String(size))
   }
 
-  // ─── Запам'ятовуємо поточний chatId для авто-redirect при наступному заході ───
+  // * запам'ятовуємо поточний chatId для авто-redirect при наступному заході
   $effect(() => {
     const id = data.chat.id
     if (typeof window !== 'undefined' && id) {

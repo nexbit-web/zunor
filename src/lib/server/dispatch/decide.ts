@@ -1,5 +1,5 @@
-// Рішення хвилі для заявки: тут лише читання, вирішує чисте ядро
-// (core/plan.ts). Нічого не пише й нікого не сповіщає.
+// * рішення хвилі для заявки: тут лише читання, вирішує чисте ядро
+// * (core/plan.ts). Нічого не пише й нікого не сповіщає
 
 import { cityDistricts, findDistrict } from '$lib/geo/districts'
 import { getDistricts } from '../reference'
@@ -19,8 +19,8 @@ export async function decide(
   const reason = stopReason(job)
   if (reason) return stop(reason)
 
-  // Довідник — із кешу, а не з транзакції: райони не є станом заявки.
-  // Вимкнений у довіднику район — те саме, що без району.
+  // * довідник — із кешу, а не з транзакції: райони не є станом заявки.
+  // * Вимкнений у довіднику район — те саме, що без району
   const districts = cityDistricts(await getDistricts(), job.city)
   const located = {
     ...job,

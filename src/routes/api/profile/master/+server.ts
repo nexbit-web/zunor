@@ -7,7 +7,7 @@ import type { RequestHandler } from './$types'
 export const POST: RequestHandler = async ({ request, locals }) => {
   const user = requireApiUser(locals)
 
-  // Кожна подача шле сповіщення модераторам — без ліміту це спам-канал.
+  // * кожна подача шле сповіщення модераторам — без ліміту це спам-канал
   const rl = await limit(`profile:${user.id}`, { points: 20, duration: 60 * 60_000 })
   if (!rl.success) throw error(429, 'Забагато спроб. Спробуйте пізніше.')
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-  // «Повідомлення» — бульбашка з трьома крапками (Hugeicons BubbleChat).
+  // * «Повідомлення» — бульбашка з трьома крапками (Hugeicons BubbleChat)
   import StrokeIcon, { type IconProps } from './stroke-icon.svelte'
 
   interface Props extends IconProps {

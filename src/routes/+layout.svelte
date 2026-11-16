@@ -18,8 +18,8 @@
     '/user/forgot',
     '/user/reset-password',
   ]
-  // Сторінка помилки — окремий екран із відсвітом угорі: шапка лендингу
-  // відрізала б смугу посередині, а підвал ставив би під неї ще екран.
+  // * сторінка помилки — окремий екран із відсвітом угорі: шапка лендингу
+  // * відрізала б смугу посередині, а підвал ставив би під неї ще екран
   const hideHeader = $derived(
     page.error !== null ||
       hiddenLayoutRoutes.some((route) => page.url.pathname.startsWith(route)),
@@ -57,7 +57,7 @@
   // блимнув би.
   const themed = $derived(isThemedPath(page.url.pathname))
 
-  // Палітра кабінету (клас in-app, layout.css) — за тим самим правилом.
+  // * палітра кабінету (клас in-app, layout.css) — за тим самим правилом
   $effect(() => {
     document.documentElement.classList.toggle('in-app', themed)
   })
@@ -79,7 +79,7 @@
     const timer = setTimeout(() => NProgress.start(), PROGRESS_DELAY)
     return () => {
       clearTimeout(timer)
-      // Не стартувала — done() нічого не робить.
+      // * не стартувала — done() нічого не робить
       NProgress.done()
     }
   })

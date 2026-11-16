@@ -1,10 +1,6 @@
-// Що з відкритих заявок майстер бачить у стрічці. Стрічка не обганяє
-// розсилку: свіжу заявку бачить лише покликаний, після останньої хвилі —
-// усі, кому вона в межах виїзду. Покликаний бачить свою заявку завжди,
-// навіть якщо її привела до нього остання хвиля з-за меж.
-//
-// Чого майстер не робить (categories/matching) — у стрічці немає зовсім,
-// як і в розсилці: інакше «миє лише вікна» гортав би генеральні.
+// * стрічка не обганяє розсилку: свіжу заявку бачить лише покликаний, після
+// * останньої хвилі — усі, кому вона в межах виїзду. Чого майстер не робить,
+// * у стрічці немає зовсім, як і в розсилці
 
 import { districtsWithin, type District } from '$lib/geo/districts'
 import { matchingFor, type JobCondition } from '$lib/categories/matching'
@@ -84,8 +80,8 @@ export async function masterFeedScope(opts: {
   const now = opts.now ?? new Date()
   const wavesDoneAt = new Date(now.getTime() - WAVES_DONE_MIN * 60_000)
 
-  // Відмови — за весь час; покликання — за життя заявки: старші вже не
-  // відкриті, а список іде в IN.
+  // * відмови — за весь час; покликання — за життя заявки: старші вже не
+  // * відкриті, а список іде в IN
   const events = await prisma.dispatchEvent.findMany({
     where: {
       masterId: opts.masterId,
@@ -106,8 +102,8 @@ export async function masterFeedScope(opts: {
     opts.masterDistrict,
     opts.travelRadiusKm,
   )
-  // Без району або з вимкненим районом відстань не перевірити — не
-  // ховаємо, як і розсилка.
+  // * без району або з вимкненим районом відстань не перевірити — не
+  // * ховаємо, як і розсилка
   const inReach: Prisma.JobWhereInput[] = reach
     ? [
         {

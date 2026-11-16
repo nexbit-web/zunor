@@ -29,8 +29,8 @@
     filters?: unknown
   } = $props()
 
-  // untrack: перша сторінка з SSR — це ПОЧАТКОВИЙ знімок. Далі список
-  // росте догрузкою через /api/jobs/feed, і перезапис пропом стер би її.
+  // * untrack: перша сторінка з SSR — це ПОЧАТКОВИЙ знімок. Далі список
+  // * росте догрузкою через /api/jobs/feed, і перезапис пропом стер би її
   let jobs = $state(untrack(() => [...initialJobs]))
   let nextCursor = $state<string | null>(untrack(() => initialNextCursor))
   let loadingMore = $state(false)
@@ -46,7 +46,7 @@
     return jobs.filter((j) => j.status === statusFilter)
   })
 
-  // $derived, а не const: лічильники приходять пропом і змінюються.
+  // * $derived, а не const: лічильники приходять пропом і змінюються
   const STATUS_OPTIONS = $derived([
     { value: 'all' as const, label: 'Усі', count: counts.all },
     { value: 'OPEN' as const, label: 'Відкриті', count: counts.open },

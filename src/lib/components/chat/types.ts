@@ -1,11 +1,5 @@
-/**
- * SYSTEM убран из клиентского контракта: чат — только общение.
- * Заказы и их статусы в чате не показываются вообще:
- * аудит — в OrderEvent, оповещения — в колокольчике, статус — на /orders.
- *
- * В Prisma-enum значение SYSTEM физически остаётся (drop value в Postgres
- * дорогой и бессмысленный), но ни писаться, ни читаться оно больше не будет.
- */
+// * SYSTEM у клієнтському контракті немає: чат — лише спілкування. У enum бази
+// * значення лишилось, але не пишеться й не читається
 import type { ReactionGroup } from './reactions'
 
 export type MessageType = 'TEXT' | 'PHOTO' | 'FILE'
@@ -50,13 +44,7 @@ export interface ChatMessage {
   linkPreview: LinkPreview | null
 }
 
-/**
- * Превʼю посилання: сайт, заголовок, опис — як у Telegram. Картинки
- * немає навмисно (чому — у $lib/server/link-preview).
- *
- * `type`, а не `interface`: обʼєкт пишеться в Json-колонку, а інтерфейс
- * Prisma як Json не приймає (немає індексної сигнатури).
- */
+/** Превʼю посилання. `type`, а не `interface`: обʼєкт пишеться в Json-колонку Prisma. */
 export type LinkPreview = {
   /** Посилання з тексту повідомлення — саме воно відкривається. */
   url: string
@@ -93,8 +81,6 @@ export interface ChatDetails {
   peerLastSeen: string | null
   mutedUntil: string | null
 }
-
-// ─── Pusher payloads ───
 
 export interface MessageNewPayload {
   message: ChatMessage

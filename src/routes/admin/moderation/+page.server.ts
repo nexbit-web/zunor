@@ -5,8 +5,8 @@ import type { PageServerLoad } from './$types'
 const STATUSES = ['PENDING', 'REJECTED', 'VERIFIED'] as const
 type Status = (typeof STATUSES)[number]
 
-// Черга анкет майстрів. За замовчуванням — ті, що чекають, від
-// найстарішої: хто подав раніше, той і чекає довше.
+// * черга анкет майстрів. За замовчуванням — ті, що чекають, від
+// * найстарішої: хто подав раніше, той і чекає довше
 export const load: PageServerLoad = async ({ locals, url }) => {
   await requireStaff(locals)
 

@@ -1,6 +1,6 @@
 <script lang="ts">
-  // Перекреслений дзвіночок (Hugeicons NotificationOff01) — тост «звук
-  // вимкнено». Червоний, щоб відрізнявся від «увімкнено» боковим зором.
+  // * перекреслений дзвіночок (Hugeicons NotificationOff01) — тост «звук
+  // * вимкнено». Червоний, щоб відрізнявся від «увімкнено» боковим зором
   import StrokeIcon, { type IconProps } from './stroke-icon.svelte'
 
   let { class: className = '', ...rest }: IconProps = $props()
