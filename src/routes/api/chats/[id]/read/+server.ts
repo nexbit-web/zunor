@@ -2,6 +2,7 @@ import { json, error } from '@sveltejs/kit'
 import { requireApiUser } from '$lib/server/guards'
 import { prisma } from '$lib/server/prisma'
 import { channels, events, safeTrigger } from '$lib/server/pusher'
+import { background } from '$lib/server/background'
 import type { RequestHandler } from './$types'
 
 /** POST — позначити чат прочитаним. Збій Pusher не ламає запит: lastReadAt уже в базі. */
@@ -38,15 +39,18 @@ export const POST: RequestHandler = async ({ params, locals }) => {
     }),
   ])
 
-  // * одночасно: message:read — відкритому чату (✓✓ у бульбашках), chat:read —
+  // * після відповіді й одночасно: message:read — відкритому чату (✓✓ у бульбашках), chat:read —
   // * особистим каналам учасників (список чатів і лічильник на інших пристроях)
   const read = { chatId, readerId: userId, lastReadAt: now.toISOString() }
-  await Promise.all([
-    safeTrigger(channels.chat(chatId), events.messageRead, read),
-    ...(membership.chat?.members ?? []).map((m) =>
-      safeTrigger(channels.user(m.userId), events.chatRead, read),
-    ),
-  ])
+  background(
+    Promise.all([
+      safeTrigger(channels.chat(chatId), events.messageRead, read),
+      ...(membership.chat?.members ?? []).map((m) =>
+        safeTrigger(channels.user(m.userId), events.chatRead, read),
+      ),
+    ]),
+    'chat read broadcast',
+  )
 
   return json({ ok: true })
 }

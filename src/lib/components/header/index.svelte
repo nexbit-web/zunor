@@ -32,7 +32,6 @@
     ORDER_HREF,
     ORDER_HREF_SIGNED_IN,
   } from '$lib/components/landing/content'
-  import UserMenu from './user-menu.svelte'
   import Logo from './logo.svelte'
 
   const LINKS = [
@@ -49,9 +48,7 @@
   // * буде на першому кадрі
   const OVERLAY_PATHS = new Set(['/'])
   let scrollY = $state(0)
-  const solid = $derived(
-    !OVERLAY_PATHS.has(page.url.pathname) || scrollY > 4,
-  )
+  const solid = $derived(!OVERLAY_PATHS.has(page.url.pathname) || scrollY > 4)
 
   let root = $state<HTMLElement | null>(null)
   let servicesOpen = $state(false)
@@ -145,7 +142,11 @@
         >
           <button
             type="button"
-            class={[NAV_ITEM, 'flex', servicesOpen && 'bg-black/6 dark:bg-white/10']}
+            class={[
+              NAV_ITEM,
+              'flex',
+              servicesOpen && 'bg-black/6 dark:bg-white/10',
+            ]}
             aria-haspopup="true"
             aria-expanded={servicesOpen}
             aria-controls="services-menu"
@@ -172,7 +173,13 @@
     <div class="flex items-center gap-2.5">
       {#if isLoggedIn}
         <a href="/dashboard" class="{SIGNUP} flex">Кабінет</a>
-        <UserMenu onnavigate={goto} />
+        <!-- меню акаунта вантажиться окремо: з ним їдуть клієнт авторизації
+             й випадайка, гостеві не потрібні -->
+        {#await import('./user-menu.svelte')}
+          <span class="size-9 rounded-full bg-muted" aria-hidden="true"></span>
+        {:then { default: UserMenu }}
+          <UserMenu onnavigate={goto} />
+        {/await}
       {:else}
         <a href="/master/about" class="{NAV_ITEM} hidden min-[1101px]:flex">
           Стати майстром
@@ -254,8 +261,7 @@
             <span
               class="text-[18px] leading-6 font-medium tracking-[-0.15px] text-[#202020] dark:text-[#eee]"
             >
-              Не знаєш, яке саме прибирання? Просто опиши задачу своїми
-              словами.
+              Не знаєш, яке саме прибирання? Просто опиши задачу своїми словами.
             </span>
             <span
               class="mt-auto text-[14px] leading-5 font-semibold tracking-[-0.15px] text-[#202020] dark:text-[#eee]"
@@ -308,7 +314,10 @@
         />
       </button>
       {#if mobileServices}
-        <ul class="flex flex-col gap-3 px-2.5 pb-3" transition:slide={{ duration: 180 }}>
+        <ul
+          class="flex flex-col gap-3 px-2.5 pb-3"
+          transition:slide={{ duration: 180 }}
+        >
           {#each LANDING_SERVICES as s (s.key)}
             <li>
               <a

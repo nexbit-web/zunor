@@ -29,6 +29,7 @@ export const GET: RequestHandler = async ({ params, url, locals }) => {
   const chatId = params.id
   const cursor = url.searchParams.get('cursor')
 
+  // * спершу членство: чужий чат не читається з бази взагалі
   const membership = await prisma.chatMember.findUnique({
     where: { chatId_userId: { chatId, userId: user.id } },
     select: { id: true },
@@ -203,9 +204,10 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 
   const payload = toChatMessage(message)
 
-  // * усі події одночасно: інакше chat:update чекав би відповіді Pusher на
-  // * message:new і приходив пізніше за саме повідомлення
-  await Promise.all([
+  // * події — після відповіді: повідомлення вже в базі, і галочка відправника
+  // * не чекає на Pusher. Усі одночасно, щоб chat:update не відставав від
+  // * message:new
+  const broadcast = Promise.all([
     safeTrigger(channels.chat(chatId), events.messageNew, {
       message: payload,
       chatId,
@@ -227,6 +229,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
       }),
     ),
   ])
+  background(broadcast, 'chat broadcast')
 
   // * Push на телефони співрозмовників ($lib/server/push) — після відповіді:
   // * запит до Expo не має тримати галочку «надіслано»

@@ -5,7 +5,6 @@
   import Header from '$lib/components/header/index.svelte'
   import { navigating, page } from '$app/state'
   import Footer from '$lib/components/footer/index.svelte'
-  import { NotificationsListener } from '$lib/notifications'
   const hiddenLayoutRoutes = [
     '/messages',
     '/terms',
@@ -97,7 +96,12 @@
     },
   }}
 />
-<NotificationsListener />
+<!-- сповіщення тягнуть Pusher — лише для того, хто увійшов -->
+{#if page.data.session}
+  {#await import('$lib/notifications/listener.svelte') then { default: NotificationsListener }}
+    <NotificationsListener />
+  {/await}
+{/if}
 <!-- Порожній darkClassNames: клас `dark` ставить ефект вище, а не
      mode-watcher — інакше лендинг темнів би разом із кабінетом.
      disableHeadScriptInjection: свій скрипт «до першого кадру» компонент

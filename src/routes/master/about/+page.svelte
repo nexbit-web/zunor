@@ -66,6 +66,10 @@
   import * as Accordion from '$lib/components/ui/accordion/index.js'
   import { Button } from '$lib/components/ui/button/index.js'
   import { reveal } from '$lib/utils/reveal'
+  // * через збірку, а не зі static/: імʼя з хешем кешується браузером на рік
+  import masterHero from '$lib/assets/landing/master-hero.webp'
+  import featFeed from '$lib/assets/landing/feat-feed.webp'
+  import featOrder from '$lib/assets/landing/feat-order.webp'
 
   // * тип спільний для всіх карткових списків сторінки: іконка + заголовок
   // * + текст. Секції відрізняються лише сіткою, не формою даних
@@ -497,7 +501,7 @@
       use:reveal
     >
       <img
-        src="/master-hero.webp"
+        src={masterHero}
         alt="Клінер Zunor за роботою"
         width="1254"
         height="1254"
@@ -764,7 +768,7 @@
           use:reveal={90}
         >
           <img
-            src="/feat-feed.webp"
+            src={featFeed}
             alt="Стрічка заявок у застосунку Zunor"
             width="1254"
             height="1254"
@@ -783,7 +787,7 @@
           use:reveal
         >
           <img
-            src="/feat-order.webp"
+            src={featOrder}
             alt="Картка замовлення у застосунку Zunor"
             width="1254"
             height="1254"
